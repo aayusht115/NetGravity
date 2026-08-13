@@ -82,6 +82,7 @@ class TestHandVerifiableInventoryCoefficients:
                 days_per_period=30,
                 inventory_z_score=1.645,
                 enable_inventory=True,
+                include_cycle_stock=False,
             ),
         )
 

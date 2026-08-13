@@ -44,6 +44,9 @@ class FacilityMarketInventoryCoeff:
     total_safety_stock_units: float
     total_inventory_cost: float
     product_breakdown: Dict[str, Tuple[float, float]]  # prod_id -> (SS_units, IC_cost)
+    total_cycle_stock_units: float = 0.0
+    total_cycle_stock_cost: float = 0.0
+    unit_inv_cost_by_product: Dict[str, float] = None  # prod_id -> unit_cost_per_flow
 
 
 class InventoryCoefficientEngine:
@@ -76,6 +79,7 @@ class InventoryCoefficientEngine:
         cost_period = config.cost_period
         days_per_period = float(config.days_per_period)
         z_score = config.inventory_z_score
+        include_cycle = getattr(config, "include_cycle_stock", True)
 
         market_roles = {NodeRole.MARKET, NodeRole.CUSTOMER}
         non_market_facs = [f for f in network.facilities if f.role not in market_roles]
@@ -103,37 +107,63 @@ class InventoryCoefficientEngine:
 
                 if total_lt <= 0.0 or days_per_period <= 0.0:
                     lt_factor = 0.0
+                    lt_ratio = 0.0
                 else:
                     lt_factor = math.sqrt(total_lt / days_per_period)
+                    lt_ratio = total_lt / days_per_period
 
                 total_ss = 0.0
+                total_cycle_units = 0.0
+                total_cycle_cost = 0.0
                 total_ic = 0.0
                 prod_breakdown: Dict[str, Tuple[float, float]] = {}
+                unit_inv_cost_by_product: Dict[str, float] = {}
 
                 for prod in network.products:
                     d_rec = demand_map.get((mkt.id, prod.id))
                     if not d_rec or d_rec.quantity <= 0.0:
+                        unit_inv_cost_by_product[prod.id] = 0.0
                         continue
 
+                    d_qty = d_rec.quantity
                     sigma = d_rec.std_dev or 0.0
-                    if sigma <= 0.0 or lt_factor <= 0.0:
-                        ss_units = 0.0
-                        ic_cost = 0.0
-                    else:
+                    holding_rate_period = prod.get_holding_rate_for_period(cost_period)
+
+                    # Safety stock
+                    if sigma > 0.0 and lt_factor > 0.0:
                         ss_units = z_score * sigma * lt_factor
-                        holding_rate_period = prod.get_holding_rate_for_period(cost_period)
-                        ic_cost = ss_units * prod.unit_value * holding_rate_period
+                        ss_cost = ss_units * prod.unit_value * holding_rate_period
+                    else:
+                        ss_units = 0.0
+                        ss_cost = 0.0
+
+                    # Cycle stock (Q/2 on replenishment cycle)
+                    if include_cycle and lt_ratio > 0.0:
+                        cyc_units = 0.5 * d_qty * lt_ratio
+                        cyc_cost = cyc_units * prod.unit_value * holding_rate_period
+                    else:
+                        cyc_units = 0.0
+                        cyc_cost = 0.0
+
+                    ic_cost = ss_cost + cyc_cost
+                    unit_inv_cost = ic_cost / d_qty if d_qty > 0 else 0.0
 
                     total_ss += ss_units
+                    total_cycle_units += cyc_units
+                    total_cycle_cost += cyc_cost
                     total_ic += ic_cost
-                    prod_breakdown[prod.id] = (round(ss_units, 4), round(ic_cost, 4))
+                    prod_breakdown[prod.id] = (round(ss_units + cyc_units, 4), round(ic_cost, 4))
+                    unit_inv_cost_by_product[prod.id] = unit_inv_cost
 
                 coeffs[(fac.id, mkt.id)] = FacilityMarketInventoryCoeff(
                     facility_id=fac.id,
                     market_id=mkt.id,
                     total_safety_stock_units=round(total_ss, 4),
                     total_inventory_cost=round(total_ic, 4),
+                    total_cycle_stock_units=round(total_cycle_units, 4),
+                    total_cycle_stock_cost=round(total_cycle_cost, 4),
                     product_breakdown=prod_breakdown,
+                    unit_inv_cost_by_product=unit_inv_cost_by_product,
                 )
 
         return coeffs

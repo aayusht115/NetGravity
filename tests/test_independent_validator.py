@@ -307,7 +307,7 @@ class TestI_DirectInventoryFormulation:
 
         net = CanonicalNetwork(
             facilities=[dc, mkt], products=[prod], demands=[demand], lanes=[lane],
-            config=OptimizationConfig(cost_period=CostPeriod.MONTH, days_per_period=30, inventory_z_score=1.645, enable_inventory=True),
+            config=OptimizationConfig(cost_period=CostPeriod.MONTH, days_per_period=30, inventory_z_score=1.645, enable_inventory=True, include_cycle_stock=False),
         )
 
         coeffs = InventoryCoefficientEngine.compute_coefficients(net)

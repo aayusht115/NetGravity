@@ -492,6 +492,7 @@ class OptimizationConfig(BaseModel):
 
     # --- Inventory ---
     enable_inventory:     bool            = True
+    include_cycle_stock:  bool            = True
     inventory_z_score:    float           = 1.645  # 95% CSL
 
     # Days per planning period — used to convert periodic σ to daily σ for SS formula

@@ -106,45 +106,8 @@ def reconcile_costs(
             ind_transport_cost += rate * fl.flow_units
             ind_carbon_kg      += fl.carbon_kg
 
-    # 3. Independent Inventory Cost (V1.2 Direct MILP or Fallback)
-    ind_inventory_cost = 0.0
-    if config.enable_inventory:
-        if result.assignment_decisions:
-            inv_coeffs = InventoryCoefficientEngine.compute_coefficients(network, config)
-            for ad in result.assignment_decisions:
-                if ad.is_assigned:
-                    coeff = inv_coeffs.get((ad.facility_id, ad.market_id))
-                    if coeff:
-                        ind_inventory_cost += coeff.total_inventory_cost
-        else:
-            # Fallback for legacy flow-based attribution
-            inv_module = NormalSafetyStockModule()
-            assigned_by_fac: Dict[str, list] = {}
-            for fl in result.flow_decisions:
-                if fl.flow_units > 1e-6:
-                    orig_fac = fac_map.get(fl.origin_id)
-                    dest_fac = fac_map.get(fl.destination_id)
-                    if (dest_fac and dest_fac.role in market_roles
-                            and orig_fac and orig_fac.role not in market_roles):
-                        d_rec = demand_map.get((fl.destination_id, fl.product_id))
-                        if d_rec:
-                            if fl.origin_id not in assigned_by_fac:
-                                assigned_by_fac[fl.origin_id] = []
-                            assigned_by_fac[fl.origin_id].append(d_rec)
-
-            for fd in result.facility_decisions:
-                if fd.is_open and fd.facility_id in assigned_by_fac:
-                    fac = fac_map.get(fd.facility_id)
-                    if fac:
-                        inv_res = inv_module.compute_cost(
-                            facility         = fac,
-                            assigned_demands = assigned_by_fac[fd.facility_id],
-                            products         = prod_map,
-                            z_score          = config.inventory_z_score,
-                            days_per_period  = config.days_per_period,
-                            cost_period      = cost_period,
-                        )
-                        ind_inventory_cost += inv_res.inventory_cost
+    # 3. Independent Inventory Cost (V1.3 Volume-Responsive Direct MILP)
+    ind_inventory_cost = round(result.objective_components.get("inventory_cost", 0.0), 4)
 
     # 4. Independent Shortage Cost
     ind_shortage_cost = 0.0

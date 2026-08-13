@@ -108,8 +108,8 @@ class ScenarioEngine:
         if scenario.config_overrides:
             config = config.model_copy(update=scenario.config_overrides)
 
-        # Build modified network
-        modified = self._apply_overrides(base_network, scenario)
+        # Build modified network and change manifest
+        modified, manifest = self._apply_overrides_with_manifest(base_network, scenario)
 
         # Solve
         result = milp_solve(
@@ -118,9 +118,15 @@ class ScenarioEngine:
             scenario_id = scenario.scenario_id,
         )
 
-        # Attach KPIs
-        result.kpis         = compute_kpis(result, modified)
+        # Attach KPIs, Flow Analytics, and Scenario Audit Manifest
+        result.kpis           = compute_kpis(result, modified)
         result.flow_analytics = compute_flow_analytics(result, modified)
+        result.scenario_audit_metadata = {
+            "scenario_id": scenario.scenario_id,
+            "scenario_name": scenario.scenario_name,
+            "change_manifest": manifest,
+            "total_changes_applied": len(manifest),
+        }
 
         return result
 
@@ -151,45 +157,83 @@ class ScenarioEngine:
         network:  CanonicalNetwork,
         scenario: Scenario,
     ) -> CanonicalNetwork:
-        """Apply all scenario overrides to a deep copy of the network."""
+        net, _ = self._apply_overrides_with_manifest(network, scenario)
+        return net
+
+    def _apply_overrides_with_manifest(
+        self,
+        network:  CanonicalNetwork,
+        scenario: Scenario,
+    ) -> Tuple[CanonicalNetwork, List[Dict[str, Any]]]:
+        """Apply all scenario overrides to a deep copy of the network and build a change manifest."""
 
         facilities = [f.model_copy(deep=True) for f in network.facilities]
         demands    = [d.model_copy(deep=True) for d in network.demands]
         lanes      = [ln.model_copy(deep=True) for ln in network.lanes]
 
         fac_map  = {f.id: f for f in facilities}
-        lane_map = {}
-        for ln in lanes:
-            key = (ln.origin_id, ln.destination_id, ln.mode.value
-                   if hasattr(ln.mode, "value") else str(ln.mode))
-            lane_map[key] = ln
+        manifest: List[Dict[str, Any]] = []
 
         # --- Apply facility changes ---
         for fc in scenario.facility_changes:
             self._apply_facility_change(fc, fac_map, facilities, lanes)
+            manifest.append({
+                "type": "FACILITY_CHANGE",
+                "action": str(fc.action),
+                "facility_id": fc.facility_id,
+                "details": fc.model_dump(exclude_none=True),
+            })
 
         # --- Apply demand changes ---
         for dc in scenario.demand_changes:
             self._apply_demand_change(dc, demands)
+            manifest.append({
+                "type": "DEMAND_CHANGE",
+                "market_id": dc.market_id,
+                "product_id": dc.product_id,
+                "details": dc.model_dump(exclude_none=True),
+            })
 
         # --- Apply cost changes ---
         for cc in scenario.cost_changes:
             self._apply_cost_change(cc, lanes)
+            manifest.append({
+                "type": "COST_CHANGE",
+                "origin_id": cc.origin_id,
+                "destination_id": cc.destination_id,
+                "mode": cc.mode,
+                "details": cc.model_dump(exclude_none=True),
+            })
 
         # --- Apply lane changes ---
         for lc in scenario.lane_changes:
             self._apply_lane_change(lc, lanes, network)
+            manifest.append({
+                "type": "LANE_CHANGE",
+                "action": str(lc.action),
+                "origin_id": lc.origin_id,
+                "destination_id": lc.destination_id,
+                "mode": lc.mode,
+                "details": lc.model_dump(exclude_none=True),
+            })
 
         # --- Apply parameter overrides ---
         for po in scenario.parameter_overrides:
             self._apply_parameter_override(po, fac_map, facilities, demands, lanes, network)
+            manifest.append({
+                "type": "PARAMETER_OVERRIDE",
+                "path": po.path,
+                "operation": str(po.operation),
+                "value": po.value,
+            })
 
-        return network.model_copy(update={
+        mod_net = network.model_copy(update={
             "facilities": facilities,
             "demands":    demands,
             "lanes":      lanes,
             "network_id": f"{network.network_id}_{scenario.scenario_id}",
         })
+        return mod_net, manifest
 
     def _apply_facility_change(
         self,
@@ -214,7 +258,11 @@ class ScenarioEngine:
                 for ln in fc.new_lanes:
                     lanes.append(ln.model_copy(deep=True))
             elif new_f.latitude is not None and new_f.longitude is not None:
-                self._auto_connect_facility(new_f, fac_map, facilities, lanes)
+                res = self._auto_connect_facility(new_f, fac_map, facilities, lanes)
+                if not res.get("eligible"):
+                    raise ValueError(f"ADD_FACILITY '{new_f.id}' failed auto-connection: {res.get('reason_if_ineligible')}")
+            else:
+                raise ValueError(f"ADD_FACILITY '{new_f.id}' requires explicit connecting lanes or valid latitude/longitude coordinates.")
             return
 
         fac = fac_map.get(fc.facility_id)
@@ -225,11 +273,11 @@ class ScenarioEngine:
             lat = fc.latitude if fc.latitude is not None else fac.latitude
             lon = fc.longitude if fc.longitude is not None else fac.longitude
             if lat is None or lon is None:
-                raise ValueError(f"MOVE facility '{fc.facility_id}' requires valid latitude and longitude.")
+                raise ValueError(f"MOVE facility '{fc.facility_id}' requires valid latitude and longitude coordinates.")
             orig_lat = fac.latitude
             orig_lon = fac.longitude
-            fac.latitude = lat
-            fac.longitude = lon
+            fac.latitude = float(lat)
+            fac.longitude = float(lon)
             self._recalculate_facility_lanes(fac, orig_lat, orig_lon, fac_map, lanes)
 
         elif fc.action == "CLOSE":

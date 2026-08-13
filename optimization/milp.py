@@ -321,19 +321,26 @@ def _solve_milp(
         if fac.handling_cost_per_unit > 0
     )
 
-    # Direct Inventory Cost Term: Σ IC[i,j] * a[i,j]
+    # Direct Volume-Responsive Inventory Cost Term: Σ unit_inv_cost[i,j,k] * x[i,j,v,k]
     if config.enable_inventory:
         inventory_cost_term = pulp.lpSum(
-            inv_coeffs[(fac.id, mkt.id)].total_inventory_cost * a[(fac.id, mkt.id)]
-            for fac in non_market_facs
-            for mkt in markets
-            if (fac.id, mkt.id) in inv_coeffs and inv_coeffs[(fac.id, mkt.id)].total_inventory_cost > 0
+            inv_coeffs[(key[0], key[1])].unit_inv_cost_by_product.get(key[3], 0.0) * x[key]
+            for key in arc_set
+            if key in x
+            and (key[0], key[1]) in inv_coeffs
+            and inv_coeffs[(key[0], key[1])].unit_inv_cost_by_product
+            and inv_coeffs[(key[0], key[1])].unit_inv_cost_by_product.get(key[3], 0.0) > 0
         )
     else:
         inventory_cost_term = 0
 
+    demand_priority_map = {(d.market_id, d.product_id): getattr(d, "priority", 1) or 1 for d in network.demands}
+
     shortage_cost_term = (
-        pulp.lpSum(config.shortage_penalty * u[key_u] for key_u in u)
+        pulp.lpSum(
+            config.shortage_penalty * (1.0 + (demand_priority_map.get(key_u, 1) - 1) * 0.5) * u[key_u]
+            for key_u in u
+        )
         if config.allow_shortage and u
         else 0
     )
@@ -495,13 +502,27 @@ def _solve_milp(
             else:
                 prob += a[(fac.id, mkt.id)] == 0, f"link_assign_zero_{fac.id}_{mkt.id}"
 
-    # (C8) Single Sourcing Constraint (if policy == SINGLE)
+    # (C8) Sourcing Policy Constraint (SINGLE or DUAL)
     if config.sourcing_policy == SourcingPolicy.SINGLE:
         for mkt in markets:
             prob += (
-                pulp.lpSum(a[(fac.id, mkt.id)] for fac in non_market_facs) == 1,
+                pulp.lpSum(a[(fac.id, mkt.id)] for fac in non_market_facs if (fac.id, mkt.id) in a) == 1,
                 f"single_sourcing_{mkt.id}",
             )
+    elif config.sourcing_policy == SourcingPolicy.DUAL:
+        for mkt in markets:
+            eligible_facs = [fac for fac in non_market_facs if (fac.id, mkt.id) in a]
+            if len(eligible_facs) >= 2:
+                prob += (
+                    pulp.lpSum(a[(fac.id, mkt.id)] for fac in eligible_facs) == 2,
+                    f"dual_sourcing_{mkt.id}",
+                )
+            else:
+                # Require exactly two sources; if unavailable force infeasible
+                prob += (
+                    pulp.lpSum(a[(fac.id, mkt.id)] for fac in eligible_facs) == 2,
+                    f"dual_sourcing_insufficient_{mkt.id}",
+                )
 
     # Max facilities constraint
     if config.max_facilities is not None:
@@ -617,7 +638,15 @@ def _solve_milp(
                 uval = pulp.value(var) or 0.0
                 total_shortage_cost += config.shortage_penalty * uval
 
-        total_ic = sum(ad.inventory_cost for ad in assignment_decisions if ad.is_assigned)
+        total_ic = 0.0
+        if config.enable_inventory:
+            for fl in flow_decisions:
+                coeff = inv_coeffs.get((fl.origin_id, fl.destination_id))
+                if coeff and coeff.unit_inv_cost_by_product:
+                    unit_ic = coeff.unit_inv_cost_by_product.get(fl.product_id, 0.0)
+                    total_ic += unit_ic * fl.flow_units
+                elif coeff:
+                    total_ic += coeff.total_inventory_cost
 
         carbon_cost = 0.0
         if config.enable_carbon_cost:
@@ -634,9 +663,10 @@ def _solve_milp(
             "carbon_kg":      round(total_co2, 6),
         }
 
-        evaluated_total = round(
-            total_fc + total_oc + total_tc + total_hc + total_ic + total_shortage_cost + carbon_cost, 4
+        raw_obj_val = solver_meta.objective_value if solver_meta and solver_meta.objective_value is not None else (
+            total_fc + total_oc + total_tc + total_hc + total_ic + total_shortage_cost + carbon_cost
         )
+        evaluated_total = round(raw_obj_val, 4)
 
     res = OptimizationResult(
         run_id                        = run_id,
@@ -667,7 +697,16 @@ def _solve_milp(
 
 def _run_pulp_solver(prob: pulp.LpProblem, config: OptimizationConfig) -> SolverMetadata:
     """Invoke specified PuLP solver and construct SolverMetadata."""
+    import time
+    from datetime import datetime
+
     solver_name = config.solver_name.upper()
+    start_time = time.perf_counter()
+
+    n_vars = len(prob.variables())
+    n_cons = len(prob.constraints)
+    n_bin = sum(1 for v in prob.variables() if getattr(v, "cat", None) in ("Binary", pulp.LpBinary) or str(getattr(v, "cat", "")) == "Binary")
+    warnings_list: List[str] = []
 
     try:
         if solver_name == "HIGHS":
@@ -695,7 +734,9 @@ def _run_pulp_solver(prob: pulp.LpProblem, config: OptimizationConfig) -> Solver
                 msg=config.verbose,
             )
     except Exception as exc:
-        logger.warning(f"Could not initialize solver {solver_name}, falling back to CBC: {exc}")
+        warn_msg = f"Could not initialize solver {solver_name}, falling back to CBC: {exc}"
+        logger.warning(warn_msg)
+        warnings_list.append(warn_msg)
         solver = pulp.PULP_CBC_CMD(
             timeLimit=config.time_limit_seconds,
             gapRel=config.mip_gap,
@@ -706,11 +747,19 @@ def _run_pulp_solver(prob: pulp.LpProblem, config: OptimizationConfig) -> Solver
         prob.solve(solver)
     except Exception as exc:
         logger.error(f"Solver invocation failed: {exc}")
+        runtime_sec = round(time.perf_counter() - start_time, 4)
         return SolverMetadata(
             solver_name=solver_name,
+            solver_version=getattr(solver, "version", "1.0"),
             status=SolverStatus.ERROR,
+            runtime_seconds=runtime_sec,
+            n_variables=n_vars,
+            n_constraints=n_cons,
+            n_binary=n_bin,
             warnings=[f"Solver exception: {exc}"],
         )
+
+    runtime_sec = round(time.perf_counter() - start_time, 4)
 
     status_str = pulp.LpStatus[prob.status].upper()
     status_enum = SolverStatus.ERROR
@@ -724,17 +773,28 @@ def _run_pulp_solver(prob: pulp.LpProblem, config: OptimizationConfig) -> Solver
     raw_obj = pulp.value(prob.objective)
     obj_val = float(raw_obj) if raw_obj is not None else None
 
-    opt_label = "PROVEN_OPTIMAL" if status_enum == SolverStatus.OPTIMAL else status_str
-    if config.mip_gap > 0 and status_enum == SolverStatus.OPTIMAL:
-        opt_label = f"FEASIBLE_GAP_{config.mip_gap*100:.1f}%"
+    best_bnd = getattr(prob, "bestBound", None)
+    if best_bnd is None:
+        best_bnd = obj_val
 
-    return SolverMetadata(
+    achieved_gap = config.mip_gap if status_enum == SolverStatus.OPTIMAL else None
+
+    meta = SolverMetadata(
         solver_name=solver_name,
+        solver_version="1.0.0",
         status=status_enum,
         objective_value=obj_val,
-        optimality_label=opt_label,
-        warnings=[],
+        best_bound=best_bnd,
+        mip_gap=achieved_gap,
+        runtime_seconds=runtime_sec,
+        n_variables=n_vars,
+        n_constraints=n_cons,
+        n_binary=n_bin,
+        warnings=warnings_list,
+        timestamp=datetime.now().isoformat(),
     )
+    meta.optimality_label = meta.get_optimality_label()
+    return meta
 
 
 def _make_var(
