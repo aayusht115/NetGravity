@@ -258,15 +258,16 @@ def _solve_milp(
 
     # Decision variables: a_{ij} ∈ {0,1} (Facility-to-Market assignment)
     a: Dict[Tuple[str, str], pulp.LpVariable] = {}
-    for fac in non_market_facs:
-        for mkt in markets:
-            a[(fac.id, mkt.id)] = _make_var(
-                prob,
-                f"a_{fac.id}_{mkt.id}",
-                lowBound=0,
-                upBound=1,
-                cat="Binary",
-            )
+    if config.sourcing_policy in (SourcingPolicy.SINGLE, SourcingPolicy.DUAL):
+        for fac in non_market_facs:
+            for mkt in markets:
+                a[(fac.id, mkt.id)] = _make_var(
+                    prob,
+                    f"a_{fac.id}_{mkt.id}",
+                    lowBound=0,
+                    upBound=1,
+                    cat="Binary",
+                )
 
     # Decision variables: x_{ijvk} ≥ 0
     x: Dict[ArcKey, pulp.LpVariable] = {}
@@ -478,51 +479,54 @@ def _solve_milp(
         elif fac.is_mandatory:
             prob += y[fac.id] == 1, f"mandatory_open_{fac.id}"
 
-    # (C6) Assignment Open Link: a_{ij} ≤ y_i
-    for fac in non_market_facs:
-        for mkt in markets:
-            prob += a[(fac.id, mkt.id)] <= y[fac.id], f"link_assign_open_{fac.id}_{mkt.id}"
+    # (C6-C8) Assignment and Sourcing Constraints (ONLY when SINGLE or DUAL sourcing)
+    if config.sourcing_policy in (SourcingPolicy.SINGLE, SourcingPolicy.DUAL):
+        # (C6) Assignment Open Link: a_{ij} ≤ y_i
+        for fac in non_market_facs:
+            for mkt in markets:
+                prob += a[(fac.id, mkt.id)] <= y[fac.id], f"link_assign_open_{fac.id}_{mkt.id}"
 
-    # (C7) Bidirectional Flow Assignment Linking
-    for fac in non_market_facs:
-        for mkt in markets:
-            mkt_demand = sum(d.quantity for d in network.demands if d.market_id == mkt.id)
-            out_arcs = [key for key in arc_set if key[0] == fac.id and key[1] == mkt.id and key in x]
-            if out_arcs and mkt_demand > 0:
-                # (C7a) Lower bound: Flow > 0 forces a_{ij} = 1
-                prob += (
-                    pulp.lpSum(x[key] for key in out_arcs) <= mkt_demand * a[(fac.id, mkt.id)],
-                    f"link_flow_assign_{fac.id}_{mkt.id}",
-                )
-                # (C7b) Upper bound: a_{ij} = 1 forces Flow > 0 (zero flow forces a_{ij} = 0)
-                prob += (
-                    a[(fac.id, mkt.id)] <= 1e8 * pulp.lpSum(x[key] for key in out_arcs),
-                    f"link_assign_flow_ub_{fac.id}_{mkt.id}",
-                )
-            else:
-                prob += a[(fac.id, mkt.id)] == 0, f"link_assign_zero_{fac.id}_{mkt.id}"
+        # (C7) Bidirectional Flow Assignment Linking
+        for fac in non_market_facs:
+            for mkt in markets:
+                mkt_demand = sum(d.quantity for d in network.demands if d.market_id == mkt.id)
+                out_arcs = [key for key in arc_set if key[0] == fac.id and key[1] == mkt.id and key in x]
+                if out_arcs and mkt_demand > 0:
+                    # (C7a) Lower bound: Flow > 0 forces a_{ij} = 1
+                    prob += (
+                        pulp.lpSum(x[key] for key in out_arcs) <= mkt_demand * a[(fac.id, mkt.id)],
+                        f"link_flow_assign_{fac.id}_{mkt.id}",
+                    )
+                    # (C7b) Upper bound: a_{ij} = 1 forces Flow > 0 (zero flow forces a_{ij} = 0)
+                    big_m = max(1000.0, 1.0 / max(mkt_demand, 1e-4))
+                    prob += (
+                        a[(fac.id, mkt.id)] <= big_m * pulp.lpSum(x[key] for key in out_arcs),
+                        f"link_assign_flow_ub_{fac.id}_{mkt.id}",
+                    )
+                else:
+                    prob += a[(fac.id, mkt.id)] == 0, f"link_assign_zero_{fac.id}_{mkt.id}"
 
-    # (C8) Sourcing Policy Constraint (SINGLE or DUAL)
-    if config.sourcing_policy == SourcingPolicy.SINGLE:
-        for mkt in markets:
-            prob += (
-                pulp.lpSum(a[(fac.id, mkt.id)] for fac in non_market_facs if (fac.id, mkt.id) in a) == 1,
-                f"single_sourcing_{mkt.id}",
-            )
-    elif config.sourcing_policy == SourcingPolicy.DUAL:
-        for mkt in markets:
-            eligible_facs = [fac for fac in non_market_facs if (fac.id, mkt.id) in a]
-            if len(eligible_facs) >= 2:
+        # (C8) Sourcing Policy Constraint (SINGLE or DUAL)
+        if config.sourcing_policy == SourcingPolicy.SINGLE:
+            for mkt in markets:
                 prob += (
-                    pulp.lpSum(a[(fac.id, mkt.id)] for fac in eligible_facs) == 2,
-                    f"dual_sourcing_{mkt.id}",
+                    pulp.lpSum(a[(fac.id, mkt.id)] for fac in non_market_facs if (fac.id, mkt.id) in a) == 1,
+                    f"single_sourcing_{mkt.id}",
                 )
-            else:
-                # Require exactly two sources; if unavailable force infeasible
-                prob += (
-                    pulp.lpSum(a[(fac.id, mkt.id)] for fac in eligible_facs) == 2,
-                    f"dual_sourcing_insufficient_{mkt.id}",
-                )
+        elif config.sourcing_policy == SourcingPolicy.DUAL:
+            for mkt in markets:
+                eligible_facs = [fac for fac in non_market_facs if (fac.id, mkt.id) in a]
+                if len(eligible_facs) >= 2:
+                    prob += (
+                        pulp.lpSum(a[(fac.id, mkt.id)] for fac in eligible_facs) == 2,
+                        f"dual_sourcing_{mkt.id}",
+                    )
+                else:
+                    # Require exactly two sources; if unavailable force infeasible
+                    prob += (
+                        pulp.lpSum(a[(fac.id, mkt.id)] for fac in eligible_facs) == 2,
+                        f"dual_sourcing_insufficient_{mkt.id}",
+                    )
 
     # Max facilities constraint
     if config.max_facilities is not None:
@@ -589,18 +593,21 @@ def _solve_milp(
                 if (fac.id, mkt.id) in a:
                     a_val = pulp.value(a[(fac.id, mkt.id)]) or 0.0
                     is_assigned = a_val > 0.5
-                    inv_cost_pair = 0.0
-                    if is_assigned and config.enable_inventory:
-                        coeff = inv_coeffs.get((fac.id, mkt.id))
-                        if coeff:
-                            inv_cost_pair = coeff.total_inventory_cost
+                else:
+                    is_assigned = any((pulp.value(x[k]) or 0.0) > 1e-6 for k in arc_set if k[0] == fac.id and k[1] == mkt.id and k in x)
 
-                    assignment_decisions.append(AssignmentDecision(
-                        facility_id    = fac.id,
-                        market_id      = mkt.id,
-                        is_assigned    = is_assigned,
-                        inventory_cost = round(inv_cost_pair, 4),
-                    ))
+                inv_cost_pair = 0.0
+                if is_assigned and config.enable_inventory:
+                    coeff = inv_coeffs.get((fac.id, mkt.id))
+                    if coeff:
+                        inv_cost_pair = coeff.total_inventory_cost
+
+                assignment_decisions.append(AssignmentDecision(
+                    facility_id    = fac.id,
+                    market_id      = mkt.id,
+                    is_assigned    = is_assigned,
+                    inventory_cost = round(inv_cost_pair, 4),
+                ))
 
         total_tc = 0.0
         total_co2 = 0.0

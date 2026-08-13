@@ -169,6 +169,16 @@ def diagnose_infeasibility(
             diag.markets_with_no_arcs.append(market.id)
             issues_found = True
 
+    # Compute effectively closed facility IDs
+    forced_closed_ids: Set[str] = {
+        f.id for f in non_market_facs if f.is_forced_closed
+    }
+    capacity_zero_ids: Set[str] = {
+        f.id for f in non_market_facs
+        if f.capacity_units_per_period <= 0 and not f.is_mandatory
+    }
+    effectively_closed = forced_closed_ids | capacity_zero_ids
+
     # ── Check 2: Markets blocked by SLA ───────────────────────────────────
     if config.enforce_sla and config.service_metric == ServiceMetric.TRANSIT_TIME:
         demand_sla: Dict[str, Optional[float]] = {}
@@ -186,6 +196,7 @@ def diagnose_infeasibility(
                 ln for ln in network.lanes
                 if ln.destination_id == market_id
                 and ln.is_active_baseline
+                and ln.origin_id not in effectively_closed
                 and (sla is None or ln.lead_time_days <= sla)
             ]
             if not eligible:
@@ -193,16 +204,6 @@ def diagnose_infeasibility(
                 issues_found = True
 
     # ── Check 3: Markets blocked by forced-close cascade ──────────────────
-    forced_closed_ids: Set[str] = {
-        f.id for f in non_market_facs if f.is_forced_closed
-    }
-    # Also consider capacity=0 facilities as effectively closed (backward compat)
-    capacity_zero_ids: Set[str] = {
-        f.id for f in non_market_facs
-        if f.capacity_units_per_period <= 0 and not f.is_mandatory
-    }
-    effectively_closed = forced_closed_ids | capacity_zero_ids
-
     if effectively_closed:
         for market in markets:
             if market.id in diag.markets_with_no_arcs:

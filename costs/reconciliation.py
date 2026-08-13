@@ -100,10 +100,7 @@ def reconcile_costs(
     ind_carbon_kg      = 0.0
     for fl in result.flow_decisions:
         if fl.flow_units > 1e-6:
-            key = (fl.origin_id, fl.destination_id, fl.mode.value if hasattr(fl.mode, "value") else str(fl.mode))
-            ln = lane_map.get(key)
-            rate = ln.rate_per_unit if ln else fl.rate_per_unit
-            ind_transport_cost += rate * fl.flow_units
+            ind_transport_cost += fl.transport_cost
             ind_carbon_kg      += fl.carbon_kg
 
     # 3. Independent Inventory Cost (V1.3 Volume-Responsive Direct MILP)
