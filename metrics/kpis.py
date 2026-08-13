@@ -75,9 +75,20 @@ def compute_kpis(
     handling_cost  = obj_comp.get("handling_cost",  0.0)
     inventory_cost = obj_comp.get("inventory_cost", 0.0)
     shortage_cost  = obj_comp.get("shortage_cost",  0.0)
+    carbon_cost    = obj_comp.get("carbon_cost",    0.0)
+
+    cfg = network.config
+    if carbon_cost == 0.0 and cfg:
+        tot_c = sum(fl.carbon_kg for fl in result.flow_decisions)
+        if cfg.enable_carbon_cost:
+            carbon_cost = tot_c * cfg.carbon_price
+        elif (hasattr(cfg, "objective_mode") and
+              (cfg.objective_mode.value if hasattr(cfg.objective_mode, "value") else str(cfg.objective_mode)) == "WEIGHTED_COST_CARBON"):
+            carbon_cost = tot_c * cfg.carbon_weight
+
     total_cost     = (
         facility_cost + transport_cost + handling_cost +
-        inventory_cost + shortage_cost
+        inventory_cost + shortage_cost + carbon_cost
     )
 
     # --- Demand ---

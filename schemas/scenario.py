@@ -68,6 +68,9 @@ class ParameterOverride(BaseModel):
         return v
 
 
+from netgravity.schemas.network import FacilityRecord, LaneRecord
+
+
 # ---------------------------------------------------------------------------
 # Facility change
 # ---------------------------------------------------------------------------
@@ -78,7 +81,7 @@ class FacilityChange(BaseModel):
     More ergonomic than ParameterOverride for common facility changes.
     """
     facility_id:    str
-    action:         str    # CLOSE | OPEN | SET_CAPACITY | SET_FIXED_COST | FORCE_OPEN
+    action:         str    # CLOSE | OPEN | SET_CAPACITY | SET_FIXED_COST | FORCE_OPEN | MOVE | SET_LOCATION | ADD_FACILITY
 
     # For capacity changes
     capacity_override:   Optional[float] = None
@@ -87,10 +90,21 @@ class FacilityChange(BaseModel):
     # For cost changes
     fixed_cost_override: Optional[float] = None
 
+    # For location moves (MOVE / SET_LOCATION)
+    latitude:  Optional[float] = None
+    longitude: Optional[float] = None
+
+    # For adding new facility (ADD_FACILITY)
+    new_facility: Optional[FacilityRecord] = None
+    new_lanes:    List[LaneRecord]        = Field(default_factory=list)
+
     @field_validator("action")
     @classmethod
     def valid_action(cls, v: str) -> str:
-        allowed = {"CLOSE", "OPEN", "SET_CAPACITY", "SET_FIXED_COST", "FORCE_OPEN"}
+        allowed = {
+            "CLOSE", "OPEN", "SET_CAPACITY", "SET_FIXED_COST", "FORCE_OPEN",
+            "MOVE", "SET_LOCATION", "MOVE_FACILITY", "ADD_FACILITY",
+        }
         if v not in allowed:
             raise ValueError(f"action must be one of {allowed}, got '{v}'")
         return v

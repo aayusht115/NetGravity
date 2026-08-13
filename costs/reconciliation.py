@@ -157,6 +157,14 @@ def reconcile_costs(
         unmet_demand = max(0.0, total_demand - total_served)
         ind_shortage_cost = unmet_demand * config.shortage_penalty
 
+    # 5. Independent Carbon Cost (if enabled in objective)
+    ind_carbon_cost = 0.0
+    if config.enable_carbon_cost:
+        ind_carbon_cost = ind_carbon_kg * config.carbon_price
+    elif (hasattr(config, "objective_mode") and
+          (config.objective_mode.value if hasattr(config.objective_mode, "value") else str(config.objective_mode)) == "WEIGHTED_COST_CARBON"):
+        ind_carbon_cost = ind_carbon_kg * config.carbon_weight
+
     independent_component_costs = {
         "facility_cost":  round(ind_facility_cost, 4),
         "opening_cost":   round(ind_opening_cost, 4),
@@ -164,12 +172,13 @@ def reconcile_costs(
         "handling_cost":  round(ind_handling_cost, 4),
         "inventory_cost": round(ind_inventory_cost, 4),
         "shortage_cost":  round(ind_shortage_cost, 4),
+        "carbon_cost":    round(ind_carbon_cost, 4),
         "carbon_kg":      round(ind_carbon_kg, 6),
     }
 
     independently_calculated_total = round(
         ind_facility_cost + ind_opening_cost + ind_transport_cost +
-        ind_handling_cost + ind_inventory_cost + ind_shortage_cost, 4
+        ind_handling_cost + ind_inventory_cost + ind_shortage_cost + ind_carbon_cost, 4
     )
 
     solver_obj = round(result.solver.objective_value or 0.0, 4)
@@ -190,3 +199,112 @@ def reconcile_costs(
         is_reconciled                  = is_reconciled,
         inventory_converged            = inventory_converged,
     )
+
+
+@dataclass
+class MetricReconciliationDetail:
+    """Detailed reconciliation metric outcome."""
+    metric:               str
+    reported_value:       float
+    independent_value:    float
+    absolute_difference:  float
+    relative_difference:  float
+    is_reconciled:        bool
+    source_notes:         str = ""
+
+
+@dataclass
+class FullReconciliationReport:
+    """Full independent objective and KPI reconciliation outcome."""
+    all_reconciled:      bool
+    cost_reconciliation: CostReconciliation
+    metric_details:      Dict[str, MetricReconciliationDetail]
+
+
+def reconcile_kpis_and_objective(
+    result:    OptimizationResult,
+    network:   CanonicalNetwork,
+    config:    Optional[OptimizationConfig] = None,
+    tolerance: float = 1e-3,
+) -> FullReconciliationReport:
+    """
+    Independently reconstruct and verify all solver objective components and reported KPIs
+    directly from decision vectors, canonical inputs, and mathematical definitions.
+    """
+    if config is None:
+        config = network.config
+
+    cost_rec = reconcile_costs(result, network, config=config, tolerance=tolerance)
+    kpis = result.kpis
+    metric_details: Dict[str, MetricReconciliationDetail] = {}
+
+    fac_map = {f.id: f for f in network.facilities}
+    market_roles = {NodeRole.MARKET, NodeRole.CUSTOMER}
+
+    # 1. Total demand & served & unmet & fill rate
+    tot_demand = sum(d.quantity for d in network.demands)
+    tot_served = sum(fl.flow_units for fl in result.flow_decisions if fac_map.get(fl.destination_id) and fac_map[fl.destination_id].role in market_roles)
+    unmet_dem = max(0.0, tot_demand - tot_served)
+    fill_rt = (tot_served / tot_demand) if tot_demand > 0 else 1.0
+
+    # 2. Weighted average distance
+    tot_flow = sum(fl.flow_units for fl in result.flow_decisions if fl.flow_units > 1e-6)
+    weighted_dist = (sum(fl.flow_units * fl.distance_km for fl in result.flow_decisions if fl.flow_units > 1e-6) / tot_flow) if tot_flow > 0 else 0.0
+
+    # 3. % Demand in SLA
+    demand_map = {(d.market_id, d.product_id): d for d in network.demands}
+    outbound_flows = [fl for fl in result.flow_decisions if fl.flow_units > 1e-6 and fac_map.get(fl.destination_id) and fac_map[fl.destination_id].role in market_roles]
+    served_in_sla = 0.0
+    for fl in outbound_flows:
+        d_rec = demand_map.get((fl.destination_id, fl.product_id))
+        if d_rec is None or d_rec.sla_days is None or fl.lead_time_days <= d_rec.sla_days:
+            served_in_sla += fl.flow_units
+    pct_sla = (served_in_sla / tot_demand * 100.0) if tot_demand > 0 else 100.0
+
+    # 4. Total Carbon kg
+    tot_carbon = sum(fl.carbon_kg for fl in result.flow_decisions)
+
+    # 5. Average Utilization
+    open_fds = [fd for fd in result.facility_decisions if fd.is_open and fd.capacity_units > 0]
+    avg_util = (sum(fd.utilization_pct for fd in open_fds) / len(open_fds)) if open_fds else 0.0
+
+    checks = [
+        ("total_objective", result.solver.objective_value or 0.0, cost_rec.independently_calculated_total, "Solver total objective vs independent total cost"),
+        ("facility_cost", result.objective_components.get("facility_cost", 0.0), cost_rec.independent_component_costs.get("facility_cost", 0.0), "Facility fixed cost"),
+        ("transport_cost", result.objective_components.get("transport_cost", 0.0), cost_rec.independent_component_costs.get("transport_cost", 0.0), "Transportation cost"),
+        ("handling_cost", result.objective_components.get("handling_cost", 0.0), cost_rec.independent_component_costs.get("handling_cost", 0.0), "Handling cost"),
+        ("inventory_cost", result.objective_components.get("inventory_cost", 0.0), cost_rec.independent_component_costs.get("inventory_cost", 0.0), "Inventory cost"),
+        ("total_cost", kpis.total_cost if kpis else 0.0, cost_rec.independently_calculated_total, "KPI total cost"),
+        ("total_demand", kpis.total_demand if kpis else 0.0, tot_demand, "Total demand units"),
+        ("total_served", kpis.total_served if kpis else 0.0, tot_served, "Total served units"),
+        ("unmet_demand", kpis.unmet_demand if kpis else 0.0, unmet_dem, "Unmet demand units"),
+        ("demand_fill_rate", kpis.demand_fill_rate if kpis else 0.0, fill_rt, "Demand fill rate fraction"),
+        ("weighted_avg_distance_km", kpis.weighted_avg_distance_km if kpis else 0.0, weighted_dist, "Weighted average distance km"),
+        ("pct_demand_in_sla", kpis.pct_demand_in_sla if kpis else 0.0, pct_sla, "Percentage demand within SLA"),
+        ("total_carbon_kg", kpis.total_carbon_kg if kpis else 0.0, tot_carbon, "Total carbon emissions kg"),
+        ("avg_utilization_pct", kpis.avg_utilization_pct if kpis else 0.0, avg_util, "Average facility utilization %"),
+    ]
+
+    all_passed = cost_rec.is_reconciled
+    for name, rep_val, ind_val, notes in checks:
+        abs_d = round(abs(rep_val - ind_val), 4)
+        rel_d = round(abs_d / max(abs(ind_val), 1.0), 6)
+        ok = bool(abs_d <= 0.05 or rel_d <= tolerance)
+        if not ok:
+            all_passed = False
+        metric_details[name] = MetricReconciliationDetail(
+            metric              = name,
+            reported_value      = round(rep_val, 4),
+            independent_value   = round(ind_val, 4),
+            absolute_difference = abs_d,
+            relative_difference = rel_d,
+            is_reconciled       = ok,
+            source_notes        = notes,
+        )
+
+    return FullReconciliationReport(
+        all_reconciled      = all_passed,
+        cost_reconciliation = cost_rec,
+        metric_details      = metric_details,
+    )
+

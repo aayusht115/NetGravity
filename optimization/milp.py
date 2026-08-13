@@ -591,7 +591,7 @@ def _solve_milp(
             total_fc + total_oc + total_tc + total_hc + total_ic + total_shortage_cost, 4
         )
 
-    return OptimizationResult(
+    res = OptimizationResult(
         run_id                        = run_id,
         scenario_id                   = scenario_id,
         network_id                    = network.network_id,
@@ -607,6 +607,11 @@ def _solve_milp(
         inventory_optimization_status = "INTEGRATED",
         inventory_iterations          = 1,
     )
+
+    from netgravity.metrics.kpis import compute_kpis, compute_flow_analytics
+    res.kpis = compute_kpis(res, network)
+    res.flow_analytics = compute_flow_analytics(res, network)
+    return res
 
 
 # ---------------------------------------------------------------------------
