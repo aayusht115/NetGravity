@@ -221,18 +221,36 @@ def diagnose_infeasibility(
 
     # ── Check 4: Total capacity vs total demand ────────────────────────────
     total_demand = sum(d.quantity for d in network.demands)
-    total_capacity = sum(
-        f.capacity_units_per_period
-        for f in non_market_facs
-        if f.capacity_units_per_period < 1e11
-        and not f.is_forced_closed
-        and f.capacity_units_per_period > 0
-    )
+
+    role_capacities: Dict[NodeRole, float] = {}
+    for f in non_market_facs:
+        if f.capacity_units_per_period >= 1e11 or f.is_forced_closed or f.capacity_units_per_period <= 0:
+            continue
+        cap = f.capacity_units_per_period
+        if f.production_capacity_units_per_period is not None and f.production_capacity_units_per_period > 0:
+            cap = min(cap, f.production_capacity_units_per_period)
+        role_capacities[f.role] = role_capacities.get(f.role, 0.0) + cap
+
+    if role_capacities:
+        total_capacity = min(role_capacities.values())
+    else:
+        total_capacity = 0.0
+
     capacity_gap = total_capacity - total_demand
 
     diag.total_demand   = total_demand
     diag.total_capacity = total_capacity
     diag.capacity_gap   = capacity_gap
+
+    echelon_shortfalls: List[str] = []
+    for role, role_cap in role_capacities.items():
+        if role_cap < total_demand and not config.allow_shortage:
+            issues_found = True
+            role_str = role.value if hasattr(role, "value") else str(role)
+            echelon_shortfalls.append(
+                f"Total {role_str} capacity ({role_cap:,.0f}) is less than total demand "
+                f"({total_demand:,.0f}). Shortfall: {total_demand - role_cap:,.0f} units/period."
+            )
 
     if capacity_gap < 0 and not config.allow_shortage:
         issues_found = True
@@ -269,7 +287,10 @@ def diagnose_infeasibility(
             f"{len(diag.markets_blocked_by_forced_close)} market(s) are unreachable because "
             f"all supplying facilities are forced-closed or have zero capacity."
         )
-    if capacity_gap < 0 and not config.allow_shortage:
+    if echelon_shortfalls:
+        for es in echelon_shortfalls:
+            summary.append(es)
+    elif capacity_gap < 0 and not config.allow_shortage:
         summary.append(
             f"Total capacity ({total_capacity:,.0f}) is less than total demand "
             f"({total_demand:,.0f}). Enable allow_shortage or increase capacity."

@@ -305,3 +305,35 @@ class TestDiagnosticReport:
         )
         diag = diagnose_infeasibility(net)
         assert len(diag.summary) > 0, "Diagnostic summary should not be empty"
+
+
+# ---------------------------------------------------------------------------
+# Test: Echelon capacity shortfall regression test
+# ---------------------------------------------------------------------------
+
+class TestEchelonCapacityShortfall:
+
+    def test_detects_echelon_capacity_shortfall_when_upstream_abundant(self):
+        """
+        DC capacity < demand while plant capacity is abundant must produce
+        a non-empty, correct diagnosis (not 'no obvious cause').
+        """
+        plant = _plant("P1", cap=10000.0)  # Plant capacity abundant (10,000)
+        dc = _dc("DC1", cap=500.0)         # DC capacity bottleneck (500)
+        mkt = _market("M1")
+
+        net = CanonicalNetwork(
+            facilities=[plant, dc, mkt],
+            products=[_product()],
+            demands=[_demand("M1", "P1", 1000.0)],  # Demand 1,000 > DC capacity 500
+            lanes=[_lane("P1", "DC1"), _lane("DC1", "M1")],
+            config=_cfg(allow_shortage=False),
+        )
+
+        diag = diagnose_infeasibility(net)
+        assert diag.has_issues, "Diagnostic must flag issues when DC capacity is below demand"
+        assert diag.capacity_gap < 0, "Capacity gap must be negative"
+        assert diag.total_capacity == 500.0, "Total effective capacity must be the bottleneck DC capacity (500.0)"
+        assert any("DC" in s or "capacity" in s for s in diag.summary)
+        assert not any("No obvious" in s for s in diag.summary), "Summary must NOT say 'No obvious structural causes detected'"
+
