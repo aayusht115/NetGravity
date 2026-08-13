@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 NetGravity — Scenario Engine
 ==============================
@@ -10,20 +12,20 @@ Design principle (Faculty guidance #25, #26):
   - Scenarios are parameterized via Scenario schema objects
 
 Supported scenario types:
-  CLOSE_FACILITY        → force y_i = 0 (set capacity = 0, is_mandatory=False)
-  OPEN_FACILITY         → add new facility or activate candidate
-  CHANGE_CAPACITY       → override CAP_i
-  CHANGE_DEMAND         → scale D_{mk}
-  CHANGE_TRANSPORT_COST → scale c_{ijvk}
-  LANE_DISRUPTION       → remove arc from A (set is_active=False)
-  FACILITY_DISRUPTION   → set CAP_i ≈ 0 (disruption, no flow)
-  CARBON_FACTOR_CHANGE  → update emission factors
-  SERVICE_TARGET_CHANGE → update SLA_m
-  CUSTOM                → apply ParameterOverride list
+  CLOSE_FACILITY        -> force y_i = 0 (set capacity = 0, is_mandatory=False)
+  OPEN_FACILITY         -> add new facility or activate candidate
+  CHANGE_CAPACITY       -> override CAP_i
+  CHANGE_DEMAND         -> scale D_{mk}
+  CHANGE_TRANSPORT_COST -> scale c_{ijvk}
+  LANE_DISRUPTION       -> remove arc from A (set is_active=False)
+  FACILITY_DISRUPTION   -> set CAP_i ≈ 0 (disruption, no flow)
+  CARBON_FACTOR_CHANGE  -> update emission factors
+  SERVICE_TARGET_CHANGE -> update SLA_m
+  CUSTOM                -> apply ParameterOverride list
 """
 
 import math
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from netgravity.schemas.network import (
     CanonicalNetwork,
