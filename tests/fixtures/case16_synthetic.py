@@ -347,7 +347,7 @@ DEFAULT_CONFIG = OptimizationConfig(
 # ---------------------------------------------------------------------------
 
 def build_case16_network(
-    config: OptimizationConfig = DEFAULT_CONFIG,
+    config: Optional[OptimizationConfig] = None,
 ) -> CanonicalNetwork:
     """
     Build and return the Case 16 synthetic test network.
@@ -355,6 +355,19 @@ def build_case16_network(
     Returns:
         CanonicalNetwork — validated, ready for optimization
     """
+    if config is None:
+        config = OptimizationConfig(
+            objective_mode    = "COST_MIN",
+            solver_name       = "HiGHS",
+            time_limit_seconds = 120,
+            mip_gap           = 0.001,
+            enable_inventory  = True,
+            inventory_z_score = 1.645,
+            enforce_sla       = True,
+            allow_shortage    = False,
+            enable_carbon_cost= False,
+            verbose           = False,
+        )
     network = CanonicalNetwork(
         network_id  = "CASE16_SYNTHETIC",
         description = (
@@ -362,10 +375,10 @@ def build_case16_network(
             "2 plants, 3 existing DCs, 2 candidate DCs, 8 customer markets, 1 product. "
             "All data is fabricated for testing purposes."
         ),
-        facilities  = FACILITIES,
-        products    = PRODUCTS,
-        demands     = DEMANDS,
-        lanes       = LANES,
+        facilities  = [f.model_copy(deep=True) for f in FACILITIES],
+        products    = [p.model_copy(deep=True) for p in PRODUCTS],
+        demands     = [d.model_copy(deep=True) for d in DEMANDS],
+        lanes       = [l.model_copy(deep=True) for l in LANES],
         config      = config,
     )
     network = network.model_copy(update={"data_version": network.compute_data_version()})

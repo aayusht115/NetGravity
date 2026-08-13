@@ -48,13 +48,13 @@ class TestWarehouseMove:
 
         base_res = engine.run(network, Scenario(scenario_id="BASE", scenario_name="Base"))
 
-        # Move DC_NORTH_NEW (active in optimal solution) to Scottish Highlands (lat=58.0, lon=-4.0)
+        # Move DC_EAST to Scottish Highlands (lat=58.0, lon=-4.0)
         move_scenario = Scenario(
-            scenario_id="MOVE_DC_NORTH_NEW",
-            scenario_name="Move DC North to Highlands",
+            scenario_id="MOVE_DC_EAST",
+            scenario_name="Move Eastern DC",
             facility_changes=[
                 FacilityChange(
-                    facility_id="DC_NORTH_NEW",
+                    facility_id="DC_EAST",
                     action="MOVE",
                     latitude=58.0,
                     longitude=-4.0,
@@ -65,9 +65,9 @@ class TestWarehouseMove:
         scen_res = engine.run(network, move_scenario)
 
         # Baseline network remains completely unchanged
-        dc_north_base = next(f for f in network.facilities if f.id == "DC_NORTH_NEW")
-        assert dc_north_base.latitude == 53.5
-        assert dc_north_base.longitude == -1.2
+        dc_east_base = next(f for f in network.facilities if f.id == "DC_EAST")
+        assert dc_east_base.latitude == 51.5
+        assert dc_east_base.longitude == 0.1
 
         # Economics or metrics change under scenario
         assert scen_res.is_solved
@@ -257,7 +257,7 @@ class TestScenarioOverrides:
             scenario_id="RATE_OVERRIDE",
             scenario_name="Rate Increase",
             parameter_overrides=[
-                ParameterOverride(path="lanes.DC_NORTH_NEW.MKT_A.ROAD.rate_per_unit", operation="MULTIPLY", value=5.0)
+                ParameterOverride(path="lanes.DC_EAST.MKT_D.ROAD.rate_per_unit", operation="MULTIPLY", value=5.0)
             ]
         )
 

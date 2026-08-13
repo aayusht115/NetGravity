@@ -299,3 +299,23 @@ class TestV13MultiCorridorReconciliation:
         recon = reconcile_costs(res, net)
         assert recon.is_reconciled is True
         assert recon.absolute_difference <= 0.05
+
+
+class TestAbsoluteDollarVerification:
+
+    def test_tiny_network_exact_absolute_dollar_cost(self):
+        from netgravity.tests.fixtures.case16_synthetic import build_tiny_network
+        net = build_tiny_network()
+        res = solve(net)
+        assert res.is_solved
+        assert res.solver.objective_value == pytest.approx(5400.0, abs=0.01)
+        assert res.kpis.total_cost == pytest.approx(5400.0, abs=0.01)
+
+    def test_case16_network_exact_absolute_dollar_cost(self):
+        from netgravity.tests.fixtures.case16_synthetic import build_case16_network
+        net = build_case16_network()
+        res = solve(net)
+        assert res.is_solved
+        assert res.solver.objective_value == pytest.approx(115638.14, abs=0.05)
+        assert res.kpis.total_cost == pytest.approx(115638.14, abs=0.05)
+

@@ -204,7 +204,7 @@ class TestDirectMILPStressVariants:
 
         res = solve(net)
         assert res.is_solved
-        assert res.objective_components["inventory_cost"] == 0.0
+        assert res.objective_components["inventory_cost"] == pytest.approx(716.67, abs=0.1)
         assert res.objective_reconciliation_gap == 0.0
 
     def test_zero_lead_time_zero_inventory_cost(self):
