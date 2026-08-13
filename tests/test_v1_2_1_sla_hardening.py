@@ -124,7 +124,7 @@ class TestSLAFeasibilityHardening:
         scen = Scenario(
             scenario_id="DEMAND_SURGE_20PCT",
             scenario_name="Demand Surge +20%",
-            demand_changes=[DemandChange(market_id="*", product_id="*", factor=1.20)],
+            demand_changes=[DemandChange(market_id="*", product_id="*", quantity_multiplier=1.20)],
         )
         res = engine.run(net, scen)
         assert res.is_solved

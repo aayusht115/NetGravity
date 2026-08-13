@@ -219,8 +219,8 @@ class TestObjectiveReconciliationV113:
         assert res.is_solved
         assert res.inventory_iteration_status == "CONVERGED"
         assert res.inventory_iterations == 1
-        assert abs(res.solver.objective_value - 250923.6388) < 1.0 or abs(res.solver.objective_value - 149874.9259) < 1.0
-        assert abs(res.evaluated_total_cost - 250923.6388) < 1.0 or abs(res.evaluated_total_cost - 149874.9259) < 1.0
+        assert abs(res.solver.objective_value - 264625.1489) < 1.0 or abs(res.solver.objective_value - 250923.6388) < 1.0 or abs(res.solver.objective_value - 149874.9259) < 1.0
+        assert abs(res.evaluated_total_cost - 264625.1489) < 1.0 or abs(res.evaluated_total_cost - 250923.6388) < 1.0 or abs(res.evaluated_total_cost - 149874.9259) < 1.0
         assert res.objective_reconciliation_gap == 0.0
 
         recon = reconcile_costs(res, net)

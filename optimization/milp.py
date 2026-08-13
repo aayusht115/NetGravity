@@ -56,6 +56,7 @@ from netgravity.schemas.network import (
     ObjectiveMode,
     OptimizationConfig,
     ProductRecord,
+    SLAMode,
     SourcingPolicy,
     TransportMode,
 )
@@ -187,27 +188,35 @@ def _solve_milp(
         if orig.status.name == "CLOSED" or dest.status.name == "CLOSED":
             continue
 
-        mode_str = lane.mode.value if hasattr(lane.mode, "value") else str(lane.mode)
+        sla_mode_val = getattr(config, "sla_mode", "LAST_MILE")
+        sla_mode_str = sla_mode_val.value if hasattr(sla_mode_val, "value") else str(sla_mode_val)
 
         if config.enforce_sla and orig.role not in market_roles and dest.role in market_roles:
-            sla_mode_val = getattr(config, "sla_mode", "LAST_MILE")
-            sla_mode_str = sla_mode_val.value if hasattr(sla_mode_val, "value") else str(sla_mode_val)
             sla_feasible = True
 
             for d in network.demands:
-                if d.market_id == dest.id and d.sla_days is not None:
+                if d.market_id == dest.id and d.sla_days is not None and d.sla_days > 0:
                     if sla_mode_str == "END_TO_END":
-                        # Compute minimum inbound lead time to origin (DC) from any plant
                         plant_roles = {NodeRole.PLANT, NodeRole.SUPPLIER}
-                        inbound_lts = [
-                            ln.lead_time_days for ln in network.lanes
+                        inbound_lanes = [
+                            ln for ln in network.lanes
                             if ln.destination_id == orig.id and facility_map.get(ln.origin_id) and facility_map.get(ln.origin_id).role in plant_roles
                         ]
-                        min_inbound_lt = min(inbound_lts) if inbound_lts else float("inf")
-                        total_lt = min_inbound_lt + lane.lead_time_days
-                        if total_lt > d.sla_days:
-                            sla_feasible = False
-                            break
+                        dc_lt = getattr(orig, "replenishment_lead_time_days", 0.0) or 0.0
+                        if inbound_lanes:
+                            feasible_paths = [
+                                ln.lead_time_days + dc_lt + lane.lead_time_days
+                                for ln in inbound_lanes
+                                if (ln.lead_time_days + dc_lt + lane.lead_time_days) <= d.sla_days
+                            ]
+                            if not feasible_paths:
+                                sla_feasible = False
+                                break
+                        else:
+                            total_lt = dc_lt + lane.lead_time_days
+                            if total_lt > d.sla_days:
+                                sla_feasible = False
+                                break
                     else:
                         # LAST_MILE (default)
                         if lane.lead_time_days > d.sla_days:
@@ -216,6 +225,8 @@ def _solve_milp(
 
             if not sla_feasible:
                 continue
+
+        mode_str = lane.mode.value if hasattr(lane.mode, "value") else str(lane.mode)
 
         for prod in network.products:
             if orig.eligible_product_ids and prod.id not in orig.eligible_product_ids:
@@ -259,10 +270,8 @@ def _solve_milp(
 
     # Decision variables: x_{ijvk} ≥ 0
     x: Dict[ArcKey, pulp.LpVariable] = {}
-    for key, ln, prod in arcs:
-        ub = (ln.lane_capacity
-              if (ln.lane_capacity is not None and ln.lane_capacity > 0)
-              else None)
+    for (key, ln, prod) in arcs:
+        ub = (ln.lane_capacity if (ln.lane_capacity is not None and ln.lane_capacity > 0) else None)
         x[key] = _make_var(
             prob,
             f"x_{key[0]}_{key[1]}_{key[2]}_{key[3]}",
@@ -271,7 +280,7 @@ def _solve_milp(
             cat="Continuous",
         )
 
-    # Shortage variables u_{mk} ≥ 0
+    # Decision variables: u_{jk} ≥ 0 (Shortage)
     u: Dict[Tuple[str, str], pulp.LpVariable] = {}
     if config.allow_shortage:
         for d in network.demands:
@@ -339,14 +348,16 @@ def _solve_milp(
         else 0
     )
 
-    if config.objective_mode == ObjectiveMode.WEIGHTED_COST_CARBON:
-        carbon_objective_term = config.carbon_weight * pulp.lpSum(
-            arc_unit_co2[key] * x[key]
+    carbon_objective_term = (
+        pulp.lpSum(
+            config.carbon_weight * arc_unit_co2[key] * x[key]
             for key in arc_set
             if key in x
         )
-    else:
-        carbon_objective_term = 0
+        if (hasattr(config, "objective_mode") and
+            (config.objective_mode.value if hasattr(config.objective_mode, "value") else str(config.objective_mode)) == "WEIGHTED_COST_CARBON")
+        else 0
+    )
 
     prob += (
         facility_cost_term
@@ -360,6 +371,32 @@ def _solve_milp(
     ), "TotalCost"
 
     # 5. Constraints
+
+    # (F-19) Carbon Cap Constraint: Σ_k (arc_unit_co2[k] * x[k]) <= carbon_cap_kg
+    if config.carbon_cap_kg is not None and config.carbon_cap_kg >= 0:
+        prob += (
+            pulp.lpSum(arc_unit_co2[key] * x[key] for key in arc_set if key in x) <= config.carbon_cap_kg,
+            "C_carbon_cap",
+        )
+
+    # (F-03) Aggregate Corridor Capacity Constraint: Σ_{v, k} x_{i, j, v, k} <= corridor_capacity
+    corridor_caps: Dict[Tuple[str, str], float] = {}
+    for lane in network.lanes:
+        if lane.lane_capacity is not None and lane.lane_capacity > 0:
+            corr_key = (lane.origin_id, lane.destination_id)
+            if corr_key not in corridor_caps or lane.lane_capacity < corridor_caps[corr_key]:
+                corridor_caps[corr_key] = lane.lane_capacity
+
+    for (orig_id, dest_id), cap_val in corridor_caps.items():
+        corr_arcs = [
+            k for k in arc_set
+            if k[0] == orig_id and k[1] == dest_id and k in x
+        ]
+        if corr_arcs:
+            prob += (
+                pulp.lpSum(x[k] for k in corr_arcs) <= cap_val,
+                f"corridor_cap_{orig_id}_{dest_id}",
+            )
 
     # (C1) Demand Fulfillment
     for d in network.demands:
@@ -410,6 +447,10 @@ def _solve_milp(
             if config.minimum_throughput_enabled and min_thru is not None and min_thru > 0:
                 prob += outbound_sum >= min_thru * y[fac.id], f"min_thru_{fac.id}"
 
+            # (F-20) Unpin binary y_i when facility carries 0 fixed cost and 0 throughput
+            if not fac.is_mandatory:
+                prob += y[fac.id] <= outbound_sum * 1e5, f"unpin_zero_thru_{fac.id}"
+
     # (C4) Flow Conservation at Intermediate Facilities (DCs, Depots, Warehouses, Cross-docks)
     intermediate_roles = {NodeRole.DC, NodeRole.DEPOT, NodeRole.WAREHOUSE, NodeRole.CROSS_DOCK, NodeRole.DARKSTORE}
     intermediate_facs = [f for f in non_market_facs if f.role in intermediate_roles]
@@ -417,8 +458,6 @@ def _solve_milp(
         for prod in network.products:
             inbound = [key for key in arc_set if key[1] == fac.id and key[3] == prod.id and key in x]
             outbound = [key for key in arc_set if key[0] == fac.id and key[3] == prod.id and key in x]
-            # Flow conservation applies strictly to ALL transshipment facilities.
-            # If inbound is empty, outbound flow must equal 0 (no phantom supply).
             if outbound:
                 prob += (
                     pulp.lpSum(x[k] for k in inbound) == pulp.lpSum(x[k] for k in outbound),
@@ -454,7 +493,6 @@ def _solve_milp(
                     f"link_assign_flow_ub_{fac.id}_{mkt.id}",
                 )
             else:
-                # If no outbound arcs exist or demand is 0, assignment MUST be 0
                 prob += a[(fac.id, mkt.id)] == 0, f"link_assign_zero_{fac.id}_{mkt.id}"
 
     # (C8) Single Sourcing Constraint (if policy == SINGLE)
@@ -471,115 +509,108 @@ def _solve_milp(
         if dc_open_vars:
             prob += pulp.lpSum(dc_open_vars) <= config.max_facilities, "max_facilities"
 
-    # 6. Solve Problem
+    # 6. Solve PuLP Model
     solver_meta = _run_pulp_solver(prob, config)
 
-    facility_decisions: List[FacilityDecision]   = []
-    flow_decisions:     List[FlowDecision]       = []
+    # 7. Extract Decision Vectors
+    facility_decisions: List[FacilityDecision] = []
     assignment_decisions: List[AssignmentDecision] = []
-    obj_components:     Dict[str, float]         = {}
-    evaluated_total:    Optional[float]          = None
+    flow_decisions: List[FlowDecision] = []
+    obj_components: Dict[str, float] = {}
+    evaluated_total: Optional[float] = None
 
-    if solver_meta.status in (SolverStatus.OPTIMAL, SolverStatus.FEASIBLE, SolverStatus.TIME_LIMIT):
+    total_fc = 0.0
+    total_oc = 0.0
+    total_hc = 0.0
 
-        # Facility decisions & throughput calculation
-        fac_throughput: Dict[str, float] = {}
-        for (key, ln, prod) in arcs:
-            if key in x:
-                val = pulp.value(x[key]) or 0.0
-                if val > 1e-6:
-                    fac_throughput[key[0]] = fac_throughput.get(key[0], 0.0) + val
+    def lane_unit_cost(ln, prod, cfg):
+        return ln.rate_per_unit
 
-        # Assignment decisions collection & assigned inventory cost calculation
-        assigned_inv_cost_by_fac: Dict[str, float] = {}
-        for (fac_id, mkt_id), var in a.items():
-            is_ass = (pulp.value(var) or 0.0) > 0.5
-            coeff = inv_coeffs.get((fac_id, mkt_id))
-            ss_units = coeff.total_safety_stock_units if (is_ass and coeff) else 0.0
-            ic_cost  = coeff.total_inventory_cost if (is_ass and coeff) else 0.0
-
-            if is_ass:
-                assigned_inv_cost_by_fac[fac_id] = assigned_inv_cost_by_fac.get(fac_id, 0.0) + ic_cost
-
-            assignment_decisions.append(AssignmentDecision(
-                facility_id=fac_id,
-                market_id=mkt_id,
-                is_assigned=is_ass,
-                safety_stock_units=round(ss_units, 4),
-                inventory_cost=round(ic_cost, 4),
-            ))
-
-        total_fc = 0.0
-        total_oc = 0.0
-        total_hc = 0.0
+    if solver_meta.status in (SolverStatus.OPTIMAL, SolverStatus.FEASIBLE):
         for fac in non_market_facs:
             y_val = pulp.value(y[fac.id]) or 0.0
             is_open = y_val > 0.5
+            fixed_c = fac.get_fixed_cost_for_period(config.cost_period) if is_open else 0.0
+            open_c  = fac.opening_cost if (is_open and fac.is_candidate) else 0.0
 
-            fc = fac.get_fixed_cost_for_period(config.cost_period) if is_open else 0.0
-            oc = fac.opening_cost if (is_open and fac.is_candidate) else 0.0
-            throughput = fac_throughput.get(fac.id, 0.0)
-            hc = fac.handling_cost_per_unit * throughput if is_open else 0.0
-            fac_ic = assigned_inv_cost_by_fac.get(fac.id, 0.0) if is_open else 0.0
+            outbound_flow = sum(
+                pulp.value(x[k]) or 0.0
+                for k in arc_set
+                if k[0] == fac.id and k in x
+            )
+            hand_c = fac.handling_cost_per_unit * outbound_flow if is_open else 0.0
 
-            total_fc += fc
-            total_oc += oc
-            total_hc += hc
+            total_fc += fixed_c
+            total_oc += open_c
+            total_hc += hand_c
 
-            cap = fac.capacity_units_per_period or 1e12
-            util_pct = (throughput / cap * 100.0) if cap > 0 and cap < 1e11 else 0.0
+            cap_val = fac.capacity_units_per_period
+            util_pct = (outbound_flow / cap_val * 100.0) if (is_open and cap_val and cap_val > 0) else 0.0
 
             facility_decisions.append(FacilityDecision(
-                facility_id         = fac.id,
-                facility_name       = fac.name,
-                role                = fac.role.value,
-                is_open             = is_open,
-                throughput_units    = round(throughput, 4),
-                capacity_units      = cap if cap < 1e11 else 0.0,
-                utilization_pct     = round(util_pct, 2),
-                fixed_cost          = round(fc, 4),
-                handling_cost       = round(hc, 4),
-                opening_cost        = round(oc, 4),
-                inventory_cost      = round(fac_ic, 4),
-                total_facility_cost = round(fc + hc + oc + fac_ic, 4),
+                facility_id             = fac.id,
+                facility_name           = fac.name,
+                role                    = fac.role,
+                status                  = fac.status,
+                is_open                 = is_open,
+                throughput_units        = round(outbound_flow, 4),
+                capacity_units          = cap_val,
+                utilization_pct         = round(util_pct, 2),
+                fixed_cost_period       = round(fixed_c, 4),
+                opening_cost            = round(open_c, 4),
+                handling_cost           = round(hand_c, 4),
+                latitude                = fac.latitude,
+                longitude               = fac.longitude,
             ))
 
-        # Flow decisions
-        total_tc  = 0.0
+        for fac in non_market_facs:
+            for mkt in markets:
+                if (fac.id, mkt.id) in a:
+                    a_val = pulp.value(a[(fac.id, mkt.id)]) or 0.0
+                    is_assigned = a_val > 0.5
+                    inv_cost_pair = 0.0
+                    if is_assigned and config.enable_inventory:
+                        coeff = inv_coeffs.get((fac.id, mkt.id))
+                        if coeff:
+                            inv_cost_pair = coeff.total_inventory_cost
+
+                    assignment_decisions.append(AssignmentDecision(
+                        facility_id    = fac.id,
+                        market_id      = mkt.id,
+                        is_assigned    = is_assigned,
+                        inventory_cost = round(inv_cost_pair, 4),
+                    ))
+
+        total_tc = 0.0
         total_co2 = 0.0
+
         for (key, ln, prod) in arcs:
-            if key not in x:
-                continue
             flow_val = pulp.value(x[key]) or 0.0
-            if flow_val < 1e-6:
-                continue
+            if flow_val > 1e-6:
+                tc = lane_unit_cost(ln, prod, config) * flow_val
+                co2 = carbon_mod.compute_unit_co2(ln, prod) * flow_val
+                total_tc += tc
+                total_co2 += co2
 
-            tc  = arc_unit_cost[key] * flow_val
-            co2 = arc_unit_co2[key]  * flow_val
-            total_tc  += tc
-            total_co2 += co2
+                cap_lane = ln.lane_capacity
+                util_pct_arc = (flow_val / cap_lane * 100.0) if (cap_lane and cap_lane > 0) else 0.0
 
-            util_pct_arc = None
-            if ln.lane_capacity and ln.lane_capacity > 0:
-                util_pct_arc = round(flow_val / ln.lane_capacity * 100, 2)
+                flow_decisions.append(FlowDecision(
+                    origin_id           = key[0],
+                    destination_id      = key[1],
+                    mode                = ln.mode,
+                    product_id          = key[3],
+                    period              = 1,
+                    flow_units          = round(flow_val, 4),
+                    distance_km         = ln.distance_km,
+                    lead_time_days      = ln.lead_time_days,
+                    rate_per_unit       = ln.rate_per_unit,
+                    transport_cost      = round(tc, 4),
+                    carbon_kg           = round(co2, 6),
+                    lane_capacity       = ln.lane_capacity,
+                    arc_utilization_pct = util_pct_arc,
+                ))
 
-            flow_decisions.append(FlowDecision(
-                origin_id           = key[0],
-                destination_id      = key[1],
-                mode                = key[2],
-                product_id          = key[3],
-                period              = 1,
-                flow_units          = round(flow_val, 4),
-                distance_km         = ln.distance_km,
-                lead_time_days      = ln.lead_time_days,
-                rate_per_unit       = ln.rate_per_unit,
-                transport_cost      = round(tc, 4),
-                carbon_kg           = round(co2, 6),
-                lane_capacity       = ln.lane_capacity,
-                arc_utilization_pct = util_pct_arc,
-            ))
-
-        # Shortage
         total_shortage_cost = 0.0
         if config.allow_shortage:
             for key_u, var in u.items():
@@ -588,6 +619,10 @@ def _solve_milp(
 
         total_ic = sum(ad.inventory_cost for ad in assignment_decisions if ad.is_assigned)
 
+        carbon_cost = 0.0
+        if config.enable_carbon_cost:
+            carbon_cost = round(total_co2 * config.carbon_price * config.carbon_weight, 4)
+
         obj_components = {
             "facility_cost":  round(total_fc, 4),
             "opening_cost":   round(total_oc, 4),
@@ -595,11 +630,12 @@ def _solve_milp(
             "handling_cost":  round(total_hc, 4),
             "inventory_cost": round(total_ic, 4),
             "shortage_cost":  round(total_shortage_cost, 4),
+            "carbon_cost":    carbon_cost,
             "carbon_kg":      round(total_co2, 6),
         }
 
         evaluated_total = round(
-            total_fc + total_oc + total_tc + total_hc + total_ic + total_shortage_cost, 4
+            total_fc + total_oc + total_tc + total_hc + total_ic + total_shortage_cost + carbon_cost, 4
         )
 
     res = OptimizationResult(

@@ -424,14 +424,16 @@ class ScenarioEngine:
         dc:      DemandChange,
         demands: List,
     ) -> None:
+        matched = 0
         for d in demands:
-            if dc.market_id is not None and d.market_id != dc.market_id:
+            if dc.market_id not in (None, "*") and d.market_id != dc.market_id:
                 continue
-            if dc.product_id is not None and d.product_id != dc.product_id:
+            if dc.product_id not in (None, "*") and d.product_id != dc.product_id:
                 continue
             if dc.period is not None and d.period != dc.period:
                 continue
 
+            matched += 1
             if dc.quantity_override is not None:
                 d.quantity = dc.quantity_override
             elif dc.quantity_multiplier is not None:
@@ -440,25 +442,33 @@ class ScenarioEngine:
             if dc.std_dev_multiplier is not None:
                 d.std_dev = max(0.0, d.std_dev * dc.std_dev_multiplier)
 
+        if matched == 0:
+            raise ValueError(f"DemandChange ({dc}) matched 0 demand records in network.")
+
     def _apply_cost_change(
         self,
         cc:    CostChange,
         lanes: List[LaneRecord],
     ) -> None:
+        matched = 0
         for ln in lanes:
-            if cc.origin_id is not None and ln.origin_id != cc.origin_id:
+            if cc.origin_id not in (None, "*") and ln.origin_id != cc.origin_id:
                 continue
-            if cc.destination_id is not None and ln.destination_id != cc.destination_id:
+            if cc.destination_id not in (None, "*") and ln.destination_id != cc.destination_id:
                 continue
-            if cc.mode is not None:
+            if cc.mode not in (None, "*"):
                 ln_mode = ln.mode.value if hasattr(ln.mode, "value") else str(ln.mode)
                 if ln_mode != cc.mode:
                     continue
 
+            matched += 1
             if cc.rate_override is not None:
                 ln.rate_per_unit = cc.rate_override
             elif cc.rate_multiplier is not None:
                 ln.rate_per_unit = max(0.0, ln.rate_per_unit * cc.rate_multiplier)
+
+        if matched == 0:
+            raise ValueError(f"CostChange ({cc}) matched 0 lane records in network.")
 
     def _apply_lane_change(
         self,
@@ -467,12 +477,15 @@ class ScenarioEngine:
         network: CanonicalNetwork,
     ) -> None:
         if lc.action == "REMOVE":
+            orig_len = len(lanes)
             lanes[:] = [
                 ln for ln in lanes
                 if not (ln.origin_id == lc.origin_id
                         and ln.destination_id == lc.destination_id
                         and (ln.mode.value if hasattr(ln.mode, "value") else str(ln.mode)) == lc.mode)
             ]
+            if len(lanes) == orig_len:
+                raise ValueError(f"LaneChange REMOVE ({lc}) matched 0 active lanes.")
 
         elif lc.action == "ADD":
             new_lane = LaneRecord(
@@ -487,16 +500,20 @@ class ScenarioEngine:
             lanes.append(new_lane)
 
         elif lc.action == "MODIFY":
+            matched = 0
             for ln in lanes:
                 ln_mode = ln.mode.value if hasattr(ln.mode, "value") else str(ln.mode)
                 if (ln.origin_id == lc.origin_id
                         and ln.destination_id == lc.destination_id
                         and ln_mode == lc.mode):
+                    matched += 1
                     if lc.rate_per_unit   is not None: ln.rate_per_unit  = lc.rate_per_unit
                     if lc.distance_km     is not None: ln.distance_km    = lc.distance_km
                     if lc.lead_time_days  is not None: ln.lead_time_days = lc.lead_time_days
                     if lc.lane_capacity   is not None: ln.lane_capacity  = lc.lane_capacity
                     if lc.is_active       is not None: ln.is_active_baseline = lc.is_active
+            if matched == 0:
+                raise ValueError(f"LaneChange MODIFY ({lc}) matched 0 active lanes.")
 
     def _apply_parameter_override(
         self,

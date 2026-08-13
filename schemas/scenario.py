@@ -15,7 +15,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +60,8 @@ class ParameterOverride(BaseModel):
     operation: str  = "SET"    # SET | MULTIPLY | ADD
     value:     Any
 
+    model_config = ConfigDict(extra="forbid")
+
     @field_validator("operation")
     @classmethod
     def valid_op(cls, v: str) -> str:
@@ -98,6 +100,8 @@ class FacilityChange(BaseModel):
     new_facility: Optional[FacilityRecord] = None
     new_lanes:    List[LaneRecord]        = Field(default_factory=list)
 
+    model_config = ConfigDict(extra="forbid")
+
     @field_validator("action")
     @classmethod
     def valid_action(cls, v: str) -> str:
@@ -126,6 +130,8 @@ class DemandChange(BaseModel):
     quantity_override:   Optional[float] = None   # absolute override
     std_dev_multiplier:  Optional[float] = None   # scale demand variability
 
+    model_config = ConfigDict(extra="forbid")
+
 
 # ---------------------------------------------------------------------------
 # Cost change
@@ -141,6 +147,8 @@ class CostChange(BaseModel):
 
     rate_multiplier: Optional[float] = None   # scale factor
     rate_override:   Optional[float] = None   # absolute override
+
+    model_config = ConfigDict(extra="forbid")
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +171,8 @@ class LaneChange(BaseModel):
     lane_capacity:   Optional[float] = None
     is_active:       Optional[bool]  = None
 
+    model_config = ConfigDict(extra="forbid")
+
     @field_validator("action")
     @classmethod
     def valid_lane_action(cls, v: str) -> str:
@@ -179,16 +189,6 @@ class LaneChange(BaseModel):
 class Scenario(BaseModel):
     """
     A complete scenario specification.
-
-    A scenario is a self-contained description of how the base network
-    is modified before solving. The optimizer receives a modified copy of
-    the canonical network — the base network is never mutated.
-
-    Scenarios can be:
-      - Composed (apply multiple changes)
-      - Named for reporting
-      - Versioned
-      - Compared against baseline or other scenarios
     """
     scenario_id:     str
     scenario_name:   str
@@ -210,7 +210,7 @@ class Scenario(BaseModel):
     created_by:  Optional[str]  = None
     tags:        List[str]      = Field(default_factory=list)
 
-    model_config = {"extra": "allow"}
+    model_config = ConfigDict(extra="forbid")
 
 
 # ---------------------------------------------------------------------------
@@ -220,12 +220,13 @@ class Scenario(BaseModel):
 class ScenarioLibrary(BaseModel):
     """
     A named collection of scenarios to be compared.
-    Includes baseline scenario identifier for comparison anchor.
     """
     library_id:      str
     baseline_id:     str              # scenario_id of the baseline (current state)
     scenarios:       List[Scenario]
     description:     str = ""
+
+    model_config = ConfigDict(extra="forbid")
 
     def get_scenario(self, scenario_id: str) -> Optional[Scenario]:
         for s in self.scenarios:
