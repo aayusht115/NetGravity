@@ -48,13 +48,13 @@ class TestWarehouseMove:
 
         base_res = engine.run(network, Scenario(scenario_id="BASE", scenario_name="Base"))
 
-        # Move DC_EAST (active in baseline) to Scottish Highlands (lat=58.0, lon=-4.0)
+        # Move DC_NORTH_NEW (active in optimal solution) to Scottish Highlands (lat=58.0, lon=-4.0)
         move_scenario = Scenario(
-            scenario_id="MOVE_DC_EAST",
-            scenario_name="Move DC East to Highlands",
+            scenario_id="MOVE_DC_NORTH_NEW",
+            scenario_name="Move DC North to Highlands",
             facility_changes=[
                 FacilityChange(
-                    facility_id="DC_EAST",
+                    facility_id="DC_NORTH_NEW",
                     action="MOVE",
                     latitude=58.0,
                     longitude=-4.0,
@@ -65,9 +65,9 @@ class TestWarehouseMove:
         scen_res = engine.run(network, move_scenario)
 
         # Baseline network remains completely unchanged
-        dc_east_base = next(f for f in network.facilities if f.id == "DC_EAST")
-        assert dc_east_base.latitude == 51.5
-        assert dc_east_base.longitude == 0.1
+        dc_north_base = next(f for f in network.facilities if f.id == "DC_NORTH_NEW")
+        assert dc_north_base.latitude == 53.5
+        assert dc_north_base.longitude == -1.2
 
         # Economics or metrics change under scenario
         assert scen_res.is_solved
@@ -136,7 +136,7 @@ class TestAddDCScenario:
 
         base_res = engine.run(network, Scenario(scenario_id="BASE", scenario_name="Base"))
 
-        # Create cheap strategic super-DC
+        # Create cheap strategic super-DC with competitive new lanes
         new_dc = FacilityRecord(
             id="DC_SUPER",
             name="Super Distribution Centre",
@@ -144,13 +144,24 @@ class TestAddDCScenario:
             status=FacilityStatus.CANDIDATE,
             latitude=52.0,
             longitude=-1.5,
-            fixed_cost_per_year=10_000,   # extremely low fixed cost
-            handling_cost_per_unit=0.10,
+            fixed_cost_per_year=1_000,   # extremely low fixed cost
+            handling_cost_per_unit=0.01,
             capacity_units_per_period=10_000,
             is_mandatory=False,
             is_closable=True,
             opening_cost=0.0,
         )
+        super_lanes = [
+            LaneRecord(origin_id="PLANT_NORTH", destination_id="DC_SUPER", mode=TransportMode.ROAD, rate_per_unit=0.50, distance_km=50.0, lead_time_days=0.5),
+            LaneRecord(origin_id="DC_SUPER", destination_id="MKT_A", mode=TransportMode.ROAD, rate_per_unit=0.50, distance_km=50.0, lead_time_days=0.5),
+            LaneRecord(origin_id="DC_SUPER", destination_id="MKT_B", mode=TransportMode.ROAD, rate_per_unit=0.50, distance_km=50.0, lead_time_days=0.5),
+            LaneRecord(origin_id="DC_SUPER", destination_id="MKT_C", mode=TransportMode.ROAD, rate_per_unit=0.50, distance_km=50.0, lead_time_days=0.5),
+            LaneRecord(origin_id="DC_SUPER", destination_id="MKT_D", mode=TransportMode.ROAD, rate_per_unit=0.50, distance_km=50.0, lead_time_days=0.5),
+            LaneRecord(origin_id="DC_SUPER", destination_id="MKT_E", mode=TransportMode.ROAD, rate_per_unit=0.50, distance_km=50.0, lead_time_days=0.5),
+            LaneRecord(origin_id="DC_SUPER", destination_id="MKT_F", mode=TransportMode.ROAD, rate_per_unit=0.50, distance_km=50.0, lead_time_days=0.5),
+            LaneRecord(origin_id="DC_SUPER", destination_id="MKT_G", mode=TransportMode.ROAD, rate_per_unit=0.50, distance_km=50.0, lead_time_days=0.5),
+            LaneRecord(origin_id="DC_SUPER", destination_id="MKT_H", mode=TransportMode.ROAD, rate_per_unit=0.50, distance_km=50.0, lead_time_days=0.5),
+        ]
 
         add_scen = Scenario(
             scenario_id="ADD_SUPER_DC",
@@ -160,6 +171,7 @@ class TestAddDCScenario:
                     facility_id="DC_SUPER",
                     action="ADD_FACILITY",
                     new_facility=new_dc,
+                    new_lanes=super_lanes,
                 )
             ]
         )
@@ -240,12 +252,12 @@ class TestScenarioOverrides:
 
         base_res = engine.run(network, Scenario(scenario_id="BASE", scenario_name="Base"))
 
-        # Override active lane (DC_EAST -> MKT_F)
+        # Override active lane (DC_NORTH_NEW -> MKT_A)
         scen = Scenario(
             scenario_id="RATE_OVERRIDE",
             scenario_name="Rate Increase",
             parameter_overrides=[
-                ParameterOverride(path="lanes.DC_EAST.MKT_F.ROAD.rate_per_unit", operation="MULTIPLY", value=5.0)
+                ParameterOverride(path="lanes.DC_NORTH_NEW.MKT_A.ROAD.rate_per_unit", operation="MULTIPLY", value=5.0)
             ]
         )
 

@@ -80,6 +80,14 @@ def solve(
     config: Optional[OptimizationConfig] = None,
     scenario_id: Optional[str] = None,
 ) -> OptimizationResult:
+    return milp_solve(network=network, config=config, scenario_id=scenario_id)
+
+
+def milp_solve(
+    network: CanonicalNetwork,
+    config: Optional[OptimizationConfig] = None,
+    scenario_id: Optional[str] = None,
+) -> OptimizationResult:
     """
     Solve the network design problem using the V1.2 Direct MILP formulation.
 
@@ -98,9 +106,12 @@ def solve(
     if config is None:
         config = network.config
 
+    # F-05: Ensure single resolved configuration attached to effective_network
+    effective_network = network.model_copy(update={"config": config})
+
     # Fast-fail network topology validation check
     from netgravity.validation.checks import validate_network
-    report = validate_network(network)
+    report = validate_network(effective_network)
     if not report.is_valid and not config.allow_shortage:
         critical_codes = {"V-014", "V-007", "V-008", "V-010"}
         if any(i.code in critical_codes for i in report.errors):
@@ -116,8 +127,8 @@ def solve(
             return OptimizationResult(
                 run_id=str(uuid.uuid4())[:8],
                 scenario_id=scenario_id,
-                network_id=network.network_id,
-                data_version=network.data_version,
+                network_id=effective_network.network_id,
+                data_version=effective_network.data_version,
                 result_type="BASELINE" if scenario_id is None else "SCENARIO",
                 solver=solver_meta,
                 facility_decisions=[],
@@ -127,7 +138,7 @@ def solve(
             )
 
     return _solve_milp(
-        network=network,
+        network=effective_network,
         config=config,
         scenario_id=scenario_id,
         iteration=0,

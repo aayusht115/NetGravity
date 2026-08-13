@@ -478,6 +478,9 @@ class OptimizationResult(BaseModel):
 
     # Inventory iteration tracking (V1.1 / V1.1.3 - DEPRECATED in V1.2, kept for back-compat)
     inventory_iterations:       int = 0
+
+    # Audit metadata for scenario execution (F-13 ADD_FACILITY audit tracking)
+    scenario_audit_metadata:    Dict[str, Any] = Field(default_factory=dict)
     # One of: NOT_APPLICABLE | INTEGRATED | CONVERGED | CYCLE_DETECTED | MAX_ITERATIONS_REACHED_NO_CONVERGENCE
 
     @property

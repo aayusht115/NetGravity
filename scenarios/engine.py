@@ -266,7 +266,7 @@ class ScenarioEngine:
     ) -> None:
         """
         Recalculate distance, transport rate, lead time, and carbon inputs for all lanes
-        connected to a facility whose location has changed using relative coordinate scaling.
+        connected to a facility whose location has changed using business-correct relocation logic.
         """
         for ln in lanes:
             if ln.origin_id == facility.id or ln.destination_id == facility.id:
@@ -276,28 +276,67 @@ class ScenarioEngine:
                     f_orig.latitude is not None and f_orig.longitude is not None and
                     f_dest.latitude is not None and f_dest.longitude is not None):
 
-                    # Coordinates of origin and destination BEFORE this move
-                    o_lat = orig_lat if ln.origin_id == facility.id and orig_lat is not None else f_orig.latitude
-                    o_lon = orig_lon if ln.origin_id == facility.id and orig_lon is not None else f_orig.longitude
-                    d_lat = orig_lat if ln.destination_id == facility.id and orig_lat is not None else f_dest.latitude
-                    d_lon = orig_lon if ln.destination_id == facility.id and orig_lon is not None else f_dest.longitude
+                    # Anchor baseline initial values on first move
+                    if getattr(ln, "_base_distance_km", None) is None:
+                        setattr(ln, "_base_distance_km", ln.distance_km)
+                        setattr(ln, "_base_rate_per_unit", ln.rate_per_unit)
+                        setattr(ln, "_base_lead_time_days", ln.lead_time_days)
+                        o_lat = orig_lat if ln.origin_id == facility.id and orig_lat is not None else f_orig.latitude
+                        o_lon = orig_lon if ln.origin_id == facility.id and orig_lon is not None else f_orig.longitude
+                        d_lat = orig_lat if ln.destination_id == facility.id and orig_lat is not None else f_dest.latitude
+                        d_lon = orig_lon if ln.destination_id == facility.id and orig_lon is not None else f_dest.longitude
+                        setattr(ln, "_base_orig_lat", o_lat)
+                        setattr(ln, "_base_orig_lon", o_lon)
+                        setattr(ln, "_base_dest_lat", d_lat)
+                        setattr(ln, "_base_dest_lon", d_lon)
 
-                    init_dist = haversine_distance(o_lat, o_lon, d_lat, d_lon)
-                    new_dist  = haversine_distance(f_orig.latitude, f_orig.longitude, f_dest.latitude, f_dest.longitude)
+                    base_dist = getattr(ln, "_base_distance_km")
+                    base_rate = getattr(ln, "_base_rate_per_unit")
+                    base_lt   = getattr(ln, "_base_lead_time_days")
 
-                    if init_dist > 1e-3:
-                        scale_factor = new_dist / init_dist
-                        ln.distance_km = round(ln.distance_km * scale_factor, 2)
-                        if ln.network_distance_km is not None and ln.network_distance_km > 0:
-                            ln.network_distance_km = round(ln.network_distance_km * scale_factor, 2)
-                        if ln.lead_time_days > 0:
-                            ln.lead_time_days = max(0.1, round(ln.lead_time_days * scale_factor, 2))
-                        if ln.rate_per_unit > 0:
-                            ln.rate_per_unit = max(0.01, round(ln.rate_per_unit * scale_factor, 4))
+                    base_o_lat = getattr(ln, "_base_orig_lat")
+                    base_o_lon = getattr(ln, "_base_orig_lon")
+                    base_d_lat = getattr(ln, "_base_dest_lat")
+                    base_d_lon = getattr(ln, "_base_dest_lon")
+
+                    # Check if moved back to baseline coordinates (within 0.001 deg)
+                    is_back_to_base = (
+                        abs(f_orig.latitude - base_o_lat) < 1e-3 and
+                        abs(f_orig.longitude - base_o_lon) < 1e-3 and
+                        abs(f_dest.latitude - base_d_lat) < 1e-3 and
+                        abs(f_dest.longitude - base_d_lon) < 1e-3
+                    )
+
+                    if is_back_to_base:
+                        ln.distance_km = base_dist
+                        if ln.network_distance_km is not None:
+                            ln.network_distance_km = base_dist
+                        ln.rate_per_unit = base_rate
+                        ln.lead_time_days = base_lt
                     else:
+                        new_dist = haversine_distance(
+                            f_orig.latitude, f_orig.longitude,
+                            f_dest.latitude, f_dest.longitude,
+                        )
                         ln.distance_km = round(new_dist, 2)
-                        ln.lead_time_days = max(0.1, round(new_dist / 500.0, 2))
-                        ln.rate_per_unit = max(0.01, round(new_dist * 0.025, 4))
+                        if ln.network_distance_km is not None:
+                            ln.network_distance_km = round(new_dist, 2)
+
+                        # Rule 1 & 2 & 3: Transport Rate Recalculation
+                        if ln.rate_per_km is not None:
+                            fixed_cost = ln.fixed_leg_cost if ln.fixed_leg_cost is not None else 0.0
+                            ln.rate_per_unit = round(ln.rate_per_km * new_dist + fixed_cost, 4)
+                        elif ln.tariff_requires_user_input:
+                            ln.rate_per_unit = base_rate
+                        elif base_dist > 1e-3 and base_rate > 0:
+                            ln.rate_per_unit = max(0.01, round((base_rate / base_dist) * new_dist, 4))
+
+                        # Rule 2: Lead Time Recalculation
+                        if ln.speed_km_per_day is not None and ln.speed_km_per_day > 0:
+                            term_time = ln.terminal_time_days if ln.terminal_time_days is not None else 0.0
+                            ln.lead_time_days = max(0.1, round(new_dist / ln.speed_km_per_day + term_time, 2))
+                        elif base_dist > 1e-3 and base_lt > 0:
+                            ln.lead_time_days = max(0.1, round((base_lt / base_dist) * new_dist, 2))
 
     def _auto_connect_facility(
         self,
@@ -305,26 +344,43 @@ class ScenarioEngine:
         fac_map:    Dict[str, FacilityRecord],
         facilities: List[FacilityRecord],
         lanes:      List[LaneRecord],
-    ) -> None:
+    ) -> Dict[str, Any]:
         """
         Automatically build inbound (from plants) and outbound (to markets) candidate lanes
-        for a newly added facility using geodesic coordinates.
+        for a newly added facility using canonical transport tariffs and network relationships.
+        Supports virtual/source plants without coordinates (F-13).
         """
         plant_roles  = {NodeRole.PLANT, NodeRole.SUPPLIER}
         market_roles = {NodeRole.MARKET, NodeRole.CUSTOMER}
 
+        lanes_created = 0
+
+        # Calculate network baseline average rate_per_km for ROAD mode across existing active lanes
+        road_lanes = [
+            l for l in lanes
+            if l.mode == TransportMode.ROAD and l.distance_km > 0 and l.rate_per_unit > 0
+        ]
+        if road_lanes:
+            base_rate_per_km = sum(l.rate_per_unit / l.distance_km for l in road_lanes) / len(road_lanes)
+        else:
+            base_rate_per_km = 0.025
+
         for f in facilities:
             if f.id == new_fac.id:
                 continue
-            if f.latitude is None or f.longitude is None:
-                continue
 
-            dist = haversine_distance(new_fac.latitude, new_fac.longitude, f.latitude, f.longitude)
-            rate = max(0.5, round(dist * 0.025, 4))
-            lt   = max(0.5, round(dist / 500.0, 2))
-
-            # If f is a plant/supplier, build inbound lane: f -> new_fac
+            # Inbound supply connection (from plants/suppliers)
             if f.role in plant_roles:
+                if f.latitude is not None and f.longitude is not None and new_fac.latitude is not None and new_fac.longitude is not None:
+                    dist = haversine_distance(f.latitude, f.longitude, new_fac.latitude, new_fac.longitude)
+                else:
+                    # F-13 Rule 3: Support virtual/source node without coordinates using existing supply relationships
+                    existing_inbound = [l.distance_km for l in lanes if l.origin_id == f.id and l.distance_km > 0]
+                    dist = sum(existing_inbound) / len(existing_inbound) if existing_inbound else 100.0
+
+                rate = max(0.01, round(dist * base_rate_per_km, 4))
+                lt   = max(0.1, round(dist / 500.0, 2))
+
                 lanes.append(LaneRecord(
                     origin_id      = f.id,
                     destination_id = new_fac.id,
@@ -332,18 +388,34 @@ class ScenarioEngine:
                     rate_per_unit  = rate,
                     distance_km    = round(dist, 2),
                     lead_time_days = lt,
+                    rate_per_km    = base_rate_per_km,
                 ))
+                lanes_created += 1
 
-            # If f is a market, build outbound lane: new_fac -> f
+            # Outbound demand connection (to markets)
             if f.role in market_roles:
-                lanes.append(LaneRecord(
-                    origin_id      = new_fac.id,
-                    destination_id = f.id,
-                    mode           = TransportMode.ROAD,
-                    rate_per_unit  = rate,
-                    distance_km    = round(dist, 2),
-                    lead_time_days = lt,
-                ))
+                if new_fac.latitude is not None and new_fac.longitude is not None and f.latitude is not None and f.longitude is not None:
+                    dist = haversine_distance(new_fac.latitude, new_fac.longitude, f.latitude, f.longitude)
+                    rate = max(0.01, round(dist * base_rate_per_km, 4))
+                    lt   = max(0.1, round(dist / 500.0, 2))
+
+                    lanes.append(LaneRecord(
+                        origin_id      = new_fac.id,
+                        destination_id = f.id,
+                        mode           = TransportMode.ROAD,
+                        rate_per_unit  = rate,
+                        distance_km    = round(dist, 2),
+                        lead_time_days = lt,
+                        rate_per_km    = base_rate_per_km,
+                    ))
+                    lanes_created += 1
+
+        return {
+            "facility_added": True,
+            "eligible": lanes_created > 0,
+            "lanes_created": lanes_created,
+            "reason_if_ineligible": None if lanes_created > 0 else "Insufficient data to establish valid inbound/outbound connectivity",
+        }
 
     def _apply_demand_change(
         self,

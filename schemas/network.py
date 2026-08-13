@@ -414,6 +414,13 @@ class LaneRecord(BaseModel):
     # Is this lane currently active in the baseline?
     is_active_baseline: bool = True
 
+    # Tariff component breakdown fields (F-12 business relocation logic)
+    rate_per_km:                 Optional[float] = None  # currency / unit / km
+    fixed_leg_cost:              Optional[float] = None  # currency / unit fixed leg handling charge
+    speed_km_per_day:            Optional[float] = None  # transit speed in km / day
+    terminal_time_days:          Optional[float] = None  # fixed terminal / loading / unloading time in days
+    tariff_requires_user_input: bool            = False # set True if flat rate cannot be defensibly recomputed
+
     @field_validator("rate_per_unit")
     @classmethod
     def rate_non_negative(cls, v: float) -> float:
