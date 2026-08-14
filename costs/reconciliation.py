@@ -117,13 +117,13 @@ def reconcile_costs(
         unmet_demand = max(0.0, total_demand - total_served)
         ind_shortage_cost = unmet_demand * config.shortage_penalty
 
-    # 5. Independent Carbon Cost (if enabled in objective)
+    # Additive, matching the actual solver objective terms (see optimization/milp.py)
     ind_carbon_cost = 0.0
     if config.enable_carbon_cost:
-        ind_carbon_cost = ind_carbon_kg * config.carbon_price
-    elif (hasattr(config, "objective_mode") and
-          (config.objective_mode.value if hasattr(config.objective_mode, "value") else str(config.objective_mode)) == "WEIGHTED_COST_CARBON"):
-        ind_carbon_cost = ind_carbon_kg * config.carbon_weight
+        ind_carbon_cost += ind_carbon_kg * config.carbon_price
+    if (hasattr(config, "objective_mode") and
+            (config.objective_mode.value if hasattr(config.objective_mode, "value") else str(config.objective_mode)) == "WEIGHTED_COST_CARBON"):
+        ind_carbon_cost += ind_carbon_kg * config.carbon_weight
 
     independent_component_costs = {
         "facility_cost":  round(ind_facility_cost, 4),

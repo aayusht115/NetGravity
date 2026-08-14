@@ -528,6 +528,17 @@ def _solve_milp(
                         f"dual_sourcing_insufficient_{mkt.id}",
                     )
 
+    # (C12) CapEx Budget Constraint: Σ capex_i * y_i <= budget_capex
+    if config.budget_capex is not None:
+        capex_terms = [
+            (fac, fac.capex) for fac in non_market_facs if fac.capex and fac.capex > 0
+        ]
+        if capex_terms:
+            prob += (
+                pulp.lpSum(capex * y[fac.id] for fac, capex in capex_terms) <= config.budget_capex,
+                "C_capex_budget",
+            )
+
     # Max facilities constraint
     if config.max_facilities is not None:
         dc_open_vars = [y[f.id] for f in non_market_facs if f.role == NodeRole.DC and f.id in y]
@@ -655,9 +666,18 @@ def _solve_milp(
                 elif coeff:
                     total_ic += coeff.total_inventory_cost
 
+        # Carbon cost must mirror the objective terms actually added to the solver
+        # (carbon_cost_term + carbon_objective_term are ADDITIVE, not multiplied).
         carbon_cost = 0.0
         if config.enable_carbon_cost:
-            carbon_cost = round(total_co2 * config.carbon_price * config.carbon_weight, 4)
+            carbon_cost += total_co2 * config.carbon_price
+        is_weighted_carbon_mode = (
+            hasattr(config, "objective_mode") and
+            (config.objective_mode.value if hasattr(config.objective_mode, "value") else str(config.objective_mode)) == "WEIGHTED_COST_CARBON"
+        )
+        if is_weighted_carbon_mode:
+            carbon_cost += total_co2 * config.carbon_weight
+        carbon_cost = round(carbon_cost, 4)
 
         obj_components = {
             "facility_cost":  round(total_fc, 4),

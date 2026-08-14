@@ -80,11 +80,12 @@ def compute_kpis(
     cfg = network.config
     if carbon_cost == 0.0 and cfg:
         tot_c = sum(fl.carbon_kg for fl in result.flow_decisions)
+        # Additive, matching the actual solver objective terms (see optimization/milp.py)
         if cfg.enable_carbon_cost:
-            carbon_cost = tot_c * cfg.carbon_price
-        elif (hasattr(cfg, "objective_mode") and
-              (cfg.objective_mode.value if hasattr(cfg.objective_mode, "value") else str(cfg.objective_mode)) == "WEIGHTED_COST_CARBON"):
-            carbon_cost = tot_c * cfg.carbon_weight
+            carbon_cost += tot_c * cfg.carbon_price
+        if (hasattr(cfg, "objective_mode") and
+                (cfg.objective_mode.value if hasattr(cfg.objective_mode, "value") else str(cfg.objective_mode)) == "WEIGHTED_COST_CARBON"):
+            carbon_cost += tot_c * cfg.carbon_weight
 
     total_cost     = (
         facility_cost + transport_cost + handling_cost +
@@ -347,12 +348,22 @@ def compare_scenarios(
                          ("facility_cost", "transport_cost", "handling_cost", "inventory_cost"))
     annual_savings  = total_base_cost - total_scen_cost
 
+    # Fraction change in demand served (same definition used by resilience/engine.py),
+    # so a scenario that degrades service can actually fail the Go/No-Go check.
+    base_kpis = baseline.kpis
+    scen_kpis = scenario.kpis
+    if base_kpis and scen_kpis and base_kpis.demand_fill_rate > 0:
+        service_delta = scen_kpis.demand_fill_rate - base_kpis.demand_fill_rate
+    else:
+        service_delta = 0.0
+
     gng = _build_go_no_go(
         scenario_id      = scenario.scenario_id or "unknown",
         baseline_id      = baseline.scenario_id or "BASELINE",
         annual_savings   = annual_savings,
         is_feasible      = scenario.is_solved,
         carbon_delta     = scen_comp.get("carbon_kg", 0) - base_comp.get("carbon_kg", 0),
+        service_delta    = service_delta,
     )
 
     return ScenarioComparison(

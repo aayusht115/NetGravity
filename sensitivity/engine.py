@@ -45,6 +45,8 @@ SENSITIVITY_PARAMETERS = {
     "carbon_factor":   "Multiplier on emission factors",
     "fixed_cost":      "Multiplier on all facility fixed costs",
     "handling_cost":   "Multiplier on all facility handling costs",
+    "distance":        "Multiplier on all lane distances (km)",
+    "service_target":  "Multiplier on all demand SLA days (e.g. 0.8 = 20% tighter SLA)",
 }
 
 
@@ -301,6 +303,21 @@ class SensitivityEngine:
                                          max(0.0, f.handling_cost_per_unit * value)})
                 )
             return network.model_copy(update={"facilities": new_facilities}), config
+
+        elif parameter == "distance":
+            new_lanes = [
+                ln.model_copy(update={"distance_km": max(0.0, ln.distance_km * value)})
+                for ln in network.lanes
+            ]
+            return network.model_copy(update={"lanes": new_lanes}), config
+
+        elif parameter == "service_target":
+            new_demands = [
+                d.model_copy(update={"sla_days": max(0.0, d.sla_days * value)})
+                if d.sla_days is not None else d
+                for d in network.demands
+            ]
+            return network.model_copy(update={"demands": new_demands}), config
 
         else:
             raise ValueError(f"Unsupported parameter: '{parameter}'")
