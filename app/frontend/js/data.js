@@ -10,86 +10,86 @@
 
 // ─── FACILITIES ─────────────────────────────────────────────
 export const PLANTS = [
-  { id: "PLT_BADDI",     name: "Baddi Plant",      city: "Baddi",      state: "Himachal Pradesh", lat: 30.96, lng: 76.79, capacity: 12000, throughput: 11200, region: "North",  status: "EXISTING" },
-  { id: "PLT_PUNE",      name: "Pune Plant",       city: "Pune",       state: "Maharashtra",      lat: 18.52, lng: 73.86, capacity: 10000, throughput: 7800,  region: "West",   status: "EXISTING" },
-  { id: "PLT_HYDERABAD", name: "Hyderabad Plant",  city: "Hyderabad",  state: "Telangana",        lat: 17.38, lng: 78.49, capacity: 8000,  throughput: 6100,  region: "South",  status: "EXISTING" },
-  { id: "PLT_KOLKATA",   name: "Kolkata Plant",    city: "Kolkata",    state: "West Bengal",       lat: 22.57, lng: 88.36, capacity: 6000,  throughput: 4200,  region: "East",   status: "EXISTING" },
+  { id: "PLT_BADDI", name: "Baddi Plant", city: "Baddi", state: "Himachal Pradesh", lat: 30.96, lng: 76.79, capacity: 12000, throughput: 11200, region: "North", status: "EXISTING" },
+  { id: "PLT_PUNE", name: "Pune Plant", city: "Pune", state: "Maharashtra", lat: 18.52, lng: 73.86, capacity: 10000, throughput: 7800, region: "West", status: "EXISTING" },
+  { id: "PLT_HYDERABAD", name: "Hyderabad Plant", city: "Hyderabad", state: "Telangana", lat: 17.38, lng: 78.49, capacity: 8000, throughput: 6100, region: "South", status: "EXISTING" },
+  { id: "PLT_KOLKATA", name: "Kolkata Plant", city: "Kolkata", state: "West Bengal", lat: 22.57, lng: 88.36, capacity: 6000, throughput: 4200, region: "East", status: "EXISTING" },
 ];
 
 export const DCS = [
-  { id: "DC_DELHI",     name: "Delhi NCR DC",    city: "Delhi NCR",   state: "Delhi",          lat: 28.61, lng: 77.21, capacity: 10000, throughput: 9400,  fixedCost: 120, handlingCost: 4.2, region: "North",     status: "EXISTING", utilPct: 94.0 },
-  { id: "DC_MUMBAI",    name: "Mumbai DC",       city: "Mumbai",      state: "Maharashtra",    lat: 19.08, lng: 72.88, capacity: 9000,  throughput: 6800,  fixedCost: 140, handlingCost: 4.8, region: "West",      status: "EXISTING", utilPct: 75.6 },
-  { id: "DC_BENGALURU", name: "Bengaluru DC",    city: "Bengaluru",   state: "Karnataka",      lat: 12.97, lng: 77.59, capacity: 7500,  throughput: 5600,  fixedCost: 110, handlingCost: 4.0, region: "South",     status: "EXISTING", utilPct: 74.7 },
-  { id: "DC_KOLKATA",   name: "Kolkata DC",      city: "Kolkata",     state: "West Bengal",    lat: 22.57, lng: 88.36, capacity: 6000,  throughput: 3200,  fixedCost: 85,  handlingCost: 3.5, region: "East",      status: "EXISTING", utilPct: 53.3 },
-  { id: "DC_GUWAHATI",  name: "Guwahati DC",     city: "Guwahati",    state: "Assam",          lat: 26.14, lng: 91.74, capacity: 4000,  throughput: 2100,  fixedCost: 65,  handlingCost: 3.8, region: "Northeast", status: "EXISTING", utilPct: 52.5 },
+  { id: "DC_DELHI", name: "Delhi NCR DC", city: "Delhi NCR", state: "Delhi", lat: 28.61, lng: 77.21, capacity: 10000, throughput: 9400, fixedCost: 120, handlingCost: 4.2, region: "North", status: "EXISTING", utilPct: 94.0 },
+  { id: "DC_MUMBAI", name: "Mumbai DC", city: "Mumbai", state: "Maharashtra", lat: 19.08, lng: 72.88, capacity: 9000, throughput: 6800, fixedCost: 140, handlingCost: 4.8, region: "West", status: "EXISTING", utilPct: 75.6 },
+  { id: "DC_BENGALURU", name: "Bengaluru DC", city: "Bengaluru", state: "Karnataka", lat: 12.97, lng: 77.59, capacity: 7500, throughput: 5600, fixedCost: 110, handlingCost: 4.0, region: "South", status: "EXISTING", utilPct: 74.7 },
+  { id: "DC_KOLKATA", name: "Kolkata DC", city: "Kolkata", state: "West Bengal", lat: 22.57, lng: 88.36, capacity: 6000, throughput: 3200, fixedCost: 85, handlingCost: 3.5, region: "East", status: "EXISTING", utilPct: 53.3 },
+  { id: "DC_GUWAHATI", name: "Guwahati DC", city: "Guwahati", state: "Assam", lat: 26.14, lng: 91.74, capacity: 4000, throughput: 2100, fixedCost: 65, handlingCost: 3.8, region: "Northeast", status: "EXISTING", utilPct: 52.5 },
 ];
 
 export const MARKETS = [
-  { id: "MKT_DELHI",     name: "Delhi",      lat: 28.70, lng: 77.10, demand: 4200, slaDays: 2, priority: "High",   region: "North" },
-  { id: "MKT_MUMBAI",    name: "Mumbai",     lat: 19.08, lng: 72.88, demand: 3800, slaDays: 2, priority: "High",   region: "West" },
-  { id: "MKT_BENGALURU", name: "Bengaluru",  lat: 12.97, lng: 77.59, demand: 3200, slaDays: 2, priority: "High",   region: "South" },
-  { id: "MKT_CHENNAI",   name: "Chennai",    lat: 13.08, lng: 80.27, demand: 2400, slaDays: 3, priority: "Medium", region: "South" },
-  { id: "MKT_HYDERABAD", name: "Hyderabad",  lat: 17.38, lng: 78.49, demand: 2800, slaDays: 3, priority: "Medium", region: "South" },
-  { id: "MKT_KOLKATA",   name: "Kolkata",    lat: 22.57, lng: 88.36, demand: 2200, slaDays: 3, priority: "Medium", region: "East" },
-  { id: "MKT_AHMEDABAD", name: "Ahmedabad",  lat: 23.03, lng: 72.57, demand: 1800, slaDays: 3, priority: "Medium", region: "West" },
-  { id: "MKT_JAIPUR",    name: "Jaipur",     lat: 26.91, lng: 75.79, demand: 1500, slaDays: 3, priority: "Medium", region: "North" },
-  { id: "MKT_LUCKNOW",   name: "Lucknow",    lat: 26.85, lng: 80.95, demand: 1400, slaDays: 3, priority: "Medium", region: "North" },
-  { id: "MKT_GUWAHATI",  name: "Guwahati",   lat: 26.14, lng: 91.74, demand: 1100, slaDays: 4, priority: "Low",    region: "Northeast" },
+  { id: "MKT_DELHI", name: "Delhi", lat: 28.70, lng: 77.10, demand: 4200, slaDays: 2, priority: "High", region: "North" },
+  { id: "MKT_MUMBAI", name: "Mumbai", lat: 19.08, lng: 72.88, demand: 3800, slaDays: 2, priority: "High", region: "West" },
+  { id: "MKT_BENGALURU", name: "Bengaluru", lat: 12.97, lng: 77.59, demand: 3200, slaDays: 2, priority: "High", region: "South" },
+  { id: "MKT_CHENNAI", name: "Chennai", lat: 13.08, lng: 80.27, demand: 2400, slaDays: 3, priority: "Medium", region: "South" },
+  { id: "MKT_HYDERABAD", name: "Hyderabad", lat: 17.38, lng: 78.49, demand: 2800, slaDays: 3, priority: "Medium", region: "South" },
+  { id: "MKT_KOLKATA", name: "Kolkata", lat: 22.57, lng: 88.36, demand: 2200, slaDays: 3, priority: "Medium", region: "East" },
+  { id: "MKT_AHMEDABAD", name: "Ahmedabad", lat: 23.03, lng: 72.57, demand: 1800, slaDays: 3, priority: "Medium", region: "West" },
+  { id: "MKT_JAIPUR", name: "Jaipur", lat: 26.91, lng: 75.79, demand: 1500, slaDays: 3, priority: "Medium", region: "North" },
+  { id: "MKT_LUCKNOW", name: "Lucknow", lat: 26.85, lng: 80.95, demand: 1400, slaDays: 3, priority: "Medium", region: "North" },
+  { id: "MKT_GUWAHATI", name: "Guwahati", lat: 26.14, lng: 91.74, demand: 1100, slaDays: 4, priority: "Low", region: "Northeast" },
 ];
 
 // ─── LANES (key corridors with cost, distance, lead time) ───
 export const LANES = [
   // Plant → DC
-  { from: "PLT_BADDI",     to: "DC_DELHI",     cost: 12, distance: 310,  leadTime: 1.0, flow: 8200,  mode: "ROAD" },
-  { from: "PLT_BADDI",     to: "DC_MUMBAI",    cost: 28, distance: 1420, leadTime: 2.5, flow: 1800,  mode: "ROAD" },
-  { from: "PLT_BADDI",     to: "DC_KOLKATA",   cost: 32, distance: 1800, leadTime: 3.0, flow: 1200,  mode: "ROAD" },
-  { from: "PLT_PUNE",      to: "DC_MUMBAI",    cost: 8,  distance: 150,  leadTime: 0.5, flow: 5000,  mode: "ROAD" },
-  { from: "PLT_PUNE",      to: "DC_BENGALURU", cost: 18, distance: 840,  leadTime: 1.5, flow: 2800,  mode: "ROAD" },
-  { from: "PLT_HYDERABAD", to: "DC_BENGALURU", cost: 15, distance: 570,  leadTime: 1.0, flow: 2800,  mode: "ROAD" },
-  { from: "PLT_HYDERABAD", to: "DC_MUMBAI",    cost: 20, distance: 710,  leadTime: 1.5, flow: 1500,  mode: "ROAD" },
-  { from: "PLT_HYDERABAD", to: "DC_KOLKATA",   cost: 25, distance: 1500, leadTime: 2.5, flow: 1300,  mode: "ROAD" },
-  { from: "PLT_KOLKATA",   to: "DC_KOLKATA",   cost: 5,  distance: 30,   leadTime: 0.2, flow: 2700,  mode: "ROAD" },
-  { from: "PLT_KOLKATA",   to: "DC_GUWAHATI",  cost: 22, distance: 1000, leadTime: 2.0, flow: 1500,  mode: "ROAD" },
-  { from: "PLT_BADDI",     to: "DC_GUWAHATI",  cost: 38, distance: 2200, leadTime: 3.5, flow: 600,   mode: "ROAD" },
+  { from: "PLT_BADDI", to: "DC_DELHI", cost: 12, distance: 310, leadTime: 1.0, flow: 8200, mode: "ROAD" },
+  { from: "PLT_BADDI", to: "DC_MUMBAI", cost: 28, distance: 1420, leadTime: 2.5, flow: 1800, mode: "ROAD" },
+  { from: "PLT_BADDI", to: "DC_KOLKATA", cost: 32, distance: 1800, leadTime: 3.0, flow: 1200, mode: "ROAD" },
+  { from: "PLT_PUNE", to: "DC_MUMBAI", cost: 8, distance: 150, leadTime: 0.5, flow: 5000, mode: "ROAD" },
+  { from: "PLT_PUNE", to: "DC_BENGALURU", cost: 18, distance: 840, leadTime: 1.5, flow: 2800, mode: "ROAD" },
+  { from: "PLT_HYDERABAD", to: "DC_BENGALURU", cost: 15, distance: 570, leadTime: 1.0, flow: 2800, mode: "ROAD" },
+  { from: "PLT_HYDERABAD", to: "DC_MUMBAI", cost: 20, distance: 710, leadTime: 1.5, flow: 1500, mode: "ROAD" },
+  { from: "PLT_HYDERABAD", to: "DC_KOLKATA", cost: 25, distance: 1500, leadTime: 2.5, flow: 1300, mode: "ROAD" },
+  { from: "PLT_KOLKATA", to: "DC_KOLKATA", cost: 5, distance: 30, leadTime: 0.2, flow: 2700, mode: "ROAD" },
+  { from: "PLT_KOLKATA", to: "DC_GUWAHATI", cost: 22, distance: 1000, leadTime: 2.0, flow: 1500, mode: "ROAD" },
+  { from: "PLT_BADDI", to: "DC_GUWAHATI", cost: 38, distance: 2200, leadTime: 3.5, flow: 600, mode: "ROAD" },
   // DC → Market (major flows)
-  { from: "DC_DELHI",     to: "MKT_DELHI",     cost: 4,  distance: 40,   leadTime: 0.3, flow: 4200, mode: "ROAD" },
-  { from: "DC_DELHI",     to: "MKT_JAIPUR",    cost: 10, distance: 270,  leadTime: 0.8, flow: 1500, mode: "ROAD" },
-  { from: "DC_DELHI",     to: "MKT_LUCKNOW",   cost: 14, distance: 500,  leadTime: 1.2, flow: 1400, mode: "ROAD" },
-  { from: "DC_DELHI",     to: "MKT_AHMEDABAD", cost: 22, distance: 950,  leadTime: 1.8, flow: 800,  mode: "ROAD" },
-  { from: "DC_MUMBAI",    to: "MKT_MUMBAI",    cost: 3,  distance: 25,   leadTime: 0.2, flow: 3800, mode: "ROAD" },
-  { from: "DC_MUMBAI",    to: "MKT_AHMEDABAD", cost: 12, distance: 530,  leadTime: 1.0, flow: 1000, mode: "ROAD" },
-  { from: "DC_MUMBAI",    to: "MKT_HYDERABAD", cost: 18, distance: 710,  leadTime: 1.5, flow: 1200, mode: "ROAD" },
-  { from: "DC_BENGALURU", to: "MKT_BENGALURU", cost: 3,  distance: 20,   leadTime: 0.2, flow: 3200, mode: "ROAD" },
-  { from: "DC_BENGALURU", to: "MKT_CHENNAI",   cost: 10, distance: 350,  leadTime: 0.8, flow: 2400, mode: "ROAD" },
-  { from: "DC_KOLKATA",   to: "MKT_KOLKATA",   cost: 3,  distance: 15,   leadTime: 0.2, flow: 2200, mode: "ROAD" },
-  { from: "DC_KOLKATA",   to: "MKT_HYDERABAD", cost: 22, distance: 1500, leadTime: 2.5, flow: 600,  mode: "ROAD" },
-  { from: "DC_GUWAHATI",  to: "MKT_GUWAHATI",  cost: 4,  distance: 30,   leadTime: 0.3, flow: 1100, mode: "ROAD" },
-  { from: "DC_DELHI",     to: "MKT_HYDERABAD", cost: 28, distance: 1500, leadTime: 2.5, flow: 500,  mode: "ROAD" },
-  { from: "DC_GUWAHATI",  to: "MKT_KOLKATA",   cost: 18, distance: 1000, leadTime: 2.0, flow: 600,  mode: "ROAD" },
-  { from: "DC_MUMBAI",    to: "MKT_CHENNAI",   cost: 24, distance: 1330, leadTime: 2.2, flow: 500,  mode: "ROAD" },
+  { from: "DC_DELHI", to: "MKT_DELHI", cost: 4, distance: 40, leadTime: 0.3, flow: 4200, mode: "ROAD" },
+  { from: "DC_DELHI", to: "MKT_JAIPUR", cost: 10, distance: 270, leadTime: 0.8, flow: 1500, mode: "ROAD" },
+  { from: "DC_DELHI", to: "MKT_LUCKNOW", cost: 14, distance: 500, leadTime: 1.2, flow: 1400, mode: "ROAD" },
+  { from: "DC_DELHI", to: "MKT_AHMEDABAD", cost: 22, distance: 950, leadTime: 1.8, flow: 800, mode: "ROAD" },
+  { from: "DC_MUMBAI", to: "MKT_MUMBAI", cost: 3, distance: 25, leadTime: 0.2, flow: 3800, mode: "ROAD" },
+  { from: "DC_MUMBAI", to: "MKT_AHMEDABAD", cost: 12, distance: 530, leadTime: 1.0, flow: 1000, mode: "ROAD" },
+  { from: "DC_MUMBAI", to: "MKT_HYDERABAD", cost: 18, distance: 710, leadTime: 1.5, flow: 1200, mode: "ROAD" },
+  { from: "DC_BENGALURU", to: "MKT_BENGALURU", cost: 3, distance: 20, leadTime: 0.2, flow: 3200, mode: "ROAD" },
+  { from: "DC_BENGALURU", to: "MKT_CHENNAI", cost: 10, distance: 350, leadTime: 0.8, flow: 2400, mode: "ROAD" },
+  { from: "DC_KOLKATA", to: "MKT_KOLKATA", cost: 3, distance: 15, leadTime: 0.2, flow: 2200, mode: "ROAD" },
+  { from: "DC_KOLKATA", to: "MKT_HYDERABAD", cost: 22, distance: 1500, leadTime: 2.5, flow: 600, mode: "ROAD" },
+  { from: "DC_GUWAHATI", to: "MKT_GUWAHATI", cost: 4, distance: 30, leadTime: 0.3, flow: 1100, mode: "ROAD" },
+  { from: "DC_DELHI", to: "MKT_HYDERABAD", cost: 28, distance: 1500, leadTime: 2.5, flow: 500, mode: "ROAD" },
+  { from: "DC_GUWAHATI", to: "MKT_KOLKATA", cost: 18, distance: 1000, leadTime: 2.0, flow: 600, mode: "ROAD" },
+  { from: "DC_MUMBAI", to: "MKT_CHENNAI", cost: 24, distance: 1330, leadTime: 2.2, flow: 500, mode: "ROAD" },
 ];
 
 // ─── DEMAND HISTORY (24 months) & FORECAST ──────────────────
 export const DEMAND_HISTORY = {
   months: [
-    "Jan'25","Feb'25","Mar'25","Apr'25","May'25","Jun'25",
-    "Jul'25","Aug'25","Sep'25","Oct'25","Nov'25","Dec'25",
-    "Jan'26","Feb'26","Mar'26","Apr'26","May'26","Jun'26",
-    "Jul'26","Aug'26","Sep'26","Oct'26","Nov'26","Dec'26",
+    "Jan'25", "Feb'25", "Mar'25", "Apr'25", "May'25", "Jun'25",
+    "Jul'25", "Aug'25", "Sep'25", "Oct'25", "Nov'25", "Dec'25",
+    "Jan'26", "Feb'26", "Mar'26", "Apr'26", "May'26", "Jun'26",
+    "Jul'26", "Aug'26", "Sep'26", "Oct'26", "Nov'26", "Dec'26",
   ],
   // North India aggregate demand (units/day)
   northIndia: [
-    7100,7000,7300,7200,7400,7100,
-    7500,7600,7800,8000,8200,8800,
-    8400,8300,8600,8500,8800,8600,
-    9000,9200,9400,9600,9800,10800,
+    7100, 7000, 7300, 7200, 7400, 7100,
+    7500, 7600, 7800, 8000, 8200, 8800,
+    8400, 8300, 8600, 8500, 8800, 8600,
+    9000, 9200, 9400, 9600, 9800, 10800,
   ],
   // Baddi DC capacity line (constant)
   baddiCapacity: 10000,
 };
 
 export const FORECAST = {
-  months: ["Jan'27","Feb'27","Mar'27","Apr'27","May'27","Jun'27"],
+  months: ["Jan'27", "Feb'27", "Mar'27", "Apr'27", "May'27", "Jun'27"],
   northIndia: [10200, 10400, 10100, 10600, 10900, 11200],
   upper: [10800, 11200, 10900, 11500, 11800, 12400],
   lower: [9600, 9700, 9400, 9800, 10000, 10100],
@@ -157,14 +157,14 @@ export const DATA_QUALITY = {
   validRecords: 4743,
   validPct: 98.4,
   issues: [
-    { id: "DQ_01", type: "Unit Inconsistency",   field: "capacity",      facility: "DC_GUWAHATI",  detail: "Capacity reported in tonnes, expected units/day", severity: "warning",  status: "needs_review" },
-    { id: "DQ_02", type: "Unit Inconsistency",   field: "demand",        market: "MKT_LUCKNOW",    detail: "Q3 demand in cases, rest in units",              severity: "warning",  status: "needs_review" },
-    { id: "DQ_03", type: "Missing Value",        field: "capacity",      facility: "DC_GUWAHATI",  detail: "Max capacity not specified for expansion scenario", severity: "info",    status: "needs_review" },
-    { id: "DQ_04", type: "AI Mapping Uncertain", field: "Qty → Demand",  source: "Distributor A",  detail: "Field 'Qty' mapped to Demand_Units (87% confidence)", severity: "warning", status: "needs_review" },
-    { id: "DQ_05", type: "AI Mapping Uncertain", field: "Vol → Demand",  source: "Distributor B",  detail: "Field 'Volume' mapped to Demand_Units (91% confidence)", severity: "info",  status: "needs_review" },
-    { id: "DQ_06", type: "AI Mapping Uncertain", field: "Units Shipped", source: "Distributor C",  detail: "Field 'Units Shipped' mapped to Demand_Units (95% confidence)", severity: "info", status: "auto_mapped" },
-    { id: "DQ_07", type: "Outlier",              field: "transport_cost", lane: "PLT_BADDI→DC_GUWAHATI", detail: "Cost ₹38/unit is 2.1σ above corridor average", severity: "info", status: "reviewed" },
-    { id: "DQ_08", type: "Stale Data",           field: "demand",        market: "MKT_GUWAHATI",   detail: "Last updated 45 days ago",                       severity: "info",    status: "needs_review" },
+    { id: "DQ_01", type: "Unit Inconsistency", field: "capacity", facility: "DC_GUWAHATI", detail: "Capacity reported in tonnes, expected units/day", severity: "warning", status: "needs_review" },
+    { id: "DQ_02", type: "Unit Inconsistency", field: "demand", market: "MKT_LUCKNOW", detail: "Q3 demand in cases, rest in units", severity: "warning", status: "needs_review" },
+    { id: "DQ_03", type: "Missing Value", field: "capacity", facility: "DC_GUWAHATI", detail: "Max capacity not specified for expansion scenario", severity: "info", status: "needs_review" },
+    { id: "DQ_04", type: "AI Mapping Uncertain", field: "Qty → Demand", source: "Distributor A", detail: "Field 'Qty' mapped to Demand_Units (87% confidence)", severity: "warning", status: "needs_review" },
+    { id: "DQ_05", type: "AI Mapping Uncertain", field: "Vol → Demand", source: "Distributor B", detail: "Field 'Volume' mapped to Demand_Units (91% confidence)", severity: "info", status: "needs_review" },
+    { id: "DQ_06", type: "AI Mapping Uncertain", field: "Units Shipped", source: "Distributor C", detail: "Field 'Units Shipped' mapped to Demand_Units (95% confidence)", severity: "info", status: "auto_mapped" },
+    { id: "DQ_07", type: "Outlier", field: "transport_cost", lane: "PLT_BADDI→DC_GUWAHATI", detail: "Cost ₹38/unit is 2.1σ above corridor average", severity: "info", status: "reviewed" },
+    { id: "DQ_08", type: "Stale Data", field: "demand", market: "MKT_GUWAHATI", detail: "Last updated 45 days ago", severity: "info", status: "needs_review" },
   ],
   reviewCount: 12,
   uncertainMappings: 3,
@@ -177,12 +177,12 @@ export const CONTRACT_DEMO = {
     name: "TransCorp Logistics",
     headlineRate: "₹10/kg",
     extractedTerms: [
-      { field: "Base Rate",               value: "₹10/kg",         confidence: "HIGH" },
-      { field: "Fuel Surcharge",          value: "₹2/kg",          confidence: "HIGH" },
+      { field: "Base Rate", value: "₹10/kg", confidence: "HIGH" },
+      { field: "Fuel Surcharge", value: "₹2/kg", confidence: "HIGH" },
       { field: "Non-Serviceable Surcharge", value: "₹5/kg for 12 pin codes in NE India", confidence: "MEDIUM" },
-      { field: "Minimum Volume",          value: "500 kg/shipment", confidence: "HIGH" },
-      { field: "Penalty (Late Pickup)",   value: "₹500/incident",  confidence: "MEDIUM" },
-      { field: "Effective Date",          value: "2026-04-01",      confidence: "HIGH" },
+      { field: "Minimum Volume", value: "500 kg/shipment", confidence: "HIGH" },
+      { field: "Penalty (Late Pickup)", value: "₹500/incident", confidence: "MEDIUM" },
+      { field: "Effective Date", value: "2026-04-01", confidence: "HIGH" },
     ],
     effectiveCost: "₹12–17/kg (depending on route)",
     hiddenCostAlert: true,
@@ -191,11 +191,11 @@ export const CONTRACT_DEMO = {
     name: "SpeedFreight India",
     headlineRate: "₹12/kg",
     extractedTerms: [
-      { field: "Base Rate",      value: "₹12/kg (all-inclusive)", confidence: "HIGH" },
-      { field: "Fuel Surcharge", value: "Included",               confidence: "HIGH" },
-      { field: "Coverage",       value: "All pin codes",          confidence: "HIGH" },
-      { field: "Minimum Volume", value: "200 kg/shipment",        confidence: "HIGH" },
-      { field: "Effective Date", value: "2026-04-01",              confidence: "HIGH" },
+      { field: "Base Rate", value: "₹12/kg (all-inclusive)", confidence: "HIGH" },
+      { field: "Fuel Surcharge", value: "Included", confidence: "HIGH" },
+      { field: "Coverage", value: "All pin codes", confidence: "HIGH" },
+      { field: "Minimum Volume", value: "200 kg/shipment", confidence: "HIGH" },
+      { field: "Effective Date", value: "2026-04-01", confidence: "HIGH" },
     ],
     effectiveCost: "₹12/kg (flat)",
     hiddenCostAlert: false,
@@ -205,10 +205,10 @@ export const CONTRACT_DEMO = {
 // ─── SCHEMA MAPPING DEMO ────────────────────────────────────
 export const SCHEMA_MAPPING = {
   distributors: [
-    { name: "Distributor A", field: "Qty",           mappedTo: "Demand_Units", confidence: 87 },
-    { name: "Distributor B", field: "Volume",        mappedTo: "Demand_Units", confidence: 91 },
+    { name: "Distributor A", field: "Qty", mappedTo: "Demand_Units", confidence: 87 },
+    { name: "Distributor B", field: "Volume", mappedTo: "Demand_Units", confidence: 91 },
     { name: "Distributor C", field: "Units Shipped", mappedTo: "Demand_Units", confidence: 95 },
-    { name: "Distributor D", field: "Order_Qty",     mappedTo: "Demand_Units", confidence: 98 },
+    { name: "Distributor D", field: "Order_Qty", mappedTo: "Demand_Units", confidence: 98 },
   ],
   canonicalField: "Demand_Units",
   sourceTypes: ["ERP", "WMS", "TMS", "Facility Master", "Demand Data", "Lane Data"],
@@ -599,28 +599,28 @@ export const AGENT_STATE = {
   status: "active",
   currentObjective: "Reduce network cost by at least 8% while maintaining SLA above 95%",
   activityTrace: [
-    { step: 1, action: "Analysed the current network",              status: "done",    detail: "42 facilities, 120 demand zones, 380 lanes" },
-    { step: 2, action: "Identified 2 capacity bottlenecks",         status: "done",    detail: "Delhi NCR DC at 94% utilisation, projected 108% in December" },
-    { step: 3, action: "Identified 1 high-cost corridor",           status: "done",    detail: "Baddi → Guwahati corridor at ₹38/unit (2.1σ above average)" },
-    { step: 4, action: "Generated 4 candidate interventions",       status: "done",    detail: "Flow rebalancing, capacity expansion, DC consolidation, new DC" },
-    { step: 5, action: "Tested 4 scenarios through MILP optimiser", status: "done",    detail: "All 4 scenarios evaluated — 3 feasible, 1 fails SLA target" },
-    { step: 6, action: "Rejected DC Consolidation on SLA grounds",  status: "done",    detail: "SLA drops to 88.4% — below 95% threshold" },
+    { step: 1, action: "Analysed the current network", status: "done", detail: "42 facilities, 120 demand zones, 380 lanes" },
+    { step: 2, action: "Identified 2 capacity bottlenecks", status: "done", detail: "Delhi NCR DC at 94% utilisation, projected 108% in December" },
+    { step: 3, action: "Identified 1 high-cost corridor", status: "done", detail: "Baddi → Guwahati corridor at ₹38/unit (2.1σ above average)" },
+    { step: 4, action: "Generated 4 candidate interventions", status: "done", detail: "Flow rebalancing, capacity expansion, DC consolidation, new DC" },
+    { step: 5, action: "Tested 4 scenarios through MILP optimiser", status: "done", detail: "All 4 scenarios evaluated — 3 feasible, 1 fails SLA target" },
+    { step: 6, action: "Rejected DC Consolidation on SLA grounds", status: "done", detail: "SLA drops to 88.4% — below 95% threshold" },
     { step: 7, action: "Stress-tested leading options under +15% demand", status: "done", detail: "Flow Rebalancing passes all stress tests" },
-    { step: 8, action: "Found the most robust configuration",       status: "done",    detail: "Flow Rebalancing: −7.8% cost, 96.7% SLA, robust under stress" },
+    { step: 8, action: "Found the most robust configuration", status: "done", detail: "Flow Rebalancing: −7.8% cost, 96.7% SLA, robust under stress" },
   ],
   toolCalls: [
-    { tool: "get_network_summary()",       result: "42 facilities, 380 lanes, total demand 24,400 units/day" },
-    { tool: "get_bottlenecks()",           result: "DC_DELHI at 94% util, projected breach Dec'26" },
-    { tool: "get_forecast(region='North')",result: "+14% demand growth, breach at 10,800 units in Dec" },
-    { tool: "run_baseline()",              result: "Total cost ₹12.84L/day, SLA 91.2%" },
-    { tool: "optimize_current_footprint()",result: "Optimised to ₹11.98L/day, SLA 94.8%" },
-    { tool: "run_scenario('rebalance')",   result: "₹11.84L/day, SLA 96.7% — FEASIBLE" },
-    { tool: "run_scenario('expand')",      result: "₹12.46L/day, SLA 97.1% — FEASIBLE (high CapEx)" },
+    { tool: "get_network_summary()", result: "42 facilities, 380 lanes, total demand 24,400 units/day" },
+    { tool: "get_bottlenecks()", result: "DC_DELHI at 94% util, projected breach Dec'26" },
+    { tool: "get_forecast(region='North')", result: "+14% demand growth, breach at 10,800 units in Dec" },
+    { tool: "run_baseline()", result: "Total cost ₹12.84L/day, SLA 91.2%" },
+    { tool: "optimize_current_footprint()", result: "Optimised to ₹11.98L/day, SLA 94.8%" },
+    { tool: "run_scenario('rebalance')", result: "₹11.84L/day, SLA 96.7% — FEASIBLE" },
+    { tool: "run_scenario('expand')", result: "₹12.46L/day, SLA 97.1% — FEASIBLE (high CapEx)" },
     { tool: "run_scenario('consolidate')", result: "₹11.42L/day, SLA 88.4% — REJECTED (SLA < 95%)" },
-    { tool: "run_scenario('new_dc')",      result: "₹12.15L/day, SLA 97.8% — FEASIBLE (high CapEx)" },
+    { tool: "run_scenario('new_dc')", result: "₹12.15L/day, SLA 97.8% — FEASIBLE (high CapEx)" },
     { tool: "run_sensitivity('demand', +15%)", result: "Rebalance: PASS | Consolidate: FAIL" },
-    { tool: "run_resilience('DC_DELHI')",  result: "Rebalance handles facility disruption — reroutes to Kolkata" },
-    { tool: "compare_scenarios()",         result: "Rebalance is optimal on cost-adjusted-risk basis" },
+    { tool: "run_resilience('DC_DELHI')", result: "Rebalance handles facility disruption — reroutes to Kolkata" },
+    { tool: "compare_scenarios()", result: "Rebalance is optimal on cost-adjusted-risk basis" },
   ],
 };
 
@@ -693,8 +693,8 @@ NetGravity Decision Intelligence`,
 
 // ─── GOVERNANCE TIERS ───────────────────────────────────────
 export const GOVERNANCE_TIERS = [
-  { tier: 1, label: "INFORM",        description: "Low-risk informational insight. No approval required.",       criteria: "Value at stake < ₹5L, fully reversible, no SLA impact", color: "#22c55e" },
-  { tier: 2, label: "PROPOSE",       description: "AI recommends and prepares action. Human approval required.", criteria: "Value at stake ₹5L–₹50L, or SLA impact, or partial reversibility", color: "#f59e0b" },
+  { tier: 1, label: "INFORM", description: "Low-risk informational insight. No approval required.", criteria: "Value at stake < ₹5L, fully reversible, no SLA impact", color: "#22c55e" },
+  { tier: 2, label: "PROPOSE", description: "AI recommends and prepares action. Human approval required.", criteria: "Value at stake ₹5L–₹50L, or SLA impact, or partial reversibility", color: "#f59e0b" },
   { tier: 3, label: "HUMAN DECISION", description: "High-impact structural decision. AI analyses, cannot execute.", criteria: "Close/open DC, major contract change, CapEx > ₹50L", color: "#dc2626" },
 ];
 
@@ -711,8 +711,8 @@ export const SYSTEM_STATUS = {
 export const PERIODS = [
   { id: "AUG_2026", label: "1 Aug – 31 Aug 2026", short: "Aug 2026", prevId: "JUL_2026" },
   { id: "JUL_2026", label: "1 Jul – 31 Jul 2026", short: "Jul 2026", prevId: "JUN_2026" },
-  { id: "Q3_2026",  label: "Q3 2026 (Jul – Sep)", short: "Q3 2026",  prevId: "Q2_2026" },
-  { id: "Q2_2026",  label: "Q2 2026 (Apr – Jun)", short: "Q2 2026",  prevId: "Q1_2026" },
+  { id: "Q3_2026", label: "Q3 2026 (Jul – Sep)", short: "Q3 2026", prevId: "Q2_2026" },
+  { id: "Q2_2026", label: "Q2 2026 (Apr – Jun)", short: "Q2 2026", prevId: "Q1_2026" },
 ];
 
 // ─── FACILITY KPIs BY PERIOD ────────────────────────────────
@@ -722,15 +722,15 @@ export const FACILITY_KPIS = {
   DC_DELHI: {
     AUG_2026: {
       utilisation: { value: 94.0, capacity: 10000, unit: "units/day", prev: 88.0, status: "critical" },
-      sla:         { value: 96.7, target: 95, prev: 94.9, status: "normal" },
-      totalCost:   { value: 1184000, prev: 1223000, status: "normal" },
+      sla: { value: 96.7, target: 95, prev: 94.9, status: "normal" },
+      totalCost: { value: 1184000, prev: 1223000, status: "normal" },
       inventoryDays: { value: 11.2, prev: 12.1, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 88.0, capacity: 10000, unit: "units/day", prev: 84.0, status: "warning" },
-      sla:         { value: 94.9, target: 95, prev: 95.1, status: "warning" },
-      totalCost:   { value: 1223000, prev: 1198000, status: "warning" },
+      sla: { value: 94.9, target: 95, prev: 95.1, status: "warning" },
+      totalCost: { value: 1223000, prev: 1198000, status: "warning" },
       inventoryDays: { value: 12.1, prev: 11.8, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -738,15 +738,15 @@ export const FACILITY_KPIS = {
   DC_MUMBAI: {
     AUG_2026: {
       utilisation: { value: 75.6, capacity: 9000, unit: "units/day", prev: 72.1, status: "normal" },
-      sla:         { value: 95.8, target: 95, prev: 94.2, status: "normal" },
-      totalCost:   { value: 980000, prev: 1010000, status: "normal" },
+      sla: { value: 95.8, target: 95, prev: 94.2, status: "normal" },
+      totalCost: { value: 980000, prev: 1010000, status: "normal" },
       inventoryDays: { value: 9.8, prev: 10.4, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 72.1, capacity: 9000, unit: "units/day", prev: 70.5, status: "normal" },
-      sla:         { value: 94.2, target: 95, prev: 94.8, status: "warning" },
-      totalCost:   { value: 1010000, prev: 995000, status: "normal" },
+      sla: { value: 94.2, target: 95, prev: 94.8, status: "warning" },
+      totalCost: { value: 1010000, prev: 995000, status: "normal" },
       inventoryDays: { value: 10.4, prev: 10.1, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -754,15 +754,15 @@ export const FACILITY_KPIS = {
   DC_BENGALURU: {
     AUG_2026: {
       utilisation: { value: 74.7, capacity: 7500, unit: "units/day", prev: 71.2, status: "normal" },
-      sla:         { value: 96.2, target: 95, prev: 95.5, status: "normal" },
-      totalCost:   { value: 840000, prev: 860000, status: "normal" },
+      sla: { value: 96.2, target: 95, prev: 95.5, status: "normal" },
+      totalCost: { value: 840000, prev: 860000, status: "normal" },
       inventoryDays: { value: 10.5, prev: 11.0, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 71.2, capacity: 7500, unit: "units/day", prev: 69.8, status: "normal" },
-      sla:         { value: 95.5, target: 95, prev: 95.0, status: "normal" },
-      totalCost:   { value: 860000, prev: 845000, status: "normal" },
+      sla: { value: 95.5, target: 95, prev: 95.0, status: "normal" },
+      totalCost: { value: 860000, prev: 845000, status: "normal" },
       inventoryDays: { value: 11.0, prev: 10.8, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -770,15 +770,15 @@ export const FACILITY_KPIS = {
   DC_KOLKATA: {
     AUG_2026: {
       utilisation: { value: 53.3, capacity: 6000, unit: "units/day", prev: 51.0, status: "normal" },
-      sla:         { value: 93.1, target: 95, prev: 92.4, status: "warning" },
-      totalCost:   { value: 520000, prev: 530000, status: "normal" },
+      sla: { value: 93.1, target: 95, prev: 92.4, status: "warning" },
+      totalCost: { value: 520000, prev: 530000, status: "normal" },
       inventoryDays: { value: 14.3, prev: 14.8, status: "warning" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 51.0, capacity: 6000, unit: "units/day", prev: 49.5, status: "normal" },
-      sla:         { value: 92.4, target: 95, prev: 93.0, status: "warning" },
-      totalCost:   { value: 530000, prev: 525000, status: "normal" },
+      sla: { value: 92.4, target: 95, prev: 93.0, status: "warning" },
+      totalCost: { value: 530000, prev: 525000, status: "normal" },
       inventoryDays: { value: 14.8, prev: 14.5, status: "warning" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -786,15 +786,15 @@ export const FACILITY_KPIS = {
   DC_GUWAHATI: {
     AUG_2026: {
       utilisation: { value: 52.5, capacity: 4000, unit: "units/day", prev: 50.0, status: "normal" },
-      sla:         { value: 91.4, target: 95, prev: 90.8, status: "warning" },
-      totalCost:   { value: 310000, prev: 320000, status: "normal" },
+      sla: { value: 91.4, target: 95, prev: 90.8, status: "warning" },
+      totalCost: { value: 310000, prev: 320000, status: "normal" },
       inventoryDays: { value: 16.1, prev: 16.8, status: "warning" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 50.0, capacity: 4000, unit: "units/day", prev: 48.2, status: "normal" },
-      sla:         { value: 90.8, target: 95, prev: 91.2, status: "warning" },
-      totalCost:   { value: 320000, prev: 315000, status: "normal" },
+      sla: { value: 90.8, target: 95, prev: 91.2, status: "warning" },
+      totalCost: { value: 320000, prev: 315000, status: "normal" },
       inventoryDays: { value: 16.8, prev: 16.5, status: "warning" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -802,15 +802,15 @@ export const FACILITY_KPIS = {
   PLT_BADDI: {
     AUG_2026: {
       utilisation: { value: 93.3, capacity: 12000, unit: "units/day", prev: 88.0, status: "critical" },
-      sla:         { value: 97.1, target: 95, prev: 96.2, status: "normal" },
-      totalCost:   { value: 1420000, prev: 1380000, status: "warning" },
+      sla: { value: 97.1, target: 95, prev: 96.2, status: "normal" },
+      totalCost: { value: 1420000, prev: 1380000, status: "warning" },
       inventoryDays: { value: 8.5, prev: 9.0, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 88.0, capacity: 12000, unit: "units/day", prev: 85.0, status: "warning" },
-      sla:         { value: 96.2, target: 95, prev: 95.8, status: "normal" },
-      totalCost:   { value: 1380000, prev: 1350000, status: "normal" },
+      sla: { value: 96.2, target: 95, prev: 95.8, status: "normal" },
+      totalCost: { value: 1380000, prev: 1350000, status: "normal" },
       inventoryDays: { value: 9.0, prev: 8.8, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -818,15 +818,15 @@ export const FACILITY_KPIS = {
   PLT_PUNE: {
     AUG_2026: {
       utilisation: { value: 78.0, capacity: 10000, unit: "units/day", prev: 75.0, status: "normal" },
-      sla:         { value: 96.8, target: 95, prev: 96.0, status: "normal" },
-      totalCost:   { value: 1100000, prev: 1120000, status: "normal" },
+      sla: { value: 96.8, target: 95, prev: 96.0, status: "normal" },
+      totalCost: { value: 1100000, prev: 1120000, status: "normal" },
       inventoryDays: { value: 10.0, prev: 10.5, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 75.0, capacity: 10000, unit: "units/day", prev: 73.0, status: "normal" },
-      sla:         { value: 96.0, target: 95, prev: 95.5, status: "normal" },
-      totalCost:   { value: 1120000, prev: 1100000, status: "normal" },
+      sla: { value: 96.0, target: 95, prev: 95.5, status: "normal" },
+      totalCost: { value: 1120000, prev: 1100000, status: "normal" },
       inventoryDays: { value: 10.5, prev: 10.2, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -834,15 +834,15 @@ export const FACILITY_KPIS = {
   PLT_HYDERABAD: {
     AUG_2026: {
       utilisation: { value: 76.3, capacity: 8000, unit: "units/day", prev: 73.0, status: "normal" },
-      sla:         { value: 95.9, target: 95, prev: 95.2, status: "normal" },
-      totalCost:   { value: 890000, prev: 910000, status: "normal" },
+      sla: { value: 95.9, target: 95, prev: 95.2, status: "normal" },
+      totalCost: { value: 890000, prev: 910000, status: "normal" },
       inventoryDays: { value: 11.8, prev: 12.3, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 73.0, capacity: 8000, unit: "units/day", prev: 71.5, status: "normal" },
-      sla:         { value: 95.2, target: 95, prev: 95.0, status: "normal" },
-      totalCost:   { value: 910000, prev: 895000, status: "normal" },
+      sla: { value: 95.2, target: 95, prev: 95.0, status: "normal" },
+      totalCost: { value: 910000, prev: 895000, status: "normal" },
       inventoryDays: { value: 12.3, prev: 12.0, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -850,15 +850,15 @@ export const FACILITY_KPIS = {
   PLT_KOLKATA: {
     AUG_2026: {
       utilisation: { value: 70.0, capacity: 6000, unit: "units/day", prev: 67.0, status: "normal" },
-      sla:         { value: 94.5, target: 95, prev: 93.8, status: "warning" },
-      totalCost:   { value: 580000, prev: 590000, status: "normal" },
+      sla: { value: 94.5, target: 95, prev: 93.8, status: "warning" },
+      totalCost: { value: 580000, prev: 590000, status: "normal" },
       inventoryDays: { value: 13.2, prev: 13.8, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 67.0, capacity: 6000, unit: "units/day", prev: 65.0, status: "normal" },
-      sla:         { value: 93.8, target: 95, prev: 94.0, status: "warning" },
-      totalCost:   { value: 590000, prev: 580000, status: "normal" },
+      sla: { value: 93.8, target: 95, prev: 94.0, status: "warning" },
+      totalCost: { value: 590000, prev: 580000, status: "normal" },
       inventoryDays: { value: 13.8, prev: 13.5, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -1077,7 +1077,7 @@ export function getScenarioById(id) {
 
 export function formatCurrency(value, decimals = 0) {
   if (value >= 100000) return "₹" + (value / 100000).toFixed(1) + "L";
-  if (value >= 1000)   return "₹" + (value / 1000).toFixed(1) + "K";
+  if (value >= 1000) return "₹" + (value / 1000).toFixed(1) + "K";
   return "₹" + value.toFixed(decimals);
 }
 

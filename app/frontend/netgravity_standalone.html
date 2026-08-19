@@ -1,19 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NetGravity — AI Decision Intelligence for Logistics Networks</title>
-<meta name="description" content="NetGravity: An AI decision agent for logistics network planning — insight, evidence, recommendation, action.">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetGravity — AI Decision Intelligence for Logistics Networks</title>
+  <meta name="description"
+    content="NetGravity: An AI decision agent for logistics network planning — insight, evidence, recommendation, action.">
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 
-<!-- Vendor CDN -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Vendor CDN -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-<!-- Design System -->
-<style>
+  <!-- Design System -->
+  <style>
 /* ═══════════════════════════════════════════════════════════
    NetGravity — Design System
    Light theme · Kearney purple · Consulting-grade SaaS
@@ -736,44 +739,60 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .provenance-badge.external-signal { background: var(--green-bg); color: var(--green); }
 .provenance-badge.ai-assessment { background: var(--purple-50); color: var(--primary); }
 
-/* ─── Scenario Planning Experience Styles ─────────────────── */
-.scenario-nav-tabs {
+/* ─── Floating Sticky Navigation & Action Bar ────────────── */
+.scenario-floating-nav-wrap {
+  position: sticky;
+  top: 20px;
+  z-index: 100;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: var(--bg-card);
-  padding: 6px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--border);
-  width: fit-content;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  pointer-events: none;
 }
 
-.scn-tab-btn {
+.scenario-floating-nav {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 16px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 6px 8px;
+  border-radius: 32px;
+  border: 1px solid rgba(107, 47, 160, 0.18);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(107, 47, 160, 0.06);
+  pointer-events: auto;
+  width: auto;
+  max-width: fit-content;
+}
+
+.scn-floating-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 18px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-2);
   background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
+  border: none;
+  border-radius: 24px;
   cursor: pointer;
   transition: all var(--t-fast);
+  white-space: nowrap;
 }
 
-.scn-tab-btn:hover {
-  color: var(--text-1);
-  background: var(--bg-subtle);
+.scn-floating-btn:hover {
+  color: var(--primary);
+  background: rgba(107, 47, 160, 0.08);
 }
 
-.scn-tab-btn.active {
+.scn-floating-btn.active {
   color: var(--primary);
   background: var(--purple-50);
-  border-color: var(--purple-100);
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(107, 47, 160, 0.08);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(107, 47, 160, 0.15);
 }
 
 .scn-count-badge {
@@ -782,26 +801,65 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   justify-content: center;
   background: var(--primary);
   color: #ffffff;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  width: 18px;
-  height: 18px;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
-  margin-left: 4px;
+  margin-left: 3px;
 }
 
-/* Workspace Layout */
-.scenario-workspace-layout {
-  display: flex;
-  gap: var(--space-lg);
-  align-items: flex-start;
-  position: relative;
+.btn-floating-create {
+  pointer-events: auto;
+  padding: 10px 22px;
+  font-size: 13.5px;
+  font-weight: 700;
+  border-radius: 28px;
+  box-shadow: 0 4px 18px rgba(107, 47, 160, 0.3);
+  display: inline-flex;
+  align-items: center;
+  transition: all var(--t-fast);
+}
+
+.btn-floating-create:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(107, 47, 160, 0.38);
+}
+
+/* Stacked Scenario Sections */
+.scenario-stacked-section {
+  scroll-margin-top: 70px;
+  margin-bottom: 22px;
 }
 
 .scenario-main-pane {
   flex: 1;
   min-width: 0;
-  transition: all var(--t-base);
+}
+
+.my-scenarios-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-md);
+}
+
+.my-scenario-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 16px 18px;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: var(--shadow-sm);
+}
+
+.my-scenario-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
 }
 
 /* Scenario Cards Row */
@@ -823,6 +881,17 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   justify-content: space-between;
   position: relative;
   box-shadow: var(--shadow-sm);
+}
+
+.scn-ai-chip {
+  background: #fcf8ff;
+  border-left: 3px solid var(--primary);
+  border-radius: 3px;
+  padding: 6px 9px;
+  font-size: 11px;
+  color: var(--text-1);
+  line-height: 1.45;
+  margin-top: 8px;
 }
 
 .scn-rec-card:hover {
@@ -1010,47 +1079,48 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   background: #f7effe;
 }
 
-/* Create Scenario Toolbox Pane */
-.scenario-toolbox-pane {
-  width: 360px;
+/* Create Scenario Pop-Up Modal (Blurs background) */
+.scenario-toolbox-modal {
+  max-width: 580px;
+  width: 90vw;
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-md);
-  padding: 18px 20px;
-  flex-shrink: 0;
-  position: sticky;
-  top: 20px;
-  animation: fadeIn 0.2s ease;
+  border-radius: var(--r-lg);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(107, 47, 160, 0.1);
+  padding: 24px 28px;
+  animation: modalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
-.scenario-toolbox-pane.hidden {
-  display: none;
+@keyframes modalScaleUp {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .toolbox-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding-bottom: 12px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border-light);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .toolbox-step {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   margin-bottom: 18px;
 }
 
 .toolbox-step-num {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--purple-50);
   color: var(--primary);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1072,7 +1142,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .scn-type-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 
 .scn-type-card {
@@ -1080,7 +1150,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 10px 4px;
+  padding: 12px 6px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
@@ -1092,21 +1162,22 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .scn-type-card:hover {
   background: var(--bg);
   border-color: var(--primary-light);
+  transform: translateY(-1px);
 }
 
 .scn-type-card.active {
   background: var(--purple-50);
   border-color: var(--primary);
-  box-shadow: 0 1px 3px rgba(107, 47, 160, 0.12);
+  box-shadow: 0 2px 6px rgba(107, 47, 160, 0.15);
 }
 
 .scn-type-icon {
-  font-size: 16px;
+  font-size: 18px;
   margin-bottom: 4px;
 }
 
 .scn-type-label {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
   color: var(--text-1);
   line-height: 1.2;
@@ -1118,41 +1189,108 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   justify-content: space-between;
   cursor: pointer;
   user-select: none;
-  padding: 4px 0;
+  padding: 6px 0;
 }
 
-.toolbox-progress {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 12px;
-  margin-bottom: 12px;
+/* Agentic Execution View & Pulse Animation */
+.agent-execution-view {
+  padding: 10px 0;
+  animation: fadeIn 0.3s ease;
 }
 
-.progress-step {
-  font-size: 11.5px;
-  color: var(--text-3);
-  padding: 3px 0;
+.agent-pulse-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
-.progress-step.done {
-  color: var(--green);
-  font-weight: 600;
+.agent-pulse-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary) 0%, #a855f7 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 0 0 0 rgba(107, 47, 160, 0.7);
+  animation: agentPulseGlow 2s infinite;
 }
 
-.progress-step.active {
-  color: var(--primary);
+@keyframes agentPulseGlow {
+  0% { transform: scale(0.98); box-shadow: 0 0 0 0 rgba(107, 47, 160, 0.6); }
+  70% { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(107, 47, 160, 0); }
+  100% { transform: scale(0.98); box-shadow: 0 0 0 0 rgba(107, 47, 160, 0); }
+}
+
+.agent-progress-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.agent-progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--primary) 0%, #38bdf8 50%, #22c55e 100%);
+  transition: width 0.4s ease;
+}
+
+.agent-telemetry-box {
+  background: #0f172a;
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+  font-size: 11.5px;
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.telemetry-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+  animation: fadeIn 0.25s ease;
+}
+
+.telemetry-tag {
   font-weight: 700;
-  animation: pulse 1.5s infinite;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  text-transform: uppercase;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+.telemetry-tag.agent { background: #6366f1; color: #ffffff; }
+.telemetry-tag.milp { background: #8b5cf6; color: #ffffff; }
+.telemetry-tag.stress { background: #f59e0b; color: #000000; }
+.telemetry-tag.done { background: #10b981; color: #ffffff; }
+
+.telemetry-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  border-top-color: #38bdf8;
+  animation: spin 0.8s linear infinite;
+  margin-right: 4px;
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 
 /* Scenario Detail Drawer */
 .scenario-drawer-overlay {
@@ -1310,702 +1448,815 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 </style>
 </head>
+
 <body>
 
-<div class="loading-bar" id="loading-bar"></div>
+  <div class="loading-bar" id="loading-bar"></div>
 
-<div class="app-shell">
-  <div class="app-body">
+  <div class="app-shell">
+    <div class="app-body">
 
-    <!-- ═══════════════════════════════════════ SIDEBAR -->
-    <nav class="sidebar" id="sidebar">
-      <div class="sidebar-brand">
-        <div class="logo-icon">N</div>
-        <div>
-          <div class="logo-text">NETGRAVITY</div>
-          <div class="logo-sub">AI Decision Intelligence<br>for Logistics Networks</div>
+      <!-- ═══════════════════════════════════════ SIDEBAR -->
+      <nav class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+          <div class="logo-icon">N</div>
+          <div>
+            <div class="logo-text">NETGRAVITY</div>
+            <div class="logo-sub">AI Decision Intelligence<br>for Logistics Networks</div>
+          </div>
         </div>
-      </div>
 
-      <div class="sidebar-nav">
-        <div class="nav-item active" data-tab="home">
-          <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10L10 3l7 7M5 8.5V16a1 1 0 001 1h3v-4h2v4h3a1 1 0 001-1V8.5"/></svg>
-          Home
+        <div class="sidebar-nav">
+          <div class="nav-item active" data-tab="home">
+            <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M3 10L10 3l7 7M5 8.5V16a1 1 0 001 1h3v-4h2v4h3a1 1 0 001-1V8.5" />
+            </svg>
+            Home
+          </div>
+          <div class="nav-item" data-tab="twin">
+            <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+              <circle cx="7" cy="7" r="2" />
+              <circle cx="14" cy="7" r="2" />
+              <circle cx="7" cy="14" r="2" />
+              <circle cx="14" cy="14" r="2" />
+              <path d="M9 7h3M7 9v3M14 9v3M9 14h3" />
+            </svg>
+            Digital Twin
+          </div>
+          <div class="nav-item" data-tab="scenarios">
+            <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 13l2 2 4-4" />
+            </svg>
+            Scenario Planning
+          </div>
+          <div class="nav-item" data-tab="forecast">
+            <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+              <polyline points="3,15 7,9 11,12 17,4" />
+              <polyline points="14,4 17,4 17,7" />
+            </svg>
+            Forecasting
+          </div>
         </div>
-        <div class="nav-item" data-tab="twin">
-          <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="2"/><circle cx="14" cy="7" r="2"/><circle cx="7" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 7h3M7 9v3M14 9v3M9 14h3"/></svg>
-          Digital Twin
-        </div>
-        <div class="nav-item" data-tab="scenarios">
-          <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 13l2 2 4-4"/></svg>
-          Scenario Planning
-        </div>
-        <div class="nav-item" data-tab="forecast">
-          <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3,15 7,9 11,12 17,4"/><polyline points="14,4 17,4 17,7"/></svg>
-          Forecasting
-        </div>
-      </div>
 
-      <div class="sidebar-meta">
-        <div class="meta-block">
-          <div class="meta-label">Network</div>
-          <div class="meta-value">India Network</div>
+        <div class="sidebar-meta">
+          <div class="meta-block">
+            <div class="meta-label">Network</div>
+            <div class="meta-value">India Network</div>
+          </div>
+          <div class="meta-block">
+            <div class="meta-label">Model Version</div>
+            <div class="meta-value">v7.0</div>
+          </div>
+          <div class="meta-block">
+            <div class="meta-label">Last Updated</div>
+            <div class="meta-value">18 Aug 2026, 09:30 AM</div>
+          </div>
         </div>
-        <div class="meta-block">
-          <div class="meta-label">Model Version</div>
-          <div class="meta-value">v7.0</div>
+
+        <div class="sidebar-status">
+          <div class="sidebar-status-title">System Status</div>
+          <div class="sidebar-status-line"><span class="status-dot"></span> All Systems Operational</div>
         </div>
-        <div class="meta-block">
-          <div class="meta-label">Last Updated</div>
-          <div class="meta-value">18 Aug 2026, 09:30 AM</div>
-        </div>
-      </div>
+      </nav>
 
-      <div class="sidebar-status">
-        <div class="sidebar-status-title">System Status</div>
-        <div class="sidebar-status-line"><span class="status-dot"></span> All Systems Operational</div>
-      </div>
-    </nav>
+      <!-- ═══════════════════════════════════ MAIN CONTENT -->
+      <main class="main-content">
 
-    <!-- ═══════════════════════════════════ MAIN CONTENT -->
-    <main class="main-content">
+        <!-- ─────────────────── TAB: HOME (Decision Cockpit) -->
+        <section class="tab-panel active" id="tab-home">
 
-      <!-- ─────────────────── TAB: HOME (Decision Cockpit) -->
-      <section class="tab-panel active" id="tab-home">
-
-        <!-- Control Bar -->
-        <div class="home-controls">
-          <div class="controls-left">
-            <div class="control-group">
-              <span class="control-label">View by</span>
-              <select class="control-select" id="sel-type">
-                <option value="DC">🏪 DC</option>
-                <option value="Plant">🏭 Plant</option>
+          <!-- Control Bar -->
+          <div class="home-controls">
+            <div class="controls-left">
+              <div class="control-group">
+                <span class="control-label">View by</span>
+                <select class="control-select" id="sel-type">
+                  <option value="DC">🏪 DC</option>
+                  <option value="Plant">🏭 Plant</option>
+                </select>
+              </div>
+              <div class="control-group">
+                <select class="control-select facility-select" id="sel-facility">
+                  <option value="DC_DELHI">Delhi NCR DC</option>
+                  <option value="DC_MUMBAI">Mumbai DC</option>
+                  <option value="DC_BENGALURU">Bengaluru DC</option>
+                  <option value="DC_KOLKATA">Kolkata DC</option>
+                  <option value="DC_GUWAHATI">Guwahati DC</option>
+                </select>
+                <span class="facility-dot" id="facility-dot"></span>
+              </div>
+            </div>
+            <div class="controls-right">
+              <span class="control-label">Period</span>
+              <select class="control-select" id="sel-period">
+                <!-- Populated by JS -->
               </select>
             </div>
-            <div class="control-group">
-              <select class="control-select facility-select" id="sel-facility">
-                <option value="DC_DELHI">Delhi NCR DC</option>
-                <option value="DC_MUMBAI">Mumbai DC</option>
-                <option value="DC_BENGALURU">Bengaluru DC</option>
-                <option value="DC_KOLKATA">Kolkata DC</option>
-                <option value="DC_GUWAHATI">Guwahati DC</option>
-              </select>
-              <span class="facility-dot" id="facility-dot"></span>
-            </div>
-          </div>
-          <div class="controls-right">
-            <span class="control-label">Period</span>
-            <select class="control-select" id="sel-period">
-              <!-- Populated by JS -->
-            </select>
-          </div>
-        </div>
-
-        <!-- Header -->
-        <div class="home-header">
-          <h1 class="home-greeting">Good morning, Priya 👋</h1>
-          <p class="home-subtitle">Here's the performance snapshot for <strong id="home-facility-name">Delhi NCR DC</strong></p>
-        </div>
-
-        <!-- KPI Cards -->
-        <div class="kpi-grid" id="kpi-grid">
-          <!-- Populated by JS -->
-        </div>
-
-        <!-- View More KPIs (Right-aligned) -->
-        <div class="view-more-kpis-container">
-          <button class="view-more-kpis-btn" id="btn-view-more-kpis">View more KPIs →</button>
-        </div>
-
-        <!-- Insights Section -->
-        <div class="home-insights-header">
-          <div>
-            <h2 class="insights-title">Here's what I found...</h2>
-            <p class="insights-subtitle">Key insights and recommendations based on your network performance and forecasts.</p>
-          </div>
-        </div>
-
-        <div class="insight-list" id="home-insight-list">
-          <!-- Populated by JS -->
-        </div>
-
-        <!-- AI Status Banner -->
-        <div class="ai-banner">
-          <div class="ai-banner-left">
-            <span class="ai-banner-icon">🤖</span>
-            <div>
-              <div class="ai-banner-text">I continuously monitor your network, forecast demand, run scenarios, and recommend the best actions.</div>
-              <div class="ai-banner-sub">Let me know if you'd like me to investigate anything specific.</div>
-            </div>
-          </div>
-          <button class="btn btn-primary" id="btn-ask-ng">🤖 Ask NetGravity</button>
-        </div>
-
-      </section>
-
-      <!-- ─────────────────── TAB: FACILITY DASHBOARD / ANALYTICS ─────────────────── -->
-      <section class="tab-panel" id="tab-facility-dashboard">
-        <!-- Dashboard Top Bar / Breadcrumb -->
-        <div class="dash-topbar">
-          <button class="btn btn-secondary btn-sm" id="btn-back-to-home">
-            <span>← Back to Decision Cockpit</span>
-          </button>
-          <div class="dash-meta-badge">
-            <span class="facility-dot" id="dash-facility-dot"></span>
-            <span id="dash-facility-name" style="font-weight:700">Delhi NCR DC</span>
-            <span class="tag tag-primary" id="dash-facility-type">Distribution Centre</span>
-          </div>
-          <div class="dash-actions">
-            <span class="text-sm text-muted" id="dash-period-label">1 Aug – 31 Aug 2026</span>
-          </div>
-        </div>
-
-        <div class="dash-header mb-lg">
-          <div>
-            <h1 class="home-greeting" id="dash-title">Facility Performance & Analytics Dashboard</h1>
-            <p class="home-subtitle" id="dash-subtitle">Complete operational telemetry, capacity utilisation, cost breakdown, and corridor flows.</p>
-          </div>
-        </div>
-
-        <!-- 6 Executive Data Cards -->
-        <div class="grid-3 mb-lg" id="dash-metrics-grid">
-          <!-- Populated by JS -->
-        </div>
-
-        <!-- Charts Section -->
-        <div class="grid-2 mb-lg">
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">Throughput vs Capacity Horizon</div>
-                <div class="card-subtitle">12-Month History + 3-Month Projection · Capacity Ceiling</div>
-              </div>
-              <span class="tag tag-danger" id="dash-util-tag">94% Utilisation</span>
-            </div>
-            <div class="chart-wrap" style="height:280px">
-              <canvas id="chart-dash-throughput"></canvas>
-            </div>
           </div>
 
-          <div class="card">
-            <div class="card-header">
-              <div>
-                <div class="card-title">Operational Cost Breakdown</div>
-                <div class="card-subtitle">Transport, Handling, Storage, Holding & Accessorials</div>
-              </div>
-              <span class="tag tag-primary" id="dash-total-cost-tag">₹11.8L / period</span>
-            </div>
-            <div class="chart-wrap" style="height:280px">
-              <canvas id="chart-dash-costs"></canvas>
-            </div>
+          <!-- Header -->
+          <div class="home-header">
+            <h1 class="home-greeting">Good morning, Priya 👋</h1>
+            <p class="home-subtitle">Here's the performance snapshot for <strong id="home-facility-name">Delhi NCR
+                DC</strong></p>
           </div>
-        </div>
 
-        <!-- Corridor Flow Distribution Chart & Summary -->
-        <div class="card mb-lg">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Connected Corridor Flows & Cost per Unit</div>
-              <div class="card-subtitle">Inbound supply from plants & Outbound dispatches to demand markets</div>
-            </div>
-            <span class="tag tag-muted" id="dash-lane-count-tag">4 Active Arcs</span>
-          </div>
-          <div class="grid-2-1" style="gap:var(--space-lg);align-items:center">
-            <div class="chart-wrap" style="height:220px">
-              <canvas id="chart-dash-lanes"></canvas>
-            </div>
-            <div id="dash-corridor-summary" style="font-size:13px;color:var(--text-2);background:var(--bg-elevated);padding:var(--space-md);border-radius:var(--r-md);line-height:1.7">
-              <!-- Populated by JS -->
-            </div>
-          </div>
-        </div>
-
-        <!-- Detailed Corridor Table -->
-        <div class="card mb-lg">
-          <div class="card-title mb-md">Connected Corridor Telemetry Table</div>
-          <div class="table-wrap">
-            <table class="ng-table" id="table-dash-lanes">
-              <thead>
-                <tr>
-                  <th>Corridor Arc</th>
-                  <th>Direction</th>
-                  <th class="num">Daily Flow</th>
-                  <th class="num">Distance</th>
-                  <th class="num">Cost / Unit</th>
-                  <th class="num">Transit Time</th>
-                  <th>Transport Mode</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Telemetry & System Source Integrity -->
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">Source Telemetry & System Mapping</div>
-            <span class="tag tag-success">✓ Live Synced</span>
-          </div>
-          <div class="grid-4" id="dash-telemetry-grid">
+          <!-- KPI Cards -->
+          <div class="kpi-grid" id="kpi-grid">
             <!-- Populated by JS -->
           </div>
-        </div>
-      </section>
 
-
-      <!-- ─────────────────── TAB: DIGITAL TWIN -->
-      <section class="tab-panel" id="tab-twin">
-        <div class="flex items-center justify-between mb-lg">
-          <div>
-            <div class="section-header" style="margin-bottom:4px">Digital Twin — India Logistics Network</div>
-            <div class="section-intro" style="margin-bottom:0">
-              Click any facility to inspect capacity, utilisation, and forecast. Toggle between network states.
-            </div>
+          <!-- View More KPIs (Right-aligned) -->
+          <div class="view-more-kpis-container">
+            <button class="view-more-kpis-btn" id="btn-view-more-kpis">View more KPIs →</button>
           </div>
-          <div class="toggle-group" id="map-toggle-twin">
-            <button class="toggle-btn active" data-state="actual">Actual</button>
-            <button class="toggle-btn" data-state="optimised">Optimised Base</button>
-            <button class="toggle-btn" data-state="recommended">Recommended</button>
-          </div>
-        </div>
 
-        <div class="card" style="padding:0;overflow:hidden">
-          <div class="map-container tall" id="map-twin"></div>
-        </div>
-
-        <div class="grid-3 mt-lg">
-          <div class="card">
-            <div class="card-title mb-md">Plants</div>
-            <table class="ng-table" id="table-plants"><thead><tr><th>Name</th><th class="num">Capacity</th><th class="num">Throughput</th><th>Status</th></tr></thead><tbody></tbody></table>
-          </div>
-          <div class="card">
-            <div class="card-title mb-md">Distribution Centres</div>
-            <table class="ng-table" id="table-dcs"><thead><tr><th>Name</th><th class="num">Capacity</th><th class="num">Utilisation</th><th>Status</th></tr></thead><tbody></tbody></table>
-          </div>
-          <div class="card">
-            <div class="card-title mb-md">Demand Markets</div>
-            <table class="ng-table" id="table-markets"><thead><tr><th>Name</th><th class="num">Demand</th><th>SLA</th><th>Priority</th></tr></thead><tbody></tbody></table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ─────────────────── TAB: FORECAST -->
-      <section class="tab-panel" id="tab-forecast">
-        <div class="section-header">Demand Forecast & External Signals</div>
-        <div class="section-intro">
-          I forecast North India demand to increase 14% over the next 3 months. Delhi NCR DC is projected to exceed capacity in December.
-        </div>
-
-        <div class="card mb-lg">
-          <div class="card-header">
+          <!-- Insights Section -->
+          <div class="home-insights-header">
             <div>
-              <div class="card-title">North India Demand — Historical & Forecast</div>
-              <div class="card-subtitle">24-month history + 6-month forecast · Confidence band · Capacity threshold</div>
-            </div>
-            <span class="tag tag-danger">Breach Projected Dec'26</span>
-          </div>
-          <div class="chart-wrap tall">
-            <canvas id="chart-forecast"></canvas>
-          </div>
-        </div>
-
-        <div class="grid-2">
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">Forecast Summary</div>
-              <span class="tag tag-muted">Statistical/ML</span>
-            </div>
-            <div class="fp-stat"><span class="fp-stat-label">Model</span><span class="fp-stat-value">Enhanced Demand Forecast</span></div>
-            <div class="fp-stat"><span class="fp-stat-label">Horizon</span><span class="fp-stat-value">6 months</span></div>
-            <div class="fp-stat"><span class="fp-stat-label">Growth Rate (North India)</span><span class="fp-stat-value" style="color:var(--red)">+14.2%</span></div>
-            <div class="fp-stat"><span class="fp-stat-label">Breach Facility</span><span class="fp-stat-value">Delhi NCR DC</span></div>
-            <div class="fp-stat"><span class="fp-stat-label">Breach Month</span><span class="fp-stat-value" style="color:var(--red)">December 2026</span></div>
-            <div class="fp-stat"><span class="fp-stat-label">Projected Utilisation</span><span class="fp-stat-value" style="color:var(--red)">108%</span></div>
-          </div>
-
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">External Signals</div>
-              <span class="signal-badge">External signal / hypothesis</span>
-            </div>
-            <div id="external-signals">
-              <!-- Populated by JS -->
+              <h2 class="insights-title">Here's what I found...</h2>
+              <p class="insights-subtitle">Key insights and recommendations based on your network performance and
+                forecasts.</p>
             </div>
           </div>
-        </div>
-      </section>
 
-      <!-- ─────────────────── TAB: SCENARIOS ─────────────────── -->
-      <section class="tab-panel" id="tab-scenarios">
-        <!-- Control Bar -->
-        <div class="home-controls">
-          <div class="controls-left">
-            <div class="control-group">
-              <span class="control-label">View by</span>
-              <select class="control-select" id="scn-sel-type">
-                <option value="DC">🏪 DC</option>
-                <option value="Plant">🏭 Plant</option>
-              </select>
+          <div class="insight-list" id="home-insight-list">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- AI Status Banner -->
+          <div class="ai-banner">
+            <div class="ai-banner-left">
+              <span class="ai-banner-icon">🤖</span>
+              <div>
+                <div class="ai-banner-text">I continuously monitor your network, forecast demand, run scenarios, and
+                  recommend the best actions.</div>
+                <div class="ai-banner-sub">Let me know if you'd like me to investigate anything specific.</div>
+              </div>
             </div>
-            <div class="control-group">
-              <select class="control-select facility-select" id="scn-sel-facility">
-                <option value="ALL">All DCs</option>
-                <option value="DC_DELHI" selected>Delhi NCR DC</option>
-                <option value="DC_MUMBAI">Mumbai DC</option>
-                <option value="DC_BENGALURU">Bengaluru DC</option>
-                <option value="DC_KOLKATA">Kolkata DC</option>
-                <option value="DC_GUWAHATI">Guwahati DC</option>
-              </select>
-              <span class="facility-dot" style="background:var(--amber)"></span>
+            <button class="btn btn-primary" id="btn-ask-ng">🤖 Ask NetGravity</button>
+          </div>
+
+        </section>
+
+        <!-- ─────────────────── TAB: FACILITY DASHBOARD / ANALYTICS ─────────────────── -->
+        <section class="tab-panel" id="tab-facility-dashboard">
+          <!-- Dashboard Top Bar / Breadcrumb -->
+          <div class="dash-topbar">
+            <button class="btn btn-secondary btn-sm" id="btn-back-to-home">
+              <span>← Back to Decision Cockpit</span>
+            </button>
+            <div class="dash-meta-badge">
+              <span class="facility-dot" id="dash-facility-dot"></span>
+              <span id="dash-facility-name" style="font-weight:700">Delhi NCR DC</span>
+              <span class="tag tag-primary" id="dash-facility-type">Distribution Centre</span>
+            </div>
+            <div class="dash-actions">
+              <span class="text-sm text-muted" id="dash-period-label">1 Aug – 31 Aug 2026</span>
             </div>
           </div>
-          <div class="controls-right">
-            <span class="control-label">Period</span>
-            <select class="control-select" id="scn-sel-period">
-              <option value="AUG_2026">1 Aug – 31 Aug 2026</option>
-              <option value="JUL_2026">1 Jul – 31 Jul 2026</option>
-              <option value="Q3_2026">Q3 2026 (Jul – Sep)</option>
-              <option value="Q4_2026">Q4 2026 (Oct – Dec)</option>
-            </select>
-            <span class="info-circle" title="All scenarios are evaluated against December peak demand forecasts.">ⓘ</span>
-          </div>
-        </div>
 
-        <!-- Page Header -->
-        <div class="home-header" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-md)">
-          <div>
-            <h1 class="home-greeting">Scenario Planning</h1>
-            <p class="home-subtitle">Explore what-if scenarios, evaluate impacts, and choose the best path forward.</p>
-          </div>
-          <button class="btn btn-primary" id="btn-toggle-create-scenario">
-            <span>+ Create New Scenario</span>
-          </button>
-        </div>
-
-        <!-- Secondary Navigation Tabs -->
-        <div class="scenario-nav-tabs mb-lg">
-          <button class="scn-tab-btn active" data-scn-tab="recommended">✨ Recommended by NetGravity</button>
-          <button class="scn-tab-btn" data-scn-tab="opt_base">⏱ Optimised Base Case</button>
-          <button class="scn-tab-btn" data-scn-tab="my_scenarios">👤 My Scenarios</button>
-          <button class="scn-tab-btn" data-scn-tab="comparison">⚖️ Scenario Comparison <span class="scn-count-badge" id="scn-count-badge">4</span></button>
-        </div>
-
-        <!-- Workspace Layout (Main Content + Right Toolbox) -->
-        <div class="scenario-workspace-layout" id="scenario-workspace-layout">
-          <!-- Main Comparison & Scenario Content -->
-          <div class="scenario-main-pane">
-            <!-- Recommended Scenarios Cards Row -->
-            <div class="scenario-cards-row mb-xl" id="scenario-cards-row">
-              <!-- Populated by JS -->
+          <div class="dash-header mb-lg">
+            <div>
+              <h1 class="home-greeting" id="dash-title">Facility Performance & Analytics Dashboard</h1>
+              <p class="home-subtitle" id="dash-subtitle">Complete operational telemetry, capacity utilisation, cost
+                breakdown, and corridor flows.</p>
             </div>
+          </div>
 
-            <!-- Scenario Comparison Table Section -->
-            <div class="card mb-xl">
+          <!-- 6 Executive Data Cards -->
+          <div class="grid-3 mb-lg" id="dash-metrics-grid">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Charts Section -->
+          <div class="grid-2 mb-lg">
+            <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title">Scenario Comparison</div>
-                  <div class="card-subtitle">Compare scenarios side by side to evaluate trade-offs.</div>
+                  <div class="card-title">Throughput vs Capacity Horizon</div>
+                  <div class="card-subtitle">12-Month History + 3-Month Projection · Capacity Ceiling</div>
                 </div>
-                <div class="flex items-center gap-sm">
-                  <div class="control-group" style="margin:0">
-                    <span class="control-label" style="font-size:11px">Metric View</span>
-                    <select class="control-select" id="scn-metric-view-select" style="font-size:12px;padding:4px 10px">
-                      <option value="key">Key Metrics</option>
-                      <option value="financial">Financial & Costs</option>
-                      <option value="operations">Operational & Service</option>
-                      <option value="all">All Metrics</option>
-                    </select>
-                  </div>
-                  <button class="btn btn-secondary btn-sm" id="btn-customize-metrics">
-                    <span>🛠️ Customize Metrics</span>
-                  </button>
+                <span class="tag tag-danger" id="dash-util-tag">94% Utilisation</span>
+              </div>
+              <div class="chart-wrap" style="height:280px">
+                <canvas id="chart-dash-throughput"></canvas>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Operational Cost Breakdown</div>
+                  <div class="card-subtitle">Transport, Handling, Storage, Holding & Accessorials</div>
+                </div>
+                <span class="tag tag-primary" id="dash-total-cost-tag">₹11.8L / period</span>
+              </div>
+              <div class="chart-wrap" style="height:280px">
+                <canvas id="chart-dash-costs"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Corridor Flow Distribution Chart & Summary -->
+          <div class="card mb-lg">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Connected Corridor Flows & Cost per Unit</div>
+                <div class="card-subtitle">Inbound supply from plants & Outbound dispatches to demand markets</div>
+              </div>
+              <span class="tag tag-muted" id="dash-lane-count-tag">4 Active Arcs</span>
+            </div>
+            <div class="grid-2-1" style="gap:var(--space-lg);align-items:center">
+              <div class="chart-wrap" style="height:220px">
+                <canvas id="chart-dash-lanes"></canvas>
+              </div>
+              <div id="dash-corridor-summary"
+                style="font-size:13px;color:var(--text-2);background:var(--bg-elevated);padding:var(--space-md);border-radius:var(--r-md);line-height:1.7">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Detailed Corridor Table -->
+          <div class="card mb-lg">
+            <div class="card-title mb-md">Connected Corridor Telemetry Table</div>
+            <div class="table-wrap">
+              <table class="ng-table" id="table-dash-lanes">
+                <thead>
+                  <tr>
+                    <th>Corridor Arc</th>
+                    <th>Direction</th>
+                    <th class="num">Daily Flow</th>
+                    <th class="num">Distance</th>
+                    <th class="num">Cost / Unit</th>
+                    <th class="num">Transit Time</th>
+                    <th>Transport Mode</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Telemetry & System Source Integrity -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Source Telemetry & System Mapping</div>
+              <span class="tag tag-success">✓ Live Synced</span>
+            </div>
+            <div class="grid-4" id="dash-telemetry-grid">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </section>
+
+
+        <!-- ─────────────────── TAB: DIGITAL TWIN -->
+        <section class="tab-panel" id="tab-twin">
+          <div class="flex items-center justify-between mb-lg">
+            <div>
+              <div class="section-header" style="margin-bottom:4px">Digital Twin — India Logistics Network</div>
+              <div class="section-intro" style="margin-bottom:0">
+                Click any facility to inspect capacity, utilisation, and forecast. Toggle between network states.
+              </div>
+            </div>
+            <div class="toggle-group" id="map-toggle-twin">
+              <button class="toggle-btn active" data-state="actual">Actual</button>
+              <button class="toggle-btn" data-state="optimised">Optimised Base</button>
+              <button class="toggle-btn" data-state="recommended">Recommended</button>
+            </div>
+          </div>
+
+          <div class="card" style="padding:0;overflow:hidden">
+            <div class="map-container tall" id="map-twin"></div>
+          </div>
+
+          <div class="grid-3 mt-lg">
+            <div class="card">
+              <div class="card-title mb-md">Plants</div>
+              <table class="ng-table" id="table-plants">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th class="num">Capacity</th>
+                    <th class="num">Throughput</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="card">
+              <div class="card-title mb-md">Distribution Centres</div>
+              <table class="ng-table" id="table-dcs">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th class="num">Capacity</th>
+                    <th class="num">Utilisation</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div class="card">
+              <div class="card-title mb-md">Demand Markets</div>
+              <table class="ng-table" id="table-markets">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th class="num">Demand</th>
+                    <th>SLA</th>
+                    <th>Priority</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─────────────────── TAB: FORECAST -->
+        <section class="tab-panel" id="tab-forecast">
+          <div class="section-header">Demand Forecast & External Signals</div>
+          <div class="section-intro">
+            I forecast North India demand to increase 14% over the next 3 months. Delhi NCR DC is projected to exceed
+            capacity in December.
+          </div>
+
+          <div class="card mb-lg">
+            <div class="card-header">
+              <div>
+                <div class="card-title">North India Demand — Historical & Forecast</div>
+                <div class="card-subtitle">24-month history + 6-month forecast · Confidence band · Capacity threshold
                 </div>
               </div>
-              <div class="table-wrap" id="scenario-comparison-table-wrap">
+              <span class="tag tag-danger">Breach Projected Dec'26</span>
+            </div>
+            <div class="chart-wrap tall">
+              <canvas id="chart-forecast"></canvas>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">Forecast Summary</div>
+                <span class="tag tag-muted">Statistical/ML</span>
+              </div>
+              <div class="fp-stat"><span class="fp-stat-label">Model</span><span class="fp-stat-value">Enhanced Demand
+                  Forecast</span></div>
+              <div class="fp-stat"><span class="fp-stat-label">Horizon</span><span class="fp-stat-value">6 months</span>
+              </div>
+              <div class="fp-stat"><span class="fp-stat-label">Growth Rate (North India)</span><span
+                  class="fp-stat-value" style="color:var(--red)">+14.2%</span></div>
+              <div class="fp-stat"><span class="fp-stat-label">Breach Facility</span><span class="fp-stat-value">Delhi
+                  NCR DC</span></div>
+              <div class="fp-stat"><span class="fp-stat-label">Breach Month</span><span class="fp-stat-value"
+                  style="color:var(--red)">December 2026</span></div>
+              <div class="fp-stat"><span class="fp-stat-label">Projected Utilisation</span><span class="fp-stat-value"
+                  style="color:var(--red)">108%</span></div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">External Signals</div>
+                <span class="signal-badge">External signal / hypothesis</span>
+              </div>
+              <div id="external-signals">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ─────────────────── TAB: SCENARIOS ─────────────────── -->
+        <section class="tab-panel" id="tab-scenarios">
+          <!-- Control Bar (Period Selector Removed as Requested) -->
+          <div class="home-controls">
+            <div class="controls-left">
+              <div class="control-group">
+                <span class="control-label">View by</span>
+                <select class="control-select" id="scn-sel-type">
+                  <option value="DC">🏪 DC</option>
+                  <option value="Plant">🏭 Plant</option>
+                </select>
+              </div>
+              <div class="control-group">
+                <select class="control-select facility-select" id="scn-sel-facility">
+                  <option value="ALL">All DCs</option>
+                  <option value="DC_DELHI" selected>Delhi NCR DC</option>
+                  <option value="DC_MUMBAI">Mumbai DC</option>
+                  <option value="DC_BENGALURU">Bengaluru DC</option>
+                  <option value="DC_KOLKATA">Kolkata DC</option>
+                  <option value="DC_GUWAHATI">Guwahati DC</option>
+                </select>
+                <span class="facility-dot" style="background:var(--amber)"></span>
+              </div>
+            </div>
+            <div class="controls-right">
+              <div class="text-xs text-muted" style="display:flex;align-items:center;gap:6px">
+                <span class="info-circle"
+                  title="All scenarios evaluated against December Peak Demand (+14.2%).">ⓘ</span>
+                <span>Horizon: <strong>December Peak Forecast</strong></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Page Header -->
+          <div class="home-header" style="margin-bottom:var(--space-md)">
+            <div>
+              <h1 class="home-greeting">Scenario Planning</h1>
+              <p class="home-subtitle">Explore what-if scenarios, evaluate impacts, and choose the best path forward.</p>
+            </div>
+          </div>
+
+          <!-- Floating Sticky Navigation & Action Bar (Placed slightly lower, bigger in size) -->
+          <div class="scenario-floating-nav-wrap">
+            <div class="scenario-floating-nav">
+              <button class="scn-floating-btn active" data-target="scn-section-recommended">
+                <span>✨ Recommended</span>
+              </button>
+              <button class="scn-floating-btn" data-target="scn-section-opt-base">
+                <span>⏱ Optimised Base</span>
+              </button>
+              <button class="scn-floating-btn" data-target="scn-section-my-scenarios">
+                <span>👤 My Scenarios</span>
+              </button>
+              <button class="scn-floating-btn" data-target="scn-section-comparison">
+                <span>⚖️ Scenario Comparison</span>
+                <span class="scn-count-badge" id="scn-count-badge">4</span>
+              </button>
+            </div>
+
+            <!-- Floating + Create New Scenario Button (Slightly bigger, floating alongside menu) -->
+            <button class="btn btn-primary btn-floating-create" id="btn-toggle-create-scenario">
+              <span style="font-size:15px;margin-right:2px">➕</span>
+              <span>Create New Scenario</span>
+            </button>
+          </div>
+
+          <!-- Main Workspace: Stacked Sections -->
+          <div class="scenario-main-pane">
+
+            <!-- Section 1: Recommended by NetGravity -->
+            <div class="scenario-stacked-section mb-xl" id="scn-section-recommended">
+              <div class="section-heading-row mb-md">
+                <div class="flex items-center gap-xs">
+                  <h3 style="font-size:16px;font-weight:700;color:var(--text-1)">Recommended by NetGravity</h3>
+                  <span class="tag tag-success" style="font-size:10px;padding:2px 8px">AI Proactive
+                    Identification</span>
+                </div>
+                <p class="text-xs text-muted">Proactively structured to solve the Delhi NCR DC December capacity
+                  bottleneck.</p>
+              </div>
+
+              <!-- Recommended Scenarios Cards Row -->
+              <div class="scenario-cards-row" id="scenario-cards-row">
                 <!-- Populated by JS -->
               </div>
             </div>
 
-            <!-- Scenario Impact at a Glance -->
-            <div class="mb-lg">
-              <div class="flex items-center justify-between mb-md">
-                <div>
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-1)">Scenario Impact at a Glance</h3>
-                  <p class="text-xs text-muted">Visual summary of key impacts across the network.</p>
+            <!-- Section 2: Optimised Base Case -->
+            <div class="scenario-stacked-section mb-lg" id="scn-section-opt-base">
+              <div class="section-heading-row mb-sm">
+                <div class="flex items-center gap-xs">
+                  <h3 style="font-size:15px;font-weight:700;color:var(--text-1)">Optimised Base Case</h3>
+                  <span class="tag tag-warning" style="font-size:10px;padding:2px 8px">Footprint Locked</span>
                 </div>
-                <button class="btn btn-ghost btn-sm" id="btn-view-detailed-results">View Detailed Results ↗</button>
+                <p class="text-xs text-muted">Pure mathematical flow optimization within existing 5 DC footprint (zero CapEx).</p>
               </div>
 
-              <div class="grid-4" style="gap:var(--space-md)">
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">Cost Impact <span class="text-xs text-muted" style="font-weight:400">(vs Baseline)</span></div>
-                  <div class="text-xs text-muted mb-sm">₹ in Lakhs</div>
-                  <div class="chart-wrap" style="height:180px">
-                    <canvas id="chart-scn-cost"></canvas>
+              <div class="card opt-base-card" id="card-opt-base" data-scn-id="SCN_OPTIMISED_BASE" style="padding:14px 18px;background:#fcfaff;border:1px solid var(--purple-100);cursor:pointer" title="Click to inspect scenario details">
+                <div class="flex items-center justify-between">
+                  <div style="flex:1">
+                    <div class="flex items-center gap-sm mb-xs">
+                      <h4 style="font-size:14px;font-weight:700;color:var(--text-1)">Optimised Base Case (Current 5 DC Network)</h4>
+                      <span class="tag tag-warning" style="font-size:10px">Not Recommended as #1</span>
+                      <span class="provenance-badge model-fact">MODEL FACT</span>
+                    </div>
+                    <p style="font-size:12px;color:var(--text-2);max-width:760px;line-height:1.45;margin-bottom:6px">
+                      Reallocates Baddi corridor flows to achieve lowest headline logistics cost of <strong>₹11.42L (↓11.1%)</strong> with 96.5% normal SLA.
+                      However, the AI Challenger rejects this plan because it pushes Delhi NCR utilisation to 97% and <strong>fails under +15% demand surge (SLA collapses to 91.8%)</strong>.
+                    </p>
+                    <div class="flex items-center gap-lg text-xs">
+                      <div><strong>Total Cost:</strong> ₹11.42L (↓11.1%)</div>
+                      <div><strong>Normal SLA:</strong> 96.5%</div>
+                      <div><strong>Surge Test (+15% Demand):</strong> <span style="color:var(--red);font-weight:700">FAIL (SLA: 91.8%)</span></div>
+                    </div>
+                  </div>
+                  <div style="margin-left:16px;text-align:right">
+                    <span class="text-xs" style="color:var(--primary);font-weight:700">Click to Inspect Details →</span>
                   </div>
                 </div>
+              </div>
+            </div>
 
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">Capacity Risk <span class="text-xs text-muted" style="font-weight:400">(December)</span></div>
-                  <div class="text-xs text-muted mb-sm">Risk Level</div>
-                  <div class="chart-wrap" style="height:180px">
-                    <canvas id="chart-scn-risk"></canvas>
+            <!-- Section 3: My Scenarios -->
+            <div class="scenario-stacked-section mb-lg" id="scn-section-my-scenarios">
+              <div class="section-heading-row mb-sm">
+                <div class="flex items-center gap-xs">
+                  <h3 style="font-size:15px;font-weight:700;color:var(--text-1)">My Scenarios</h3>
+                  <span class="tag tag-primary" style="font-size:10px;padding:2px 8px">User Created What-Ifs</span>
+                </div>
+                <p class="text-xs text-muted">Custom scenarios created by network planners and evaluated through the MILP solver.</p>
+              </div>
+
+              <div class="my-scenarios-grid" id="my-scenarios-grid">
+                <!-- Populated dynamically (no overflow buttons) -->
+              </div>
+            </div>
+
+            <!-- Section 4: Scenario Comparison Table -->
+            <div class="scenario-stacked-section mb-lg" id="scn-section-comparison">
+              <div class="card">
+                <div class="card-header" style="margin-bottom:12px">
+                  <div>
+                    <div class="card-title">Scenario Comparison Table</div>
+                    <div class="card-subtitle">Side-by-side trade-off matrix. Click any column or cell to inspect full mathematical formulation.</div>
+                  </div>
+                  <div class="flex items-center gap-sm">
+                    <div class="control-group" style="margin:0">
+                      <span class="control-label" style="font-size:11px">Metric View</span>
+                      <select class="control-select" id="scn-metric-view-select" style="font-size:12px;padding:4px 10px">
+                        <option value="key">Key Metrics</option>
+                        <option value="financial">Financial & Costs</option>
+                        <option value="operations">Operational & Service</option>
+                        <option value="all">All Metrics</option>
+                      </select>
+                    </div>
+                    <button class="btn btn-secondary btn-sm" id="btn-customize-metrics">
+                      <span>🛠️ Customize Metrics</span>
+                    </button>
                   </div>
                 </div>
-
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">SLA <span class="text-xs text-muted" style="font-weight:400">(On-time Service %)</span></div>
-                  <div class="text-xs text-muted mb-sm">% on-time delivery</div>
-                  <div class="chart-wrap" style="height:180px">
-                    <canvas id="chart-scn-sla"></canvas>
-                  </div>
-                </div>
-
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">Network Flow Change</div>
-                  <div class="text-xs text-muted mb-sm">vs Baseline</div>
-                  <div id="container-scn-flow-map" style="height:180px">
-                    <!-- SVG Flow Map -->
-                  </div>
+                <div class="table-wrap" id="scenario-comparison-table-wrap">
+                  <!-- Populated by JS -->
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Right-Side "Create New Scenario" Toolbox Panel (Collapsible/Side) -->
-          <div class="scenario-toolbox-pane" id="scenario-toolbox-pane">
-            <div class="toolbox-header">
-              <div class="card-title">Create New Scenario</div>
-              <button class="btn btn-ghost btn-sm" id="btn-close-toolbox">✕</button>
-            </div>
 
-            <!-- Step 1: Select Scenario Type -->
-            <div class="toolbox-step">
-              <div class="toolbox-step-num">1</div>
-              <div class="toolbox-step-content">
-                <div class="toolbox-step-title">Select Scenario Type</div>
-                <div class="scn-type-grid">
-                  <button class="scn-type-card active" data-type="CHANGE_CAPACITY">
-                    <span class="scn-type-icon">🛡️</span>
-                    <span class="scn-type-label">Change Capacity</span>
-                  </button>
-                  <button class="scn-type-card" data-type="OPEN_FACILITY">
-                    <span class="scn-type-icon">🏪</span>
-                    <span class="scn-type-label">Open Facility</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CLOSE_FACILITY">
-                    <span class="scn-type-icon">✕</span>
-                    <span class="scn-type-label">Close Facility</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CHANGE_DEMAND">
-                    <span class="scn-type-icon">📈</span>
-                    <span class="scn-type-label">Change Demand</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CHANGE_TRANSPORT_COST">
-                    <span class="scn-type-icon">🚛</span>
-                    <span class="scn-type-label">Change Transport Cost</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CHANGE_SLA">
-                    <span class="scn-type-icon">⏱️</span>
-                    <span class="scn-type-label">Change SLA</span>
-                  </button>
+          <!-- Create New Scenario Pop-Up Modal (Blurs background, appears only on click) -->
+          <div class="modal-overlay" id="modal-create-toolbox">
+            <div class="modal-box scenario-toolbox-modal">
+              <div class="toolbox-header">
+                <div>
+                  <div class="card-title" style="font-size:16px">Create New Scenario</div>
+                  <div class="text-xs text-muted">Configure custom network intervention parameters for MILP evaluation.
+                  </div>
                 </div>
+                <button class="btn btn-ghost btn-sm" id="btn-close-toolbox">✕</button>
               </div>
-            </div>
 
-            <!-- Step 2: Configure Changes -->
-            <div class="toolbox-step">
-              <div class="toolbox-step-num">2</div>
-              <div class="toolbox-step-content">
-                <div class="toolbox-step-title">Configure Changes</div>
-                
-                <div class="form-group mb-sm">
-                  <label class="form-label">Select Facility</label>
-                  <select class="form-select" id="toolbox-facility">
-                    <option value="DC_DELHI">Delhi NCR DC</option>
-                    <option value="DC_MUMBAI">Mumbai DC</option>
-                    <option value="DC_BENGALURU">Bengaluru DC</option>
-                    <option value="DC_KOLKATA">Kolkata DC</option>
-                    <option value="DC_GUWAHATI">Guwahati DC</option>
-                  </select>
-                </div>
-
-                <div class="form-group mb-sm">
-                  <label class="form-label">Capacity Change</label>
-                  <div class="flex gap-sm">
-                    <select class="form-select" id="toolbox-change-dir" style="width:120px">
-                      <option value="INCREASE">Increase</option>
-                      <option value="DECREASE">Decrease</option>
-                    </select>
-                    <div style="position:relative;flex:1">
-                      <input type="number" class="form-input" id="toolbox-amount" value="2000" step="500">
-                      <span style="position:absolute;right:10px;top:9px;font-size:11px;color:var(--text-3)">units/day</span>
+              <!-- Form Body (visible during configuration) -->
+              <div id="toolbox-form-body">
+                <!-- Step 1: Select Scenario Type -->
+                <div class="toolbox-step">
+                  <div class="toolbox-step-num">1</div>
+                  <div class="toolbox-step-content">
+                    <div class="toolbox-step-title">Select Scenario Type</div>
+                    <div class="scn-type-grid">
+                      <button class="scn-type-card active" data-type="CHANGE_CAPACITY">
+                        <span class="scn-type-icon">🛡️</span>
+                        <span class="scn-type-label">Change Capacity</span>
+                      </button>
+                      <button class="scn-type-card" data-type="OPEN_FACILITY">
+                        <span class="scn-type-icon">🏪</span>
+                        <span class="scn-type-label">Open Facility</span>
+                      </button>
+                      <button class="scn-type-card" data-type="CLOSE_FACILITY">
+                        <span class="scn-type-icon">✕</span>
+                        <span class="scn-type-label">Close Facility</span>
+                      </button>
+                      <button class="scn-type-card" data-type="CHANGE_DEMAND">
+                        <span class="scn-type-icon">📈</span>
+                        <span class="scn-type-label">Change Demand</span>
+                      </button>
+                      <button class="scn-type-card" data-type="CHANGE_TRANSPORT_COST">
+                        <span class="scn-type-icon">🚛</span>
+                        <span class="scn-type-label">Change Transport Cost</span>
+                      </button>
+                      <button class="scn-type-card" data-type="CHANGE_SLA">
+                        <span class="scn-type-icon">⏱️</span>
+                        <span class="scn-type-label">Change SLA</span>
+                      </button>
                     </div>
                   </div>
                 </div>
 
-                <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-                  <div class="form-group">
-                    <label class="form-label">Start Date</label>
-                    <input type="text" class="form-input" id="toolbox-start" value="1 Oct 2026">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">End Date <span class="text-muted">(Optional)</span></label>
-                    <input type="text" class="form-input" id="toolbox-end" value="31 Dec 2026">
+                <!-- Step 2: Configure Changes (Dynamically populated based on Scenario Type) -->
+                <div class="toolbox-step">
+                  <div class="toolbox-step-num">2</div>
+                  <div class="toolbox-step-content">
+                    <div class="flex items-center justify-between mb-xs">
+                      <div class="toolbox-step-title" style="margin-bottom:0">Configure Parameters</div>
+                      <span class="tag tag-primary" id="toolbox-active-type-badge" style="font-size:9.5px;padding:2px 7px">Change Capacity</span>
+                    </div>
+                    <div class="text-xs text-muted mb-sm" id="toolbox-active-type-desc">Specify capacity expansion or reduction parameters.</div>
+
+                    <!-- Dynamic Fields Container -->
+                    <div id="toolbox-dynamic-fields">
+                      <!-- Populated dynamically by JS -->
+                    </div>
                   </div>
                 </div>
 
-                <div class="form-group">
-                  <label class="form-label">Notes <span class="text-muted">(Optional)</span></label>
-                  <input type="text" class="form-input" id="toolbox-notes" value="Adding seasonal capacity for peak demand">
+                <!-- Step 3: Advanced Options (Collapsible) -->
+                <div class="toolbox-step">
+                  <div class="toolbox-step-num">3</div>
+                  <div class="toolbox-step-content">
+                    <div class="toolbox-accordion-toggle" id="toolbox-adv-toggle">
+                      <span class="toolbox-step-title">Advanced Solver Constraints & Multi-Objective <span class="text-muted">(Optional)</span></span>
+                      <span id="adv-chevron">▼</span>
+                    </div>
+
+                    <div class="toolbox-adv-content hidden" id="toolbox-adv-content">
+                      <div class="form-group mb-sm">
+                        <label class="form-label">Primary Solver Objective</label>
+                        <select class="form-select" id="toolbox-objective">
+                          <option value="COST">Minimise Total Network Logistics Cost</option>
+                          <option value="SLA">Maximise Network-Wide On-Time SLA</option>
+                          <option value="CARBON">Minimise Scope 3 Carbon Emissions</option>
+                          <option value="HEADROOM">Maximise Capacity Headroom & Safety Buffer</option>
+                        </select>
+                      </div>
+
+                      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+                        <div class="form-group">
+                          <label class="form-label">Minimum SLA Constraint (%)</label>
+                          <input type="number" class="form-input" id="toolbox-sla-min" value="95" min="80" max="100" step="0.5">
+                        </div>
+                        <div class="form-group">
+                          <label class="form-label">Solver Engine Backend</label>
+                          <select class="form-select" id="toolbox-solver-backend">
+                            <option value="HIGHS">PuLP / HiGHS Branch-and-Cut (Exact)</option>
+                            <option value="CBC">COIN-OR CBC Dual Simplex</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div class="form-group">
+                        <label class="form-label">Resilience Stress Testing Suite</label>
+                        <div class="flex flex-col gap-xs text-xs" style="background:var(--bg-subtle);padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--border-light)">
+                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="checkbox" id="stress-check-demand" checked>
+                            <span>Simulate +15% December Demand Surge</span>
+                          </label>
+                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="checkbox" id="stress-check-lane" checked>
+                            <span>Simulate Primary Corridor Disruption</span>
+                          </label>
+                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                            <input type="checkbox" id="stress-check-rate" checked>
+                            <span>Evaluate ±10% Fuel & Rate Elasticity</span>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Footer Buttons -->
+                <div class="flex items-center justify-between mt-lg pt-md"
+                  style="border-top:1px solid var(--border-light)">
+                  <button class="btn btn-secondary btn-sm" id="btn-cancel-toolbox">Cancel</button>
+                  <button class="btn btn-primary" id="btn-run-toolbox-scenario"
+                    style="padding:10px 24px;font-size:13.5px;font-weight:700">
+                    <span>▶ Run Solver</span>
+                  </button>
                 </div>
               </div>
-            </div>
 
-            <!-- Step 3: Advanced Options (Collapsible) -->
-            <div class="toolbox-step">
-              <div class="toolbox-step-num">3</div>
-              <div class="toolbox-step-content">
-                <div class="toolbox-accordion-toggle" id="toolbox-adv-toggle">
-                  <span class="toolbox-step-title">Advanced Options <span class="text-muted">(Optional)</span></span>
-                  <span id="adv-chevron">▼</span>
-                </div>
-
-                <div class="toolbox-adv-content hidden" id="toolbox-adv-content">
-                  <div class="form-group mb-sm">
-                    <label class="form-label">Optimise for</label>
-                    <select class="form-select" id="toolbox-objective">
-                      <option value="COST">Minimise Total Cost</option>
-                      <option value="SLA">Maximise On-Time SLA</option>
-                      <option value="CARBON">Minimise Carbon Emissions</option>
-                      <option value="HEADROOM">Maximise Capacity Headroom</option>
-                    </select>
-                  </div>
-
-                  <div class="form-group mb-sm">
-                    <label class="form-label">Constraint: Minimum SLA (%)</label>
-                    <input type="number" class="form-input" id="toolbox-sla-min" value="95" min="80" max="100">
-                  </div>
-
-                  <div class="form-group">
-                    <label class="form-label">Forecast Horizon</label>
-                    <select class="form-select" id="toolbox-forecast-ver">
-                      <option value="DEC_PEAK">December Peak Surge (+14.2%)</option>
-                      <option value="Q4_BASE">Q4 Base Forecast</option>
-                    </select>
+              <!-- Agentic Calibration & Solver Execution State (Shown during execution) -->
+              <div class="agent-execution-view hidden" id="agent-execution-view">
+                <div class="agent-pulse-header">
+                  <div class="agent-pulse-icon">🤖</div>
+                  <div>
+                    <h4 style="font-size:15px;font-weight:800;color:var(--text-1);margin-bottom:2px">NetGravity AI
+                      Orchestrator</h4>
+                    <div class="text-xs text-muted" id="agent-live-status-text">Calibrating network parameters and
+                      invoking MILP solver...</div>
                   </div>
                 </div>
-              </div>
-            </div>
 
-            <!-- Execution Status & Run Button -->
-            <div class="toolbox-footer mt-md">
-              <div class="toolbox-progress hidden" id="toolbox-progress">
-                <div class="progress-step done">✓ Scenario Validated</div>
-                <div class="progress-step active" id="progress-step-solver">● MILP Solver running (PuLP / HiGHS)...</div>
-                <div class="progress-step" id="progress-step-resilience">○ Resilience stress testing</div>
-                <div class="progress-step" id="progress-step-ai">○ Generating AI trade-off assessment</div>
-              </div>
+                <!-- Animated Progress Bar -->
+                <div class="agent-progress-bar-wrap">
+                  <div class="agent-progress-bar-fill" id="agent-progress-bar-fill"></div>
+                </div>
 
-              <button class="btn btn-primary btn-block" id="btn-run-toolbox-scenario" style="padding:12px;font-size:14px;font-weight:700">
-                <span>▶ Run Scenario</span>
-              </button>
+                <!-- Dynamic Execution Telemetry Log -->
+                <div class="agent-telemetry-box" id="agent-telemetry-box">
+                  <!-- Populated dynamically with pulsing log steps -->
+                </div>
+              </div>
             </div>
           </div>
+        </section>
+
+
+        <!-- ─────────────────── TAB: RECOMMENDATION (accessed via insights) -->
+        <section class="tab-panel" id="tab-recommend">
+          <div class="section-header">Here's what I recommend.</div>
+          <div id="recommendation-panel">
+            <!-- Populated by JS -->
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Facility Detail Panel (slide-in) -->
+  <div class="facility-panel" id="facility-panel">
+    <button class="facility-panel-close" id="fp-close">✕</button>
+    <div id="fp-content"></div>
+  </div>
+
+  <!-- Insight Detail Drawer -->
+  <div class="insight-drawer-overlay" id="insight-drawer-overlay">
+    <div class="insight-drawer" id="insight-drawer">
+      <button class="facility-panel-close" id="insight-drawer-close">✕</button>
+      <div id="insight-drawer-content"></div>
+    </div>
+  </div>
+
+  <!-- Scenario Detail Drawer (Right-side slide-over) -->
+  <div class="scenario-drawer-overlay" id="scenario-drawer-overlay">
+    <div class="scenario-drawer" id="scenario-drawer">
+      <button class="facility-panel-close" id="scenario-drawer-close">✕</button>
+      <div id="scenario-drawer-content">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Metric Customization Modal -->
+  <div class="modal-overlay" id="modal-metric-customizer">
+    <div class="modal-box" style="max-width:520px">
+      <div class="flex items-center justify-between mb-md">
+        <div>
+          <div class="card-title">Customize Comparison Metrics</div>
+          <div class="text-xs text-muted">Select which rows appear in the side-by-side scenario comparison table.</div>
         </div>
-      </section>
+        <button class="btn btn-ghost btn-sm" id="modal-close-metrics">✕</button>
+      </div>
 
-
-      <!-- ─────────────────── TAB: RECOMMENDATION (accessed via insights) -->
-      <section class="tab-panel" id="tab-recommend">
-        <div class="section-header">Here's what I recommend.</div>
-        <div id="recommendation-panel">
-          <!-- Populated by JS -->
+      <div class="metric-category-group mb-md">
+        <div class="metric-category-title">Financial & Cost Metrics</div>
+        <div class="metric-checkbox-grid">
+          <label class="metric-check-item"><input type="checkbox" data-metric="totalCost" checked> Total Cost
+            (₹)</label>
+          <label class="metric-check-item"><input type="checkbox" data-metric="costChange" checked> Cost Change
+            (%)</label>
+          <label class="metric-check-item"><input type="checkbox" data-metric="transportCost"> Transport Freight
+            Cost</label>
+          <label class="metric-check-item"><input type="checkbox" data-metric="fixedCost"> Fixed Facility Cost</label>
+          <label class="metric-check-item"><input type="checkbox" data-metric="inventoryCost"> Inventory Holding
+            Cost</label>
         </div>
-      </section>
-
-    </main>
-  </div>
-</div>
-
-<!-- Facility Detail Panel (slide-in) -->
-<div class="facility-panel" id="facility-panel">
-  <button class="facility-panel-close" id="fp-close">✕</button>
-  <div id="fp-content"></div>
-</div>
-
-<!-- Insight Detail Drawer -->
-<div class="insight-drawer-overlay" id="insight-drawer-overlay">
-  <div class="insight-drawer" id="insight-drawer">
-    <button class="facility-panel-close" id="insight-drawer-close">✕</button>
-    <div id="insight-drawer-content"></div>
-  </div>
-</div>
-
-<!-- Scenario Detail Drawer (Right-side slide-over) -->
-<div class="scenario-drawer-overlay" id="scenario-drawer-overlay">
-  <div class="scenario-drawer" id="scenario-drawer">
-    <button class="facility-panel-close" id="scenario-drawer-close">✕</button>
-    <div id="scenario-drawer-content">
-      <!-- Populated by JS -->
-    </div>
-  </div>
-</div>
-
-<!-- Metric Customization Modal -->
-<div class="modal-overlay" id="modal-metric-customizer">
-  <div class="modal-box" style="max-width:520px">
-    <div class="flex items-center justify-between mb-md">
-      <div>
-        <div class="card-title">Customize Comparison Metrics</div>
-        <div class="text-xs text-muted">Select which rows appear in the side-by-side scenario comparison table.</div>
       </div>
-      <button class="btn btn-ghost btn-sm" id="modal-close-metrics">✕</button>
-    </div>
 
-    <div class="metric-category-group mb-md">
-      <div class="metric-category-title">Financial & Cost Metrics</div>
-      <div class="metric-checkbox-grid">
-        <label class="metric-check-item"><input type="checkbox" data-metric="totalCost" checked> Total Cost (₹)</label>
-        <label class="metric-check-item"><input type="checkbox" data-metric="costChange" checked> Cost Change (%)</label>
-        <label class="metric-check-item"><input type="checkbox" data-metric="transportCost"> Transport Freight Cost</label>
-        <label class="metric-check-item"><input type="checkbox" data-metric="fixedCost"> Fixed Facility Cost</label>
-        <label class="metric-check-item"><input type="checkbox" data-metric="inventoryCost"> Inventory Holding Cost</label>
+      <div class="metric-category-group mb-md">
+        <div class="metric-category-title">Service & Operations</div>
+        <div class="metric-checkbox-grid">
+          <label class="metric-check-item"><input type="checkbox" data-metric="sla" checked> SLA (On-time Service
+            %)</label>
+          <label class="metric-check-item"><input type="checkbox" data-metric="capacityRisk" checked> Capacity Risk
+            (Dec)</label>
+          <label class="metric-check-item"><input type="checkbox" data-metric="delhiUtil" checked> Utilisation – Delhi
+            NCR</label>
+          <label class="metric-check-item"><input type="checkbox" data-metric="avgUtil"> Network Average
+            Utilisation</label>
+        </div>
       </div>
-    </div>
 
-    <div class="metric-category-group mb-md">
-      <div class="metric-category-title">Service & Operations</div>
-      <div class="metric-checkbox-grid">
-        <label class="metric-check-item"><input type="checkbox" data-metric="sla" checked> SLA (On-time Service %)</label>
-        <label class="metric-check-item"><input type="checkbox" data-metric="capacityRisk" checked> Capacity Risk (Dec)</label>
-        <label class="metric-check-item"><input type="checkbox" data-metric="delhiUtil" checked> Utilisation – Delhi NCR</label>
-        <label class="metric-check-item"><input type="checkbox" data-metric="avgUtil"> Network Average Utilisation</label>
+      <div class="metric-category-group mb-md">
+        <div class="metric-category-title">Sustainability & Implementation</div>
+        <div class="metric-checkbox-grid">
+          <label class="metric-check-item"><input type="checkbox" data-metric="carbonKg"> Scope 3 Carbon (kg
+            CO₂)</label>
+          <label class="metric-check-item"><input type="checkbox" data-metric="implementationTime" checked>
+            Implementation Lead Time</label>
+          <label class="metric-check-item"><input type="checkbox" data-metric="confidence" checked> Robustness /
+            Confidence</label>
+        </div>
       </div>
-    </div>
 
-    <div class="metric-category-group mb-md">
-      <div class="metric-category-title">Sustainability & Implementation</div>
-      <div class="metric-checkbox-grid">
-        <label class="metric-check-item"><input type="checkbox" data-metric="carbonKg"> Scope 3 Carbon (kg CO₂)</label>
-        <label class="metric-check-item"><input type="checkbox" data-metric="implementationTime" checked> Implementation Lead Time</label>
-        <label class="metric-check-item"><input type="checkbox" data-metric="confidence" checked> Robustness / Confidence</label>
-      </div>
-    </div>
-
-    <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border)">
-      <button class="btn btn-ghost btn-sm" id="btn-reset-metrics">Reset to Default</button>
-      <div class="flex gap-sm">
-        <button class="btn btn-secondary btn-sm" id="btn-cancel-metrics">Cancel</button>
-        <button class="btn btn-primary btn-sm" id="btn-save-metrics">Apply Metrics</button>
+      <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border)">
+        <button class="btn btn-ghost btn-sm" id="btn-reset-metrics">Reset to Default</button>
+        <div class="flex gap-sm">
+          <button class="btn btn-secondary btn-sm" id="btn-cancel-metrics">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="btn-save-metrics">Apply Metrics</button>
+        </div>
       </div>
     </div>
   </div>
-</div>
 
-<script>
+  <script>
 /* ═════════ data.js ═════════ */
 /**
  * NetGravity — Central Mock Data Layer
@@ -2019,86 +2270,86 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 // ─── FACILITIES ─────────────────────────────────────────────
 const PLANTS = [
-  { id: "PLT_BADDI",     name: "Baddi Plant",      city: "Baddi",      state: "Himachal Pradesh", lat: 30.96, lng: 76.79, capacity: 12000, throughput: 11200, region: "North",  status: "EXISTING" },
-  { id: "PLT_PUNE",      name: "Pune Plant",       city: "Pune",       state: "Maharashtra",      lat: 18.52, lng: 73.86, capacity: 10000, throughput: 7800,  region: "West",   status: "EXISTING" },
-  { id: "PLT_HYDERABAD", name: "Hyderabad Plant",  city: "Hyderabad",  state: "Telangana",        lat: 17.38, lng: 78.49, capacity: 8000,  throughput: 6100,  region: "South",  status: "EXISTING" },
-  { id: "PLT_KOLKATA",   name: "Kolkata Plant",    city: "Kolkata",    state: "West Bengal",       lat: 22.57, lng: 88.36, capacity: 6000,  throughput: 4200,  region: "East",   status: "EXISTING" },
+  { id: "PLT_BADDI", name: "Baddi Plant", city: "Baddi", state: "Himachal Pradesh", lat: 30.96, lng: 76.79, capacity: 12000, throughput: 11200, region: "North", status: "EXISTING" },
+  { id: "PLT_PUNE", name: "Pune Plant", city: "Pune", state: "Maharashtra", lat: 18.52, lng: 73.86, capacity: 10000, throughput: 7800, region: "West", status: "EXISTING" },
+  { id: "PLT_HYDERABAD", name: "Hyderabad Plant", city: "Hyderabad", state: "Telangana", lat: 17.38, lng: 78.49, capacity: 8000, throughput: 6100, region: "South", status: "EXISTING" },
+  { id: "PLT_KOLKATA", name: "Kolkata Plant", city: "Kolkata", state: "West Bengal", lat: 22.57, lng: 88.36, capacity: 6000, throughput: 4200, region: "East", status: "EXISTING" },
 ];
 
 const DCS = [
-  { id: "DC_DELHI",     name: "Delhi NCR DC",    city: "Delhi NCR",   state: "Delhi",          lat: 28.61, lng: 77.21, capacity: 10000, throughput: 9400,  fixedCost: 120, handlingCost: 4.2, region: "North",     status: "EXISTING", utilPct: 94.0 },
-  { id: "DC_MUMBAI",    name: "Mumbai DC",       city: "Mumbai",      state: "Maharashtra",    lat: 19.08, lng: 72.88, capacity: 9000,  throughput: 6800,  fixedCost: 140, handlingCost: 4.8, region: "West",      status: "EXISTING", utilPct: 75.6 },
-  { id: "DC_BENGALURU", name: "Bengaluru DC",    city: "Bengaluru",   state: "Karnataka",      lat: 12.97, lng: 77.59, capacity: 7500,  throughput: 5600,  fixedCost: 110, handlingCost: 4.0, region: "South",     status: "EXISTING", utilPct: 74.7 },
-  { id: "DC_KOLKATA",   name: "Kolkata DC",      city: "Kolkata",     state: "West Bengal",    lat: 22.57, lng: 88.36, capacity: 6000,  throughput: 3200,  fixedCost: 85,  handlingCost: 3.5, region: "East",      status: "EXISTING", utilPct: 53.3 },
-  { id: "DC_GUWAHATI",  name: "Guwahati DC",     city: "Guwahati",    state: "Assam",          lat: 26.14, lng: 91.74, capacity: 4000,  throughput: 2100,  fixedCost: 65,  handlingCost: 3.8, region: "Northeast", status: "EXISTING", utilPct: 52.5 },
+  { id: "DC_DELHI", name: "Delhi NCR DC", city: "Delhi NCR", state: "Delhi", lat: 28.61, lng: 77.21, capacity: 10000, throughput: 9400, fixedCost: 120, handlingCost: 4.2, region: "North", status: "EXISTING", utilPct: 94.0 },
+  { id: "DC_MUMBAI", name: "Mumbai DC", city: "Mumbai", state: "Maharashtra", lat: 19.08, lng: 72.88, capacity: 9000, throughput: 6800, fixedCost: 140, handlingCost: 4.8, region: "West", status: "EXISTING", utilPct: 75.6 },
+  { id: "DC_BENGALURU", name: "Bengaluru DC", city: "Bengaluru", state: "Karnataka", lat: 12.97, lng: 77.59, capacity: 7500, throughput: 5600, fixedCost: 110, handlingCost: 4.0, region: "South", status: "EXISTING", utilPct: 74.7 },
+  { id: "DC_KOLKATA", name: "Kolkata DC", city: "Kolkata", state: "West Bengal", lat: 22.57, lng: 88.36, capacity: 6000, throughput: 3200, fixedCost: 85, handlingCost: 3.5, region: "East", status: "EXISTING", utilPct: 53.3 },
+  { id: "DC_GUWAHATI", name: "Guwahati DC", city: "Guwahati", state: "Assam", lat: 26.14, lng: 91.74, capacity: 4000, throughput: 2100, fixedCost: 65, handlingCost: 3.8, region: "Northeast", status: "EXISTING", utilPct: 52.5 },
 ];
 
 const MARKETS = [
-  { id: "MKT_DELHI",     name: "Delhi",      lat: 28.70, lng: 77.10, demand: 4200, slaDays: 2, priority: "High",   region: "North" },
-  { id: "MKT_MUMBAI",    name: "Mumbai",     lat: 19.08, lng: 72.88, demand: 3800, slaDays: 2, priority: "High",   region: "West" },
-  { id: "MKT_BENGALURU", name: "Bengaluru",  lat: 12.97, lng: 77.59, demand: 3200, slaDays: 2, priority: "High",   region: "South" },
-  { id: "MKT_CHENNAI",   name: "Chennai",    lat: 13.08, lng: 80.27, demand: 2400, slaDays: 3, priority: "Medium", region: "South" },
-  { id: "MKT_HYDERABAD", name: "Hyderabad",  lat: 17.38, lng: 78.49, demand: 2800, slaDays: 3, priority: "Medium", region: "South" },
-  { id: "MKT_KOLKATA",   name: "Kolkata",    lat: 22.57, lng: 88.36, demand: 2200, slaDays: 3, priority: "Medium", region: "East" },
-  { id: "MKT_AHMEDABAD", name: "Ahmedabad",  lat: 23.03, lng: 72.57, demand: 1800, slaDays: 3, priority: "Medium", region: "West" },
-  { id: "MKT_JAIPUR",    name: "Jaipur",     lat: 26.91, lng: 75.79, demand: 1500, slaDays: 3, priority: "Medium", region: "North" },
-  { id: "MKT_LUCKNOW",   name: "Lucknow",    lat: 26.85, lng: 80.95, demand: 1400, slaDays: 3, priority: "Medium", region: "North" },
-  { id: "MKT_GUWAHATI",  name: "Guwahati",   lat: 26.14, lng: 91.74, demand: 1100, slaDays: 4, priority: "Low",    region: "Northeast" },
+  { id: "MKT_DELHI", name: "Delhi", lat: 28.70, lng: 77.10, demand: 4200, slaDays: 2, priority: "High", region: "North" },
+  { id: "MKT_MUMBAI", name: "Mumbai", lat: 19.08, lng: 72.88, demand: 3800, slaDays: 2, priority: "High", region: "West" },
+  { id: "MKT_BENGALURU", name: "Bengaluru", lat: 12.97, lng: 77.59, demand: 3200, slaDays: 2, priority: "High", region: "South" },
+  { id: "MKT_CHENNAI", name: "Chennai", lat: 13.08, lng: 80.27, demand: 2400, slaDays: 3, priority: "Medium", region: "South" },
+  { id: "MKT_HYDERABAD", name: "Hyderabad", lat: 17.38, lng: 78.49, demand: 2800, slaDays: 3, priority: "Medium", region: "South" },
+  { id: "MKT_KOLKATA", name: "Kolkata", lat: 22.57, lng: 88.36, demand: 2200, slaDays: 3, priority: "Medium", region: "East" },
+  { id: "MKT_AHMEDABAD", name: "Ahmedabad", lat: 23.03, lng: 72.57, demand: 1800, slaDays: 3, priority: "Medium", region: "West" },
+  { id: "MKT_JAIPUR", name: "Jaipur", lat: 26.91, lng: 75.79, demand: 1500, slaDays: 3, priority: "Medium", region: "North" },
+  { id: "MKT_LUCKNOW", name: "Lucknow", lat: 26.85, lng: 80.95, demand: 1400, slaDays: 3, priority: "Medium", region: "North" },
+  { id: "MKT_GUWAHATI", name: "Guwahati", lat: 26.14, lng: 91.74, demand: 1100, slaDays: 4, priority: "Low", region: "Northeast" },
 ];
 
 // ─── LANES (key corridors with cost, distance, lead time) ───
 const LANES = [
   // Plant → DC
-  { from: "PLT_BADDI",     to: "DC_DELHI",     cost: 12, distance: 310,  leadTime: 1.0, flow: 8200,  mode: "ROAD" },
-  { from: "PLT_BADDI",     to: "DC_MUMBAI",    cost: 28, distance: 1420, leadTime: 2.5, flow: 1800,  mode: "ROAD" },
-  { from: "PLT_BADDI",     to: "DC_KOLKATA",   cost: 32, distance: 1800, leadTime: 3.0, flow: 1200,  mode: "ROAD" },
-  { from: "PLT_PUNE",      to: "DC_MUMBAI",    cost: 8,  distance: 150,  leadTime: 0.5, flow: 5000,  mode: "ROAD" },
-  { from: "PLT_PUNE",      to: "DC_BENGALURU", cost: 18, distance: 840,  leadTime: 1.5, flow: 2800,  mode: "ROAD" },
-  { from: "PLT_HYDERABAD", to: "DC_BENGALURU", cost: 15, distance: 570,  leadTime: 1.0, flow: 2800,  mode: "ROAD" },
-  { from: "PLT_HYDERABAD", to: "DC_MUMBAI",    cost: 20, distance: 710,  leadTime: 1.5, flow: 1500,  mode: "ROAD" },
-  { from: "PLT_HYDERABAD", to: "DC_KOLKATA",   cost: 25, distance: 1500, leadTime: 2.5, flow: 1300,  mode: "ROAD" },
-  { from: "PLT_KOLKATA",   to: "DC_KOLKATA",   cost: 5,  distance: 30,   leadTime: 0.2, flow: 2700,  mode: "ROAD" },
-  { from: "PLT_KOLKATA",   to: "DC_GUWAHATI",  cost: 22, distance: 1000, leadTime: 2.0, flow: 1500,  mode: "ROAD" },
-  { from: "PLT_BADDI",     to: "DC_GUWAHATI",  cost: 38, distance: 2200, leadTime: 3.5, flow: 600,   mode: "ROAD" },
+  { from: "PLT_BADDI", to: "DC_DELHI", cost: 12, distance: 310, leadTime: 1.0, flow: 8200, mode: "ROAD" },
+  { from: "PLT_BADDI", to: "DC_MUMBAI", cost: 28, distance: 1420, leadTime: 2.5, flow: 1800, mode: "ROAD" },
+  { from: "PLT_BADDI", to: "DC_KOLKATA", cost: 32, distance: 1800, leadTime: 3.0, flow: 1200, mode: "ROAD" },
+  { from: "PLT_PUNE", to: "DC_MUMBAI", cost: 8, distance: 150, leadTime: 0.5, flow: 5000, mode: "ROAD" },
+  { from: "PLT_PUNE", to: "DC_BENGALURU", cost: 18, distance: 840, leadTime: 1.5, flow: 2800, mode: "ROAD" },
+  { from: "PLT_HYDERABAD", to: "DC_BENGALURU", cost: 15, distance: 570, leadTime: 1.0, flow: 2800, mode: "ROAD" },
+  { from: "PLT_HYDERABAD", to: "DC_MUMBAI", cost: 20, distance: 710, leadTime: 1.5, flow: 1500, mode: "ROAD" },
+  { from: "PLT_HYDERABAD", to: "DC_KOLKATA", cost: 25, distance: 1500, leadTime: 2.5, flow: 1300, mode: "ROAD" },
+  { from: "PLT_KOLKATA", to: "DC_KOLKATA", cost: 5, distance: 30, leadTime: 0.2, flow: 2700, mode: "ROAD" },
+  { from: "PLT_KOLKATA", to: "DC_GUWAHATI", cost: 22, distance: 1000, leadTime: 2.0, flow: 1500, mode: "ROAD" },
+  { from: "PLT_BADDI", to: "DC_GUWAHATI", cost: 38, distance: 2200, leadTime: 3.5, flow: 600, mode: "ROAD" },
   // DC → Market (major flows)
-  { from: "DC_DELHI",     to: "MKT_DELHI",     cost: 4,  distance: 40,   leadTime: 0.3, flow: 4200, mode: "ROAD" },
-  { from: "DC_DELHI",     to: "MKT_JAIPUR",    cost: 10, distance: 270,  leadTime: 0.8, flow: 1500, mode: "ROAD" },
-  { from: "DC_DELHI",     to: "MKT_LUCKNOW",   cost: 14, distance: 500,  leadTime: 1.2, flow: 1400, mode: "ROAD" },
-  { from: "DC_DELHI",     to: "MKT_AHMEDABAD", cost: 22, distance: 950,  leadTime: 1.8, flow: 800,  mode: "ROAD" },
-  { from: "DC_MUMBAI",    to: "MKT_MUMBAI",    cost: 3,  distance: 25,   leadTime: 0.2, flow: 3800, mode: "ROAD" },
-  { from: "DC_MUMBAI",    to: "MKT_AHMEDABAD", cost: 12, distance: 530,  leadTime: 1.0, flow: 1000, mode: "ROAD" },
-  { from: "DC_MUMBAI",    to: "MKT_HYDERABAD", cost: 18, distance: 710,  leadTime: 1.5, flow: 1200, mode: "ROAD" },
-  { from: "DC_BENGALURU", to: "MKT_BENGALURU", cost: 3,  distance: 20,   leadTime: 0.2, flow: 3200, mode: "ROAD" },
-  { from: "DC_BENGALURU", to: "MKT_CHENNAI",   cost: 10, distance: 350,  leadTime: 0.8, flow: 2400, mode: "ROAD" },
-  { from: "DC_KOLKATA",   to: "MKT_KOLKATA",   cost: 3,  distance: 15,   leadTime: 0.2, flow: 2200, mode: "ROAD" },
-  { from: "DC_KOLKATA",   to: "MKT_HYDERABAD", cost: 22, distance: 1500, leadTime: 2.5, flow: 600,  mode: "ROAD" },
-  { from: "DC_GUWAHATI",  to: "MKT_GUWAHATI",  cost: 4,  distance: 30,   leadTime: 0.3, flow: 1100, mode: "ROAD" },
-  { from: "DC_DELHI",     to: "MKT_HYDERABAD", cost: 28, distance: 1500, leadTime: 2.5, flow: 500,  mode: "ROAD" },
-  { from: "DC_GUWAHATI",  to: "MKT_KOLKATA",   cost: 18, distance: 1000, leadTime: 2.0, flow: 600,  mode: "ROAD" },
-  { from: "DC_MUMBAI",    to: "MKT_CHENNAI",   cost: 24, distance: 1330, leadTime: 2.2, flow: 500,  mode: "ROAD" },
+  { from: "DC_DELHI", to: "MKT_DELHI", cost: 4, distance: 40, leadTime: 0.3, flow: 4200, mode: "ROAD" },
+  { from: "DC_DELHI", to: "MKT_JAIPUR", cost: 10, distance: 270, leadTime: 0.8, flow: 1500, mode: "ROAD" },
+  { from: "DC_DELHI", to: "MKT_LUCKNOW", cost: 14, distance: 500, leadTime: 1.2, flow: 1400, mode: "ROAD" },
+  { from: "DC_DELHI", to: "MKT_AHMEDABAD", cost: 22, distance: 950, leadTime: 1.8, flow: 800, mode: "ROAD" },
+  { from: "DC_MUMBAI", to: "MKT_MUMBAI", cost: 3, distance: 25, leadTime: 0.2, flow: 3800, mode: "ROAD" },
+  { from: "DC_MUMBAI", to: "MKT_AHMEDABAD", cost: 12, distance: 530, leadTime: 1.0, flow: 1000, mode: "ROAD" },
+  { from: "DC_MUMBAI", to: "MKT_HYDERABAD", cost: 18, distance: 710, leadTime: 1.5, flow: 1200, mode: "ROAD" },
+  { from: "DC_BENGALURU", to: "MKT_BENGALURU", cost: 3, distance: 20, leadTime: 0.2, flow: 3200, mode: "ROAD" },
+  { from: "DC_BENGALURU", to: "MKT_CHENNAI", cost: 10, distance: 350, leadTime: 0.8, flow: 2400, mode: "ROAD" },
+  { from: "DC_KOLKATA", to: "MKT_KOLKATA", cost: 3, distance: 15, leadTime: 0.2, flow: 2200, mode: "ROAD" },
+  { from: "DC_KOLKATA", to: "MKT_HYDERABAD", cost: 22, distance: 1500, leadTime: 2.5, flow: 600, mode: "ROAD" },
+  { from: "DC_GUWAHATI", to: "MKT_GUWAHATI", cost: 4, distance: 30, leadTime: 0.3, flow: 1100, mode: "ROAD" },
+  { from: "DC_DELHI", to: "MKT_HYDERABAD", cost: 28, distance: 1500, leadTime: 2.5, flow: 500, mode: "ROAD" },
+  { from: "DC_GUWAHATI", to: "MKT_KOLKATA", cost: 18, distance: 1000, leadTime: 2.0, flow: 600, mode: "ROAD" },
+  { from: "DC_MUMBAI", to: "MKT_CHENNAI", cost: 24, distance: 1330, leadTime: 2.2, flow: 500, mode: "ROAD" },
 ];
 
 // ─── DEMAND HISTORY (24 months) & FORECAST ──────────────────
 const DEMAND_HISTORY = {
   months: [
-    "Jan'25","Feb'25","Mar'25","Apr'25","May'25","Jun'25",
-    "Jul'25","Aug'25","Sep'25","Oct'25","Nov'25","Dec'25",
-    "Jan'26","Feb'26","Mar'26","Apr'26","May'26","Jun'26",
-    "Jul'26","Aug'26","Sep'26","Oct'26","Nov'26","Dec'26",
+    "Jan'25", "Feb'25", "Mar'25", "Apr'25", "May'25", "Jun'25",
+    "Jul'25", "Aug'25", "Sep'25", "Oct'25", "Nov'25", "Dec'25",
+    "Jan'26", "Feb'26", "Mar'26", "Apr'26", "May'26", "Jun'26",
+    "Jul'26", "Aug'26", "Sep'26", "Oct'26", "Nov'26", "Dec'26",
   ],
   // North India aggregate demand (units/day)
   northIndia: [
-    7100,7000,7300,7200,7400,7100,
-    7500,7600,7800,8000,8200,8800,
-    8400,8300,8600,8500,8800,8600,
-    9000,9200,9400,9600,9800,10800,
+    7100, 7000, 7300, 7200, 7400, 7100,
+    7500, 7600, 7800, 8000, 8200, 8800,
+    8400, 8300, 8600, 8500, 8800, 8600,
+    9000, 9200, 9400, 9600, 9800, 10800,
   ],
   // Baddi DC capacity line (constant)
   baddiCapacity: 10000,
 };
 
 const FORECAST = {
-  months: ["Jan'27","Feb'27","Mar'27","Apr'27","May'27","Jun'27"],
+  months: ["Jan'27", "Feb'27", "Mar'27", "Apr'27", "May'27", "Jun'27"],
   northIndia: [10200, 10400, 10100, 10600, 10900, 11200],
   upper: [10800, 11200, 10900, 11500, 11800, 12400],
   lower: [9600, 9700, 9400, 9800, 10000, 10100],
@@ -2166,14 +2417,14 @@ const DATA_QUALITY = {
   validRecords: 4743,
   validPct: 98.4,
   issues: [
-    { id: "DQ_01", type: "Unit Inconsistency",   field: "capacity",      facility: "DC_GUWAHATI",  detail: "Capacity reported in tonnes, expected units/day", severity: "warning",  status: "needs_review" },
-    { id: "DQ_02", type: "Unit Inconsistency",   field: "demand",        market: "MKT_LUCKNOW",    detail: "Q3 demand in cases, rest in units",              severity: "warning",  status: "needs_review" },
-    { id: "DQ_03", type: "Missing Value",        field: "capacity",      facility: "DC_GUWAHATI",  detail: "Max capacity not specified for expansion scenario", severity: "info",    status: "needs_review" },
-    { id: "DQ_04", type: "AI Mapping Uncertain", field: "Qty → Demand",  source: "Distributor A",  detail: "Field 'Qty' mapped to Demand_Units (87% confidence)", severity: "warning", status: "needs_review" },
-    { id: "DQ_05", type: "AI Mapping Uncertain", field: "Vol → Demand",  source: "Distributor B",  detail: "Field 'Volume' mapped to Demand_Units (91% confidence)", severity: "info",  status: "needs_review" },
-    { id: "DQ_06", type: "AI Mapping Uncertain", field: "Units Shipped", source: "Distributor C",  detail: "Field 'Units Shipped' mapped to Demand_Units (95% confidence)", severity: "info", status: "auto_mapped" },
-    { id: "DQ_07", type: "Outlier",              field: "transport_cost", lane: "PLT_BADDI→DC_GUWAHATI", detail: "Cost ₹38/unit is 2.1σ above corridor average", severity: "info", status: "reviewed" },
-    { id: "DQ_08", type: "Stale Data",           field: "demand",        market: "MKT_GUWAHATI",   detail: "Last updated 45 days ago",                       severity: "info",    status: "needs_review" },
+    { id: "DQ_01", type: "Unit Inconsistency", field: "capacity", facility: "DC_GUWAHATI", detail: "Capacity reported in tonnes, expected units/day", severity: "warning", status: "needs_review" },
+    { id: "DQ_02", type: "Unit Inconsistency", field: "demand", market: "MKT_LUCKNOW", detail: "Q3 demand in cases, rest in units", severity: "warning", status: "needs_review" },
+    { id: "DQ_03", type: "Missing Value", field: "capacity", facility: "DC_GUWAHATI", detail: "Max capacity not specified for expansion scenario", severity: "info", status: "needs_review" },
+    { id: "DQ_04", type: "AI Mapping Uncertain", field: "Qty → Demand", source: "Distributor A", detail: "Field 'Qty' mapped to Demand_Units (87% confidence)", severity: "warning", status: "needs_review" },
+    { id: "DQ_05", type: "AI Mapping Uncertain", field: "Vol → Demand", source: "Distributor B", detail: "Field 'Volume' mapped to Demand_Units (91% confidence)", severity: "info", status: "needs_review" },
+    { id: "DQ_06", type: "AI Mapping Uncertain", field: "Units Shipped", source: "Distributor C", detail: "Field 'Units Shipped' mapped to Demand_Units (95% confidence)", severity: "info", status: "auto_mapped" },
+    { id: "DQ_07", type: "Outlier", field: "transport_cost", lane: "PLT_BADDI→DC_GUWAHATI", detail: "Cost ₹38/unit is 2.1σ above corridor average", severity: "info", status: "reviewed" },
+    { id: "DQ_08", type: "Stale Data", field: "demand", market: "MKT_GUWAHATI", detail: "Last updated 45 days ago", severity: "info", status: "needs_review" },
   ],
   reviewCount: 12,
   uncertainMappings: 3,
@@ -2186,12 +2437,12 @@ const CONTRACT_DEMO = {
     name: "TransCorp Logistics",
     headlineRate: "₹10/kg",
     extractedTerms: [
-      { field: "Base Rate",               value: "₹10/kg",         confidence: "HIGH" },
-      { field: "Fuel Surcharge",          value: "₹2/kg",          confidence: "HIGH" },
+      { field: "Base Rate", value: "₹10/kg", confidence: "HIGH" },
+      { field: "Fuel Surcharge", value: "₹2/kg", confidence: "HIGH" },
       { field: "Non-Serviceable Surcharge", value: "₹5/kg for 12 pin codes in NE India", confidence: "MEDIUM" },
-      { field: "Minimum Volume",          value: "500 kg/shipment", confidence: "HIGH" },
-      { field: "Penalty (Late Pickup)",   value: "₹500/incident",  confidence: "MEDIUM" },
-      { field: "Effective Date",          value: "2026-04-01",      confidence: "HIGH" },
+      { field: "Minimum Volume", value: "500 kg/shipment", confidence: "HIGH" },
+      { field: "Penalty (Late Pickup)", value: "₹500/incident", confidence: "MEDIUM" },
+      { field: "Effective Date", value: "2026-04-01", confidence: "HIGH" },
     ],
     effectiveCost: "₹12–17/kg (depending on route)",
     hiddenCostAlert: true,
@@ -2200,11 +2451,11 @@ const CONTRACT_DEMO = {
     name: "SpeedFreight India",
     headlineRate: "₹12/kg",
     extractedTerms: [
-      { field: "Base Rate",      value: "₹12/kg (all-inclusive)", confidence: "HIGH" },
-      { field: "Fuel Surcharge", value: "Included",               confidence: "HIGH" },
-      { field: "Coverage",       value: "All pin codes",          confidence: "HIGH" },
-      { field: "Minimum Volume", value: "200 kg/shipment",        confidence: "HIGH" },
-      { field: "Effective Date", value: "2026-04-01",              confidence: "HIGH" },
+      { field: "Base Rate", value: "₹12/kg (all-inclusive)", confidence: "HIGH" },
+      { field: "Fuel Surcharge", value: "Included", confidence: "HIGH" },
+      { field: "Coverage", value: "All pin codes", confidence: "HIGH" },
+      { field: "Minimum Volume", value: "200 kg/shipment", confidence: "HIGH" },
+      { field: "Effective Date", value: "2026-04-01", confidence: "HIGH" },
     ],
     effectiveCost: "₹12/kg (flat)",
     hiddenCostAlert: false,
@@ -2214,10 +2465,10 @@ const CONTRACT_DEMO = {
 // ─── SCHEMA MAPPING DEMO ────────────────────────────────────
 const SCHEMA_MAPPING = {
   distributors: [
-    { name: "Distributor A", field: "Qty",           mappedTo: "Demand_Units", confidence: 87 },
-    { name: "Distributor B", field: "Volume",        mappedTo: "Demand_Units", confidence: 91 },
+    { name: "Distributor A", field: "Qty", mappedTo: "Demand_Units", confidence: 87 },
+    { name: "Distributor B", field: "Volume", mappedTo: "Demand_Units", confidence: 91 },
     { name: "Distributor C", field: "Units Shipped", mappedTo: "Demand_Units", confidence: 95 },
-    { name: "Distributor D", field: "Order_Qty",     mappedTo: "Demand_Units", confidence: 98 },
+    { name: "Distributor D", field: "Order_Qty", mappedTo: "Demand_Units", confidence: 98 },
   ],
   canonicalField: "Demand_Units",
   sourceTypes: ["ERP", "WMS", "TMS", "Facility Master", "Demand Data", "Lane Data"],
@@ -2608,28 +2859,28 @@ const AGENT_STATE = {
   status: "active",
   currentObjective: "Reduce network cost by at least 8% while maintaining SLA above 95%",
   activityTrace: [
-    { step: 1, action: "Analysed the current network",              status: "done",    detail: "42 facilities, 120 demand zones, 380 lanes" },
-    { step: 2, action: "Identified 2 capacity bottlenecks",         status: "done",    detail: "Delhi NCR DC at 94% utilisation, projected 108% in December" },
-    { step: 3, action: "Identified 1 high-cost corridor",           status: "done",    detail: "Baddi → Guwahati corridor at ₹38/unit (2.1σ above average)" },
-    { step: 4, action: "Generated 4 candidate interventions",       status: "done",    detail: "Flow rebalancing, capacity expansion, DC consolidation, new DC" },
-    { step: 5, action: "Tested 4 scenarios through MILP optimiser", status: "done",    detail: "All 4 scenarios evaluated — 3 feasible, 1 fails SLA target" },
-    { step: 6, action: "Rejected DC Consolidation on SLA grounds",  status: "done",    detail: "SLA drops to 88.4% — below 95% threshold" },
+    { step: 1, action: "Analysed the current network", status: "done", detail: "42 facilities, 120 demand zones, 380 lanes" },
+    { step: 2, action: "Identified 2 capacity bottlenecks", status: "done", detail: "Delhi NCR DC at 94% utilisation, projected 108% in December" },
+    { step: 3, action: "Identified 1 high-cost corridor", status: "done", detail: "Baddi → Guwahati corridor at ₹38/unit (2.1σ above average)" },
+    { step: 4, action: "Generated 4 candidate interventions", status: "done", detail: "Flow rebalancing, capacity expansion, DC consolidation, new DC" },
+    { step: 5, action: "Tested 4 scenarios through MILP optimiser", status: "done", detail: "All 4 scenarios evaluated — 3 feasible, 1 fails SLA target" },
+    { step: 6, action: "Rejected DC Consolidation on SLA grounds", status: "done", detail: "SLA drops to 88.4% — below 95% threshold" },
     { step: 7, action: "Stress-tested leading options under +15% demand", status: "done", detail: "Flow Rebalancing passes all stress tests" },
-    { step: 8, action: "Found the most robust configuration",       status: "done",    detail: "Flow Rebalancing: −7.8% cost, 96.7% SLA, robust under stress" },
+    { step: 8, action: "Found the most robust configuration", status: "done", detail: "Flow Rebalancing: −7.8% cost, 96.7% SLA, robust under stress" },
   ],
   toolCalls: [
-    { tool: "get_network_summary()",       result: "42 facilities, 380 lanes, total demand 24,400 units/day" },
-    { tool: "get_bottlenecks()",           result: "DC_DELHI at 94% util, projected breach Dec'26" },
-    { tool: "get_forecast(region='North')",result: "+14% demand growth, breach at 10,800 units in Dec" },
-    { tool: "run_baseline()",              result: "Total cost ₹12.84L/day, SLA 91.2%" },
-    { tool: "optimize_current_footprint()",result: "Optimised to ₹11.98L/day, SLA 94.8%" },
-    { tool: "run_scenario('rebalance')",   result: "₹11.84L/day, SLA 96.7% — FEASIBLE" },
-    { tool: "run_scenario('expand')",      result: "₹12.46L/day, SLA 97.1% — FEASIBLE (high CapEx)" },
+    { tool: "get_network_summary()", result: "42 facilities, 380 lanes, total demand 24,400 units/day" },
+    { tool: "get_bottlenecks()", result: "DC_DELHI at 94% util, projected breach Dec'26" },
+    { tool: "get_forecast(region='North')", result: "+14% demand growth, breach at 10,800 units in Dec" },
+    { tool: "run_baseline()", result: "Total cost ₹12.84L/day, SLA 91.2%" },
+    { tool: "optimize_current_footprint()", result: "Optimised to ₹11.98L/day, SLA 94.8%" },
+    { tool: "run_scenario('rebalance')", result: "₹11.84L/day, SLA 96.7% — FEASIBLE" },
+    { tool: "run_scenario('expand')", result: "₹12.46L/day, SLA 97.1% — FEASIBLE (high CapEx)" },
     { tool: "run_scenario('consolidate')", result: "₹11.42L/day, SLA 88.4% — REJECTED (SLA < 95%)" },
-    { tool: "run_scenario('new_dc')",      result: "₹12.15L/day, SLA 97.8% — FEASIBLE (high CapEx)" },
+    { tool: "run_scenario('new_dc')", result: "₹12.15L/day, SLA 97.8% — FEASIBLE (high CapEx)" },
     { tool: "run_sensitivity('demand', +15%)", result: "Rebalance: PASS | Consolidate: FAIL" },
-    { tool: "run_resilience('DC_DELHI')",  result: "Rebalance handles facility disruption — reroutes to Kolkata" },
-    { tool: "compare_scenarios()",         result: "Rebalance is optimal on cost-adjusted-risk basis" },
+    { tool: "run_resilience('DC_DELHI')", result: "Rebalance handles facility disruption — reroutes to Kolkata" },
+    { tool: "compare_scenarios()", result: "Rebalance is optimal on cost-adjusted-risk basis" },
   ],
 };
 
@@ -2702,8 +2953,8 @@ NetGravity Decision Intelligence`,
 
 // ─── GOVERNANCE TIERS ───────────────────────────────────────
 const GOVERNANCE_TIERS = [
-  { tier: 1, label: "INFORM",        description: "Low-risk informational insight. No approval required.",       criteria: "Value at stake < ₹5L, fully reversible, no SLA impact", color: "#22c55e" },
-  { tier: 2, label: "PROPOSE",       description: "AI recommends and prepares action. Human approval required.", criteria: "Value at stake ₹5L–₹50L, or SLA impact, or partial reversibility", color: "#f59e0b" },
+  { tier: 1, label: "INFORM", description: "Low-risk informational insight. No approval required.", criteria: "Value at stake < ₹5L, fully reversible, no SLA impact", color: "#22c55e" },
+  { tier: 2, label: "PROPOSE", description: "AI recommends and prepares action. Human approval required.", criteria: "Value at stake ₹5L–₹50L, or SLA impact, or partial reversibility", color: "#f59e0b" },
   { tier: 3, label: "HUMAN DECISION", description: "High-impact structural decision. AI analyses, cannot execute.", criteria: "Close/open DC, major contract change, CapEx > ₹50L", color: "#dc2626" },
 ];
 
@@ -2720,8 +2971,8 @@ const SYSTEM_STATUS = {
 const PERIODS = [
   { id: "AUG_2026", label: "1 Aug – 31 Aug 2026", short: "Aug 2026", prevId: "JUL_2026" },
   { id: "JUL_2026", label: "1 Jul – 31 Jul 2026", short: "Jul 2026", prevId: "JUN_2026" },
-  { id: "Q3_2026",  label: "Q3 2026 (Jul – Sep)", short: "Q3 2026",  prevId: "Q2_2026" },
-  { id: "Q2_2026",  label: "Q2 2026 (Apr – Jun)", short: "Q2 2026",  prevId: "Q1_2026" },
+  { id: "Q3_2026", label: "Q3 2026 (Jul – Sep)", short: "Q3 2026", prevId: "Q2_2026" },
+  { id: "Q2_2026", label: "Q2 2026 (Apr – Jun)", short: "Q2 2026", prevId: "Q1_2026" },
 ];
 
 // ─── FACILITY KPIs BY PERIOD ────────────────────────────────
@@ -2731,15 +2982,15 @@ const FACILITY_KPIS = {
   DC_DELHI: {
     AUG_2026: {
       utilisation: { value: 94.0, capacity: 10000, unit: "units/day", prev: 88.0, status: "critical" },
-      sla:         { value: 96.7, target: 95, prev: 94.9, status: "normal" },
-      totalCost:   { value: 1184000, prev: 1223000, status: "normal" },
+      sla: { value: 96.7, target: 95, prev: 94.9, status: "normal" },
+      totalCost: { value: 1184000, prev: 1223000, status: "normal" },
       inventoryDays: { value: 11.2, prev: 12.1, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 88.0, capacity: 10000, unit: "units/day", prev: 84.0, status: "warning" },
-      sla:         { value: 94.9, target: 95, prev: 95.1, status: "warning" },
-      totalCost:   { value: 1223000, prev: 1198000, status: "warning" },
+      sla: { value: 94.9, target: 95, prev: 95.1, status: "warning" },
+      totalCost: { value: 1223000, prev: 1198000, status: "warning" },
       inventoryDays: { value: 12.1, prev: 11.8, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -2747,15 +2998,15 @@ const FACILITY_KPIS = {
   DC_MUMBAI: {
     AUG_2026: {
       utilisation: { value: 75.6, capacity: 9000, unit: "units/day", prev: 72.1, status: "normal" },
-      sla:         { value: 95.8, target: 95, prev: 94.2, status: "normal" },
-      totalCost:   { value: 980000, prev: 1010000, status: "normal" },
+      sla: { value: 95.8, target: 95, prev: 94.2, status: "normal" },
+      totalCost: { value: 980000, prev: 1010000, status: "normal" },
       inventoryDays: { value: 9.8, prev: 10.4, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 72.1, capacity: 9000, unit: "units/day", prev: 70.5, status: "normal" },
-      sla:         { value: 94.2, target: 95, prev: 94.8, status: "warning" },
-      totalCost:   { value: 1010000, prev: 995000, status: "normal" },
+      sla: { value: 94.2, target: 95, prev: 94.8, status: "warning" },
+      totalCost: { value: 1010000, prev: 995000, status: "normal" },
       inventoryDays: { value: 10.4, prev: 10.1, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -2763,15 +3014,15 @@ const FACILITY_KPIS = {
   DC_BENGALURU: {
     AUG_2026: {
       utilisation: { value: 74.7, capacity: 7500, unit: "units/day", prev: 71.2, status: "normal" },
-      sla:         { value: 96.2, target: 95, prev: 95.5, status: "normal" },
-      totalCost:   { value: 840000, prev: 860000, status: "normal" },
+      sla: { value: 96.2, target: 95, prev: 95.5, status: "normal" },
+      totalCost: { value: 840000, prev: 860000, status: "normal" },
       inventoryDays: { value: 10.5, prev: 11.0, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 71.2, capacity: 7500, unit: "units/day", prev: 69.8, status: "normal" },
-      sla:         { value: 95.5, target: 95, prev: 95.0, status: "normal" },
-      totalCost:   { value: 860000, prev: 845000, status: "normal" },
+      sla: { value: 95.5, target: 95, prev: 95.0, status: "normal" },
+      totalCost: { value: 860000, prev: 845000, status: "normal" },
       inventoryDays: { value: 11.0, prev: 10.8, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -2779,15 +3030,15 @@ const FACILITY_KPIS = {
   DC_KOLKATA: {
     AUG_2026: {
       utilisation: { value: 53.3, capacity: 6000, unit: "units/day", prev: 51.0, status: "normal" },
-      sla:         { value: 93.1, target: 95, prev: 92.4, status: "warning" },
-      totalCost:   { value: 520000, prev: 530000, status: "normal" },
+      sla: { value: 93.1, target: 95, prev: 92.4, status: "warning" },
+      totalCost: { value: 520000, prev: 530000, status: "normal" },
       inventoryDays: { value: 14.3, prev: 14.8, status: "warning" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 51.0, capacity: 6000, unit: "units/day", prev: 49.5, status: "normal" },
-      sla:         { value: 92.4, target: 95, prev: 93.0, status: "warning" },
-      totalCost:   { value: 530000, prev: 525000, status: "normal" },
+      sla: { value: 92.4, target: 95, prev: 93.0, status: "warning" },
+      totalCost: { value: 530000, prev: 525000, status: "normal" },
       inventoryDays: { value: 14.8, prev: 14.5, status: "warning" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -2795,15 +3046,15 @@ const FACILITY_KPIS = {
   DC_GUWAHATI: {
     AUG_2026: {
       utilisation: { value: 52.5, capacity: 4000, unit: "units/day", prev: 50.0, status: "normal" },
-      sla:         { value: 91.4, target: 95, prev: 90.8, status: "warning" },
-      totalCost:   { value: 310000, prev: 320000, status: "normal" },
+      sla: { value: 91.4, target: 95, prev: 90.8, status: "warning" },
+      totalCost: { value: 310000, prev: 320000, status: "normal" },
       inventoryDays: { value: 16.1, prev: 16.8, status: "warning" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 50.0, capacity: 4000, unit: "units/day", prev: 48.2, status: "normal" },
-      sla:         { value: 90.8, target: 95, prev: 91.2, status: "warning" },
-      totalCost:   { value: 320000, prev: 315000, status: "normal" },
+      sla: { value: 90.8, target: 95, prev: 91.2, status: "warning" },
+      totalCost: { value: 320000, prev: 315000, status: "normal" },
       inventoryDays: { value: 16.8, prev: 16.5, status: "warning" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -2811,15 +3062,15 @@ const FACILITY_KPIS = {
   PLT_BADDI: {
     AUG_2026: {
       utilisation: { value: 93.3, capacity: 12000, unit: "units/day", prev: 88.0, status: "critical" },
-      sla:         { value: 97.1, target: 95, prev: 96.2, status: "normal" },
-      totalCost:   { value: 1420000, prev: 1380000, status: "warning" },
+      sla: { value: 97.1, target: 95, prev: 96.2, status: "normal" },
+      totalCost: { value: 1420000, prev: 1380000, status: "warning" },
       inventoryDays: { value: 8.5, prev: 9.0, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 88.0, capacity: 12000, unit: "units/day", prev: 85.0, status: "warning" },
-      sla:         { value: 96.2, target: 95, prev: 95.8, status: "normal" },
-      totalCost:   { value: 1380000, prev: 1350000, status: "normal" },
+      sla: { value: 96.2, target: 95, prev: 95.8, status: "normal" },
+      totalCost: { value: 1380000, prev: 1350000, status: "normal" },
       inventoryDays: { value: 9.0, prev: 8.8, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -2827,15 +3078,15 @@ const FACILITY_KPIS = {
   PLT_PUNE: {
     AUG_2026: {
       utilisation: { value: 78.0, capacity: 10000, unit: "units/day", prev: 75.0, status: "normal" },
-      sla:         { value: 96.8, target: 95, prev: 96.0, status: "normal" },
-      totalCost:   { value: 1100000, prev: 1120000, status: "normal" },
+      sla: { value: 96.8, target: 95, prev: 96.0, status: "normal" },
+      totalCost: { value: 1100000, prev: 1120000, status: "normal" },
       inventoryDays: { value: 10.0, prev: 10.5, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 75.0, capacity: 10000, unit: "units/day", prev: 73.0, status: "normal" },
-      sla:         { value: 96.0, target: 95, prev: 95.5, status: "normal" },
-      totalCost:   { value: 1120000, prev: 1100000, status: "normal" },
+      sla: { value: 96.0, target: 95, prev: 95.5, status: "normal" },
+      totalCost: { value: 1120000, prev: 1100000, status: "normal" },
       inventoryDays: { value: 10.5, prev: 10.2, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -2843,15 +3094,15 @@ const FACILITY_KPIS = {
   PLT_HYDERABAD: {
     AUG_2026: {
       utilisation: { value: 76.3, capacity: 8000, unit: "units/day", prev: 73.0, status: "normal" },
-      sla:         { value: 95.9, target: 95, prev: 95.2, status: "normal" },
-      totalCost:   { value: 890000, prev: 910000, status: "normal" },
+      sla: { value: 95.9, target: 95, prev: 95.2, status: "normal" },
+      totalCost: { value: 890000, prev: 910000, status: "normal" },
       inventoryDays: { value: 11.8, prev: 12.3, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 73.0, capacity: 8000, unit: "units/day", prev: 71.5, status: "normal" },
-      sla:         { value: 95.2, target: 95, prev: 95.0, status: "normal" },
-      totalCost:   { value: 910000, prev: 895000, status: "normal" },
+      sla: { value: 95.2, target: 95, prev: 95.0, status: "normal" },
+      totalCost: { value: 910000, prev: 895000, status: "normal" },
       inventoryDays: { value: 12.3, prev: 12.0, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -2859,15 +3110,15 @@ const FACILITY_KPIS = {
   PLT_KOLKATA: {
     AUG_2026: {
       utilisation: { value: 70.0, capacity: 6000, unit: "units/day", prev: 67.0, status: "normal" },
-      sla:         { value: 94.5, target: 95, prev: 93.8, status: "warning" },
-      totalCost:   { value: 580000, prev: 590000, status: "normal" },
+      sla: { value: 94.5, target: 95, prev: 93.8, status: "warning" },
+      totalCost: { value: 580000, prev: 590000, status: "normal" },
       inventoryDays: { value: 13.2, prev: 13.8, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
     JUL_2026: {
       utilisation: { value: 67.0, capacity: 6000, unit: "units/day", prev: 65.0, status: "normal" },
-      sla:         { value: 93.8, target: 95, prev: 94.0, status: "warning" },
-      totalCost:   { value: 590000, prev: 580000, status: "normal" },
+      sla: { value: 93.8, target: 95, prev: 94.0, status: "warning" },
+      totalCost: { value: 590000, prev: 580000, status: "normal" },
       inventoryDays: { value: 13.8, prev: 13.5, status: "normal" },
       prevLabel: "1 Jun – 30 Jun 2026",
     },
@@ -3086,7 +3337,7 @@ function getScenarioById(id) {
 
 function formatCurrency(value, decimals = 0) {
   if (value >= 100000) return "₹" + (value / 100000).toFixed(1) + "L";
-  if (value >= 1000)   return "₹" + (value / 1000).toFixed(1) + "K";
+  if (value >= 1000) return "₹" + (value / 1000).toFixed(1) + "K";
   return "₹" + value.toFixed(decimals);
 }
 
@@ -4093,6 +4344,7 @@ let activeMetricKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk', 'delhi
 // ─── Init ───────────────────────────────────────────────────
 function initScenarios() {
   renderScenarioCardsRow();
+  renderMyScenariosGrid();
   renderComparisonTable();
   renderImpactCharts();
   wireScenarioEvents();
@@ -4165,7 +4417,56 @@ function renderScenarioCardsRow() {
       const id = card.dataset.scnId;
       selectedScenarioId = id;
       renderScenarioCardsRow();
-      renderComparisonTable();
+      openScenarioDrawer(id);
+    });
+  });
+}
+
+// ─── Render My Scenarios Grid ───────────────────────────────
+function renderMyScenariosGrid() {
+  const container = document.getElementById('my-scenarios-grid');
+  if (!container) return;
+
+  const userScenarios = SCENARIOS.filter((s) => s.source === 'user');
+
+  if (userScenarios.length === 0) {
+    container.innerHTML = `
+      <div class="card" style="padding:16px;text-align:center;color:var(--text-3);font-size:12.5px;grid-column:1 / -1;background:#faf8fd;border:1px dashed var(--border)">
+        No custom what-if scenarios created yet. Use the top <strong>+ Create New Scenario</strong> button to run custom what-if evaluations.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = userScenarios
+    .map(
+      (s) => `
+      <div class="my-scenario-card" data-scn-id="${s.id}" style="cursor:pointer" title="Click to inspect scenario details">
+        <div>
+          <div class="flex items-center justify-between mb-xs">
+            <span class="tag tag-primary" style="font-size:10px">${s.badge || 'User Created'}</span>
+            <span class="text-xs text-muted" style="font-weight:600">MILP Solved</span>
+          </div>
+          <div style="font-size:14px;font-weight:700;color:var(--text-1);margin-bottom:4px">${s.cardTitle || s.name}</div>
+          <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;line-height:1.4">${s.description}</div>
+        </div>
+        <div class="flex items-center justify-between pt-sm" style="border-top:1px solid var(--border-light)">
+          <div class="text-xs">
+            <strong>Cost:</strong> <span style="color:var(--green);font-weight:700">${s.costChange ? (s.costChange < 0 ? '↓ ' : '↑ ') + Math.abs(s.costChange) + '%' : '—'}</span> · 
+            <strong>SLA:</strong> ${s.sla}%
+          </div>
+          <span class="text-xs" style="color:var(--primary);font-weight:700">Click to Inspect →</span>
+        </div>
+      </div>
+    `
+    )
+    .join('');
+
+  // Wire card clicks
+  container.querySelectorAll('.my-scenario-card[data-scn-id]').forEach((card) => {
+    card.addEventListener('click', () => {
+      const id = card.dataset.scnId;
+      selectedScenarioId = id;
       openScenarioDrawer(id);
     });
   });
@@ -4176,13 +4477,7 @@ function renderComparisonTable() {
   const container = document.getElementById('scenario-comparison-table-wrap');
   if (!container) return;
 
-  // Active scenarios to display in table columns
-  let displayScenarios = SCENARIOS;
-  if (activeScnTab === 'opt_base') {
-    displayScenarios = SCENARIOS.filter((s) => s.id === 'SCN_ACTUAL' || s.id === 'SCN_OPTIMISED_BASE');
-  } else if (activeScnTab === 'my_scenarios') {
-    displayScenarios = SCENARIOS.filter((s) => s.id === 'SCN_ACTUAL' || s.source === 'user' || s.id === 'SCN_REBALANCE');
-  }
+  const displayScenarios = SCENARIOS;
 
   const html = `
     <table class="scenario-comparison-table">
@@ -4190,28 +4485,27 @@ function renderComparisonTable() {
         <tr>
           <th>Metrics</th>
           ${displayScenarios
-            .map((s) => {
-              const isRec = s.id === 'SCN_REBALANCE';
-              const isSelected = s.id === selectedScenarioId;
-              let colHeaderClass = isRec ? 'highlight-col' : '';
-              return `
+      .map((s) => {
+        const isRec = s.id === 'SCN_REBALANCE';
+        let colHeaderClass = isRec ? 'highlight-col' : '';
+        return `
                 <th class="${colHeaderClass}" style="cursor:pointer" data-scn-id="${s.id}" title="Click to view scenario details">
                   <div style="font-size:11px;color:var(--text-3);font-weight:500">${s.badge || s.type}</div>
                   <div style="font-size:13px;font-weight:700">${s.shortName || s.name}</div>
                   ${isRec ? '<span class="tag tag-success" style="font-size:9px;margin-top:3px">Recommended</span>' : ''}
                 </th>
               `;
-            })
-            .join('')}
+      })
+      .join('')}
         </tr>
       </thead>
       <tbody>
         ${activeMetricKeys
-          .map((key) => {
-            const def = ALL_METRIC_DEFS[key];
-            if (!def) return '';
+      .map((key) => {
+        const def = ALL_METRIC_DEFS[key];
+        if (!def) return '';
 
-            return `
+        return `
               <tr>
                 <td>
                   <div style="display:flex;align-items:center;gap:6px">
@@ -4220,23 +4514,23 @@ function renderComparisonTable() {
                   </div>
                 </td>
                 ${displayScenarios
-                  .map((s) => {
-                    const val = s[key];
-                    const isRec = s.id === 'SCN_REBALANCE';
-                    const customStyle = def.style ? def.style(val) : '';
-                    let formattedVal = def.fmt ? (typeof def.fmt === 'function' ? (key === 'confidence' ? def.fmt(s) : def.fmt(val)) : val) : val;
+            .map((s) => {
+              const val = s[key];
+              const isRec = s.id === 'SCN_REBALANCE';
+              const customStyle = def.style ? def.style(val) : '';
+              let formattedVal = def.fmt ? (typeof def.fmt === 'function' ? (key === 'confidence' ? def.fmt(s) : def.fmt(val)) : val) : val;
 
-                    return `
+              return `
                       <td class="${isRec ? 'highlight-col' : ''}" style="${customStyle};cursor:pointer" data-scn-id="${s.id}">
                         ${formattedVal !== undefined && formattedVal !== null ? formattedVal : '—'}
                       </td>
                     `;
-                  })
-                  .join('')}
+            })
+            .join('')}
               </tr>
             `;
-          })
-          .join('')}
+      })
+      .join('')}
       </tbody>
     </table>
   `;
@@ -4248,8 +4542,6 @@ function renderComparisonTable() {
     el.addEventListener('click', () => {
       const id = el.dataset.scnId;
       selectedScenarioId = id;
-      renderScenarioCardsRow();
-      renderComparisonTable();
       openScenarioDrawer(id);
     });
   });
@@ -4295,11 +4587,10 @@ function openScenarioDrawer(scenarioId) {
     <!-- Section B: What Changed -->
     <div class="scn-section-box">
       <div class="drawer-section-title" style="margin-top:0">B. What Changed (Exact Flow & Facility Modifiers)</div>
-      ${
-        scenario.changes && scenario.changes.length > 0
-          ? scenario.changes
-              .map(
-                (ch) => `
+      ${scenario.changes && scenario.changes.length > 0
+      ? scenario.changes
+        .map(
+          (ch) => `
             <div class="scn-change-row">
               <div>
                 <div style="font-weight:600;color:var(--text-1)">${ch.item}</div>
@@ -4308,20 +4599,19 @@ function openScenarioDrawer(scenarioId) {
               <span class="tag tag-purple" style="font-weight:700">${ch.change}</span>
             </div>
           `
-              )
-              .join('')
-          : '<div class="text-xs text-muted">No structural changes from baseline observed state.</div>'
-      }
+        )
+        .join('')
+      : '<div class="text-xs text-muted">No structural changes from baseline observed state.</div>'
+    }
     </div>
 
     <!-- Section C: Assumptions & External Signals -->
     <div class="scn-section-box">
       <div class="drawer-section-title" style="margin-top:0">C. Assumptions & Input Provenance</div>
-      ${
-        scenario.assumptions && scenario.assumptions.length > 0
-          ? scenario.assumptions
-              .map(
-                (asm) => `
+      ${scenario.assumptions && scenario.assumptions.length > 0
+      ? scenario.assumptions
+        .map(
+          (asm) => `
             <div class="evidence-row">
               <span class="evidence-label">${asm.label}</span>
               <div class="flex items-center">
@@ -4330,10 +4620,10 @@ function openScenarioDrawer(scenarioId) {
               </div>
             </div>
           `
-              )
-              .join('')
-          : ''
-      }
+        )
+        .join('')
+      : ''
+    }
     </div>
 
     <!-- Section D: Mathematical Optimisation Settings -->
@@ -4401,11 +4691,10 @@ function openScenarioDrawer(scenarioId) {
       <div class="drawer-section-title" style="margin-top:0">
         F. Robustness & Stress Tests <span class="provenance-badge model-fact">MODEL FACT</span>
       </div>
-      ${
-        scenario.robustnessTests && scenario.robustnessTests.length > 0
-          ? scenario.robustnessTests
-              .map(
-                (t) => `
+      ${scenario.robustnessTests && scenario.robustnessTests.length > 0
+      ? scenario.robustnessTests
+        .map(
+          (t) => `
             <div class="scn-robust-row">
               <div>
                 <div style="font-weight:600;color:var(--text-1)">${t.status === 'PASS' ? '✓' : '⚠'} ${t.test}</div>
@@ -4414,10 +4703,10 @@ function openScenarioDrawer(scenarioId) {
               <span class="tag ${t.status === 'PASS' ? 'tag-success' : 'tag-danger'}">${t.status}</span>
             </div>
           `
-              )
-              .join('')
-          : '<div class="text-xs text-muted">Standard robustness stress testing passed.</div>'
-      }
+        )
+        .join('')
+      : '<div class="text-xs text-muted">Standard robustness stress testing passed.</div>'
+    }
     </div>
 
     <!-- Section G: NetGravity AI Assessment -->
@@ -4480,24 +4769,38 @@ function closeScenarioDrawer() {
 
 // ─── Wire Scenario Page Events ──────────────────────────────
 function wireScenarioEvents() {
-  // Secondary Nav Tabs
-  document.querySelectorAll('.scn-tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.scn-tab-btn').forEach((b) => b.classList.remove('active'));
+  // Floating Menu Scroll Actions
+  document.querySelectorAll('.scn-floating-btn[data-target]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.querySelectorAll('.scn-floating-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      activeScnTab = btn.dataset.scnTab;
-      renderComparisonTable();
+      const targetId = btn.dataset.target;
+      const targetEl = document.getElementById(targetId);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     });
   });
+
+  // Wire inspect optimised base card
+  document.getElementById('card-opt-base')?.addEventListener('click', () => {
+    openScenarioDrawer('SCN_OPTIMISED_BASE');
+  });
+
+  // Setup Scroll Spy for Floating Menu
+  setupScenarioScrollSpy();
 
   // Top toggle create scenario button
   document.getElementById('btn-toggle-create-scenario')?.addEventListener('click', () => {
     openCreateToolbox();
   });
 
-  // Close toolbox button
-  document.getElementById('btn-close-toolbox')?.addEventListener('click', () => {
-    closeCreateToolbox();
+  // Close toolbox buttons
+  document.getElementById('btn-close-toolbox')?.addEventListener('click', closeCreateToolbox);
+  document.getElementById('btn-cancel-toolbox')?.addEventListener('click', closeCreateToolbox);
+  document.getElementById('modal-create-toolbox')?.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-create-toolbox') closeCreateToolbox();
   });
 
   // Toolbox Step 1 type selector tiles
@@ -4505,6 +4808,8 @@ function wireScenarioEvents() {
     card.addEventListener('click', () => {
       document.querySelectorAll('.scn-type-card').forEach((c) => c.classList.remove('active'));
       card.classList.add('active');
+      const type = card.dataset.type;
+      renderToolboxStep2(type);
     });
   });
 
@@ -4588,149 +4893,738 @@ function wireScenarioEvents() {
   });
 }
 
+function setupScenarioScrollSpy() {
+  const sectionIds = ['scn-section-recommended', 'scn-section-opt-base', 'scn-section-my-scenarios', 'scn-section-comparison'];
+  const sections = sectionIds.map((id) => document.getElementById(id)).filter(Boolean);
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          const id = entry.target.id;
+          document.querySelectorAll('.scn-floating-btn').forEach((btn) => {
+            if (btn.dataset.target === id) {
+              btn.classList.add('active');
+            } else {
+              btn.classList.remove('active');
+            }
+          });
+        }
+      });
+    },
+    { rootMargin: '-10% 0px -70% 0px', threshold: 0 }
+  );
+
+  sections.forEach((s) => observer.observe(s));
+}
+
 function openCreateToolbox() {
-  const toolbox = document.getElementById('scenario-toolbox-pane');
-  if (toolbox) {
-    toolbox.classList.remove('hidden');
-    toolbox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const modal = document.getElementById('modal-create-toolbox');
+  const formBody = document.getElementById('toolbox-form-body');
+  const agentView = document.getElementById('agent-execution-view');
+  if (modal) {
+    if (formBody) formBody.classList.remove('hidden');
+    if (agentView) agentView.classList.add('hidden');
+    modal.classList.add('visible');
   }
 }
 
 function closeCreateToolbox() {
-  document.getElementById('scenario-toolbox-pane')?.classList.add('hidden');
+  document.getElementById('modal-create-toolbox')?.classList.remove('visible');
 }
 
-// ─── Handle Scenario Execution (MILP Solver Simulation) ─────
+// ─── Handle Scenario Execution (Agentic Calibration & Solver) ─
+let currentToolboxType = 'CHANGE_CAPACITY';
+
+const SCENARIO_TYPE_META = {
+  CHANGE_CAPACITY: {
+    badge: 'Change Capacity',
+    desc: 'Adjust capacity at existing distribution centers to resolve bottlenecks or reduce unused overhead.',
+  },
+  OPEN_FACILITY: {
+    badge: 'Open Facility',
+    desc: 'Evaluate adding a new distribution center or cross-dock hub to the network topology.',
+  },
+  CLOSE_FACILITY: {
+    badge: 'Close Facility',
+    desc: 'Decommission a sub-scale node and reassign regional customer demand across surviving DCs.',
+  },
+  CHANGE_DEMAND: {
+    badge: 'Change Demand',
+    desc: 'Stress test network resilience under regional or national demand surges and SKU mix shifts.',
+  },
+  CHANGE_TRANSPORT_COST: {
+    badge: 'Change Transport Cost',
+    desc: 'Simulate diesel fuel shocks, highway toll surcharges, or negotiated freight rate discounts.',
+  },
+  CHANGE_SLA: {
+    badge: 'Change SLA Target',
+    desc: 'Evaluate cost and routing implications of tighter lead-time and on-time service level targets.',
+  },
+};
+
+function renderToolboxStep2(type) {
+  currentToolboxType = type;
+  const container = document.getElementById('toolbox-dynamic-fields');
+  const badgeEl = document.getElementById('toolbox-active-type-badge');
+  const descEl = document.getElementById('toolbox-active-type-desc');
+
+  if (badgeEl) badgeEl.textContent = SCENARIO_TYPE_META[type]?.badge || type;
+  if (descEl) descEl.textContent = SCENARIO_TYPE_META[type]?.desc || '';
+  if (!container) return;
+
+  if (type === 'CHANGE_CAPACITY') {
+    container.innerHTML = `
+      <div class="form-group mb-sm">
+        <label class="form-label">Select Target Facility</label>
+        <select class="form-select" id="tb-cap-facility">
+          <option value="DC_DELHI">Delhi NCR DC (Current: 12,000 u/d · 108% Peak Load)</option>
+          <option value="DC_MUMBAI">Mumbai DC (Current: 10,000 u/d · 85% Load)</option>
+          <option value="DC_BENGALURU">Bengaluru DC (Current: 8,000 u/d · 82% Load)</option>
+          <option value="DC_KOLKATA">Kolkata DC (Current: 6,000 u/d · 68% Load)</option>
+          <option value="DC_GUWAHATI">Guwahati DC (Current: 3,000 u/d · 45% Load)</option>
+        </select>
+      </div>
+
+      <div class="form-group mb-sm">
+        <label class="form-label">Capacity Adjustment Direction & Volume</label>
+        <div class="flex gap-sm">
+          <select class="form-select" id="tb-cap-dir" style="width:130px">
+            <option value="INCREASE">Increase (+)</option>
+            <option value="DECREASE">Decrease (-)</option>
+          </select>
+          <div style="position:relative;flex:1">
+            <input type="number" class="form-input" id="tb-cap-amount" value="2500" step="500" min="500">
+            <span style="position:absolute;right:10px;top:9px;font-size:11px;color:var(--text-3)">units/day</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">CapEx / Setup Cost (₹)</label>
+          <input type="text" class="form-input" id="tb-cap-cost" value="₹2,50,000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Monthly Fixed Opex Delta</label>
+          <input type="text" class="form-input" id="tb-cap-opex" value="+₹35,000/mo">
+        </div>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Start Horizon</label>
+          <input type="text" class="form-input" id="tb-cap-start" value="1 Oct 2026">
+        </div>
+        <div class="form-group">
+          <label class="form-label">End Horizon <span class="text-muted">(Optional)</span></label>
+          <input type="text" class="form-input" id="tb-cap-end" value="31 Dec 2026">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Operational Notes</label>
+        <input type="text" class="form-input" id="tb-cap-notes" value="Expand peak storage buffer to absorb December surge without bottlenecking">
+      </div>
+    `;
+  } else if (type === 'CLOSE_FACILITY') {
+    container.innerHTML = `
+      <div class="form-group mb-sm">
+        <label class="form-label">Select Facility to Decommission / Close</label>
+        <select class="form-select" id="tb-close-facility">
+          <option value="DC_GUWAHATI">Guwahati DC (3,000 u/d · Sub-scale 45% utilisation)</option>
+          <option value="DC_KOLKATA">Kolkata DC (6,000 u/d · Eastern Hub)</option>
+          <option value="DC_BENGALURU">Bengaluru DC (8,000 u/d · Southern Hub)</option>
+          <option value="DC_MUMBAI">Mumbai DC (10,000 u/d · Western Hub)</option>
+          <option value="DC_DELHI">Delhi NCR DC (12,000 u/d · Northern Hub)</option>
+        </select>
+      </div>
+
+      <div class="form-group mb-sm">
+        <label class="form-label">Volume Reassignment Strategy</label>
+        <select class="form-select" id="tb-close-reassign">
+          <option value="MILP_GLOBAL">Re-optimize all network flows via PuLP MILP (Recommended)</option>
+          <option value="NEAREST_DC">Transfer 100% volume to nearest surviving regional DC</option>
+          <option value="DIRECT_PLANT">Direct dispatch from Pune / Baddi plants to demand markets</option>
+        </select>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Exit / Lease Severance (₹)</label>
+          <input type="text" class="form-input" id="tb-close-exit" value="₹4,50,000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Monthly Fixed Cost Savings</label>
+          <input type="text" class="form-input" id="tb-close-saving" value="₹1,20,000/mo">
+        </div>
+      </div>
+
+      <div class="form-group mb-sm">
+        <label class="form-label">Effective Closure Date</label>
+        <input type="text" class="form-input" id="tb-close-date" value="1 Nov 2026">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Strategic Rationale</label>
+        <input type="text" class="form-input" id="tb-close-notes" value="Consolidate low-volume sub-scale node into regional hub to reduce fixed lease overhead">
+      </div>
+    `;
+  } else if (type === 'OPEN_FACILITY') {
+    container.innerHTML = `
+      <div class="form-group mb-sm">
+        <label class="form-label">Candidate DC Location</label>
+        <select class="form-select" id="tb-open-location">
+          <option value="DC_HYDERABAD">Hyderabad DC (South-Central Corridor)</option>
+          <option value="DC_AHMEDABAD">Ahmedabad DC (Gujarat & Western Corridor)</option>
+          <option value="DC_JAIPUR">Jaipur DC (North-West Regional Hub)</option>
+          <option value="DC_CHENNAI">Chennai DC (Southern Coastal Corridor)</option>
+          <option value="DC_LUCKNOW">Lucknow DC (Central Uttar Pradesh Hub)</option>
+          <option value="DC_INDORE">Indore DC (Central India Transit Hub)</option>
+        </select>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Planned Capacity</label>
+          <div style="position:relative">
+            <input type="number" class="form-input" id="tb-open-capacity" value="6000" step="1000">
+            <span style="position:absolute;right:10px;top:9px;font-size:11px;color:var(--text-3)">units/day</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Facility Tier</label>
+          <select class="form-select" id="tb-open-tier">
+            <option value="REGIONAL">Regional Distribution Hub</option>
+            <option value="CROSSDOCK">Urban Fast Cross-Dock</option>
+            <option value="SATELLITE">Satellite Micro-Fulfillment</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Initial Fitout CapEx (₹)</label>
+          <input type="text" class="form-input" id="tb-open-capex" value="₹22,00,000">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Fixed Monthly Opex (₹)</label>
+          <input type="text" class="form-input" id="tb-open-opex" value="₹2,80,000/mo">
+        </div>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Target Go-Live Date</label>
+          <input type="text" class="form-input" id="tb-open-date" value="1 Dec 2026">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Primary Inbound Source</label>
+          <select class="form-select" id="tb-open-source">
+            <option value="PUNE">Pune Plant (High Capacity)</option>
+            <option value="BADDI">Baddi Plant (Northern Inbound)</option>
+            <option value="DUAL">Dual-Source Allocation</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Expansion Objective</label>
+        <input type="text" class="form-input" id="tb-open-notes" value="Offload regional demand and shorten last-mile delivery times">
+      </div>
+    `;
+  } else if (type === 'CHANGE_DEMAND') {
+    container.innerHTML = `
+      <div class="form-group mb-sm">
+        <label class="form-label">Target Market / Region</label>
+        <select class="form-select" id="tb-dem-region">
+          <option value="ALL">All Markets (National Demand Surge · +14.2% Base)</option>
+          <option value="NORTH">North Region (Delhi NCR, Lucknow, Jaipur)</option>
+          <option value="WEST">West Region (Mumbai, Pune, Ahmedabad)</option>
+          <option value="EAST">East Region (Kolkata, Patna, Guwahati)</option>
+          <option value="SOUTH">South Region (Bengaluru, Chennai, Hyderabad)</option>
+        </select>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Demand Surge Magnitude (%)</label>
+          <input type="number" class="form-input" id="tb-dem-pct" value="15.0" step="2.5" min="1" max="50">
+        </div>
+        <div class="form-group">
+          <label class="form-label">SKU Category Focus</label>
+          <select class="form-select" id="tb-dem-sku">
+            <option value="ALL">All SKU Categories (Uniform Surge)</option>
+            <option value="FAST">High-Velocity SKUs</option>
+            <option value="SEASONAL">Seasonal & Promotional Lines</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Forecast Horizon</label>
+          <select class="form-select" id="tb-dem-horizon">
+            <option value="DEC_PEAK">December Peak Surge (+14.2%)</option>
+            <option value="Q4_SUSTAINED">Q4 Full Quarter Sustained</option>
+            <option value="POST_FESTIVAL">Post-Festival High Baseline</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Demand Confidence Interval</label>
+          <select class="form-select" id="tb-dem-ci">
+            <option value="P90">P90 Upper Bound (Stress Test)</option>
+            <option value="P50">P50 Mean Expected</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Simulation Notes</label>
+        <input type="text" class="form-input" id="tb-dem-notes" value="Evaluate supply chain resilience against extreme peak season surge">
+      </div>
+    `;
+  } else if (type === 'CHANGE_TRANSPORT_COST') {
+    container.innerHTML = `
+      <div class="form-group mb-sm">
+        <label class="form-label">Target Corridor / Echelon</label>
+        <select class="form-select" id="tb-freight-lane">
+          <option value="ALL_LANES">All Active Transportation Lanes (National Fuel Shock)</option>
+          <option value="PRIMARY">Primary Inbound (Plant → DC Long-Haul Corridors)</option>
+          <option value="SECONDARY">Secondary Outbound (DC → Customer Demand Markets)</option>
+          <option value="EASTERN">Eastern Corridor (Baddi → Kolkata / Guwahati)</option>
+          <option value="NORTHERN">Northern Trunk (Baddi → Delhi NCR / Lucknow)</option>
+        </select>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Rate Adjustment Direction & %</label>
+          <div class="flex gap-sm">
+            <select class="form-select" id="tb-freight-dir" style="width:130px">
+              <option value="INCREASE">Rate Hike (+)</option>
+              <option value="DECREASE">Discount (-)</option>
+            </select>
+            <input type="number" class="form-input" id="tb-freight-pct" value="12.5" step="1.0" min="0">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Primary Cost Driver</label>
+          <select class="form-select" id="tb-freight-driver">
+            <option value="DIESEL">Diesel Price Increase (+8.5%)</option>
+            <option value="TOLL">Expressway Toll & FASTag Tariff Hike</option>
+            <option value="CONTRACT">Annual Carrier Contract Renegotiation</option>
+            <option value="GREEN">Green Logistics Rail-Shift Incentive</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Corridor Cost Notes</label>
+        <input type="text" class="form-input" id="tb-freight-notes" value="Test modal-shift viability under volatile diesel fuel prices">
+      </div>
+    `;
+  } else if (type === 'CHANGE_SLA') {
+    container.innerHTML = `
+      <div class="form-group mb-sm">
+        <label class="form-label">Target Customer Tier</label>
+        <select class="form-select" id="tb-sla-tier">
+          <option value="ALL">Network-Wide Standard (All Customer Demand)</option>
+          <option value="METRO">Tier 1 Metro Customers (Delhi, Mumbai, Bengaluru)</option>
+          <option value="REGIONAL">Tier 2 & 3 Regional Markets</option>
+        </select>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Target On-Time SLA (%)</label>
+          <input type="number" class="form-input" id="tb-sla-target" value="98.0" step="0.5" min="85" max="99.9">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Maximum Delivery Window</label>
+          <select class="form-select" id="tb-sla-window">
+            <option value="24">24 Hours (Next Day Service)</option>
+            <option value="48">48 Hours (Standard Regional)</option>
+            <option value="72">72 Hours (Extended Zone)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Non-Delivery Penalty (₹/unit)</label>
+          <input type="number" class="form-input" id="tb-sla-penalty" value="75" step="10">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Routing Priority Constraint</label>
+          <select class="form-select" id="tb-sla-strict">
+            <option value="HARD">Strict Feasibility (Zero SLA Breaches Allowed)</option>
+            <option value="SOFT">Soft Penalty Optimization (Cost-Service Trade-off)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">SLA Strategy Notes</label>
+        <input type="text" class="form-input" id="tb-sla-notes" value="Elevate premium service commitment to gain retail market share">
+      </div>
+    `;
+  }
+}
+
+function openCreateToolbox() {
+  document.getElementById('modal-create-toolbox')?.classList.add('visible');
+  document.getElementById('toolbox-form-body')?.classList.remove('hidden');
+  document.getElementById('agent-execution-view')?.classList.add('hidden');
+
+  // Reset to default type
+  document.querySelectorAll('.scn-type-card').forEach((c, idx) => {
+    if (idx === 0) c.classList.add('active');
+    else c.classList.remove('active');
+  });
+
+  renderToolboxStep2('CHANGE_CAPACITY');
+}
+
+function closeCreateToolbox() {
+  document.getElementById('modal-create-toolbox')?.classList.remove('visible');
+}
+
+// ─── Run Scenario (Solver Pipeline Simulation) ──────────────
 function handleRunScenario() {
-  const facilitySelect = document.getElementById('toolbox-facility');
-  const facilityName = facilitySelect?.options[facilitySelect.selectedIndex]?.text || 'Delhi NCR DC';
-  const changeDir = document.getElementById('toolbox-change-dir')?.value || 'INCREASE';
-  const amount = document.getElementById('toolbox-amount')?.value || '2000';
-  const notes = document.getElementById('toolbox-notes')?.value || 'Custom planner intervention';
+  const formBody = document.getElementById('toolbox-form-body');
+  const agentView = document.getElementById('agent-execution-view');
+  const progressBar = document.getElementById('agent-progress-bar-fill');
+  const telemetryBox = document.getElementById('agent-telemetry-box');
+  const statusText = document.getElementById('agent-live-status-text');
 
-  const progressBox = document.getElementById('toolbox-progress');
-  const runBtn = document.getElementById('btn-run-toolbox-scenario');
-  if (!progressBox || !runBtn) return;
+  if (!agentView || !telemetryBox) return;
 
-  // Show progress state
-  progressBox.classList.remove('hidden');
-  runBtn.disabled = true;
-  runBtn.innerHTML = '<span>⏳ Evaluating with PuLP / HiGHS...</span>';
+  // Build Scenario Attributes Based on Specific Type
+  let scnName = '';
+  let scnCardTitle = '';
+  let scnDesc = '';
+  let scnHighlight = '';
+  let totalCost = 1205000;
+  let costChange = -6.2;
+  let sla = 97.2;
+  let delhiUtil = 78.0;
+  let avgUtil = 62.0;
+  let capacityRisk = 'Low';
+  let capacityRiskClass = 'green';
+  let capEx = 250000;
+  let implementationTime = '3–4 weeks';
+  let changesList = [];
+  let whyBullets = [];
+  let rejectionReason = '';
 
-  // Step 1: Solving
+  if (currentToolboxType === 'CHANGE_CAPACITY') {
+    const facSelect = document.getElementById('tb-cap-facility');
+    const facName = facSelect?.options[facSelect.selectedIndex]?.text.split('(')[0].trim() || 'Delhi NCR DC';
+    const dir = document.getElementById('tb-cap-dir')?.value || 'INCREASE';
+    const amount = parseInt(document.getElementById('tb-cap-amount')?.value || '2500', 10);
+    const notes = document.getElementById('tb-cap-notes')?.value || 'Seasonal capacity adjustment';
+
+    scnName = `User: ${dir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facName} (+${formatNumber(amount)} u/d)`;
+    scnCardTitle = `${dir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facName}`;
+    scnDesc = `${dir === 'INCREASE' ? 'Added' : 'Reduced'} capacity by ${formatNumber(amount)} units/day at ${facName}.`;
+    scnHighlight = notes;
+    totalCost = dir === 'INCREASE' ? 1205000 : 1248000;
+    costChange = dir === 'INCREASE' ? -6.2 : -2.9;
+    sla = dir === 'INCREASE' ? 97.4 : 95.1;
+    delhiUtil = facName.includes('Delhi') ? (dir === 'INCREASE' ? 84.0 : 112.0) : 91.0;
+    capEx = 250000;
+    implementationTime = '3–4 weeks';
+    changesList = [{ item: `${facName} Capacity`, change: `${dir === 'INCREASE' ? '+' : '-'}${formatNumber(amount)} units/day`, note: notes }];
+    whyBullets = [
+      `Resolves ${facName} throughput constraints during peak December surge.`,
+      `Maintains healthy 97.4% on-time delivery across northern retail hubs.`,
+      `Total recurring logistics cost drops to ₹12.05L (↓6.2% vs baseline).`,
+    ];
+    rejectionReason = 'Requires minor Capex for temporary facility racking, unlike pure routing optimization.';
+  } else if (currentToolboxType === 'CLOSE_FACILITY') {
+    const facSelect = document.getElementById('tb-close-facility');
+    const facName = facSelect?.options[facSelect.selectedIndex]?.text.split('(')[0].trim() || 'Guwahati DC';
+    const strat = document.getElementById('tb-close-reassign')?.options[document.getElementById('tb-close-reassign')?.selectedIndex]?.text || 'Re-optimize via MILP';
+    const notes = document.getElementById('tb-close-notes')?.value || 'Decommission sub-scale node';
+
+    scnName = `User: Decommission ${facName}`;
+    scnCardTitle = `Decommission ${facName}`;
+    scnDesc = `Closed ${facName} node; redistributed regional flow using strategy: ${strat}.`;
+    scnHighlight = notes;
+    totalCost = 1260000;
+    costChange = -1.9;
+    sla = 94.8;
+    delhiUtil = 93.0;
+    capacityRisk = 'Medium';
+    capacityRiskClass = 'amber';
+    capEx = 450000;
+    implementationTime = '6–8 weeks';
+    changesList = [
+      { item: `${facName} Status`, change: 'Decommissioned (0 units/day)', note: notes },
+      { item: 'Flow Reassignment', change: strat, note: 'Absorbed by adjacent regional network' },
+    ];
+    whyBullets = [
+      `Eliminates ₹1.20L/month in fixed facility lease and warehouse overhead.`,
+      `Slightly increases secondary outbound transit distances to peripheral markets.`,
+      `Net network cost is ₹12.60L with 94.8% SLA.`,
+    ];
+    rejectionReason = 'Higher freight miles to remote tier-3 markets slightly degrades SLA compared to keeping regional presence.';
+  } else if (currentToolboxType === 'OPEN_FACILITY') {
+    const locSelect = document.getElementById('tb-open-location');
+    const locName = locSelect?.options[locSelect.selectedIndex]?.text.split('(')[0].trim() || 'Hyderabad DC';
+    const cap = parseInt(document.getElementById('tb-open-capacity')?.value || '6000', 10);
+    const notes = document.getElementById('tb-open-notes')?.value || 'Commission candidate DC';
+
+    scnName = `User: Open ${locName} (${formatNumber(cap)} u/d)`;
+    scnCardTitle = `Open ${locName}`;
+    scnDesc = `Commissioned new ${locName} with ${formatNumber(cap)} units/day capacity.`;
+    scnHighlight = notes;
+    totalCost = 1195000;
+    costChange = -7.0;
+    sla = 98.1;
+    delhiUtil = 88.0;
+    capacityRisk = 'Low';
+    capacityRiskClass = 'green';
+    capEx = 2200000;
+    implementationTime = '8–12 weeks';
+    changesList = [
+      { item: `New Node: ${locName}`, change: `+${formatNumber(cap)} units/day capacity`, note: notes },
+      { item: 'Network Footprint', change: 'Expanded from 5 to 6 DCs', note: 'New South-Central Hub' },
+    ];
+    whyBullets = [
+      `Significantly reduces secondary delivery lead times in regional corridor.`,
+      `Achieves best-in-class 98.1% on-time SLA.`,
+      `Unlocks ₹11.95L total monthly cost but requires ₹22L initial setup CapEx.`,
+    ];
+    rejectionReason = 'Requires substantial upfront capital expenditure (₹22L) and 2–3 months construction timeline.';
+  } else if (currentToolboxType === 'CHANGE_DEMAND') {
+    const regSelect = document.getElementById('tb-dem-region');
+    const regName = regSelect?.options[regSelect.selectedIndex]?.text.split('(')[0].trim() || 'All Markets';
+    const pct = parseFloat(document.getElementById('tb-dem-pct')?.value || '15.0');
+    const notes = document.getElementById('tb-dem-notes')?.value || 'Demand surge resilience test';
+
+    scnName = `User: ${regName} Demand Surge (+${pct}%)`;
+    scnCardTitle = `Surge (+${pct}%): ${regName}`;
+    scnDesc = `Simulated +${pct}% demand increase across ${regName}.`;
+    scnHighlight = notes;
+    totalCost = 1380000;
+    costChange = +7.4;
+    sla = 95.6;
+    delhiUtil = 96.5;
+    capacityRisk = 'Medium';
+    capacityRiskClass = 'amber';
+    capEx = 0;
+    implementationTime = 'Immediate (Routing)';
+    changesList = [{ item: `${regName} Demand`, change: `+${pct}% Surge`, note: notes }];
+    whyBullets = [
+      `Stress-tests network feasibility under severe peak surge volumes.`,
+      `Dynamic flow reallocations prevent catastrophic bottlenecking.`,
+      `Network delivers 95.6% SLA even under elevated throughput pressure.`,
+    ];
+    rejectionReason = 'Stress scenario representing higher total volume expenditure.';
+  } else if (currentToolboxType === 'CHANGE_TRANSPORT_COST') {
+    const laneSelect = document.getElementById('tb-freight-lane');
+    const laneName = laneSelect?.options[laneSelect.selectedIndex]?.text.split('(')[0].trim() || 'All Active Lanes';
+    const dir = document.getElementById('tb-freight-dir')?.value || 'INCREASE';
+    const pct = parseFloat(document.getElementById('tb-freight-pct')?.value || '12.5');
+    const notes = document.getElementById('tb-freight-notes')?.value || 'Freight rate shift';
+
+    scnName = `User: Freight ${dir === 'INCREASE' ? 'Hike' : 'Discount'} (${dir === 'INCREASE' ? '+' : '-'}${pct}%)`;
+    scnCardTitle = `Freight ${dir === 'INCREASE' ? 'Hike' : 'Drop'} (${pct}%)`;
+    scnDesc = `Adjusted transportation tariffs by ${dir === 'INCREASE' ? '+' : '-'}${pct}% across ${laneName}.`;
+    scnHighlight = notes;
+    totalCost = dir === 'INCREASE' ? 1345000 : 1152000;
+    costChange = dir === 'INCREASE' ? +4.7 : -10.3;
+    sla = 96.5;
+    delhiUtil = 89.0;
+    capEx = 0;
+    implementationTime = 'Immediate';
+    changesList = [{ item: `${laneName} Freight Rate`, change: `${dir === 'INCREASE' ? '+' : '-'}${pct}%`, note: notes }];
+    whyBullets = [
+      `Re-evaluates lane selection and modal trade-offs under modified tariff curves.`,
+      `MILP solver re-routes marginal volume to minimize overall cost impact.`,
+      `Maintains stable 96.5% on-time SLA.`,
+    ];
+    rejectionReason = 'Parametric cost sensitivity test.';
+  } else if (currentToolboxType === 'CHANGE_SLA') {
+    const targetSla = parseFloat(document.getElementById('tb-sla-target')?.value || '98.0');
+    const win = document.getElementById('tb-sla-window')?.value || '24';
+    const notes = document.getElementById('tb-sla-notes')?.value || 'Tighter SLA target';
+
+    scnName = `User: Strict SLA Target (${targetSla}% / ${win}h)`;
+    scnCardTitle = `Strict SLA (${targetSla}%)`;
+    scnDesc = `Enforced hard ${targetSla}% SLA target with maximum ${win}-hour delivery window.`;
+    scnHighlight = notes;
+    totalCost = 1295000;
+    costChange = +0.8;
+    sla = targetSla;
+    delhiUtil = 91.5;
+    capEx = 0;
+    implementationTime = '1–2 weeks';
+    changesList = [
+      { item: 'Minimum SLA Target', change: `${targetSla}%`, note: notes },
+      { item: 'Lead Time Window', change: `Max ${win} hours`, note: 'Fast-lane prioritization' },
+    ];
+    whyBullets = [
+      `Prioritizes direct line-haul connections to fulfill tight ${win}-hour commitments.`,
+      `Guarantees ${targetSla}% on-time customer fulfillment.`,
+      `Marginal freight cost increase of +0.8% to satisfy expedited dispatch requirements.`,
+    ];
+    rejectionReason = 'Tighter lead times increase premium dedicated vehicle runs.';
+  }
+
+  // Transition to Agentic Execution Screen
+  if (formBody) formBody.classList.add('hidden');
+  agentView.classList.remove('hidden');
+  if (progressBar) progressBar.style.width = '15%';
+  if (statusText) statusText.textContent = 'Agent initializing mathematical graph and parameter bounds...';
+
+  telemetryBox.innerHTML = `
+    <div class="telemetry-row">
+      <span class="telemetry-spinner"></span>
+      <span class="telemetry-tag agent">AGENT</span>
+      <span>Ingesting scenario specifications: <strong>${scnCardTitle}</strong>...</span>
+    </div>
+  `;
+
+  // Step 2 (700ms): Echelon calibration
   setTimeout(() => {
-    const stepSolver = document.getElementById('progress-step-solver');
-    if (stepSolver) {
-      stepSolver.className = 'progress-step done';
-      stepSolver.textContent = '✓ MILP Optimization Complete (0.42s)';
-    }
+    if (progressBar) progressBar.style.width = '40%';
+    if (statusText) statusText.textContent = 'Calibrating multi-echelon network balance & candidate arcs...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-spinner"></span>
+        <span class="telemetry-tag agent">AGENT</span>
+        <span>Calibrating 380 active transportation corridors & facility mass-balance...</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 700);
 
-    const stepResilience = document.getElementById('progress-step-resilience');
-    if (stepResilience) {
-      stepResilience.className = 'progress-step active';
-      stepResilience.textContent = '● Resilience Stress Testing (+15% surge)...';
-    }
+  // Step 3 (1500ms): Solving MILP
+  setTimeout(() => {
+    if (progressBar) progressBar.style.width = '68%';
+    if (statusText) statusText.textContent = 'Executing Mixed-Integer Linear Program in PuLP (HiGHS Backend)...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-spinner"></span>
+        <span class="telemetry-tag milp">MILP</span>
+        <span>Formulating dual simplex & branch-and-cut optimization model...</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 1500);
 
-    // Step 2: Stress testing & AI Assessment
-    setTimeout(() => {
-      if (stepResilience) {
-        stepResilience.className = 'progress-step done';
-        stepResilience.textContent = '✓ Robustness Verified (SLA: 96.8%)';
-      }
+  // Step 4 (2300ms): Optimal Solution & Stress Testing
+  setTimeout(() => {
+    if (progressBar) progressBar.style.width = '88%';
+    if (statusText) statusText.textContent = 'Running resilience stress tests (+15% surge & lane disruptions)...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-tag milp" style="background:#10b981">OPTIMAL</span>
+        <span>Deterministic solution found in 0.36s (Cost: ₹${(totalCost / 100000).toFixed(2)}L, SLA: ${sla}%) ✓</span>
+      </div>
+      <div class="telemetry-row">
+        <span class="telemetry-spinner"></span>
+        <span class="telemetry-tag stress">CHALLENGER</span>
+        <span>Simulating resilience stress test... PASS (SLA maintained ≥95.0%) ✓</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 2300);
 
-      const stepAi = document.getElementById('progress-step-ai');
-      if (stepAi) {
-        stepAi.className = 'progress-step done';
-        stepAi.textContent = '✓ AI Trade-off Assessment Generated';
-      }
+  // Step 5 (3100ms): AI Recommendation Synthesis
+  setTimeout(() => {
+    if (progressBar) progressBar.style.width = '100%';
+    if (statusText) statusText.textContent = 'AI synthesis complete. Formatting executive scorecard...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-tag done">SYNTHESIS</span>
+        <span>Synthesized trade-off provenance: Evaluated and ready for executive inspection.</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 3100);
 
-      // Step 3: Insert new evaluated scenario
-      const newScnId = `SCN_CUSTOM_${Date.now()}`;
-      const newScenario = {
-        id: newScnId,
-        num: `My ${SCENARIOS.filter((s) => s.source === 'user').length + 1}`,
-        name: `My Scenario ${SCENARIOS.filter((s) => s.source === 'user').length + 1}: ${changeDir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facilityName}`,
-        cardTitle: `${changeDir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facilityName}`,
-        shortName: `My Scen ${SCENARIOS.filter((s) => s.source === 'user').length + 1}`,
-        type: 'USER_CREATED',
-        source: 'user',
-        badge: 'User Created',
-        badgeClass: 'tag-primary',
-        status: 'Evaluated',
-        description: `${changeDir === 'INCREASE' ? 'Increase' : 'Decrease'} capacity by ${formatNumber(amount)} units/day at ${facilityName}.`,
-        highlight: notes,
-        totalCost: 1208000,
-        costChange: -6.0,
-        transportCost: 820000,
-        fixedCost: 336000,
-        inventoryCost: 52000,
-        sla: 96.9,
-        avgUtil: 61.5,
-        maxUtil: 76.0,
-        delhiUtil: 76.0,
-        capacityRisk: 'Very Low',
-        capacityRiskClass: 'green',
-        carbonKg: 129000,
-        implementationCost: 70000,
-        implementationTime: '4–6 weeks',
-        confidence: 'High Confidence',
-        stars: 4,
-        robustness: 'High',
-        feasible: true,
-        objective: {
-          goal: `Evaluate ${changeDir.toLowerCase()} of ${formatNumber(amount)} u/d at ${facilityName}`,
-          primaryMetric: 'Total Cost & SLA',
-          constraint: 'SLA ≥ 95%',
-        },
-        changes: [
-          { item: `${facilityName} Capacity`, change: `${changeDir === 'INCREASE' ? '+' : '-'}${formatNumber(amount)} units/day`, note: notes },
-        ],
-        assumptions: [
-          { label: 'Demand Horizon', value: 'December Peak Surge (+14.2%)', type: 'FORECAST' },
-          { label: 'Footprint Status', value: 'Capacity Modification', type: 'MODEL FACT' },
-        ],
-        optimisation: {
-          objective: 'Minimise Total Network Logistics Cost',
-          lockedDecisions: 'Existing DC network topology',
-          allowedDecisions: 'Dynamic lane reallocations',
-          slaConstraint: '≥95.0%',
-        },
-        robustnessTests: [
-          { test: '+15% Demand Surge', status: 'PASS', detail: 'Absorbs peak surge without SLA degradation' },
-          { test: 'Corridor Resilience', status: 'PASS', detail: 'Maintains alternative routing' },
-        ],
-        aiAssessment: {
-          recommendation: `Feasible and cost-effective intervention. Achieves 6.0% cost reduction and lowers peak capacity utilization to 76%.`,
-          why: [
-            `Total cost drops to ₹12.08L (↓6.0% vs baseline)`,
-            `SLA increases to 96.9%`,
-            `Eliminates capacity risk at ${facilityName}`,
-          ],
-          whatIRejected: 'Compared to NetGravity Recommended Scenario 1 (₹11.84L), this requires minor operational capacity adjustment costs.',
-        },
-      };
+  // Step 6 (3800ms): Finish, append scenario and open drawer
+  setTimeout(() => {
+    const userScnCount = SCENARIOS.filter((s) => s.source === 'user').length + 1;
+    const newScnId = `SCN_CUSTOM_${Date.now()}`;
+    const newScenario = {
+      id: newScnId,
+      num: `My ${userScnCount}`,
+      name: scnName,
+      cardTitle: scnCardTitle,
+      shortName: `My Scen ${userScnCount}`,
+      type: 'USER_CREATED',
+      source: 'user',
+      badge: 'User Created',
+      badgeClass: 'tag-primary',
+      status: 'Evaluated',
+      description: scnDesc,
+      highlight: scnHighlight,
+      totalCost: totalCost,
+      costChange: costChange,
+      transportCost: Math.round(totalCost * 0.68),
+      fixedCost: Math.round(totalCost * 0.27),
+      inventoryCost: Math.round(totalCost * 0.05),
+      sla: sla,
+      avgUtil: avgUtil,
+      maxUtil: delhiUtil,
+      delhiUtil: delhiUtil,
+      capacityRisk: capacityRisk,
+      capacityRiskClass: capacityRiskClass,
+      carbonKg: Math.round(totalCost * 0.11),
+      implementationCost: capEx,
+      implementationTime: implementationTime,
+      confidence: 'High Confidence',
+      stars: 4,
+      robustness: 'High',
+      feasible: true,
+      objective: {
+        goal: scnDesc,
+        primaryMetric: 'Total Cost & SLA',
+        constraint: 'SLA ≥ 95%',
+      },
+      changes: changesList,
+      assumptions: [
+        { label: 'Demand Horizon', value: 'December Peak Surge (+14.2%)', type: 'FORECAST' },
+        { label: 'Footprint Status', value: 'Custom What-If Parameterization', type: 'MODEL FACT' },
+      ],
+      optimisation: {
+        objective: 'Minimise Total Network Logistics Cost',
+        lockedDecisions: 'Specified intervention constraints',
+        allowedDecisions: 'Dynamic lane reallocations',
+        slaConstraint: '≥95.0%',
+      },
+      robustnessTests: [
+        { test: '+15% Demand Surge', status: 'PASS', detail: 'Absorbs peak surge without catastrophic SLA failure' },
+        { test: 'Corridor Resilience', status: 'PASS', detail: 'Alternative transport arcs active' },
+      ],
+      aiAssessment: {
+        recommendation: `Evaluated what-if scenario: ${scnCardTitle}. Yields ₹${(totalCost / 100000).toFixed(2)}L total monthly cost with ${sla}% on-time SLA.`,
+        why: whyBullets,
+        whatIRejected: rejectionReason,
+      },
+    };
 
-      SCENARIOS.push(newScenario);
-      selectedScenarioId = newScnId;
+    SCENARIOS.push(newScenario);
+    selectedScenarioId = newScnId;
 
-      // Update UI
-      const badge = document.getElementById('scn-count-badge');
-      if (badge) badge.textContent = SCENARIOS.length - 1;
+    // Update UI badge & tables
+    const badge = document.getElementById('scn-count-badge');
+    if (badge) badge.textContent = SCENARIOS.length - 1;
 
-      renderComparisonTable();
-      renderImpactCharts();
+    renderMyScenariosGrid();
+    renderComparisonTable();
+    closeCreateToolbox();
 
-      // Reset button
-      runBtn.disabled = false;
-      runBtn.innerHTML = '<span>▶ Run Scenario</span>';
-      progressBox.classList.add('hidden');
-      closeCreateToolbox();
-
-      // Open new scenario details
-      openScenarioDrawer(newScnId);
-    }, 1200);
-  }, 1000);
+    // Open Scenario Details Drawer
+    openScenarioDrawer(newScnId);
+  }, 3800);
 }
+
 
 
 /* ═════════ agent.js ═════════ */
@@ -5775,5 +6669,5 @@ function showNotification(message) {
 
 </script>
 </body>
-</html>
 
+</html>
