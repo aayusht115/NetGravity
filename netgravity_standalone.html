@@ -1057,120 +1057,478 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .provenance-badge.external-signal { background: var(--green-bg); color: var(--green); }
 .provenance-badge.ai-assessment { background: var(--purple-50); color: var(--primary); }
 
-/* ─── Floating Sticky Navigation & Action Bar ────────────── */
-.scenario-floating-nav-wrap {
-  position: sticky;
-  top: 20px;
-  z-index: 100;
+/* ═══════════════════════════════════════════════════════════
+   SCENARIO PLANNING WORKSPACE (Approved Reference Design)
+   ═══════════════════════════════════════════════════════════ */
+
+/* Secondary Sub-Navigation Tabs */
+.scn-subnav-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  pointer-events: none;
+  gap: 28px;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 18px;
 }
 
-.scenario-floating-nav {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  padding: 6px 8px;
-  border-radius: 32px;
-  border: 1px solid rgba(107, 47, 160, 0.18);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(107, 47, 160, 0.06);
-  pointer-events: auto;
-  width: auto;
-  max-width: fit-content;
-}
-
-.scn-floating-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 18px;
-  font-size: 13px;
+.scn-subnav-tab {
+  font-size: 14.5px;
   font-weight: 600;
   color: var(--text-2);
   background: transparent;
   border: none;
-  border-radius: 24px;
+  padding: 8px 4px 12px;
   cursor: pointer;
+  position: relative;
   transition: all var(--t-fast);
-  white-space: nowrap;
 }
 
-.scn-floating-btn:hover {
+.scn-subnav-tab:hover {
   color: var(--primary);
-  background: rgba(107, 47, 160, 0.08);
 }
 
-.scn-floating-btn.active {
+.scn-subnav-tab.active {
   color: var(--primary);
-  background: var(--purple-50);
   font-weight: 700;
-  box-shadow: 0 1px 4px rgba(107, 47, 160, 0.15);
 }
 
-.scn-count-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.scn-subnav-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
   background: var(--primary);
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  width: 19px;
-  height: 19px;
-  border-radius: 50%;
-  margin-left: 3px;
+  border-radius: 2px;
 }
 
-.btn-floating-create {
-  pointer-events: auto;
-  padding: 10px 22px;
-  font-size: 13.5px;
-  font-weight: 700;
-  border-radius: 28px;
-  box-shadow: 0 4px 18px rgba(107, 47, 160, 0.3);
-  display: inline-flex;
+/* Scenario Planning Top Header */
+.scn-header-row {
+  display: flex;
   align-items: center;
-  transition: all var(--t-fast);
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
 
-.btn-floating-create:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 22px rgba(107, 47, 160, 0.38);
+.scn-header-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-1);
 }
 
-/* Stacked Scenario Sections */
-.scenario-stacked-section {
-  scroll-margin-top: 70px;
+.scn-header-subtitle {
+  font-size: 12.5px;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* Scenario Selection Strip */
+.scn-strip-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 22px;
+  flex-wrap: wrap;
 }
 
-.scenario-main-pane {
-  flex: 1;
-  min-width: 0;
-}
-
-.my-scenarios-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-md);
-}
-
-.my-scenario-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 16px 18px;
-  cursor: pointer;
-  transition: all var(--t-fast);
+.scn-strip-card {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  min-width: 190px;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.scn-strip-card:hover {
+  border-color: var(--purple-200);
+  box-shadow: 0 2px 8px rgba(107, 47, 160, 0.08);
+}
+
+.scn-strip-card.selected {
+  background: #fbf8fd;
+  border: 1.5px solid var(--primary);
+  box-shadow: 0 2px 10px rgba(107, 47, 160, 0.12);
+}
+
+.scn-strip-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.scn-strip-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scn-strip-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  border: 1.5px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  cursor: pointer;
+  background: #ffffff;
+  color: #ffffff;
+}
+
+.scn-strip-card.selected .scn-strip-checkbox {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.scn-strip-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.scn-strip-close {
+  color: var(--text-4);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px;
+}
+
+.scn-strip-close:hover {
+  color: var(--red);
+}
+
+.scn-strip-inspect-link {
+  font-size: 11.5px;
+  color: var(--primary);
+  font-weight: 600;
+  text-decoration: none;
+  margin-top: 2px;
+  display: inline-block;
+}
+
+.scn-strip-inspect-link:hover {
+  text-decoration: underline;
+}
+
+.scn-strip-helper-text {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-left: 4px;
+}
+
+.scn-strip-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary);
+  background: var(--bg-card);
+  border: 1px dashed var(--purple-200);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.scn-strip-add-btn:hover {
+  background: var(--purple-50);
+  border-color: var(--primary);
+}
+
+/* Single Scenario 2-Column Layout (75% / 25%) */
+.scn-single-2col {
+  display: grid;
+  grid-template-columns: 1fr 270px;
+  gap: 20px;
+  align-items: start;
+}
+
+.scn-single-left {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.scn-single-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Comparison Tables */
+.scn-table-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.scn-table-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.scn-table-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.scn-table-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scn-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.scn-data-table th {
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  border-bottom: 1px solid var(--border-light);
+  text-align: left;
+  background: var(--bg-subtle);
+}
+
+.scn-data-table td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-1);
+}
+
+.scn-data-table tr:last-child td {
+  border-bottom: none;
+}
+
+.scn-th-rec {
+  background: rgba(107, 47, 160, 0.04) !important;
+  color: var(--primary) !important;
+  border-top: 2px solid var(--primary);
+  border-left: 1px solid var(--purple-100);
+  border-right: 1px solid var(--purple-100);
+}
+
+.scn-td-rec {
+  background: rgba(107, 47, 160, 0.02);
+  border-left: 1px solid var(--purple-100);
+  border-right: 1px solid var(--purple-100);
+}
+
+.scn-info-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 10.5px;
+  color: var(--text-3);
+  cursor: pointer;
+  margin-left: 8px;
+  transition: all var(--t-fast);
+}
+
+.scn-info-btn:hover {
+  color: var(--primary);
+  background: var(--purple-50);
+}
+
+/* Visual Context Card */
+.scn-visual-context-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.scn-map-wrap {
+  height: 320px;
+  border-radius: var(--r-md);
+  overflow: hidden;
+  position: relative;
+  margin-top: 10px;
+}
+
+/* Right Rail Cards */
+.scn-rail-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.scn-rail-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}
+
+.scn-rail-bullet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scn-rail-bullet-item {
+  font-size: 13px;
+  color: var(--text-1);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.scn-rail-bullet-item:hover {
+  color: var(--primary);
+}
+
+.scn-rail-actions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scn-rail-action-row {
+  font-size: 13px;
+  color: var(--text-1);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.scn-rail-action-row:hover {
+  color: var(--primary);
+}
+
+/* Multi-Scenario Table */
+.scn-multi-table-wrap {
+  overflow-x: auto;
+}
+
+.scn-multi-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 820px;
+}
+
+.scn-multi-table th,
+.scn-multi-table td {
+  padding: 11px 14px;
+  border: 1px solid var(--border-light);
+  text-align: center;
+}
+
+.scn-multi-table th:first-child,
+.scn-multi-table td:first-child {
+  text-align: left;
+}
+
+/* Cell Highlight Colors */
+.cell-pos {
+  background: #f0fdf4 !important;
+  color: #166534 !important;
+  font-weight: 700;
+}
+
+.cell-warn {
+  background: #fffbeb !important;
+  color: #9a3412 !important;
+  font-weight: 700;
+}
+
+.cell-neg {
+  background: #fef2f2 !important;
+  color: #991b1b !important;
+  font-weight: 700;
+}
+
+/* Multi-Scenario Bottom Section */
+.scn-multi-bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.scn-comparison-insights-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.scn-multi-actions-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+}
+
+.scn-insight-numbered-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.scn-insight-item {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.45;
+  cursor: pointer;
+  transition: color var(--t-fast);
+}
+
+.scn-insight-item:hover {
+  color: var(--primary);
+}
+
+.scn-action-checkbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.scn-action-item-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.scn-action-item-row:hover {
+  color: var(--primary);
+}
   box-shadow: var(--shadow-sm);
 }
 
@@ -2415,171 +2773,171 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
         <!-- ─────────────────── TAB: SCENARIOS ─────────────────── -->
         <section class="tab-panel" id="tab-scenarios">
-          <!-- Control Bar (Period Selector Removed as Requested) -->
-          <div class="home-controls">
-            <div class="controls-left">
-              <div class="control-group">
-                <span class="control-label">View by</span>
-                <select class="control-select" id="scn-sel-type">
-                  <option value="DC">🏪 DC</option>
-                  <option value="Plant">🏭 Plant</option>
-                </select>
-              </div>
-              <div class="control-group">
-                <select class="control-select facility-select" id="scn-sel-facility">
-                  <option value="ALL">All DCs</option>
-                  <option value="DC_DELHI" selected>Delhi NCR DC</option>
-                  <option value="DC_MUMBAI">Mumbai DC</option>
-                  <option value="DC_BENGALURU">Bengaluru DC</option>
-                  <option value="DC_KOLKATA">Kolkata DC</option>
-                  <option value="DC_GUWAHATI">Guwahati DC</option>
-                </select>
-                <span class="facility-dot" style="background:var(--amber)"></span>
-              </div>
+          <!-- Top Context Bar (Facility & Period Selectors) -->
+          <div class="home-controls" style="margin-bottom:16px;justify-content:flex-start;gap:12px">
+            <div class="control-group">
+              <span class="control-icon" style="font-size:13px">📍</span>
+              <select class="control-select facility-select" id="scn-global-facility" style="padding-left:26px">
+                <option value="DC_DELHI" selected>Delhi NCR DC</option>
+                <option value="DC_MUMBAI">Mumbai DC</option>
+                <option value="DC_BENGALURU">Bengaluru DC</option>
+                <option value="DC_KOLKATA">Kolkata DC</option>
+                <option value="DC_GUWAHATI">Guwahati DC</option>
+                <option value="ALL">All DCs (Network Overview)</option>
+              </select>
             </div>
-            <div class="controls-right">
-              <div class="text-xs text-muted" style="display:flex;align-items:center;gap:6px">
-                <span class="info-circle"
-                  title="All scenarios evaluated against December Peak Demand (+14.2%).">ⓘ</span>
-                <span>Horizon: <strong>December Peak Forecast</strong></span>
-              </div>
+            <div class="control-group">
+              <span class="control-label" style="font-size:12px">Period:</span>
+              <select class="control-select period-select" id="scn-global-period">
+                <option value="M_2026_08" selected>1 Aug – 31 Aug 2026</option>
+                <option value="M_2026_09">1 Sep – 30 Sep 2026</option>
+                <option value="M_2026_10">1 Oct – 31 Oct 2026</option>
+                <option value="M_2026_11">1 Nov – 30 Nov 2026</option>
+                <option value="M_2026_12">1 Dec – 31 Dec 2026</option>
+              </select>
             </div>
           </div>
 
-          <!-- Page Header -->
-          <div class="home-header" style="margin-bottom:var(--space-md)">
-            <div>
-              <h1 class="home-greeting">Scenario Planning</h1>
-              <p class="home-subtitle">Explore what-if scenarios, evaluate impacts, and choose the best path forward.</p>
-            </div>
+          <!-- Secondary Scenario Navigation Tabs -->
+          <div class="scn-subnav-bar">
+            <button class="scn-subnav-tab active" id="tab-btn-my-scenarios" data-view="my-scenarios">My Scenarios</button>
+            <button class="scn-subnav-tab" id="tab-btn-comparison" data-view="comparison">Scenario Comparison</button>
           </div>
 
-          <!-- Floating Sticky Navigation & Action Bar (Placed slightly lower, bigger in size) -->
-          <div class="scenario-floating-nav-wrap">
-            <div class="scenario-floating-nav">
-              <button class="scn-floating-btn active" data-target="scn-section-recommended">
-                <span>✨ Recommended</span>
-              </button>
-              <button class="scn-floating-btn" data-target="scn-section-opt-base">
-                <span>⏱ Optimised Base</span>
-              </button>
-              <button class="scn-floating-btn" data-target="scn-section-my-scenarios">
-                <span>👤 My Scenarios</span>
-              </button>
-              <button class="scn-floating-btn" data-target="scn-section-comparison">
-                <span>⚖️ Scenario Comparison</span>
-                <span class="scn-count-badge" id="scn-count-badge">4</span>
+          <!-- VIEW 1: My Scenarios / Single Scenario Deep-Dive -->
+          <div class="scn-view-pane" id="view-my-scenarios">
+            <!-- Header Row -->
+            <div class="scn-header-row">
+              <div>
+                <h1 class="scn-header-title">Single Scenario Deep-Dive</h1>
+              </div>
+              <button class="btn btn-primary" id="btn-add-scenario-top" style="padding:8px 18px;font-size:13px;font-weight:700">
+                <span>+ Add new Scenario</span>
               </button>
             </div>
 
-            <!-- Floating + Create New Scenario Button (Slightly bigger, floating alongside menu) -->
-            <button class="btn btn-primary btn-floating-create" id="btn-toggle-create-scenario">
-              <span style="font-size:15px;margin-right:2px">➕</span>
-              <span>Create New Scenario</span>
-            </button>
-          </div>
+            <!-- Scenario Selection Strip -->
+            <div class="scn-strip-wrap" id="scn-strip-container">
+              <!-- Populated dynamically by JS -->
+            </div>
 
-          <!-- Main Workspace: Stacked Sections -->
-          <div class="scenario-main-pane">
-
-            <!-- Section 1: Recommended by NetGravity -->
-            <div class="scenario-stacked-section mb-xl" id="scn-section-recommended">
-              <div class="section-heading-row mb-md">
-                <div class="flex items-center gap-xs">
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-1)">Recommended by NetGravity</h3>
-                  <span class="tag tag-success" style="font-size:10px;padding:2px 8px">AI Proactive
-                    Identification</span>
+            <!-- 2-Column Deep-Dive Layout (75% / 25%) -->
+            <div class="scn-single-2col">
+              <!-- Left 75% Column -->
+              <div class="scn-single-left">
+                <!-- Comparison Table -->
+                <div class="scn-table-card">
+                  <div class="scn-table-header-row">
+                    <div class="scn-table-title">Scenario Comparison Table</div>
+                    <div class="scn-table-controls">
+                      <div class="control-group" style="margin:0">
+                        <span class="control-label" style="font-size:11.5px">Metric View</span>
+                        <select class="control-select" id="scn-metric-view-select" style="font-size:12px;padding:4px 10px">
+                          <option value="key" selected>Key Metrics</option>
+                          <option value="financial">Financial & Costs</option>
+                          <option value="operations">Operational & Service</option>
+                          <option value="all">All Metrics</option>
+                        </select>
+                      </div>
+                      <button class="btn btn-secondary btn-sm" id="btn-customize-metrics" style="padding:5px 10px;font-size:12px">
+                        <span>🛠️ Customize Metrics</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="table-wrap" id="single-scenario-table-wrap">
+                    <!-- Populated by JS -->
+                  </div>
                 </div>
-                <p class="text-xs text-muted">Proactively structured to solve the Delhi NCR DC December capacity
-                  bottleneck.</p>
+
+                <!-- Visual Context Card -->
+                <div class="scn-visual-context-card">
+                  <div class="scn-table-header-row" style="margin-bottom:8px">
+                    <div class="scn-table-title">Visual Context</div>
+                    <div class="flex items-center gap-xs">
+                      <span class="text-xs text-muted" style="margin-right:6px">Map View</span>
+                      <div class="toggle-group" id="scn-map-toggle-group">
+                        <button class="toggle-btn active" id="btn-map-baseline" data-mode="baseline">Baseline</button>
+                        <button class="toggle-btn" id="btn-map-scenario" data-mode="scenario">Scenario 1</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="scn-map-wrap" id="scenario-map-wrap">
+                    <div id="scenario-leaflet-map" style="width:100%;height:100%"></div>
+                  </div>
+                </div>
               </div>
 
-              <!-- Recommended Scenarios Cards Row -->
-              <div class="scenario-cards-row" id="scenario-cards-row">
+              <!-- Right 25% Column -->
+              <div class="scn-single-right">
+                <!-- Insights Card -->
+                <div class="scn-rail-card">
+                  <div class="scn-rail-title">INSIGHTS</div>
+                  <div class="scn-rail-bullet-list" id="scn-single-insights-list">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+
+                <!-- Action Items Card -->
+                <div class="scn-rail-card">
+                  <div class="scn-rail-title">ACTION ITEMS</div>
+                  <div class="scn-rail-actions-list" id="scn-single-actions-list">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- VIEW 2: Scenario Comparison / Multi-Scenario Trade-off Analysis -->
+          <div class="scn-view-pane hidden" id="view-comparison">
+            <!-- Header Row -->
+            <div class="scn-header-row">
+              <div>
+                <h1 class="scn-header-title">Multi-Scenario Trade-off Analysis</h1>
+              </div>
+              <div class="scn-table-controls">
+                <div class="control-group" style="margin:0">
+                  <span class="control-label" style="font-size:11.5px">Metric View</span>
+                  <select class="control-select" id="scn-multi-metric-view-select" style="font-size:12px;padding:4px 10px">
+                    <option value="key" selected>Key Metrics</option>
+                    <option value="financial">Financial & Costs</option>
+                    <option value="operations">Operational & Service</option>
+                    <option value="all">All Metrics</option>
+                  </select>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-multi-customize-metrics" style="padding:5px 10px;font-size:12px">
+                  <span>🛠️ Customize Metrics</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Multi-Scenario Trade-off Matrix Table -->
+            <div class="scn-table-card">
+              <div class="scn-multi-table-wrap" id="multi-scenario-table-wrap">
                 <!-- Populated by JS -->
               </div>
             </div>
 
-            <!-- Section 2: Optimised Base Case -->
-            <div class="scenario-stacked-section mb-lg" id="scn-section-opt-base">
-              <div class="section-heading-row mb-sm">
-                <div class="flex items-center gap-xs">
-                  <h3 style="font-size:15px;font-weight:700;color:var(--text-1)">Optimised Base Case</h3>
-                  <span class="tag tag-warning" style="font-size:10px;padding:2px 8px">Footprint Locked</span>
-                </div>
-                <p class="text-xs text-muted">Pure mathematical flow optimization within existing 5 DC footprint (zero CapEx).</p>
-              </div>
-
-              <div class="card opt-base-card" id="card-opt-base" data-scn-id="SCN_OPTIMISED_BASE" style="padding:14px 18px;background:#fcfaff;border:1px solid var(--purple-100);cursor:pointer" title="Click to inspect scenario details">
-                <div class="flex items-center justify-between">
-                  <div style="flex:1">
-                    <div class="flex items-center gap-sm mb-xs">
-                      <h4 style="font-size:14px;font-weight:700;color:var(--text-1)">Optimised Base Case (Current 5 DC Network)</h4>
-                      <span class="tag tag-warning" style="font-size:10px">Not Recommended as #1</span>
-                      <span class="provenance-badge model-fact">MODEL FACT</span>
-                    </div>
-                    <p style="font-size:12px;color:var(--text-2);max-width:760px;line-height:1.45;margin-bottom:6px">
-                      Reallocates Baddi corridor flows to achieve lowest headline logistics cost of <strong>₹11.42L (↓11.1%)</strong> with 96.5% normal SLA.
-                      However, the AI Challenger rejects this plan because it pushes Delhi NCR utilisation to 97% and <strong>fails under +15% demand surge (SLA collapses to 91.8%)</strong>.
-                    </p>
-                    <div class="flex items-center gap-lg text-xs">
-                      <div><strong>Total Cost:</strong> ₹11.42L (↓11.1%)</div>
-                      <div><strong>Normal SLA:</strong> 96.5%</div>
-                      <div><strong>Surge Test (+15% Demand):</strong> <span style="color:var(--red);font-weight:700">FAIL (SLA: 91.8%)</span></div>
-                    </div>
-                  </div>
-                  <div style="margin-left:16px;text-align:right">
-                    <span class="text-xs" style="color:var(--primary);font-weight:700">Click to Inspect Details →</span>
-                  </div>
+            <!-- Bottom 2-Column Section (Comparison Insights & Multi-Scenario Action Items) -->
+            <div class="scn-multi-bottom-grid">
+              <!-- Comparison Insights Box -->
+              <div class="scn-comparison-insights-box">
+                <div class="scn-table-title" style="font-size:13px;text-transform:uppercase;letter-spacing:0.04em">COMPARISON INSIGHTS</div>
+                <div class="scn-insight-numbered-list" id="multi-comparison-insights-list">
+                  <!-- Populated by JS -->
                 </div>
               </div>
-            </div>
 
-            <!-- Section 3: My Scenarios -->
-            <div class="scenario-stacked-section mb-lg" id="scn-section-my-scenarios">
-              <div class="section-heading-row mb-sm">
-                <div class="flex items-center gap-xs">
-                  <h3 style="font-size:15px;font-weight:700;color:var(--text-1)">My Scenarios</h3>
-                  <span class="tag tag-primary" style="font-size:10px;padding:2px 8px">User Created What-Ifs</span>
-                </div>
-                <p class="text-xs text-muted">Custom scenarios created by network planners and evaluated through the MILP solver.</p>
-              </div>
-
-              <div class="my-scenarios-grid" id="my-scenarios-grid">
-                <!-- Populated dynamically (no overflow buttons) -->
-              </div>
-            </div>
-
-            <!-- Section 4: Scenario Comparison Table -->
-            <div class="scenario-stacked-section mb-lg" id="scn-section-comparison">
-              <div class="card">
-                <div class="card-header" style="margin-bottom:12px">
-                  <div>
-                    <div class="card-title">Scenario Comparison Table</div>
-                    <div class="card-subtitle">Side-by-side trade-off matrix. Click any column or cell to inspect full mathematical formulation.</div>
-                  </div>
-                  <div class="flex items-center gap-sm">
-                    <div class="control-group" style="margin:0">
-                      <span class="control-label" style="font-size:11px">Metric View</span>
-                      <select class="control-select" id="scn-metric-view-select" style="font-size:12px;padding:4px 10px">
-                        <option value="key">Key Metrics</option>
-                        <option value="financial">Financial & Costs</option>
-                        <option value="operations">Operational & Service</option>
-                        <option value="all">All Metrics</option>
-                      </select>
-                    </div>
-                    <button class="btn btn-secondary btn-sm" id="btn-customize-metrics">
-                      <span>🛠️ Customize Metrics</span>
-                    </button>
-                  </div>
-                </div>
-                <div class="table-wrap" id="scenario-comparison-table-wrap">
+              <!-- Multi-Scenario Action Items Box -->
+              <div class="scn-multi-actions-box">
+                <div class="scn-table-title" style="font-size:13px;text-transform:uppercase;letter-spacing:0.04em">MULTI-SCENARIO ACTION ITEMS</div>
+                <div class="text-xs text-muted" style="margin-top:4px">Prioritized items include:</div>
+                <div class="scn-action-checkbox-list" id="multi-comparison-actions-list">
                   <!-- Populated by JS -->
                 </div>
               </div>
             </div>
           </div>
-
 
           <!-- Create New Scenario Pop-Up Modal (Blurs background, appears only on click) -->
           <div class="modal-overlay" id="modal-create-toolbox">
@@ -2587,8 +2945,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
               <div class="toolbox-header">
                 <div>
                   <div class="card-title" style="font-size:16px">Create New Scenario</div>
-                  <div class="text-xs text-muted">Configure custom network intervention parameters for MILP evaluation.
-                  </div>
+                  <div class="text-xs text-muted">Configure custom network intervention parameters for MILP evaluation.</div>
                 </div>
                 <button class="btn btn-ghost btn-sm" id="btn-close-toolbox">✕</button>
               </div>
@@ -2599,7 +2956,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
                 <div class="toolbox-step">
                   <div class="toolbox-step-num">1</div>
                   <div class="toolbox-step-content">
-                    <div class="toolbox-step-title">Select Scenario Type</div>
+                    <div class="toolbox-step-title">What do you want to change?</div>
                     <div class="scn-type-grid">
                       <button class="scn-type-card active" data-type="CHANGE_CAPACITY">
                         <span class="scn-type-icon">🛡️</span>
@@ -2646,92 +3003,89 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
                   </div>
                 </div>
 
-                <!-- Step 3: Advanced Options (Collapsible) -->
+                <!-- Step 3: Optimization Objective & Constraints -->
                 <div class="toolbox-step">
                   <div class="toolbox-step-num">3</div>
                   <div class="toolbox-step-content">
-                    <div class="toolbox-accordion-toggle" id="toolbox-adv-toggle">
-                      <span class="toolbox-step-title">Advanced Solver Constraints & Multi-Objective <span class="text-muted">(Optional)</span></span>
-                      <span id="adv-chevron">▼</span>
+                    <div class="toolbox-step-title">Objective & Constraints</div>
+
+                    <div class="form-group mb-sm">
+                      <label class="form-label">Optimise for</label>
+                      <select class="form-select" id="toolbox-objective">
+                        <option value="COST" selected>Total Cost</option>
+                        <option value="SLA">SLA</option>
+                        <option value="TRANSPORT">Transport Cost</option>
+                        <option value="CARBON">Carbon Emissions</option>
+                        <option value="CAPACITY">Capacity Risk</option>
+                        <option value="HEADROOM">Capacity Headroom</option>
+                      </select>
                     </div>
 
-                    <div class="toolbox-adv-content hidden" id="toolbox-adv-content">
-                      <div class="form-group mb-sm">
-                        <label class="form-label">Primary Solver Objective</label>
-                        <select class="form-select" id="toolbox-objective">
-                          <option value="COST">Minimise Total Network Logistics Cost</option>
-                          <option value="SLA">Maximise Network-Wide On-Time SLA</option>
-                          <option value="CARBON">Minimise Scope 3 Carbon Emissions</option>
-                          <option value="HEADROOM">Maximise Capacity Headroom & Safety Buffer</option>
+                    <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+                      <div class="form-group">
+                        <label class="form-label">Subject to Constraint</label>
+                        <select class="form-select" id="toolbox-constraint-type">
+                          <option value="SLA_95" selected>SLA ≥ 95%</option>
+                          <option value="UTIL_90">Capacity Utilisation ≤ 90%</option>
+                          <option value="BUDGET_20L">CapEx Budget ≤ ₹20L</option>
                         </select>
                       </div>
-
-                      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-                        <div class="form-group">
-                          <label class="form-label">Minimum SLA Constraint (%)</label>
-                          <input type="number" class="form-input" id="toolbox-sla-min" value="95" min="80" max="100" step="0.5">
-                        </div>
-                        <div class="form-group">
-                          <label class="form-label">Solver Engine Backend</label>
-                          <select class="form-select" id="toolbox-solver-backend">
-                            <option value="HIGHS">PuLP / HiGHS Branch-and-Cut (Exact)</option>
-                            <option value="CBC">COIN-OR CBC Dual Simplex</option>
-                          </select>
-                        </div>
-                      </div>
-
                       <div class="form-group">
-                        <label class="form-label">Resilience Stress Testing Suite</label>
-                        <div class="flex flex-col gap-xs text-xs" style="background:var(--bg-subtle);padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--border-light)">
-                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                            <input type="checkbox" id="stress-check-demand" checked>
-                            <span>Simulate +15% December Demand Surge</span>
-                          </label>
-                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                            <input type="checkbox" id="stress-check-lane" checked>
-                            <span>Simulate Primary Corridor Disruption</span>
-                          </label>
-                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                            <input type="checkbox" id="stress-check-rate" checked>
-                            <span>Evaluate ±10% Fuel & Rate Elasticity</span>
-                          </label>
-                        </div>
+                        <label class="form-label">Solver Backend</label>
+                        <select class="form-select" id="toolbox-solver-backend">
+                          <option value="HIGHS">PuLP / HiGHS Branch-and-Cut (Exact)</option>
+                          <option value="CBC">COIN-OR CBC Dual Simplex</option>
+                        </select>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <!-- Footer Buttons -->
-                <div class="flex items-center justify-between mt-lg pt-md"
-                  style="border-top:1px solid var(--border-light)">
+                <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border-light)">
                   <button class="btn btn-secondary btn-sm" id="btn-cancel-toolbox">Cancel</button>
-                  <button class="btn btn-primary" id="btn-run-toolbox-scenario"
-                    style="padding:10px 24px;font-size:13.5px;font-weight:700">
-                    <span>▶ Run Solver</span>
+                  <button class="btn btn-primary" id="btn-run-toolbox-scenario" style="padding:10px 24px;font-size:13.5px;font-weight:700">
+                    <span>▶ Run Scenario</span>
                   </button>
                 </div>
               </div>
 
-              <!-- Agentic Calibration & Solver Execution State (Shown during execution) -->
+              <!-- Solver Execution State (Phased Execution) -->
               <div class="agent-execution-view hidden" id="agent-execution-view">
                 <div class="agent-pulse-header">
-                  <div class="agent-pulse-icon">🤖</div>
+                  <div class="agent-pulse-icon">⚡</div>
                   <div>
-                    <h4 style="font-size:15px;font-weight:800;color:var(--text-1);margin-bottom:2px">NetGravity AI
-                      Orchestrator</h4>
-                    <div class="text-xs text-muted" id="agent-live-status-text">Calibrating network parameters and
-                      invoking MILP solver...</div>
+                    <h4 style="font-size:15px;font-weight:800;color:var(--text-1);margin-bottom:2px">NetGravity Mathematical Engine</h4>
+                    <div class="text-xs text-muted" id="agent-live-status-text">Formulating constraints and invoking MILP solver...</div>
                   </div>
                 </div>
 
-                <!-- Animated Progress Bar -->
-                <div class="agent-progress-bar-wrap">
-                  <div class="agent-progress-bar-fill" id="agent-progress-bar-fill"></div>
-                </div>
-
-                <!-- Dynamic Execution Telemetry Log -->
-                <div class="agent-telemetry-box" id="agent-telemetry-box">
-                  <!-- Populated dynamically with pulsing log steps -->
+                <!-- Execution Step List -->
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px;background:var(--bg-subtle);padding:14px;border-radius:var(--r-md);border:1px solid var(--border-light)" id="solver-phase-steps">
+                  <div class="flex items-center justify-between text-xs" id="step-phase-1">
+                    <span>Scenario validated</span>
+                    <span style="color:var(--green);font-weight:700">✓</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs" id="step-phase-2">
+                    <span>Preparing optimisation</span>
+                    <span style="color:var(--green);font-weight:700">✓</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs" id="step-phase-3">
+                    <span>Running network optimisation</span>
+                    <span class="telemetry-spinner"></span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs text-muted" id="step-phase-4">
+                    <span>Evaluating scenario impact</span>
+                    <span>○</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs text-muted" id="step-phase-5">
+                    <span>Stress testing</span>
+                    <span>○</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs text-muted" id="step-phase-6">
+                    <span>Generating assessment</span>
+                    <span>○</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2845,6 +3199,28 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     </div>
   </div>
 
+  <!-- Metric Drilldown Modal (Clickable Table Metric Deep-Dive) -->
+  <div class="modal-overlay" id="modal-metric-drilldown">
+    <div class="modal-box" style="max-width:600px">
+      <div class="flex items-center justify-between mb-md">
+        <div>
+          <div class="card-title" id="drilldown-title">Metric Drill-Down</div>
+          <div class="text-xs text-muted" id="drilldown-subtitle">Mathematical decomposition and network impact evidence.</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="modal-close-drilldown">✕</button>
+      </div>
+
+      <div id="drilldown-body-content">
+        <!-- Populated dynamically by JS -->
+      </div>
+
+      <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border-light)">
+        <div class="text-xs text-muted" id="drilldown-provenance-tag">PROVENANCE: MODEL FACT</div>
+        <button class="btn btn-secondary btn-sm" id="btn-close-drilldown-bottom">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
 /* ═════════ data.js ═════════ */
 /**
@@ -2871,6 +3247,11 @@ const DCS = [
   { id: "DC_BENGALURU", name: "Bengaluru DC", city: "Bengaluru", state: "Karnataka", lat: 12.97, lng: 77.59, capacity: 7500, throughput: 5600, fixedCost: 110, handlingCost: 4.0, region: "South", status: "EXISTING", utilPct: 74.7 },
   { id: "DC_KOLKATA", name: "Kolkata DC", city: "Kolkata", state: "West Bengal", lat: 22.57, lng: 88.36, capacity: 6000, throughput: 3200, fixedCost: 85, handlingCost: 3.5, region: "East", status: "EXISTING", utilPct: 53.3 },
   { id: "DC_GUWAHATI", name: "Guwahati DC", city: "Guwahati", state: "Assam", lat: 26.14, lng: 91.74, capacity: 4000, throughput: 2100, fixedCost: 65, handlingCost: 3.8, region: "Northeast", status: "EXISTING", utilPct: 52.5 },
+];
+
+const FACILITIES = [
+  ...PLANTS.map((p) => ({ ...p, type: 'Plant' })),
+  ...DCS.map((d) => ({ ...d, type: 'DC' })),
 ];
 
 const MARKETS = [
@@ -3063,13 +3444,14 @@ const SCHEMA_MAPPING = {
   sourceTypes: ["ERP", "WMS", "TMS", "Facility Master", "Demand Data", "Lane Data"],
 };
 
-// ─── SCENARIO RESULTS (pre-computed mock MILP outputs) ──────
+// ─── SCENARIO RESULTS (Canonical MILP outputs for Decision Cockpit) ──────
 const SCENARIOS = [
   {
     id: "SCN_ACTUAL",
     num: 0,
-    name: "Actual (Baseline) As-Is",
-    shortName: "Baseline",
+    name: "Current Baseline",
+    shortName: "Current Baseline",
+    cardTitle: "Baseline",
     type: "BASELINE",
     source: "system",
     badge: "Current Baseline",
@@ -3079,18 +3461,20 @@ const SCENARIOS = [
     highlight: "Observed network operations without optimization.",
     totalCost: 1285000,
     costChange: 0,
-    transportCost: 892000,
+    transportCost: 1325000,
     fixedCost: 312000,
+    variableCost: 245000,
     inventoryCost: 81000,
+    inventoryDays: 17,
     sla: 94.3,
     avgUtil: 72.4,
     maxUtil: 94.0,
     delhiUtil: 94.0,
     capacityRisk: "High",
     capacityRiskClass: "red",
-    carbonKg: 142000,
+    carbonKg: 105688,
     implementationCost: 0,
-    implementationTime: "—",
+    implementationTime: "10 mins",
     confidence: "—",
     stars: 0,
     robustness: "Baseline",
@@ -3123,97 +3507,40 @@ const SCENARIOS = [
     },
   },
   {
-    id: "SCN_OPTIMISED_BASE",
-    num: "Opt",
-    name: "Optimised Base Case",
-    shortName: "Opt. Base Case",
-    type: "OPTIMISED_BASE",
-    source: "agent",
-    badge: "Optimised Base",
-    badgeClass: "tag-warning",
-    status: "Not Recommended",
-    description: "Optimise routing within current facility footprint without CapEx",
-    highlight: "Lowest headline cost, but fails demand surge stress test.",
-    totalCost: 1142000,
-    costChange: -11.1,
-    transportCost: 782000,
-    fixedCost: 312000,
-    inventoryCost: 48000,
-    sla: 96.5,
-    avgUtil: 74.2,
-    maxUtil: 97.0,
-    delhiUtil: 97.0,
-    capacityRisk: "Medium",
-    capacityRiskClass: "amber",
-    carbonKg: 131000,
-    implementationCost: 15000,
-    implementationTime: "1–2 weeks",
-    confidence: "Medium Confidence",
-    stars: 3,
-    robustness: "Medium",
-    feasible: true,
-    objective: {
-      goal: "Minimise total cost under current footprint",
-      primaryMetric: "Total Cost",
-      constraint: "SLA ≥ 95%",
-    },
-    changes: [
-      { item: "Baddi DC → Delhi NCR", change: "-8% Volume", note: "Shift corridor traffic" },
-      { item: "Baddi DC → Mumbai", change: "+8% Volume", note: "Utilise western corridor" },
-    ],
-    assumptions: [
-      { label: "Demand Horizon", value: "August Baseline Forecast", type: "FORECAST" },
-      { label: "Facility Footprint", value: "Unchanged (Current 5 DCs)", type: "MODEL FACT" },
-    ],
-    optimisation: {
-      objective: "Minimise Total Network Cost",
-      lockedDecisions: "Facility footprint locked",
-      allowedDecisions: "Corridor flow reallocations",
-      slaConstraint: "SLA ≥ 95.0%",
-    },
-    robustnessTests: [
-      { test: "+15% Demand Surge", status: "FAIL", detail: "Delhi NCR exceeds 100% capacity; SLA breaches to 91.8%" },
-      { test: "Lane Disruption", status: "FAIL", detail: "Single point of failure on Baddi→Mumbai corridor" },
-    ],
-    aiAssessment: {
-      recommendation: "Not recommended as the primary operating plan.",
-      why: ["Achieves the lowest mathematical cost (₹11.42L, ↓11.1%)", "Maintains baseline SLA at 96.5% under normal conditions"],
-      whatIRejected: "Rejected as leading recommendation because it fails resilience stress tests under +15% demand surge.",
-    },
-  },
-  {
     id: "SCN_REBALANCE",
     num: 1,
-    name: "Scenario 1: Rebalance Baddi Volume",
-    cardTitle: "Rebalance Baddi Volume",
-    shortName: "Scen 1 (Rec.)",
+    name: "Scenario 1 (Rec.)",
+    shortName: "Recommended Scenario 1 (Rec.)",
+    cardTitle: "Scenario 1 (Rec.)",
     type: "RECOMMENDED",
     source: "agent",
-    badge: "Recommended by NetGravity",
+    badge: "Recommended",
     badgeClass: "tag-success",
     status: "Recommended",
     description: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata.",
     highlight: "Best balance of cost, service and capacity risk.",
     totalCost: 1184000,
     costChange: -7.8,
-    transportCost: 818000,
+    transportCost: 1216000,
     fixedCost: 312000,
+    variableCost: 228000,
     inventoryCost: 54000,
+    inventoryDays: 24,
     sla: 96.7,
     avgUtil: 65.3,
     maxUtil: 91.0,
     delhiUtil: 91.0,
     capacityRisk: "Low",
     capacityRiskClass: "green",
-    carbonKg: 136000,
+    carbonKg: 231737,
     implementationCost: 25000,
-    implementationTime: "2–3 weeks",
+    implementationTime: "13 mins",
     confidence: "High Confidence",
     stars: 5,
     robustness: "High",
     feasible: true,
     objective: {
-      goal: "Reduce network cost while maintaining SLA ≥95% & mitigating capacity risk",
+      goal: "Reduce total cost while maintaining SLA ≥95% & mitigating capacity risk",
       primaryMetric: "Total Cost",
       constraint: "SLA ≥ 95%, Peak Utilisation ≤ 92%",
     },
@@ -3251,194 +3578,284 @@ const SCENARIOS = [
     },
   },
   {
-    id: "SCN_EXPAND_DELHI",
-    num: 2,
-    name: "Scenario 2: Add Capacity – Delhi NCR",
-    cardTitle: "Add Capacity – Delhi NCR",
-    shortName: "Scen 2",
-    type: "VIABLE",
-    source: "agent",
-    badge: "Viable",
-    badgeClass: "tag-warning",
-    status: "Viable",
-    description: "Add 2,000 units/day capacity at Delhi NCR DC.",
-    highlight: "Eliminates capacity risk with moderate cost impact.",
-    totalCost: 1244000,
-    costChange: -3.2,
-    transportCost: 835000,
-    fixedCost: 351000,
-    inventoryCost: 58000,
-    sla: 97.1,
-    avgUtil: 62.4,
-    maxUtil: 78.0,
-    delhiUtil: 78.0,
-    capacityRisk: "Very Low",
-    capacityRiskClass: "green",
-    carbonKg: 128000,
-    implementationCost: 180000,
-    implementationTime: "4–6 weeks",
-    confidence: "Medium Confidence",
-    stars: 3,
-    robustness: "Medium",
-    feasible: true,
-    objective: {
-      goal: "Eliminate capacity risk via facility expansion",
-      primaryMetric: "Capacity Headroom",
-      constraint: "CapEx Budget ≤ ₹20L",
-    },
-    changes: [
-      { item: "Delhi NCR DC Capacity", change: "+2,000 u/d (10,000 → 12,000 u/d)", note: "Warehouse expansion" },
-      { item: "Capital Expenditure", change: "₹18L upfront CapEx", note: "Fixed facility investment" },
-    ],
-    assumptions: [
-      { label: "Demand Forecast", value: "Long-term growth horizon (+18%)", type: "FORECAST" },
-      { label: "CapEx Amortization", value: "36-month straight line", type: "MODEL FACT" },
-    ],
-    optimisation: {
-      objective: "Minimise Operating Cost + Amortized CapEx",
-      lockedDecisions: "4 Satellite DCs locked",
-      allowedDecisions: "Delhi expansion & lane flows",
-      slaConstraint: "≥95.0%",
-    },
-    robustnessTests: [
-      { test: "+15% Demand Surge", status: "PASS", detail: "Utilisation stays at healthy 78%" },
-      { test: "Downside Demand (-10%)", status: "FAIL", detail: "ROI deteriorates due to idle expanded capacity" },
-    ],
-    aiAssessment: {
-      recommendation: "A viable alternative if long-term demand growth exceeds 20%, but carries higher upfront CapEx risk compared to flow rebalancing.",
-      why: [
-        "Eliminates capacity risk completely (util drops to 78%)",
-        "High SLA performance at 97.1%",
-      ],
-      whatIRejected: "Not recommended as #1 because Flow Rebalancing achieves greater cost reduction (7.8% vs 3.2%) with zero CapEx.",
-    },
-  },
-  {
-    id: "SCN_KOLKATA",
-    num: 3,
-    name: "Scenario 3: Redistribute to Kolkata",
-    cardTitle: "Redistribute to Kolkata",
-    shortName: "Scen 3",
-    type: "VIABLE",
-    source: "agent",
-    badge: "Viable",
-    badgeClass: "tag-warning",
-    status: "Viable",
-    description: "Shift 20% more volume to Kolkata DC.",
-    highlight: "Good SLA, higher transport cost vs recommended.",
-    totalCost: 1232000,
-    costChange: -4.1,
-    transportCost: 852000,
-    fixedCost: 312000,
-    inventoryCost: 68000,
-    sla: 96.2,
-    avgUtil: 66.8,
-    maxUtil: 83.0,
-    delhiUtil: 83.0,
-    capacityRisk: "Low",
-    capacityRiskClass: "green",
-    carbonKg: 139000,
-    implementationCost: 30000,
-    implementationTime: "2–3 weeks",
-    confidence: "Medium Confidence",
-    stars: 3,
-    robustness: "Medium",
-    feasible: true,
-    objective: {
-      goal: "Maximise spare capacity absorption in Eastern corridor",
-      primaryMetric: "Spare Capacity Utilisation",
-      constraint: "SLA ≥ 95%",
-    },
-    changes: [
-      { item: "Kolkata DC Throughput", change: "+1,400 u/d volume shift", note: "Absorb East & Central zones" },
-      { item: "Delhi NCR DC Throughput", change: "-1,000 u/d volume reduction", note: "Relieve capacity" },
-    ],
-    assumptions: [
-      { label: "Handling Rate", value: "₹3.5/unit (Kolkata lowest)", type: "MODEL FACT" },
-      { label: "East Region Demand", value: "Stable (+3% YoY)", type: "FORECAST" },
-    ],
-    optimisation: {
-      objective: "Minimise Network Cost with Eastern Allocation Priority",
-      lockedDecisions: "Current 5 DC Footprint",
-      allowedDecisions: "Cross-regional dispatch arcs",
-      slaConstraint: "≥95.0%",
-    },
-    robustnessTests: [
-      { test: "+15% Demand Surge", status: "PASS", detail: "Utilisation stays below 85%" },
-      { test: "Fuel Cost Spike (+15%)", status: "FAIL", detail: "Longer transit distances increase transport cost penalty by ₹42K" },
-    ],
-    aiAssessment: {
-      recommendation: "Viable operational contingency, but higher transit mileage results in 3.7% higher transport cost than Scenario 1.",
-      why: [
-        "SLA maintained at 96.2%",
-        "Reduces Delhi NCR utilization to 83%",
-      ],
-      whatIRejected: "Inferior to Scenario 1 due to unnecessary inter-regional freight spend.",
-    },
-  },
-  {
     id: "SCN_USER_1",
-    num: "My 1",
-    name: "My Scenario 1: Increase Capacity Delhi NCR",
-    cardTitle: "Increase Capacity Delhi NCR",
-    shortName: "My Scen 1",
+    num: 2,
+    name: "Scenario 2 (My Scen 1)",
+    shortName: "User Created 2 (My Scen 1)",
+    cardTitle: "Scenario 2 (My Scen 1)",
     type: "USER_CREATED",
     source: "user",
     badge: "User Created",
     badgeClass: "tag-primary",
-    status: "Evaluated",
-    description: "Add 2,000 units/day seasonal capacity from 1 Oct to 31 Dec.",
-    highlight: "Custom what-if seasonal capacity expansion.",
-    totalCost: 1210000,
-    costChange: -5.8,
-    transportCost: 824000,
-    fixedCost: 334000,
+    status: "User Created",
+    description: "User customized flow rebalancing with western corridor routing.",
+    highlight: "Custom what-if rebalancing scenario.",
+    totalCost: 1285000,
+    costChange: -7.7,
+    transportCost: 1315000,
+    fixedCost: 312000,
+    variableCost: 241000,
     inventoryCost: 52000,
-    sla: 96.8,
-    avgUtil: 60.8,
-    maxUtil: 75.0,
-    delhiUtil: 75.0,
-    capacityRisk: "Very Low",
-    capacityRiskClass: "green",
-    carbonKg: 130000,
-    implementationCost: 65000,
-    implementationTime: "4–6 weeks",
+    inventoryDays: 13,
+    sla: 94.3,
+    avgUtil: 72.4,
+    maxUtil: 94.0,
+    delhiUtil: 94.0,
+    capacityRisk: "High",
+    capacityRiskClass: "red",
+    carbonKg: 104499,
+    implementationCost: 45000,
+    implementationTime: "21 mins",
     confidence: "Medium Confidence",
     stars: 3,
     robustness: "Medium",
     feasible: true,
     objective: {
-      goal: "Evaluate seasonal 3-month temporary capacity expansion",
+      goal: "Custom flow optimization focused on Western hub distribution",
       primaryMetric: "Total Cost",
+      constraint: "SLA ≥ 94%",
+    },
+    changes: [
+      { item: "Baddi DC → Mumbai DC", change: "+15% Volume (+900 u/d)", note: "Western shift" },
+      { item: "Delhi NCR DC", change: "Unchanged allocation", note: "Maintains current flows" },
+    ],
+    assumptions: [
+      { label: "Demand Forecast", value: "December Forecast (+14.2%)", type: "FORECAST" },
+      { label: "Western Route Rates", value: "₹18.2/unit discounted tariff", type: "EXTERNAL SIGNAL" },
+    ],
+    optimisation: {
+      objective: "Minimise Corridor Freight Spend",
+      lockedDecisions: "Northern DC allocation",
+      allowedDecisions: "Western corridor dispatch",
+      slaConstraint: "≥94.0%",
+    },
+    robustnessTests: [
+      { test: "+15% Demand Surge", status: "FAIL", detail: "Delhi NCR breaches 100% capacity threshold" },
+      { test: "SLA Integrity", status: "FAIL", detail: "SLA is 94.3% (below target ≥95%)" },
+    ],
+    aiAssessment: {
+      recommendation: "Achieves cost improvement but leaves Delhi NCR exposed to December capacity breach.",
+      why: [
+        "Transport cost reaches ₹13.15L (↓7.7%)",
+        "Higher average network utilisation at 72.4%",
+      ],
+      whatIRejected: "Not recommended because it fails the SLA target of ≥95% and leaves capacity risk High.",
+    },
+  },
+  {
+    id: "SCN_USER_2",
+    num: 3,
+    name: "Scenario 3",
+    shortName: "User Created 3 (My Scen 2)",
+    cardTitle: "Scenario 3",
+    type: "CANDIDATE",
+    source: "user",
+    badge: "Candidate",
+    badgeClass: "tag-warning",
+    status: "Candidate",
+    description: "Rapid execution capacity redistribution to Kolkata DC.",
+    highlight: "Lowest implementation risk and fastest execution.",
+    totalCost: 1384000,
+    costChange: -7.8,
+    transportCost: 1429000,
+    fixedCost: 312000,
+    variableCost: 260000,
+    inventoryCost: 62000,
+    inventoryDays: 18,
+    sla: 96.7,
+    avgUtil: 65.3,
+    maxUtil: 90.0,
+    delhiUtil: 90.0,
+    capacityRisk: "Low",
+    capacityRiskClass: "green",
+    carbonKg: 97133,
+    implementationCost: 20000,
+    implementationTime: "10 mins",
+    confidence: "High Confidence",
+    stars: 4,
+    robustness: "High",
+    feasible: true,
+    objective: {
+      goal: "Fastest deployment rebalancing with low operational risk",
+      primaryMetric: "Implementation Time",
       constraint: "SLA ≥ 95%",
     },
     changes: [
-      { item: "Delhi NCR DC Capacity", change: "+2,000 units/day (Seasonal lease)", note: "Effective 1 Oct – 31 Dec 2026" },
-      { item: "Seasonal Lease Cost", change: "₹65K/month temporary buffer", note: "Non-capitalised operational lease" },
+      { item: "Baddi DC → Kolkata DC", change: "+1,200 u/d shift", note: "Eastern capacity absorption" },
+      { item: "Delhi NCR DC", change: "-800 u/d volume reduction", note: "Relieve northern bottleneck" },
     ],
     assumptions: [
-      { label: "Lease Duration", value: "3 Months (Q4 2026)", type: "MODEL FACT" },
-      { label: "Demand Surge", value: "December Forecast (+14.2%)", type: "FORECAST" },
+      { label: "Implementation Speed", value: "10 mins automated WMS switch", type: "MODEL FACT" },
+      { label: "Kolkata Spare Capacity", value: "41% headroom available", type: "MODEL FACT" },
     ],
     optimisation: {
-      objective: "Minimise Total Logistics Cost under Seasonal Buffer",
-      lockedDecisions: "Existing 5 DCs",
-      allowedDecisions: "Seasonal capacity dispatch",
+      objective: "Minimise Execution Friction & Implementation Time",
+      lockedDecisions: "Western & Southern nodes locked",
+      allowedDecisions: "East-North reallocations",
       slaConstraint: "≥95.0%",
     },
     robustnessTests: [
-      { test: "+15% Demand Surge", status: "PASS", detail: "Absorbs peak surge with 25% headroom" },
-      { test: "SLA Integrity", status: "PASS", detail: "Maintains 96.8% on-time delivery" },
+      { test: "+15% Demand Surge", status: "PASS", detail: "Absorbs surge safely; peak util 90%" },
+      { test: "SLA Integrity", status: "PASS", detail: "SLA remains solid at 96.7%" },
     ],
     aiAssessment: {
-      recommendation: "Strong candidate that successfully mitigates peak risk while avoiding full permanent CapEx.",
+      recommendation: "Scenario 3 has the lowest implementation risk but only marginal cost improvement relative to S1.",
       why: [
-        "Cost reduction of 5.8% (₹12.10L vs ₹12.85L baseline)",
-        "Reduces peak utilisation to 75%",
-        "Maintains high SLA at 96.8%",
+        "Fastest implementation timeline: 10 mins",
+        "Delivers 96.7% SLA and Low capacity risk",
+        "Lowest Scope 3 Carbon: 97,133 kg CO₂",
       ],
-      whatIRejected: "Slightly higher cost than Scenario 1 (₹12.10L vs ₹11.84L) due to seasonal lease premiums.",
+      whatIRejected: "Carries higher transport cost (₹14.29L) than Scenario 1 (₹12.16L) due to longer freight routes.",
     },
+  },
+  {
+    id: "SCN_AI_REC_4",
+    num: 4,
+    name: "Scenario 4 (AI Rec)",
+    shortName: "AI Recommended 4 (AI Rec)",
+    cardTitle: "Scenario 4 (AI Rec)",
+    type: "CANDIDATE",
+    source: "agent",
+    badge: "Candidate",
+    badgeClass: "tag-warning",
+    status: "Candidate",
+    description: "Consolidated multi-echelon rail corridor routing.",
+    highlight: "High SLA and low carbon footprint.",
+    totalCost: 1184000,
+    costChange: -5.3,
+    transportCost: 1835000,
+    fixedCost: 312000,
+    variableCost: 215000,
+    inventoryCost: 45000,
+    inventoryDays: 15,
+    sla: 96.7,
+    avgUtil: 65.3,
+    maxUtil: 89.0,
+    delhiUtil: 89.0,
+    capacityRisk: "Low",
+    capacityRiskClass: "green",
+    carbonKg: 97777,
+    implementationCost: 75000,
+    implementationTime: "40 mins",
+    confidence: "Medium Confidence",
+    stars: 3,
+    robustness: "High",
+    feasible: true,
+    objective: {
+      goal: "Multi-echelon distribution consolidation with dedicated rail corridors",
+      primaryMetric: "Total Cost & Carbon",
+      constraint: "SLA ≥ 95%",
+    },
+    changes: [
+      { item: "Northern Rail Hub", change: "+1,500 u/d intermodal transfer", note: "Shift from road to rail" },
+      { item: "Delhi NCR DC Throughput", change: "-1,400 u/d volume reduction", note: "Relieve bottleneck" },
+    ],
+    assumptions: [
+      { label: "Rail Freight Schedule", value: "Fixed 36-hr transit window", type: "MODEL FACT" },
+      { label: "Implementation Ramp-up", value: "40 mins setup in TMS", type: "MODEL FACT" },
+    ],
+    optimisation: {
+      objective: "Minimise Operating Cost + Scope 3 Carbon",
+      lockedDecisions: "Plant production volumes",
+      allowedDecisions: "Intermodal corridor selections",
+      slaConstraint: "≥95.0%",
+    },
+    robustnessTests: [
+      { test: "+15% Demand Surge", status: "PASS", detail: "Intermodal rail capacity absorbs surge" },
+      { test: "SLA Integrity", status: "PASS", detail: "SLA maintained at 96.7%" },
+    ],
+    aiAssessment: {
+      recommendation: "Strong environmental performance with Low capacity risk, but carries higher freight handling costs.",
+      why: [
+        "SLA reaches 96.7%",
+        "Low capacity risk on Delhi NCR DC",
+        "Scope 3 Carbon: 97,777 kg CO₂",
+      ],
+      whatIRejected: "Higher freight cost (₹18.35L) and longer implementation timeline (40 mins) than Scenario 1.",
+    },
+  },
+];
+
+// ─── SCENARIO COMPARISON INSIGHTS (Deterministic AI Assessments) ─
+const SCENARIO_COMPARISON_INSIGHTS = [
+  {
+    id: "SCI_1",
+    num: 1,
+    text: "S3 has the lowest implementation risk but marginal cost improvement.",
+    evidence: "Implementation time: 10 mins (lowest in network); cost change: -7.8% (₹13.84L vs ₹12.85L baseline).",
+    scenarioId: "SCN_USER_2",
+  },
+  {
+    id: "SCI_2",
+    num: 2,
+    text: "S1 balances cost and SLA best, but S2 is cheaper.",
+    evidence: "S1 delivers ₹11.84L total cost with 96.7% SLA and Low capacity risk; passes +15% demand surge.",
+    scenarioId: "SCN_REBALANCE",
+  },
+  {
+    id: "SCI_3",
+    num: 3,
+    text: "S2 increases average network utilization significantly.",
+    evidence: "Average utilization reaches 72.4% with High capacity risk remaining on Delhi NCR.",
+    scenarioId: "SCN_USER_1",
+  },
+  {
+    id: "SCI_4",
+    num: 4,
+    text: "All robust check against 15% stress test.",
+    evidence: "S1, S3, and S4 pass +15% demand surge test without infeasibility.",
+    scenarioId: "SCN_REBALANCE",
+  },
+  {
+    id: "SCI_5",
+    num: 5,
+    text: "All meet target of >=95% SLA except S2.",
+    evidence: "S1 (96.7%), S3 (96.7%), S4 (96.7%) exceed SLA ≥95%; S2 (94.3%) breaches target.",
+    scenarioId: "SCN_USER_1",
+  },
+];
+
+// ─── MULTI-SCENARIO ACTION ITEMS ────────────────────────────
+const SCENARIO_COMPARISON_ACTIONS = [
+  {
+    id: "SCA_1",
+    title: "Validate cost assumptions for Scenario 2.",
+    why: "Scenario 2 achieves ₹13.15L transport cost but assumes discounted line-haul rates on western corridors.",
+    scenarioId: "SCN_USER_1",
+    evidence: "Baddi→Mumbai route rate ₹18.2/unit vs contract benchmark ₹19.5/unit.",
+    nextStep: "Confirm rate card with SpeedFreight India.",
+  },
+  {
+    id: "SCA_2",
+    title: "Conduct deep dive into S3 implementation timeline.",
+    why: "Scenario 3 estimates 10-minute automated dispatch rollout but requires WMS slotting reconfiguration.",
+    scenarioId: "SCN_USER_2",
+    evidence: "Kolkata DC throughput increases by +800 units/day.",
+    nextStep: "Review warehouse floor capacity in Kolkata.",
+  },
+  {
+    id: "SCA_3",
+    title: "Review stakeholder alignment for Recommended Scenario (S1).",
+    why: "Scenario 1 shifts 12% Baddi volume to Kolkata DC to avoid Delhi NCR bottleneck before December.",
+    scenarioId: "SCN_REBALANCE",
+    evidence: "Reduces total network cost by 7.8% (₹8.4L/mo) with 96.7% SLA.",
+    nextStep: "Proceed to operational execution sign-off.",
+  },
+  {
+    id: "SCA_4",
+    title: "Automate network stress testing.",
+    why: "Ensure real-time telemetry from S/4HANA automatically triggers rebalancing alerts if demand exceeds +12%.",
+    scenarioId: "SCN_REBALANCE",
+    evidence: "Peak demand buffer is 1,200 units/day.",
+    nextStep: "Enable automated webhook alerts in TMS.",
+  },
+  {
+    id: "SCA_5",
+    title: "Set up KPI alerts for selected implementation.",
+    why: "Track daily capacity utilization and on-time delivery across North & East corridors during ramp-up.",
+    scenarioId: "SCN_REBALANCE",
+    evidence: "Delhi NCR utilization threshold: 92%; Target SLA: 95.0%.",
+    nextStep: "Configure threshold monitoring in KPI Dashboard.",
   },
 ];
 
@@ -5922,1363 +6339,1284 @@ function renderFacilityLaneFlowsChart(canvasId, connectedLanes, facilityId) {
  * ========================================
  * Executive decision workspace for scenario exploration, MILP evaluation,
  * trade-off comparison, robustness stress-testing, and AI recommendation.
+ * 
+ * Matches approved visual designs:
+ * - Single Scenario Deep-Dive (My Scenarios)
+ * - Multi-Scenario Trade-off Analysis (Scenario Comparison)
  */
 
 
 
-
 // ─── State ──────────────────────────────────────────────────
-let activeScnTab = 'recommended';
+let activeView = 'my-scenarios'; // 'my-scenarios' | 'comparison'
 let selectedScenarioId = 'SCN_REBALANCE';
+let mapMode = 'baseline'; // 'baseline' | 'scenario'
 let activeMetricView = 'key';
+let leafletScenarioMap = null;
+let leafletLayerGroup = null;
 
-// Metric definitions with formatters, groupings, and labels
+// Metric definitions with formatters, provenance, and drilldown data
 const ALL_METRIC_DEFS = {
   totalCost: {
+    key: 'totalCost',
     label: 'Total Cost (₹)',
     fmt: (v) => `₹${(v / 100000).toFixed(2)}L`,
     provenance: 'MODEL FACT',
+    category: 'financial',
   },
   costChange: {
+    key: 'costChange',
     label: 'Cost Change',
     fmt: (v) => (v === 0 ? '—' : `${v < 0 ? '↓ ' : '↑ '}${Math.abs(v)}%`),
-    style: (v) => (v < 0 ? 'color:var(--green);font-weight:700' : ''),
+    cellClass: (v) => (v < 0 ? 'cell-pos' : v > 0 ? 'cell-neg' : ''),
+    category: 'financial',
   },
   sla: {
+    key: 'sla',
     label: 'SLA (On-time)',
     fmt: (v) => `${v}%`,
-    style: (v) => (v >= 95 ? 'color:var(--green);font-weight:700' : 'color:var(--red);font-weight:700'),
+    cellClass: (v) => (v >= 95 ? 'cell-pos' : 'cell-neg'),
     provenance: 'MODEL FACT',
+    category: 'operations',
   },
   capacityRisk: {
+    key: 'capacityRisk',
     label: 'Capacity Risk (Dec)',
     fmt: (v) => v,
-    style: (v) => {
-      if (v === 'High') return 'color:var(--red);font-weight:700';
-      if (v === 'Medium') return 'color:var(--amber);font-weight:700';
-      return 'color:var(--green);font-weight:700';
+    cellClass: (v) => {
+      if (v === 'High') return 'cell-neg';
+      if (v === 'Medium') return 'cell-warn';
+      return 'cell-pos';
     },
     provenance: 'FORECAST',
-  },
-  delhiUtil: {
-    label: 'Utilisation – Delhi NCR',
-    fmt: (v) => `${v}%`,
-    style: (v) => (v > 90 ? 'color:var(--amber);font-weight:700' : 'color:var(--text-1)'),
-    provenance: 'MODEL FACT',
-  },
-  transportCost: {
-    label: 'Transport Freight Cost',
-    fmt: (v) => formatCurrency(v),
-    provenance: 'MODEL FACT',
-  },
-  fixedCost: {
-    label: 'Fixed Facility Cost',
-    fmt: (v) => formatCurrency(v),
-    provenance: 'MODEL FACT',
-  },
-  inventoryCost: {
-    label: 'Inventory Holding Cost',
-    fmt: (v) => formatCurrency(v),
-    provenance: 'MODEL FACT',
+    category: 'operations',
   },
   avgUtil: {
+    key: 'avgUtil',
     label: 'Network Avg Utilisation',
     fmt: (v) => `${v}%`,
+    cellClass: (v) => (v > 70 ? 'cell-neg' : 'cell-pos'),
     provenance: 'MODEL FACT',
+    category: 'operations',
+  },
+  transportCost: {
+    key: 'transportCost',
+    label: 'Transport Costs',
+    fmt: (v) => `₹${(v / 100000).toFixed(2)}L`,
+    provenance: 'MODEL FACT',
+    category: 'financial',
+  },
+  inventoryDays: {
+    key: 'inventoryDays',
+    label: 'Inventory Days',
+    fmt: (v) => `${v}`,
+    provenance: 'MODEL FACT',
+    category: 'financial',
   },
   carbonKg: {
-    label: 'Scope 3 Carbon (kg CO₂)',
-    fmt: (v) => formatNumber(v) + ' kg',
-    provenance: 'MODEL FACT',
+    key: 'carbonKg',
+    label: 'Scope 3 Carbon (kg CO2)',
+    fmt: (v) => formatNumber(v),
+    provenance: 'FORECAST',
+    category: 'sustainability',
   },
   implementationTime: {
+    key: 'implementationTime',
     label: 'Implementation Time',
     fmt: (v) => v,
     provenance: 'MODEL FACT',
+    category: 'sustainability',
   },
-  confidence: {
-    label: 'Robustness / Confidence',
-    fmt: (s) => {
-      if (s.stars === 5) return '★★★★★';
-      if (s.stars === 3) return '★★★☆☆';
-      return s.confidence || '—';
-    },
-    style: () => 'color:var(--primary);letter-spacing:1px',
-    provenance: 'AI ASSESSMENT',
+  fixedCost: {
+    key: 'fixedCost',
+    label: 'Fixed Facility Cost',
+    fmt: (v) => `₹${(v / 100000).toFixed(2)}L`,
+    provenance: 'MODEL FACT',
+    category: 'financial',
+  },
+  inventoryCost: {
+    key: 'inventoryCost',
+    label: 'Inventory Holding Cost',
+    fmt: (v) => `₹${(v / 100000).toFixed(2)}L`,
+    provenance: 'MODEL FACT',
+    category: 'financial',
+  },
+  delhiUtil: {
+    key: 'delhiUtil',
+    label: 'Utilisation – Delhi NCR',
+    fmt: (v) => `${v}%`,
+    cellClass: (v) => (v > 92 ? 'cell-neg' : 'cell-pos'),
+    provenance: 'MODEL FACT',
+    category: 'operations',
   },
 };
 
-let activeMetricKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk', 'delhiUtil', 'implementationTime', 'confidence'];
+const METRIC_VIEWS = {
+  key: ['totalCost', 'costChange', 'sla', 'capacityRisk', 'avgUtil'],
+  financial: ['totalCost', 'costChange', 'transportCost', 'fixedCost', 'inventoryCost', 'inventoryDays'],
+  operations: ['sla', 'capacityRisk', 'avgUtil', 'delhiUtil', 'implementationTime'],
+  all: ['totalCost', 'costChange', 'sla', 'capacityRisk', 'avgUtil', 'transportCost', 'inventoryDays', 'carbonKg', 'implementationTime', 'fixedCost', 'inventoryCost', 'delhiUtil'],
+};
+
+let activeSingleMetricKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk', 'avgUtil'];
+let activeMultiMetricKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk', 'avgUtil', 'transportCost', 'inventoryDays', 'carbonKg', 'implementationTime'];
 
 // ─── Init ───────────────────────────────────────────────────
 function initScenarios() {
-  renderScenarioCardsRow();
-  renderMyScenariosGrid();
-  renderComparisonTable();
-  renderImpactCharts();
+  renderScenarioStrip();
+  renderSingleScenarioTable();
+  renderSingleScenarioInsights();
+  renderSingleScenarioActions();
+  renderMultiScenarioTable();
+  renderComparisonInsights();
+  renderMultiScenarioActions();
   wireScenarioEvents();
+
+  // Initialize visual context map
+  setTimeout(() => {
+    initScenarioLeafletMap();
+  }, 100);
 }
 
-// ─── Render Recommended Scenario Cards ──────────────────────
-function renderScenarioCardsRow() {
-  const container = document.getElementById('scenario-cards-row');
+// ─── Switch Sub-Nav View ────────────────────────────────────
+function switchScenarioView(viewName) {
+  activeView = viewName;
+
+  const btnMy = document.getElementById('tab-btn-my-scenarios');
+  const btnComp = document.getElementById('tab-btn-comparison');
+  const paneMy = document.getElementById('view-my-scenarios');
+  const paneComp = document.getElementById('view-comparison');
+
+  if (viewName === 'my-scenarios') {
+    if (btnMy) btnMy.classList.add('active');
+    if (btnComp) btnComp.classList.remove('active');
+    if (paneMy) paneMy.classList.remove('hidden');
+    if (paneComp) paneComp.classList.add('hidden');
+    if (leafletScenarioMap) {
+      setTimeout(() => leafletScenarioMap.invalidateSize(), 50);
+    }
+  } else {
+    if (btnMy) btnMy.classList.remove('active');
+    if (btnComp) btnComp.classList.add('active');
+    if (paneMy) paneMy.classList.add('hidden');
+    if (paneComp) paneComp.classList.remove('hidden');
+    renderMultiScenarioTable();
+  }
+}
+
+// ─── Render Scenario Selection Strip ────────────────────────
+function renderScenarioStrip() {
+  const container = document.getElementById('scn-strip-container');
   if (!container) return;
 
-  // Filter candidates for top cards
-  const candidateScenarios = SCENARIOS.filter(
-    (s) => s.id === 'SCN_REBALANCE' || s.id === 'SCN_EXPAND_DELHI' || s.id === 'SCN_KOLKATA'
-  );
+  const visibleScenarios = SCENARIOS.filter((s) => s.id !== 'SCN_ACTUAL');
 
-  container.innerHTML = candidateScenarios
+  const cardsHtml = visibleScenarios
     .map((s) => {
       const isSelected = s.id === selectedScenarioId;
-      const isRec = s.id === 'SCN_REBALANCE';
-      const badgeCls = isRec ? 'tag-success' : 'tag-warning';
-      const badgeText = isRec ? 'Recommended' : 'Viable';
+      const isRec = s.type === 'RECOMMENDED' || s.id === 'SCN_REBALANCE';
+      const cardTitle = s.cardTitle || s.name;
 
       return `
-        <div class="scn-rec-card ${isRec ? 'recommended' : ''} ${isSelected ? 'selected' : ''}" data-scn-id="${s.id}">
-          <div>
-            <div class="scn-rec-card-header">
-              <div class="flex items-center gap-xs">
-                <span class="scn-num-badge">${s.num}</span>
-                <span class="tag ${badgeCls}" style="font-size:10px;padding:2px 8px">${badgeText}</span>
+        <div class="scn-strip-card ${isSelected ? 'selected' : ''}" data-scn-id="${s.id}">
+          <div class="scn-strip-top">
+            <div class="scn-strip-left">
+              <div class="scn-strip-checkbox">
+                ${isSelected ? '✓' : ''}
               </div>
-              <span class="text-xs text-muted" style="font-weight:600">MILP Verified</span>
+              <div class="scn-strip-name">${cardTitle}</div>
             </div>
-
-            <div class="scn-card-body">
-              <div class="scn-card-left">
-                <div class="scn-card-title">${s.cardTitle || s.name}</div>
-                <div class="scn-card-desc">${s.description}</div>
-                <div class="scn-card-highlight">${s.highlight || ''}</div>
-              </div>
-
-              <div class="scn-card-right">
-                <div class="scn-stat-unit">
-                  <span class="scn-stat-label">Total Cost</span>
-                  <span class="scn-stat-val positive">${s.costChange ? (s.costChange < 0 ? '↓ ' : '↑ ') + Math.abs(s.costChange) + '%' : '—'}</span>
-                </div>
-                <div class="scn-stat-unit">
-                  <span class="scn-stat-label">SLA</span>
-                  <span class="scn-stat-val">${s.sla}%</span>
-                </div>
-                <div class="scn-stat-unit">
-                  <span class="scn-stat-label">Capacity Risk</span>
-                  <span class="scn-stat-val" style="color:${s.capacityRisk === 'Low' || s.capacityRisk === 'Very Low' ? 'var(--green)' : 'var(--amber)'}">${s.capacityRisk}</span>
-                </div>
-              </div>
-            </div>
+            ${!isRec ? `<span class="scn-strip-close" data-del-id="${s.id}" title="Remove scenario">✕</span>` : '<span style="width:12px"></span>'}
           </div>
-
-          <div class="scn-card-footer">
-            <span class="scn-conf-badge ${isRec ? 'high' : 'medium'}">${s.confidence}</span>
-            <span class="text-xs" style="color:var(--primary);font-weight:600">Inspect Details →</span>
+          <div>
+            <a href="javascript:void(0)" class="scn-strip-inspect-link" data-inspect-id="${s.id}">Click to Inspect →</a>
           </div>
         </div>
       `;
     })
     .join('');
 
-  // Wire card clicks to open detail drawer
-  container.querySelectorAll('.scn-rec-card').forEach((card) => {
-    card.addEventListener('click', () => {
-      const id = card.dataset.scnId;
-      selectedScenarioId = id;
-      renderScenarioCardsRow();
-      openScenarioDrawer(id);
+  container.innerHTML = `
+    ${cardsHtml}
+    <span class="scn-strip-helper-text">select one scenario<br>for deep dive</span>
+    <button class="scn-strip-add-btn" id="btn-strip-add-scenario">
+      <span style="font-size:14px;font-weight:700">+</span>
+      <span>Add new Scenario</span>
+    </button>
+  `;
+
+  // Wire card events
+  container.querySelectorAll('.scn-strip-card').forEach((card) => {
+    card.addEventListener('click', (e) => {
+      if (e.target.classList.contains('scn-strip-close')) {
+        e.stopPropagation();
+        const delId = e.target.dataset.delId;
+        removeScenario(delId);
+        return;
+      }
+      if (e.target.classList.contains('scn-strip-inspect-link')) {
+        e.stopPropagation();
+        const scnId = e.target.dataset.inspectId;
+        selectScenario(scnId);
+        openScenarioDrawer(scnId);
+        return;
+      }
+      const scnId = card.dataset.scnId;
+      selectScenario(scnId);
     });
   });
+
+  const btnStripAdd = document.getElementById('btn-strip-add-scenario');
+  if (btnStripAdd) {
+    btnStripAdd.addEventListener('click', () => openCreateToolbox());
+  }
 }
 
-// ─── Render My Scenarios Grid ───────────────────────────────
-function renderMyScenariosGrid() {
-  const container = document.getElementById('my-scenarios-grid');
+// ─── Select Scenario ────────────────────────────────────────
+function selectScenario(scenarioId) {
+  selectedScenarioId = scenarioId;
+
+  // Update strip highlight
+  document.querySelectorAll('.scn-strip-card').forEach((card) => {
+    const isThis = card.dataset.scnId === scenarioId;
+    card.classList.toggle('selected', isThis);
+    const cb = card.querySelector('.scn-strip-checkbox');
+    if (cb) cb.innerHTML = isThis ? '✓' : '';
+  });
+
+  // Re-render single scenario table
+  renderSingleScenarioTable();
+
+  // Update map button text & layer
+  const btnScenario = document.getElementById('btn-map-scenario');
+  const scnObj = SCENARIOS.find((s) => s.id === scenarioId);
+  if (btnScenario && scnObj) {
+    btnScenario.textContent = scnObj.cardTitle || scnObj.name;
+  }
+  updateScenarioMapLayers();
+
+  // Re-render right rail insights and actions
+  renderSingleScenarioInsights();
+  renderSingleScenarioActions();
+}
+
+// ─── Remove Scenario ────────────────────────────────────────
+function removeScenario(scenarioId) {
+  const idx = SCENARIOS.findIndex((s) => s.id === scenarioId);
+  if (idx !== -1) {
+    SCENARIOS.splice(idx, 1);
+    if (selectedScenarioId === scenarioId) {
+      selectedScenarioId = 'SCN_REBALANCE';
+    }
+    renderScenarioStrip();
+    renderSingleScenarioTable();
+    renderMultiScenarioTable();
+  }
+}
+
+// ─── Render Single Scenario Comparison Table ────────────────
+function renderSingleScenarioTable() {
+  const container = document.getElementById('single-scenario-table-wrap');
   if (!container) return;
 
-  const userScenarios = SCENARIOS.filter((s) => s.source === 'user');
+  const baseline = SCENARIOS.find((s) => s.id === 'SCN_ACTUAL') || SCENARIOS[0];
+  const selected = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[1];
 
-  if (userScenarios.length === 0) {
-    container.innerHTML = `
-      <div class="card" style="padding:16px;text-align:center;color:var(--text-3);font-size:12.5px;grid-column:1 / -1;background:#faf8fd;border:1px dashed var(--border)">
-        No custom what-if scenarios created yet. Use the top <strong>+ Create New Scenario</strong> button to run custom what-if evaluations.
-      </div>
-    `;
-    return;
-  }
+  const rowsHtml = activeSingleMetricKeys
+    .map((key) => {
+      const def = ALL_METRIC_DEFS[key];
+      if (!def) return '';
 
-  container.innerHTML = userScenarios
-    .map(
-      (s) => `
-      <div class="my-scenario-card" data-scn-id="${s.id}" style="cursor:pointer" title="Click to inspect scenario details">
-        <div>
-          <div class="flex items-center justify-between mb-xs">
-            <span class="tag tag-primary" style="font-size:10px">${s.badge || 'User Created'}</span>
-            <span class="text-xs text-muted" style="font-weight:600">MILP Solved</span>
-          </div>
-          <div style="font-size:14px;font-weight:700;color:var(--text-1);margin-bottom:4px">${s.cardTitle || s.name}</div>
-          <div style="font-size:12px;color:var(--text-2);margin-bottom:8px;line-height:1.4">${s.description}</div>
-        </div>
-        <div class="flex items-center justify-between pt-sm" style="border-top:1px solid var(--border-light)">
-          <div class="text-xs">
-            <strong>Cost:</strong> <span style="color:var(--green);font-weight:700">${s.costChange ? (s.costChange < 0 ? '↓ ' : '↑ ') + Math.abs(s.costChange) + '%' : '—'}</span> · 
-            <strong>SLA:</strong> ${s.sla}%
-          </div>
-          <span class="text-xs" style="color:var(--primary);font-weight:700">Click to Inspect →</span>
-        </div>
-      </div>
-    `
-    )
+      const baseVal = baseline[key] !== undefined ? def.fmt(baseline[key]) : '—';
+      const scnVal = selected[key] !== undefined ? def.fmt(selected[key]) : '—';
+      const baseClass = def.cellClass ? def.cellClass(baseline[key]) : '';
+      const scnClass = def.cellClass ? def.cellClass(selected[key]) : '';
+
+      const provBadge = def.provenance
+        ? `<span class="provenance-badge ${def.provenance.toLowerCase().replace(' ', '-')}">${def.provenance}</span>`
+        : '';
+
+      return `
+        <tr class="scn-metric-row" data-metric-key="${key}">
+          <td style="font-weight:600;display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;align-items:center">
+              <span>${def.label}</span>
+              ${provBadge}
+            </div>
+          </td>
+          <td class="${baseClass}" style="text-align:center">${baseVal}</td>
+          <td class="scn-td-rec ${scnClass}" style="text-align:center;font-weight:700">
+            <span>${scnVal}</span>
+            <span class="scn-info-btn" data-drill-metric="${key}" title="Click for mathematical drilldown">ⓘ</span>
+          </td>
+        </tr>
+      `;
+    })
     .join('');
 
-  // Wire card clicks
-  container.querySelectorAll('.my-scenario-card[data-scn-id]').forEach((card) => {
-    card.addEventListener('click', () => {
-      const id = card.dataset.scnId;
-      selectedScenarioId = id;
-      openScenarioDrawer(id);
-    });
-  });
-}
-
-// ─── Render Comparison Table ────────────────────────────────
-function renderComparisonTable() {
-  const container = document.getElementById('scenario-comparison-table-wrap');
-  if (!container) return;
-
-  const displayScenarios = SCENARIOS;
-
-  const html = `
-    <table class="scenario-comparison-table">
+  container.innerHTML = `
+    <table class="scn-data-table">
       <thead>
         <tr>
-          <th>Metrics</th>
-          ${displayScenarios
-      .map((s) => {
-        const isRec = s.id === 'SCN_REBALANCE';
-        let colHeaderClass = isRec ? 'highlight-col' : '';
-        return `
-                <th class="${colHeaderClass}" style="cursor:pointer" data-scn-id="${s.id}" title="Click to view scenario details">
-                  <div style="font-size:11px;color:var(--text-3);font-weight:500">${s.badge || s.type}</div>
-                  <div style="font-size:13px;font-weight:700">${s.shortName || s.name}</div>
-                  ${isRec ? '<span class="tag tag-success" style="font-size:9px;margin-top:3px">Recommended</span>' : ''}
-                </th>
-              `;
-      })
-      .join('')}
+          <th style="width:40%">Metrics</th>
+          <th style="width:30%;text-align:center">Baseline</th>
+          <th class="scn-th-rec" style="width:30%;text-align:center">${selected.cardTitle || selected.name}</th>
         </tr>
       </thead>
       <tbody>
-        ${activeMetricKeys
-      .map((key) => {
-        const def = ALL_METRIC_DEFS[key];
-        if (!def) return '';
-
-        return `
-              <tr>
-                <td>
-                  <div style="display:flex;align-items:center;gap:6px">
-                    <span>${def.label}</span>
-                    ${def.provenance ? `<span class="provenance-badge ${def.provenance.toLowerCase().replace(/\s+/g, '-')}">${def.provenance}</span>` : ''}
-                  </div>
-                </td>
-                ${displayScenarios
-            .map((s) => {
-              const val = s[key];
-              const isRec = s.id === 'SCN_REBALANCE';
-              const customStyle = def.style ? def.style(val) : '';
-              let formattedVal = def.fmt ? (typeof def.fmt === 'function' ? (key === 'confidence' ? def.fmt(s) : def.fmt(val)) : val) : val;
-
-              return `
-                      <td class="${isRec ? 'highlight-col' : ''}" style="${customStyle};cursor:pointer" data-scn-id="${s.id}">
-                        ${formattedVal !== undefined && formattedVal !== null ? formattedVal : '—'}
-                      </td>
-                    `;
-            })
-            .join('')}
-              </tr>
-            `;
-      })
-      .join('')}
+        ${rowsHtml}
       </tbody>
     </table>
   `;
 
-  container.innerHTML = html;
+  // Wire metric drilldown clicks
+  container.querySelectorAll('.scn-info-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const metricKey = btn.dataset.drillMetric;
+      openMetricDrilldown(metricKey, selectedScenarioId);
+    });
+  });
 
-  // Wire column / cell clicks to open drawer
-  container.querySelectorAll('[data-scn-id]').forEach((el) => {
-    el.addEventListener('click', () => {
-      const id = el.dataset.scnId;
-      selectedScenarioId = id;
-      openScenarioDrawer(id);
+  container.querySelectorAll('.scn-metric-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const metricKey = row.dataset.metricKey;
+      openMetricDrilldown(metricKey, selectedScenarioId);
     });
   });
 }
 
-// ─── Render Impact Charts ───────────────────────────────────
-function renderImpactCharts() {
-  renderScenarioCostImpactChart('chart-scn-cost', SCENARIOS);
-  renderScenarioCapacityRiskChart('chart-scn-risk', SCENARIOS);
-  renderScenarioSlaChart('chart-scn-sla', SCENARIOS);
-  renderScenarioFlowMap('container-scn-flow-map', selectedScenarioId);
+// ─── Render Single Scenario Insights ────────────────────────
+function renderSingleScenarioInsights() {
+  const container = document.getElementById('scn-single-insights-list');
+  if (!container) return;
+
+  const scn = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[1];
+
+  let bullets = [
+    'Utilisation projected to exceed 95%',
+    'Cost reduction focused on 2 lanes',
+  ];
+
+  if (scn.id === 'SCN_USER_1') {
+    bullets = [
+      'Transport cost ↓7.7% on western lanes',
+      'Delhi NCR remains at 94% utilisation',
+    ];
+  } else if (scn.id === 'SCN_USER_2') {
+    bullets = [
+      '10-min automated dispatch rollout',
+      'Scope 3 Carbon reduced to 97,133 kg',
+    ];
+  } else if (scn.id === 'SCN_AI_REC_4') {
+    bullets = [
+      'Intermodal rail transport absorbs demand',
+      'SLA maintained at 96.7% with Low risk',
+    ];
+  }
+
+  container.innerHTML = bullets
+    .map((b) => `<div class="scn-rail-bullet-item">• ${b}</div>`)
+    .join('');
+
+  container.querySelectorAll('.scn-rail-bullet-item').forEach((el) => {
+    el.addEventListener('click', () => {
+      openScenarioDrawer(selectedScenarioId);
+    });
+  });
 }
 
-// ─── Open Scenario Detail Drawer ────────────────────────────
-function openScenarioDrawer(scenarioId) {
-  const scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[2];
-  const overlay = document.getElementById('scenario-drawer-overlay');
-  const content = document.getElementById('scenario-drawer-content');
+// ─── Render Single Scenario Action Items ────────────────────
+function renderSingleScenarioActions() {
+  const container = document.getElementById('scn-single-actions-list');
+  if (!container) return;
+
+  const scn = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[1];
+
+  let items = [
+    '1. Rebalance Baddi to Delhi NCR',
+    '2. Review recommended network state',
+  ];
+
+  if (scn.id === 'SCN_USER_1') {
+    items = [
+      '1. Validate line-haul freight rates with carrier',
+      '2. Stress test western corridor headroom',
+    ];
+  } else if (scn.id === 'SCN_USER_2') {
+    items = [
+      '1. Verify Kolkata DC cross-dock throughput',
+      '2. Configure automated dispatch rules in TMS',
+    ];
+  } else if (scn.id === 'SCN_AI_REC_4') {
+    items = [
+      '1. Review rail freight schedules and SLA impact',
+      '2. Approve intermodal corridor allocation',
+    ];
+  }
+
+  container.innerHTML = items
+    .map((item) => `<div class="scn-rail-action-row">${item}</div>`)
+    .join('');
+
+  container.querySelectorAll('.scn-rail-action-row').forEach((el) => {
+    el.addEventListener('click', () => {
+      openScenarioDrawer(selectedScenarioId);
+    });
+  });
+}
+
+// ─── Leaflet Visual Context Map ─────────────────────────────
+function initScenarioLeafletMap() {
+  const mapEl = document.getElementById('scenario-leaflet-map');
+  if (!mapEl || leafletScenarioMap) return;
+
+  leafletScenarioMap = L.map('scenario-leaflet-map', {
+    center: [22.5, 79.5],
+    zoom: 4.2,
+    zoomControl: true,
+    attributionControl: false,
+    scrollWheelZoom: false,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd',
+    maxZoom: 18,
+  }).addTo(leafletScenarioMap);
+
+  leafletLayerGroup = L.layerGroup().addTo(leafletScenarioMap);
+  updateScenarioMapLayers();
+}
+
+function updateScenarioMapLayers() {
+  if (!leafletLayerGroup || !leafletScenarioMap) return;
+  leafletLayerGroup.clearLayers();
+
+  const isScenario = mapMode === 'scenario';
+
+  // Draw facilities as circle markers
+  FACILITIES.forEach((fac) => {
+    const isDelhi = fac.id === 'DC_DELHI';
+
+    let color = '#a855f7'; // Purple Plant
+    if (fac.type === 'DC') {
+      if (isScenario) {
+        color = '#22c55e'; // Green under scenario
+      } else {
+        color = isDelhi ? '#ef4444' : '#f59e0b'; // Red Delhi in baseline
+      }
+    }
+
+    const radius = fac.type === 'Plant' ? 7 : 8;
+    const marker = L.circleMarker([fac.lat, fac.lng], {
+      radius: radius,
+      color: '#ffffff',
+      weight: 2,
+      fillColor: color,
+      fillOpacity: 0.95,
+    }).addTo(leafletLayerGroup);
+
+    marker.bindPopup(`<strong>${fac.name}</strong><br>Type: ${fac.type}<br>Capacity: ${fac.capacity} u/d`);
+  });
+
+  // Draw Flow Lines
+  const flows = [
+    { from: [31.2, 76.8], to: [28.6, 77.2], vol: isScenario ? '2,800' : '4,000', label: 'Baddi → Delhi NCR', changed: isScenario },
+    { from: [31.2, 76.8], to: [22.5, 88.3], vol: isScenario ? '2,200' : '1,400', label: 'Baddi → Kolkata', changed: isScenario },
+    { from: [18.5, 73.8], to: [19.0, 72.8], vol: '3,200', label: 'Pune → Mumbai', changed: false },
+    { from: [13.0, 80.2], to: [12.9, 77.5], vol: '2,500', label: 'Chennai → Bengaluru', changed: false },
+  ];
+
+  flows.forEach((flow) => {
+    const polyline = L.polyline([flow.from, flow.to], {
+      color: flow.changed ? '#6B2FA0' : '#94a3b8',
+      weight: flow.changed ? 3.5 : 2,
+      dashArray: flow.changed ? '6, 4' : null,
+      opacity: 0.85,
+    }).addTo(leafletLayerGroup);
+
+    polyline.bindPopup(`<strong>${flow.label}</strong><br>Flow: ${flow.vol} units/day ${flow.changed ? '(Rebalanced)' : ''}`);
+  });
+
+  // Legend Control in bottom right
+  const legendHtml = `
+    <div style="background:rgba(255,255,255,0.92);padding:6px 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:10.5px;line-height:1.4">
+      <div style="font-weight:700;margin-bottom:2px">Network Legend</div>
+      <div style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#a855f7;display:inline-block"></span> Plant</div>
+      <div style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block"></span> Distribution Centre</div>
+      <div style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:2px;background:#6B2FA0;display:inline-block"></span> ${isScenario ? 'Optimised Corridor Flow' : 'Observed Base Flow'}</div>
+    </div>
+  `;
+
+  if (!leafletScenarioMap._legendControl) {
+    const legendControl = L.control({ position: 'bottomright' });
+    legendControl.onAdd = function () {
+      const div = L.DomUtil.create('div', 'info legend');
+      div.id = 'scn-map-legend-box';
+      div.innerHTML = legendHtml;
+      return div;
+    };
+    legendControl.addTo(leafletScenarioMap);
+    leafletScenarioMap._legendControl = legendControl;
+  } else {
+    const box = document.getElementById('scn-map-legend-box');
+    if (box) box.innerHTML = legendHtml;
+  }
+}
+
+// ─── Render Multi-Scenario Trade-off Analysis Table ─────────
+function renderMultiScenarioTable() {
+  const container = document.getElementById('multi-scenario-table-wrap');
+  if (!container) return;
+
+  const baseline = SCENARIOS.find((s) => s.id === 'SCN_ACTUAL') || SCENARIOS[0];
+  const compareScenarios = SCENARIOS.filter((s) => s.id !== 'SCN_ACTUAL');
+
+  const theadCols = compareScenarios
+    .map((s) => {
+      const isRec = s.type === 'RECOMMENDED' || s.id === 'SCN_REBALANCE';
+      const thClass = isRec ? 'scn-th-rec' : '';
+      const colTitle = s.shortName || s.name;
+      return `<th class="${thClass}" style="text-align:center">${colTitle}</th>`;
+    })
+    .join('');
+
+  const rowsHtml = activeMultiMetricKeys
+    .map((key) => {
+      const def = ALL_METRIC_DEFS[key];
+      if (!def) return '';
+
+      const baseVal = baseline[key] !== undefined ? def.fmt(baseline[key]) : '—';
+      const baseClass = def.cellClass ? def.cellClass(baseline[key]) : '';
+
+      const provBadge = def.provenance
+        ? `<span class="provenance-badge ${def.provenance.toLowerCase().replace(' ', '-')}">${def.provenance}</span>`
+        : '';
+
+      const cellsHtml = compareScenarios
+        .map((s) => {
+          const isRec = s.type === 'RECOMMENDED' || s.id === 'SCN_REBALANCE';
+          const val = s[key] !== undefined ? def.fmt(s[key]) : '—';
+          const cellClass = def.cellClass ? def.cellClass(s[key]) : '';
+          const recColClass = isRec ? 'scn-td-rec' : '';
+
+          return `<td class="${recColClass} ${cellClass}" style="text-align:center">${val}</td>`;
+        })
+        .join('');
+
+      return `
+        <tr class="scn-multi-row" data-metric-key="${key}">
+          <td style="font-weight:600;display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;align-items:center">
+              <span>${def.label}</span>
+              ${provBadge}
+            </div>
+          </td>
+          <td class="${baseClass}" style="text-align:center">${baseVal}</td>
+          ${cellsHtml}
+          <td style="width:24px;text-align:center">
+            <span class="scn-info-btn" data-drill-metric="${key}" title="Click for metric breakdown">ⓘ</span>
+          </td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  container.innerHTML = `
+    <table class="scn-multi-table">
+      <thead>
+        <tr>
+          <th style="width:24%;text-align:left">Metrics</th>
+          <th style="width:15%;text-align:center">Current Baseline</th>
+          ${theadCols}
+          <th style="width:24px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+  `;
+
+  // Wire metric drilldowns
+  container.querySelectorAll('.scn-info-btn').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const metricKey = btn.dataset.drillMetric;
+      openMetricDrilldown(metricKey, selectedScenarioId);
+    });
+  });
+
+  container.querySelectorAll('.scn-multi-row').forEach((row) => {
+    row.addEventListener('click', () => {
+      const metricKey = row.dataset.metricKey;
+      openMetricDrilldown(metricKey, selectedScenarioId);
+    });
+  });
+}
+
+// ─── Render Comparison Insights (View 2) ────────────────────
+function renderComparisonInsights() {
+  const container = document.getElementById('multi-comparison-insights-list');
+  if (!container) return;
+
+  container.innerHTML = SCENARIO_COMPARISON_INSIGHTS.map(
+    (ins) => `
+      <div class="scn-insight-item" data-insight-id="${ins.id}">
+        (${ins.num}) ${ins.text}
+      </div>
+    `
+  ).join('');
+
+  container.querySelectorAll('.scn-insight-item').forEach((el) => {
+    el.addEventListener('click', () => {
+      const insId = el.dataset.insightId;
+      const ins = SCENARIO_COMPARISON_INSIGHTS.find((item) => item.id === insId);
+      if (ins) {
+        openScenarioDrawer(ins.scenarioId);
+      }
+    });
+  });
+}
+
+// ─── Render Multi-Scenario Action Items (View 2) ────────────
+function renderMultiScenarioActions() {
+  const container = document.getElementById('multi-comparison-actions-list');
+  if (!container) return;
+
+  container.innerHTML = SCENARIO_COMPARISON_ACTIONS.map(
+    (act) => `
+      <div class="scn-action-item-row" data-action-id="${act.id}">
+        <input type="checkbox" style="margin-top:2px;cursor:pointer">
+        <span>${act.title}</span>
+      </div>
+    `
+  ).join('');
+
+  container.querySelectorAll('.scn-action-item-row').forEach((el) => {
+    el.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      const actId = el.dataset.actionId;
+      openActionDetailDrawer(actId);
+    });
+  });
+}
+
+// ─── Open Action Detail Drawer ──────────────────────────────
+function openActionDetailDrawer(actionId) {
+  const act = SCENARIO_COMPARISON_ACTIONS.find((a) => a.id === actionId);
+  if (!act) return;
+
+  const overlay = document.getElementById('action-drawer-overlay');
+  const content = document.getElementById('action-drawer-content');
   if (!overlay || !content) return;
 
-  const isRec = scenario.id === 'SCN_REBALANCE';
+  const scn = SCENARIOS.find((s) => s.id === act.scenarioId) || SCENARIOS[1];
 
   content.innerHTML = `
-    <!-- Header -->
-    <div style="margin-bottom:20px">
-      <span class="scn-drawer-tag ${isRec ? 'tag-success' : 'tag-primary'}">${scenario.badge || 'Scenario Specification'}</span>
-      <h2 style="font-size:20px;font-weight:800;color:var(--text-1);margin-bottom:6px">${scenario.name}</h2>
-      <p style="font-size:13px;color:var(--text-2);line-height:1.5">${scenario.description}</p>
+    <div style="margin-bottom:16px">
+      <span class="tag tag-primary" style="font-size:10px;padding:3px 8px">Action Item</span>
+      <h3 style="font-size:18px;font-weight:800;color:var(--text-1);margin-top:6px">${act.title}</h3>
+      <div class="text-xs text-muted">Related Scenario: <strong>${scn.cardTitle || scn.name}</strong></div>
     </div>
 
-    <!-- Section A: Scenario Objective -->
     <div class="scn-section-box">
-      <div class="drawer-section-title" style="margin-top:0">A. Scenario Objective</div>
-      <div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:6px">
-        🎯 ${scenario.objective?.goal || 'Optimize network flows to balance cost and SLA'}
-      </div>
-      <div class="flex items-center gap-md text-xs text-muted">
-        <div><strong>Primary Metric:</strong> ${scenario.objective?.primaryMetric || 'Total Cost'}</div>
-        <div><strong>Constraint:</strong> ${scenario.objective?.constraint || 'SLA ≥ 95%'}</div>
-      </div>
+      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:6px">Why this action exists</h4>
+      <p style="font-size:12.5px;color:var(--text-2);line-height:1.45">${act.why}</p>
     </div>
 
-    <!-- Section B: What Changed -->
     <div class="scn-section-box">
-      <div class="drawer-section-title" style="margin-top:0">B. What Changed (Exact Flow & Facility Modifiers)</div>
-      ${scenario.changes && scenario.changes.length > 0
-      ? scenario.changes
-        .map(
-          (ch) => `
-            <div class="scn-change-row">
-              <div>
-                <div style="font-weight:600;color:var(--text-1)">${ch.item}</div>
-                <div class="text-xs text-muted">${ch.note || ''}</div>
-              </div>
-              <span class="tag tag-purple" style="font-weight:700">${ch.change}</span>
-            </div>
-          `
-        )
-        .join('')
-      : '<div class="text-xs text-muted">No structural changes from baseline observed state.</div>'
-    }
+      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:6px">Mathematical Evidence</h4>
+      <div style="font-size:12px;color:var(--text-2);background:#fff;padding:10px;border-radius:var(--r-sm);border:1px solid var(--border-light)">
+        ${act.evidence}
+      </div>
     </div>
 
-    <!-- Section C: Assumptions & External Signals -->
     <div class="scn-section-box">
-      <div class="drawer-section-title" style="margin-top:0">C. Assumptions & Input Provenance</div>
-      ${scenario.assumptions && scenario.assumptions.length > 0
-      ? scenario.assumptions
-        .map(
-          (asm) => `
-            <div class="evidence-row">
-              <span class="evidence-label">${asm.label}</span>
-              <div class="flex items-center">
-                <span class="evidence-value">${asm.value}</span>
-                <span class="provenance-badge ${asm.type.toLowerCase().replace(/\s+/g, '-')}">${asm.type}</span>
-              </div>
-            </div>
-          `
-        )
-        .join('')
-      : ''
-    }
+      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:6px">Suggested Next Step</h4>
+      <p style="font-size:12.5px;color:var(--text-1);font-weight:600">${act.nextStep}</p>
     </div>
 
-    <!-- Section D: Mathematical Optimisation Settings -->
-    <div class="scn-section-box">
-      <div class="drawer-section-title" style="margin-top:0">D. Optimisation Settings (Deterministic MILP)</div>
-      <div class="evidence-row">
-        <span class="evidence-label">Objective Function</span>
-        <span class="evidence-value">${scenario.optimisation?.objective || 'Minimise Total Logistics Cost'}</span>
-      </div>
-      <div class="evidence-row">
-        <span class="evidence-label">Locked Decisions</span>
-        <span class="evidence-value">${scenario.optimisation?.lockedDecisions || 'Facility footprint'}</span>
-      </div>
-      <div class="evidence-row">
-        <span class="evidence-label">Allowed Variables</span>
-        <span class="evidence-value">${scenario.optimisation?.allowedDecisions || 'Multi-echelon flow volumes'}</span>
-      </div>
-      <div class="evidence-row">
-        <span class="evidence-label">Service Constraint</span>
-        <span class="evidence-value">${scenario.optimisation?.slaConstraint || 'SLA ≥ 95%'}</span>
-      </div>
-      <div style="margin-top:8px;font-size:11px;color:var(--text-3)">
-        Solver: <strong>PuLP / HiGHS Core</strong> · 100% Deterministic Math Source of Truth
-      </div>
-    </div>
-
-    <!-- Section E: Scenario Outcome Scorecard -->
-    <div class="scn-section-box">
-      <div class="drawer-section-title" style="margin-top:0">
-        E. Scenario Outcome <span class="provenance-badge model-fact">MODEL FACT</span>
-      </div>
-      <div class="scn-outcome-grid">
-        <div class="scn-outcome-card">
-          <div class="text-xs text-muted">Total Cost</div>
-          <div style="font-size:15px;font-weight:800;color:var(--primary)">₹${(scenario.totalCost / 100000).toFixed(2)}L</div>
-          <div class="text-xs" style="color:var(--green)">${scenario.costChange ? (scenario.costChange < 0 ? '↓ ' : '↑ ') + Math.abs(scenario.costChange) + '%' : '—'}</div>
-        </div>
-        <div class="scn-outcome-card">
-          <div class="text-xs text-muted">On-Time SLA</div>
-          <div style="font-size:15px;font-weight:800;color:var(--text-1)">${scenario.sla}%</div>
-          <div class="text-xs" style="color:var(--green)">Target: ≥95%</div>
-        </div>
-        <div class="scn-outcome-card">
-          <div class="text-xs text-muted">Delhi NCR Util</div>
-          <div style="font-size:15px;font-weight:800;color:${scenario.delhiUtil > 90 ? 'var(--amber)' : 'var(--green)'}">${scenario.delhiUtil || scenario.maxUtil}%</div>
-          <div class="text-xs text-muted">Ceiling: 100%</div>
-        </div>
-        <div class="scn-outcome-card">
-          <div class="text-xs text-muted">Capacity Risk</div>
-          <div style="font-size:13px;font-weight:700;color:${scenario.capacityRisk === 'Low' || scenario.capacityRisk === 'Very Low' ? 'var(--green)' : 'var(--red)'}">${scenario.capacityRisk}</div>
-        </div>
-        <div class="scn-outcome-card">
-          <div class="text-xs text-muted">Implementation Lead Time</div>
-          <div style="font-size:13px;font-weight:700;color:var(--text-1)">${scenario.implementationTime || '2–3 weeks'}</div>
-        </div>
-        <div class="scn-outcome-card">
-          <div class="text-xs text-muted">Scope 3 Carbon</div>
-          <div style="font-size:13px;font-weight:700;color:var(--text-1)">${formatNumber(scenario.carbonKg)} kg</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Section F: Robustness & Stress Testing -->
-    <div class="scn-section-box">
-      <div class="drawer-section-title" style="margin-top:0">
-        F. Robustness & Stress Tests <span class="provenance-badge model-fact">MODEL FACT</span>
-      </div>
-      ${scenario.robustnessTests && scenario.robustnessTests.length > 0
-      ? scenario.robustnessTests
-        .map(
-          (t) => `
-            <div class="scn-robust-row">
-              <div>
-                <div style="font-weight:600;color:var(--text-1)">${t.status === 'PASS' ? '✓' : '⚠'} ${t.test}</div>
-                <div class="text-xs text-muted">${t.detail}</div>
-              </div>
-              <span class="tag ${t.status === 'PASS' ? 'tag-success' : 'tag-danger'}">${t.status}</span>
-            </div>
-          `
-        )
-        .join('')
-      : '<div class="text-xs text-muted">Standard robustness stress testing passed.</div>'
-    }
-    </div>
-
-    <!-- Section G: NetGravity AI Assessment -->
-    <div class="scn-ai-box">
-      <div class="drawer-section-title" style="margin-top:0;color:var(--primary);border-color:var(--purple-100)">
-        G. NetGravity AI Assessment <span class="provenance-badge ai-assessment">AI ASSESSMENT</span>
-      </div>
-      <p style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:10px;line-height:1.5">
-        "${scenario.aiAssessment?.recommendation || 'Evaluated for optimal trade-off balance.'}"
-      </p>
-
-      <div style="margin-bottom:10px">
-        <div style="font-size:11px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin-bottom:4px">Why I Recommend / Evaluated This:</div>
-        <ul style="padding-left:18px;font-size:12.5px;color:var(--text-2);line-height:1.6">
-          ${(scenario.aiAssessment?.why || ['Provides mathematically optimal cost reduction', 'Meets all operational SLA constraints']).map((w) => `<li>${w}</li>`).join('')}
-        </ul>
-      </div>
-
-      <div>
-        <div style="font-size:11px;font-weight:700;color:var(--text-2);text-transform:uppercase;margin-bottom:4px">What I Rejected & Trade-Offs:</div>
-        <div style="font-size:12px;color:var(--text-3);line-height:1.5;background:rgba(255,255,255,0.7);padding:8px;border-radius:6px">
-          ${scenario.aiAssessment?.whatIRejected || 'No critical disqualifying trade-offs.'}
-        </div>
-      </div>
-    </div>
-
-    <!-- Section H: Actions -->
-    <div class="flex flex-col gap-sm">
-      ${isRec ? '<button class="btn btn-primary btn-block" id="drawer-btn-review-rec" style="padding:12px">Review Formal Recommendation →</button>' : ''}
-      <div class="flex gap-sm">
-        <button class="btn btn-secondary btn-block" id="drawer-btn-run-again">Run Scenario Again</button>
-        <button class="btn btn-ghost btn-block" id="drawer-btn-close">Close Drawer</button>
-      </div>
-      <div style="text-align:center;font-size:11px;color:var(--text-3);margin-top:4px">
-        🔒 Human governance tier: Approval required before production dispatch changes.
-      </div>
+    <div class="flex gap-sm mt-lg">
+      <button class="btn btn-primary" id="btn-action-goto-scenario">Inspect Scenario Details →</button>
+      <button class="btn btn-secondary" id="btn-action-dismiss">Close</button>
     </div>
   `;
 
   overlay.classList.add('visible');
 
-  // Wire drawer buttons
-  document.getElementById('scenario-drawer-close')?.addEventListener('click', closeScenarioDrawer);
-  document.getElementById('drawer-btn-close')?.addEventListener('click', closeScenarioDrawer);
-  document.getElementById('drawer-btn-run-again')?.addEventListener('click', () => {
-    closeScenarioDrawer();
-    openCreateToolbox();
+  document.getElementById('action-drawer-close')?.addEventListener('click', () => {
+    overlay.classList.remove('visible');
   });
-  document.getElementById('drawer-btn-review-rec')?.addEventListener('click', () => {
-    closeScenarioDrawer();
-    // Switch to digital twin or recommendations if available
-    window.location.hash = '#tab-digital-twin';
-    document.querySelector('.nav-item[data-tab="tab-digital-twin"]')?.click();
+  document.getElementById('btn-action-dismiss')?.addEventListener('click', () => {
+    overlay.classList.remove('visible');
+  });
+  document.getElementById('btn-action-goto-scenario')?.addEventListener('click', () => {
+    overlay.classList.remove('visible');
+    selectScenario(act.scenarioId);
+    openScenarioDrawer(act.scenarioId);
   });
 }
 
-function closeScenarioDrawer() {
-  document.getElementById('scenario-drawer-overlay')?.classList.remove('visible');
+// ─── Open Scenario Detail Drawer ────────────────────────────
+function openScenarioDrawer(scenarioId) {
+  const scn = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[1];
+  const overlay = document.getElementById('scenario-drawer-overlay');
+  const content = document.getElementById('scenario-drawer-content');
+  if (!overlay || !content) return;
+
+  const isRec = scn.type === 'RECOMMENDED' || scn.id === 'SCN_REBALANCE';
+  const badgeCls = isRec ? 'tag-success' : 'tag-primary';
+
+  const changesHtml = scn.changes
+    ? scn.changes
+        .map(
+          (c) => `
+          <div class="scn-change-row">
+            <div>
+              <strong>${c.item}</strong>
+              <div class="text-xs text-muted">${c.note || ''}</div>
+            </div>
+            <div style="font-weight:700;color:var(--primary)">${c.change}</div>
+          </div>
+        `
+        )
+        .join('')
+    : '<div class="text-xs text-muted">No configuration changes.</div>';
+
+  const assumptionsHtml = scn.assumptions
+    ? scn.assumptions
+        .map(
+          (a) => `
+          <div class="flex items-center justify-between text-xs py-xs" style="border-bottom:1px solid var(--border-light)">
+            <span style="color:var(--text-2)">${a.label}</span>
+            <div class="flex items-center gap-xs">
+              <span style="font-weight:600">${a.value}</span>
+              <span class="provenance-badge ${a.type.toLowerCase().replace(' ', '-')}">${a.type}</span>
+            </div>
+          </div>
+        `
+        )
+        .join('')
+    : '<div class="text-xs text-muted">No explicit assumptions.</div>';
+
+  const robustnessHtml = scn.robustnessTests
+    ? scn.robustnessTests
+        .map(
+          (t) => `
+          <div class="flex items-center justify-between text-xs py-xs" style="border-bottom:1px solid var(--border-light)">
+            <div>
+              <strong>${t.test}</strong>
+              <div class="text-xs text-muted">${t.detail}</div>
+            </div>
+            <span class="tag ${t.status === 'PASS' ? 'tag-success' : 'tag-danger'}" style="font-size:10px">${t.status}</span>
+          </div>
+        `
+        )
+        .join('')
+    : '';
+
+  content.innerHTML = `
+    <div style="margin-bottom:18px">
+      <div class="flex items-center gap-xs mb-xs">
+        <span class="tag ${badgeCls}" style="font-size:10px;padding:3px 8px">${scn.status}</span>
+        <span class="provenance-badge model-fact">MILP EVALUATED</span>
+      </div>
+      <h3 style="font-size:20px;font-weight:800;color:var(--text-1)">${scn.cardTitle || scn.name}</h3>
+      <p style="font-size:12.5px;color:var(--text-2);margin-top:4px">${scn.description}</p>
+    </div>
+
+    <!-- Objective Box -->
+    <div class="scn-section-box">
+      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:4px">Optimisation Objective</h4>
+      <p style="font-size:12.5px;color:var(--text-2)">${scn.objective?.goal || 'Cost & SLA Optimisation'}</p>
+    </div>
+
+    <!-- Key Metrics Grid -->
+    <div class="grid-2 mb-md" style="gap:var(--space-sm)">
+      <div style="background:var(--bg-subtle);padding:10px 14px;border-radius:var(--r-md);border:1px solid var(--border-light)">
+        <span class="text-xs text-muted">Total Cost</span>
+        <div style="font-size:16px;font-weight:800;color:var(--text-1)">₹${(scn.totalCost / 100000).toFixed(2)}L <span class="text-xs" style="color:var(--green)">(${scn.costChange < 0 ? '↓ ' : '↑ '}${Math.abs(scn.costChange)}%)</span></div>
+      </div>
+      <div style="background:var(--bg-subtle);padding:10px 14px;border-radius:var(--r-md);border:1px solid var(--border-light)">
+        <span class="text-xs text-muted">On-Time SLA</span>
+        <div style="font-size:16px;font-weight:800;color:${scn.sla >= 95 ? 'var(--green)' : 'var(--red)'}">${scn.sla}%</div>
+      </div>
+    </div>
+
+    <!-- What Changed Section -->
+    <div class="scn-section-box">
+      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:8px">What Changed (Network Allocations)</h4>
+      ${changesHtml}
+    </div>
+
+    <!-- Assumptions -->
+    <div class="scn-section-box">
+      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:8px">Assumptions & Boundary Constraints</h4>
+      ${assumptionsHtml}
+    </div>
+
+    <!-- Robustness & Stress Testing -->
+    <div class="scn-section-box">
+      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:8px">Resilience Stress Testing (+15% Demand Surge)</h4>
+      ${robustnessHtml}
+    </div>
+
+    <!-- AI Assessment -->
+    <div class="scn-section-box" style="background:#faf5ff;border-color:var(--purple-200)">
+      <div class="flex items-center gap-xs mb-xs">
+        <span style="font-size:14px">🧠</span>
+        <h4 style="font-size:13px;font-weight:700;color:var(--primary)">NetGravity AI Assessment</h4>
+      </div>
+      <p style="font-size:12.5px;color:var(--text-1);line-height:1.45;margin-bottom:8px">${scn.aiAssessment?.recommendation || ''}</p>
+      <ul style="font-size:12px;color:var(--text-2);padding-left:16px;margin:0;line-height:1.4">
+        ${scn.aiAssessment?.why ? scn.aiAssessment.why.map((w) => `<li>${w}</li>`).join('') : ''}
+      </ul>
+    </div>
+
+    <div class="flex gap-sm mt-lg">
+      <button class="btn btn-primary" id="btn-apply-scenario-drawer" style="flex:1">Proceed with this Scenario</button>
+      <button class="btn btn-secondary" id="btn-close-scenario-drawer">Close</button>
+    </div>
+  `;
+
+  overlay.classList.add('visible');
+
+  document.getElementById('scenario-drawer-close')?.addEventListener('click', () => {
+    overlay.classList.remove('visible');
+  });
+  document.getElementById('btn-close-scenario-drawer')?.addEventListener('click', () => {
+    overlay.classList.remove('visible');
+  });
+  document.getElementById('btn-apply-scenario-drawer')?.addEventListener('click', () => {
+    overlay.classList.remove('visible');
+    selectScenario(scenarioId);
+  });
 }
 
-// ─── Wire Scenario Page Events ──────────────────────────────
-function wireScenarioEvents() {
-  // Floating Menu Scroll Actions
-  document.querySelectorAll('.scn-floating-btn[data-target]').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      document.querySelectorAll('.scn-floating-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      const targetId = btn.dataset.target;
-      const targetEl = document.getElementById(targetId);
-      if (targetEl) {
-        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+// ─── Open Metric Drilldown Modal ────────────────────────────
+function openMetricDrilldown(metricKey, scenarioId) {
+  const modal = document.getElementById('modal-metric-drilldown');
+  const titleEl = document.getElementById('drilldown-title');
+  const bodyEl = document.getElementById('drilldown-body-content');
+  const provEl = document.getElementById('drilldown-provenance-tag');
+  if (!modal || !bodyEl) return;
+
+  const def = ALL_METRIC_DEFS[metricKey];
+  const baseline = SCENARIOS.find((s) => s.id === 'SCN_ACTUAL') || SCENARIOS[0];
+  const scn = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[1];
+
+  if (titleEl) titleEl.textContent = `${def.label} Drill-Down`;
+  if (provEl) provEl.textContent = `PROVENANCE: ${def.provenance || 'MODEL FACT'}`;
+
+  let detailHtml = '';
+
+  if (metricKey === 'totalCost' || metricKey === 'costChange' || metricKey === 'transportCost') {
+    detailHtml = `
+      <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">
+        Mathematical cost decomposition across freight transport, fixed facility handling, and inventory holding.
+      </div>
+      <table class="scn-data-table" style="font-size:12.5px">
+        <thead>
+          <tr>
+            <th>Cost Component</th>
+            <th style="text-align:center">Baseline</th>
+            <th style="text-align:center">${scn.cardTitle || scn.name}</th>
+            <th style="text-align:center">Variance</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Transport Freight Cost</td>
+            <td style="text-align:center">₹${(baseline.transportCost / 100000).toFixed(2)}L</td>
+            <td style="text-align:center">₹${(scn.transportCost / 100000).toFixed(2)}L</td>
+            <td style="text-align:center;color:var(--green);font-weight:700">↓ ${(((baseline.transportCost - scn.transportCost) / baseline.transportCost) * 100).toFixed(1)}%</td>
+          </tr>
+          <tr>
+            <td>Fixed Facility Cost</td>
+            <td style="text-align:center">₹${(baseline.fixedCost / 100000).toFixed(2)}L</td>
+            <td style="text-align:center">₹${(scn.fixedCost / 100000).toFixed(2)}L</td>
+            <td style="text-align:center">0.0%</td>
+          </tr>
+          <tr>
+            <td>Inventory Holding Cost</td>
+            <td style="text-align:center">₹${(baseline.inventoryCost / 100000).toFixed(2)}L</td>
+            <td style="text-align:center">₹${(scn.inventoryCost / 100000).toFixed(2)}L</td>
+            <td style="text-align:center;color:var(--green);font-weight:700">↓ ${(((baseline.inventoryCost - scn.inventoryCost) / baseline.inventoryCost) * 100).toFixed(1)}%</td>
+          </tr>
+          <tr style="font-weight:800;background:var(--bg-subtle)">
+            <td>Total Net Cost</td>
+            <td style="text-align:center">₹${(baseline.totalCost / 100000).toFixed(2)}L</td>
+            <td style="text-align:center">₹${(scn.totalCost / 100000).toFixed(2)}L</td>
+            <td style="text-align:center;color:var(--green)">↓ ${Math.abs(scn.costChange)}%</td>
+          </tr>
+        </tbody>
+      </table>
+    `;
+  } else if (metricKey === 'sla') {
+    detailHtml = `
+      <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">
+        On-time service SLA across North, West, East, and South regional customer clusters.
+      </div>
+      <div class="grid-2 mb-md" style="gap:var(--space-sm)">
+        <div style="background:var(--bg-subtle);padding:10px;border-radius:var(--r-sm);border:1px solid var(--border-light)">
+          <span class="text-xs text-muted">Baseline SLA</span>
+          <div style="font-size:16px;font-weight:800;color:var(--red)">94.3% (Target: ≥95.0%)</div>
+        </div>
+        <div style="background:var(--bg-subtle);padding:10px;border-radius:var(--r-sm);border:1px solid var(--border-light)">
+          <span class="text-xs text-muted">Scenario SLA</span>
+          <div style="font-size:16px;font-weight:800;color:var(--green)">${scn.sla}% (Exceeds Target)</div>
+        </div>
+      </div>
+      <div class="text-xs text-muted">
+        • Baddi → Delhi NCR corridor on-time delivery improves from 91.2% to 96.8% due to reallocated bottleneck volume.
+      </div>
+    `;
+  } else if (metricKey === 'capacityRisk' || metricKey === 'delhiUtil' || metricKey === 'avgUtil') {
+    detailHtml = `
+      <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">
+        Projected peak utilization for December demand surge (+14.2% YoY growth).
+      </div>
+      <div class="grid-2 mb-md" style="gap:var(--space-sm)">
+        <div style="background:var(--bg-subtle);padding:10px;border-radius:var(--r-sm);border:1px solid var(--border-light)">
+          <span class="text-xs text-muted">Delhi NCR DC (Baseline)</span>
+          <div style="font-size:16px;font-weight:800;color:var(--red)">108% (Capacity Breach)</div>
+        </div>
+        <div style="background:var(--bg-subtle);padding:10px;border-radius:var(--r-sm);border:1px solid var(--border-light)">
+          <span class="text-xs text-muted">Delhi NCR DC (Scenario)</span>
+          <div style="font-size:16px;font-weight:800;color:var(--green)">91% (Safe Headroom)</div>
+        </div>
+      </div>
+    `;
+  } else {
+    detailHtml = `
+      <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">
+        Deterministic MILP model output for ${def.label}.
+      </div>
+      <div class="flex items-center justify-between" style="background:var(--bg-subtle);padding:12px;border-radius:var(--r-sm)">
+        <span>Baseline: <strong>${baseline[metricKey] !== undefined ? def.fmt(baseline[metricKey]) : '—'}</strong></span>
+        <span>Scenario: <strong style="color:var(--primary)">${scn[metricKey] !== undefined ? def.fmt(scn[metricKey]) : '—'}</strong></span>
+      </div>
+    `;
+  }
+
+  bodyEl.innerHTML = detailHtml;
+  modal.classList.add('visible');
+
+  document.getElementById('modal-close-drilldown')?.addEventListener('click', () => {
+    modal.classList.remove('visible');
+  });
+  document.getElementById('btn-close-drilldown-bottom')?.addEventListener('click', () => {
+    modal.classList.remove('visible');
+  });
+}
+
+// ─── Open Create Scenario Toolbox ───────────────────────────
+function openCreateToolbox() {
+  const modal = document.getElementById('modal-create-toolbox');
+  if (!modal) return;
+
+  const formBody = document.getElementById('toolbox-form-body');
+  const execView = document.getElementById('agent-execution-view');
+  if (formBody) formBody.classList.remove('hidden');
+  if (execView) execView.classList.add('hidden');
+
+  renderToolboxDynamicFields('CHANGE_CAPACITY');
+  modal.classList.add('visible');
+}
+
+function renderToolboxDynamicFields(type) {
+  const container = document.getElementById('toolbox-dynamic-fields');
+  const badge = document.getElementById('toolbox-active-type-badge');
+  const desc = document.getElementById('toolbox-active-type-desc');
+  if (!container) return;
+
+  if (type === 'CHANGE_CAPACITY') {
+    if (badge) badge.textContent = 'Change Capacity';
+    if (desc) desc.textContent = 'Specify capacity expansion or reduction parameters.';
+    container.innerHTML = `
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Facility</label>
+          <select class="form-select" id="toolbox-facility">
+            <option value="DC_DELHI" selected>Delhi NCR DC</option>
+            <option value="DC_MUMBAI">Mumbai DC</option>
+            <option value="DC_BENGALURU">Bengaluru DC</option>
+            <option value="DC_KOLKATA">Kolkata DC</option>
+            <option value="DC_GUWAHATI">Guwahati DC</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Adjustment Direction</label>
+          <select class="form-select" id="toolbox-direction">
+            <option value="INCREASE" selected>Increase (+)</option>
+            <option value="DECREASE">Decrease (-)</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid-2" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Adjustment Amount (units/day)</label>
+          <input type="number" class="form-input" id="toolbox-amount" value="2000" min="100" max="10000" step="500">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Effective Horizon</label>
+          <select class="form-select" id="toolbox-horizon">
+            <option value="Q4_2026" selected>1 Oct – 31 Dec 2026</option>
+            <option value="ANNUAL">Full Year 2027</option>
+          </select>
+        </div>
+      </div>
+    `;
+  } else if (type === 'OPEN_FACILITY' || type === 'CLOSE_FACILITY') {
+    if (badge) badge.textContent = type === 'OPEN_FACILITY' ? 'Open Facility' : 'Close Facility';
+    if (desc) desc.textContent = 'Evaluate network reconfiguration with facility footprint changes.';
+    container.innerHTML = `
+      <div class="form-group">
+        <label class="form-label">Target Location</label>
+        <select class="form-select" id="toolbox-facility">
+          <option value="DC_AHMEDABAD">Ahmedabad DC (New Candidate)</option>
+          <option value="DC_HYDERABAD">Hyderabad DC (New Candidate)</option>
+          <option value="DC_GUWAHATI">Guwahati DC</option>
+        </select>
+      </div>
+    `;
+  } else {
+    if (badge) badge.textContent = type.replace('_', ' ');
+    if (desc) desc.textContent = 'Configure parameter adjustments for network optimization.';
+    container.innerHTML = `
+      <div class="grid-2" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Adjustment Magnitude (%)</label>
+          <input type="number" class="form-input" id="toolbox-amount" value="10" min="-50" max="50" step="5">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Target Corridor / Zone</label>
+          <select class="form-select" id="toolbox-zone">
+            <option value="NORTH" selected>North India Corridor</option>
+            <option value="WEST">Western Corridor</option>
+            <option value="ALL">Network Wide</option>
+          </select>
+        </div>
+      </div>
+    `;
+  }
+}
+
+// ─── Execute Scenario Creation (Phased Telemetry) ───────────
+function runScenarioCreation() {
+  const formBody = document.getElementById('toolbox-form-body');
+  const execView = document.getElementById('agent-execution-view');
+  if (formBody) formBody.classList.add('hidden');
+  if (execView) execView.classList.remove('hidden');
+
+  const steps = [
+    { id: 'step-phase-1', text: 'Scenario validated ✓' },
+    { id: 'step-phase-2', text: 'Preparing optimisation ✓' },
+    { id: 'step-phase-3', text: 'Running network optimisation ●' },
+    { id: 'step-phase-4', text: 'Evaluating scenario impact ○' },
+    { id: 'step-phase-5', text: 'Stress testing ○' },
+    { id: 'step-phase-6', text: 'Generating assessment ○' },
+  ];
+
+  let currentStep = 1;
+  const interval = setInterval(() => {
+    currentStep++;
+    if (currentStep <= 6) {
+      for (let i = 1; i <= currentStep; i++) {
+        const el = document.getElementById(`step-phase-${i}`);
+        if (el) {
+          if (i < currentStep) {
+            el.innerHTML = `<span>${steps[i - 1].text.replace('●', '✓').replace('○', '✓')}</span><span style="color:var(--green);font-weight:700">✓</span>`;
+            el.classList.remove('text-muted');
+          } else if (i === currentStep) {
+            el.innerHTML = `<span>${steps[i - 1].text.replace('○', '●')}</span><span class="telemetry-spinner"></span>`;
+            el.classList.remove('text-muted');
+          }
+        }
       }
-    });
+    } else {
+      clearInterval(interval);
+      // Finalize and add new scenario object
+      const newNum = SCENARIOS.length;
+      const newId = `SCN_CUSTOM_${Date.now()}`;
+      const newScenario = {
+        id: newId,
+        num: newNum,
+        name: `Scenario ${newNum} (Custom)`,
+        shortName: `User Created ${newNum}`,
+        cardTitle: `Scenario ${newNum}`,
+        type: 'USER_CREATED',
+        source: 'user',
+        badge: 'User Created',
+        badgeClass: 'tag-primary',
+        status: 'Evaluated',
+        description: 'Custom what-if simulation with adjusted network flows.',
+        highlight: 'User-configured MILP optimization run.',
+        totalCost: 1220000,
+        costChange: -5.1,
+        transportCost: 1290000,
+        fixedCost: 312000,
+        variableCost: 235000,
+        inventoryCost: 56000,
+        inventoryDays: 16,
+        sla: 96.5,
+        avgUtil: 66.2,
+        maxUtil: 88.0,
+        delhiUtil: 88.0,
+        capacityRisk: 'Low',
+        capacityRiskClass: 'green',
+        carbonKg: 101200,
+        implementationCost: 35000,
+        implementationTime: '15 mins',
+        confidence: 'High Confidence',
+        stars: 4,
+        robustness: 'High',
+        feasible: true,
+        objective: {
+          goal: 'User customized solver execution',
+          primaryMetric: 'Total Cost',
+          constraint: 'SLA ≥ 95%',
+        },
+        changes: [
+          { item: 'Configured Network Adjustment', change: 'Custom parameters applied', note: 'MILP verified' },
+        ],
+        assumptions: [
+          { label: 'Demand Forecast', value: 'December Peak Forecast', type: 'FORECAST' },
+          { label: 'Solver Execution', value: 'Branch-and-Cut (Exact)', type: 'MODEL FACT' },
+        ],
+        robustnessTests: [
+          { test: '+15% Demand Surge', status: 'PASS', detail: 'Peak utilization stays below 90%' },
+        ],
+        aiAssessment: {
+          recommendation: 'Viable custom scenario with solid SLA and controlled capacity risk.',
+          why: ['Cost ↓5.1%', 'SLA 96.5%', 'Low capacity risk'],
+        },
+      };
+
+      SCENARIOS.push(newScenario);
+
+      setTimeout(() => {
+        const modal = document.getElementById('modal-create-toolbox');
+        if (modal) modal.classList.remove('visible');
+        renderScenarioStrip();
+        selectScenario(newId);
+        renderMultiScenarioTable();
+      }, 500);
+    }
+  }, 350);
+}
+
+// ─── Wire Scenario Events ───────────────────────────────────
+function wireScenarioEvents() {
+  // Sub-Navigation Tabs
+  document.getElementById('tab-btn-my-scenarios')?.addEventListener('click', () => {
+    switchScenarioView('my-scenarios');
+  });
+  document.getElementById('tab-btn-comparison')?.addEventListener('click', () => {
+    switchScenarioView('comparison');
   });
 
-  // Wire inspect optimised base card
-  document.getElementById('card-opt-base')?.addEventListener('click', () => {
-    openScenarioDrawer('SCN_OPTIMISED_BASE');
-  });
-
-  // Setup Scroll Spy for Floating Menu
-  setupScenarioScrollSpy();
-
-  // Top toggle create scenario button
-  document.getElementById('btn-toggle-create-scenario')?.addEventListener('click', () => {
+  // Add Scenario Top Button
+  document.getElementById('btn-add-scenario-top')?.addEventListener('click', () => {
     openCreateToolbox();
   });
 
-  // Close toolbox buttons
-  document.getElementById('btn-close-toolbox')?.addEventListener('click', closeCreateToolbox);
-  document.getElementById('btn-cancel-toolbox')?.addEventListener('click', closeCreateToolbox);
-  document.getElementById('modal-create-toolbox')?.addEventListener('click', (e) => {
-    if (e.target.id === 'modal-create-toolbox') closeCreateToolbox();
+  // Map View Toggle (Baseline vs Scenario)
+  const btnMapBase = document.getElementById('btn-map-baseline');
+  const btnMapScn = document.getElementById('btn-map-scenario');
+
+  if (btnMapBase && btnMapScn) {
+    btnMapBase.addEventListener('click', () => {
+      mapMode = 'baseline';
+      btnMapBase.classList.add('active');
+      btnMapScn.classList.remove('active');
+      updateScenarioMapLayers();
+    });
+
+    btnMapScn.addEventListener('click', () => {
+      mapMode = 'scenario';
+      btnMapScn.classList.add('active');
+      btnMapBase.classList.remove('active');
+      updateScenarioMapLayers();
+    });
+  }
+
+  // Metric View Dropdowns
+  document.getElementById('scn-metric-view-select')?.addEventListener('change', (e) => {
+    const view = e.target.value;
+    activeSingleMetricKeys = METRIC_VIEWS[view] || METRIC_VIEWS.key;
+    renderSingleScenarioTable();
   });
 
-  // Toolbox Step 1 type selector tiles
+  document.getElementById('scn-multi-metric-view-select')?.addEventListener('change', (e) => {
+    const view = e.target.value;
+    activeMultiMetricKeys = METRIC_VIEWS[view] || METRIC_VIEWS.all;
+    renderMultiScenarioTable();
+  });
+
+  // Customize Metrics Modal
+  const btnCustSingle = document.getElementById('btn-customize-metrics');
+  const btnCustMulti = document.getElementById('btn-multi-customize-metrics');
+  const modalCust = document.getElementById('modal-metric-customizer');
+
+  const openCustModal = () => {
+    if (modalCust) modalCust.classList.add('visible');
+  };
+
+  if (btnCustSingle) btnCustSingle.addEventListener('click', openCustModal);
+  if (btnCustMulti) btnCustMulti.addEventListener('click', openCustModal);
+
+  document.getElementById('modal-close-metrics')?.addEventListener('click', () => {
+    if (modalCust) modalCust.classList.remove('visible');
+  });
+  document.getElementById('btn-cancel-metrics')?.addEventListener('click', () => {
+    if (modalCust) modalCust.classList.remove('visible');
+  });
+
+  document.getElementById('btn-save-metrics')?.addEventListener('click', () => {
+    const checked = [];
+    document.querySelectorAll('#modal-metric-customizer input[type="checkbox"]:checked').forEach((cb) => {
+      if (cb.dataset.metric) checked.push(cb.dataset.metric);
+    });
+    if (checked.length > 0) {
+      activeSingleMetricKeys = checked;
+      activeMultiMetricKeys = checked;
+      renderSingleScenarioTable();
+      renderMultiScenarioTable();
+    }
+    if (modalCust) modalCust.classList.remove('visible');
+  });
+
+  document.getElementById('btn-reset-metrics')?.addEventListener('click', () => {
+    activeSingleMetricKeys = METRIC_VIEWS.key;
+    activeMultiMetricKeys = METRIC_VIEWS.all;
+    renderSingleScenarioTable();
+    renderMultiScenarioTable();
+    if (modalCust) modalCust.classList.remove('visible');
+  });
+
+  // Toolbox Modal events
+  document.getElementById('btn-close-toolbox')?.addEventListener('click', () => {
+    document.getElementById('modal-create-toolbox')?.classList.remove('visible');
+  });
+  document.getElementById('btn-cancel-toolbox')?.addEventListener('click', () => {
+    document.getElementById('modal-create-toolbox')?.classList.remove('visible');
+  });
+
   document.querySelectorAll('.scn-type-card').forEach((card) => {
     card.addEventListener('click', () => {
       document.querySelectorAll('.scn-type-card').forEach((c) => c.classList.remove('active'));
       card.classList.add('active');
       const type = card.dataset.type;
-      renderToolboxStep2(type);
+      renderToolboxDynamicFields(type);
     });
   });
 
-  // Toolbox Step 3 Advanced Options accordion
-  document.getElementById('toolbox-adv-toggle')?.addEventListener('click', () => {
-    const content = document.getElementById('toolbox-adv-content');
-    const chevron = document.getElementById('adv-chevron');
-    if (content) {
-      const isHidden = content.classList.contains('hidden');
-      if (isHidden) {
-        content.classList.remove('hidden');
-        if (chevron) chevron.textContent = '▲';
-      } else {
-        content.classList.add('hidden');
-        if (chevron) chevron.textContent = '▼';
-      }
-    }
-  });
-
-  // Toolbox "Run Scenario" button
-  document.getElementById('btn-run-toolbox-scenario')?.addEventListener('click', handleRunScenario);
-
-  // Metric View Select Dropdown
-  document.getElementById('scn-metric-view-select')?.addEventListener('change', (e) => {
-    const val = e.target.value;
-    activeMetricView = val;
-    if (val === 'key') {
-      activeMetricKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk', 'delhiUtil', 'implementationTime', 'confidence'];
-    } else if (val === 'financial') {
-      activeMetricKeys = ['totalCost', 'costChange', 'transportCost', 'fixedCost', 'inventoryCost'];
-    } else if (val === 'operations') {
-      activeMetricKeys = ['sla', 'capacityRisk', 'delhiUtil', 'avgUtil', 'implementationTime'];
-    } else if (val === 'all') {
-      activeMetricKeys = Object.keys(ALL_METRIC_DEFS);
-    }
-    renderComparisonTable();
-  });
-
-  // Customize Metrics Button & Modal
-  document.getElementById('btn-customize-metrics')?.addEventListener('click', () => {
-    document.getElementById('modal-metric-customizer')?.classList.add('visible');
-  });
-
-  document.getElementById('modal-close-metrics')?.addEventListener('click', () => {
-    document.getElementById('modal-metric-customizer')?.classList.remove('visible');
-  });
-
-  document.getElementById('btn-cancel-metrics')?.addEventListener('click', () => {
-    document.getElementById('modal-metric-customizer')?.classList.remove('visible');
-  });
-
-  document.getElementById('btn-save-metrics')?.addEventListener('click', () => {
-    const checked = [];
-    document.querySelectorAll('#modal-metric-customizer input[data-metric]:checked').forEach((cb) => {
-      checked.push(cb.dataset.metric);
-    });
-    if (checked.length > 0) {
-      activeMetricKeys = checked;
-      renderComparisonTable();
-    }
-    document.getElementById('modal-metric-customizer')?.classList.remove('visible');
-  });
-
-  document.getElementById('btn-reset-metrics')?.addEventListener('click', () => {
-    activeMetricKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk', 'delhiUtil', 'implementationTime', 'confidence'];
-    document.querySelectorAll('#modal-metric-customizer input[data-metric]').forEach((cb) => {
-      cb.checked = activeMetricKeys.includes(cb.dataset.metric);
-    });
-    renderComparisonTable();
-    document.getElementById('modal-metric-customizer')?.classList.remove('visible');
-  });
-
-  // Drawer Overlay Click
-  document.getElementById('scenario-drawer-overlay')?.addEventListener('click', (e) => {
-    if (e.target.id === 'scenario-drawer-overlay') closeScenarioDrawer();
-  });
-
-  // View Detailed Results Button
-  document.getElementById('btn-view-detailed-results')?.addEventListener('click', () => {
-    openScenarioDrawer(selectedScenarioId);
+  document.getElementById('btn-run-toolbox-scenario')?.addEventListener('click', () => {
+    runScenarioCreation();
   });
 }
-
-function setupScenarioScrollSpy() {
-  const sectionIds = ['scn-section-recommended', 'scn-section-opt-base', 'scn-section-my-scenarios', 'scn-section-comparison'];
-  const sections = sectionIds.map((id) => document.getElementById(id)).filter(Boolean);
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const id = entry.target.id;
-          document.querySelectorAll('.scn-floating-btn').forEach((btn) => {
-            if (btn.dataset.target === id) {
-              btn.classList.add('active');
-            } else {
-              btn.classList.remove('active');
-            }
-          });
-        }
-      });
-    },
-    { rootMargin: '-10% 0px -70% 0px', threshold: 0 }
-  );
-
-  sections.forEach((s) => observer.observe(s));
-}
-
-// ─── Handle Scenario Execution (Agentic Calibration & Solver) ─
-let currentToolboxType = 'CHANGE_CAPACITY';
-
-const SCENARIO_TYPE_META = {
-  CHANGE_CAPACITY: {
-    badge: 'Change Capacity',
-    desc: 'Adjust capacity at existing distribution centers to resolve bottlenecks or reduce unused overhead.',
-  },
-  OPEN_FACILITY: {
-    badge: 'Open Facility',
-    desc: 'Evaluate adding a new distribution center or cross-dock hub to the network topology.',
-  },
-  CLOSE_FACILITY: {
-    badge: 'Close Facility',
-    desc: 'Decommission a sub-scale node and reassign regional customer demand across surviving DCs.',
-  },
-  CHANGE_DEMAND: {
-    badge: 'Change Demand',
-    desc: 'Stress test network resilience under regional or national demand surges and SKU mix shifts.',
-  },
-  CHANGE_TRANSPORT_COST: {
-    badge: 'Change Transport Cost',
-    desc: 'Simulate diesel fuel shocks, highway toll surcharges, or negotiated freight rate discounts.',
-  },
-  CHANGE_SLA: {
-    badge: 'Change SLA Target',
-    desc: 'Evaluate cost and routing implications of tighter lead-time and on-time service level targets.',
-  },
-};
-
-function renderToolboxStep2(type) {
-  currentToolboxType = type;
-  const container = document.getElementById('toolbox-dynamic-fields');
-  const badgeEl = document.getElementById('toolbox-active-type-badge');
-  const descEl = document.getElementById('toolbox-active-type-desc');
-
-  if (badgeEl) badgeEl.textContent = SCENARIO_TYPE_META[type]?.badge || type;
-  if (descEl) descEl.textContent = SCENARIO_TYPE_META[type]?.desc || '';
-  if (!container) return;
-
-  if (type === 'CHANGE_CAPACITY') {
-    container.innerHTML = `
-      <div class="form-group mb-sm">
-        <label class="form-label">Select Target Facility</label>
-        <select class="form-select" id="tb-cap-facility">
-          <option value="DC_DELHI">Delhi NCR DC (Current: 12,000 u/d · 108% Peak Load)</option>
-          <option value="DC_MUMBAI">Mumbai DC (Current: 10,000 u/d · 85% Load)</option>
-          <option value="DC_BENGALURU">Bengaluru DC (Current: 8,000 u/d · 82% Load)</option>
-          <option value="DC_KOLKATA">Kolkata DC (Current: 6,000 u/d · 68% Load)</option>
-          <option value="DC_GUWAHATI">Guwahati DC (Current: 3,000 u/d · 45% Load)</option>
-        </select>
-      </div>
-
-      <div class="form-group mb-sm">
-        <label class="form-label">Capacity Adjustment Direction & Volume</label>
-        <div class="flex gap-sm">
-          <select class="form-select" id="tb-cap-dir" style="width:130px">
-            <option value="INCREASE">Increase (+)</option>
-            <option value="DECREASE">Decrease (-)</option>
-          </select>
-          <div style="position:relative;flex:1">
-            <input type="number" class="form-input" id="tb-cap-amount" value="2500" step="500" min="500">
-            <span style="position:absolute;right:10px;top:9px;font-size:11px;color:var(--text-3)">units/day</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">CapEx / Setup Cost (₹)</label>
-          <input type="text" class="form-input" id="tb-cap-cost" value="₹2,50,000">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Monthly Fixed Opex Delta</label>
-          <input type="text" class="form-input" id="tb-cap-opex" value="+₹35,000/mo">
-        </div>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">Start Horizon</label>
-          <input type="text" class="form-input" id="tb-cap-start" value="1 Oct 2026">
-        </div>
-        <div class="form-group">
-          <label class="form-label">End Horizon <span class="text-muted">(Optional)</span></label>
-          <input type="text" class="form-input" id="tb-cap-end" value="31 Dec 2026">
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Operational Notes</label>
-        <input type="text" class="form-input" id="tb-cap-notes" value="Expand peak storage buffer to absorb December surge without bottlenecking">
-      </div>
-    `;
-  } else if (type === 'CLOSE_FACILITY') {
-    container.innerHTML = `
-      <div class="form-group mb-sm">
-        <label class="form-label">Select Facility to Decommission / Close</label>
-        <select class="form-select" id="tb-close-facility">
-          <option value="DC_GUWAHATI">Guwahati DC (3,000 u/d · Sub-scale 45% utilisation)</option>
-          <option value="DC_KOLKATA">Kolkata DC (6,000 u/d · Eastern Hub)</option>
-          <option value="DC_BENGALURU">Bengaluru DC (8,000 u/d · Southern Hub)</option>
-          <option value="DC_MUMBAI">Mumbai DC (10,000 u/d · Western Hub)</option>
-          <option value="DC_DELHI">Delhi NCR DC (12,000 u/d · Northern Hub)</option>
-        </select>
-      </div>
-
-      <div class="form-group mb-sm">
-        <label class="form-label">Volume Reassignment Strategy</label>
-        <select class="form-select" id="tb-close-reassign">
-          <option value="MILP_GLOBAL">Re-optimize all network flows via PuLP MILP (Recommended)</option>
-          <option value="NEAREST_DC">Transfer 100% volume to nearest surviving regional DC</option>
-          <option value="DIRECT_PLANT">Direct dispatch from Pune / Baddi plants to demand markets</option>
-        </select>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">Exit / Lease Severance (₹)</label>
-          <input type="text" class="form-input" id="tb-close-exit" value="₹4,50,000">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Monthly Fixed Cost Savings</label>
-          <input type="text" class="form-input" id="tb-close-saving" value="₹1,20,000/mo">
-        </div>
-      </div>
-
-      <div class="form-group mb-sm">
-        <label class="form-label">Effective Closure Date</label>
-        <input type="text" class="form-input" id="tb-close-date" value="1 Nov 2026">
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Strategic Rationale</label>
-        <input type="text" class="form-input" id="tb-close-notes" value="Consolidate low-volume sub-scale node into regional hub to reduce fixed lease overhead">
-      </div>
-    `;
-  } else if (type === 'OPEN_FACILITY') {
-    container.innerHTML = `
-      <div class="form-group mb-sm">
-        <label class="form-label">Candidate DC Location</label>
-        <select class="form-select" id="tb-open-location">
-          <option value="DC_HYDERABAD">Hyderabad DC (South-Central Corridor)</option>
-          <option value="DC_AHMEDABAD">Ahmedabad DC (Gujarat & Western Corridor)</option>
-          <option value="DC_JAIPUR">Jaipur DC (North-West Regional Hub)</option>
-          <option value="DC_CHENNAI">Chennai DC (Southern Coastal Corridor)</option>
-          <option value="DC_LUCKNOW">Lucknow DC (Central Uttar Pradesh Hub)</option>
-          <option value="DC_INDORE">Indore DC (Central India Transit Hub)</option>
-        </select>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">Planned Capacity</label>
-          <div style="position:relative">
-            <input type="number" class="form-input" id="tb-open-capacity" value="6000" step="1000">
-            <span style="position:absolute;right:10px;top:9px;font-size:11px;color:var(--text-3)">units/day</span>
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Facility Tier</label>
-          <select class="form-select" id="tb-open-tier">
-            <option value="REGIONAL">Regional Distribution Hub</option>
-            <option value="CROSSDOCK">Urban Fast Cross-Dock</option>
-            <option value="SATELLITE">Satellite Micro-Fulfillment</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">Initial Fitout CapEx (₹)</label>
-          <input type="text" class="form-input" id="tb-open-capex" value="₹22,00,000">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Fixed Monthly Opex (₹)</label>
-          <input type="text" class="form-input" id="tb-open-opex" value="₹2,80,000/mo">
-        </div>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">Target Go-Live Date</label>
-          <input type="text" class="form-input" id="tb-open-date" value="1 Dec 2026">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Primary Inbound Source</label>
-          <select class="form-select" id="tb-open-source">
-            <option value="PUNE">Pune Plant (High Capacity)</option>
-            <option value="BADDI">Baddi Plant (Northern Inbound)</option>
-            <option value="DUAL">Dual-Source Allocation</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Expansion Objective</label>
-        <input type="text" class="form-input" id="tb-open-notes" value="Offload regional demand and shorten last-mile delivery times">
-      </div>
-    `;
-  } else if (type === 'CHANGE_DEMAND') {
-    container.innerHTML = `
-      <div class="form-group mb-sm">
-        <label class="form-label">Target Market / Region</label>
-        <select class="form-select" id="tb-dem-region">
-          <option value="ALL">All Markets (National Demand Surge · +14.2% Base)</option>
-          <option value="NORTH">North Region (Delhi NCR, Lucknow, Jaipur)</option>
-          <option value="WEST">West Region (Mumbai, Pune, Ahmedabad)</option>
-          <option value="EAST">East Region (Kolkata, Patna, Guwahati)</option>
-          <option value="SOUTH">South Region (Bengaluru, Chennai, Hyderabad)</option>
-        </select>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">Demand Surge Magnitude (%)</label>
-          <input type="number" class="form-input" id="tb-dem-pct" value="15.0" step="2.5" min="1" max="50">
-        </div>
-        <div class="form-group">
-          <label class="form-label">SKU Category Focus</label>
-          <select class="form-select" id="tb-dem-sku">
-            <option value="ALL">All SKU Categories (Uniform Surge)</option>
-            <option value="FAST">High-Velocity SKUs</option>
-            <option value="SEASONAL">Seasonal & Promotional Lines</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">Forecast Horizon</label>
-          <select class="form-select" id="tb-dem-horizon">
-            <option value="DEC_PEAK">December Peak Surge (+14.2%)</option>
-            <option value="Q4_SUSTAINED">Q4 Full Quarter Sustained</option>
-            <option value="POST_FESTIVAL">Post-Festival High Baseline</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Demand Confidence Interval</label>
-          <select class="form-select" id="tb-dem-ci">
-            <option value="P90">P90 Upper Bound (Stress Test)</option>
-            <option value="P50">P50 Mean Expected</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Simulation Notes</label>
-        <input type="text" class="form-input" id="tb-dem-notes" value="Evaluate supply chain resilience against extreme peak season surge">
-      </div>
-    `;
-  } else if (type === 'CHANGE_TRANSPORT_COST') {
-    container.innerHTML = `
-      <div class="form-group mb-sm">
-        <label class="form-label">Target Corridor / Echelon</label>
-        <select class="form-select" id="tb-freight-lane">
-          <option value="ALL_LANES">All Active Transportation Lanes (National Fuel Shock)</option>
-          <option value="PRIMARY">Primary Inbound (Plant → DC Long-Haul Corridors)</option>
-          <option value="SECONDARY">Secondary Outbound (DC → Customer Demand Markets)</option>
-          <option value="EASTERN">Eastern Corridor (Baddi → Kolkata / Guwahati)</option>
-          <option value="NORTHERN">Northern Trunk (Baddi → Delhi NCR / Lucknow)</option>
-        </select>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">Rate Adjustment Direction & %</label>
-          <div class="flex gap-sm">
-            <select class="form-select" id="tb-freight-dir" style="width:130px">
-              <option value="INCREASE">Rate Hike (+)</option>
-              <option value="DECREASE">Discount (-)</option>
-            </select>
-            <input type="number" class="form-input" id="tb-freight-pct" value="12.5" step="1.0" min="0">
-          </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Primary Cost Driver</label>
-          <select class="form-select" id="tb-freight-driver">
-            <option value="DIESEL">Diesel Price Increase (+8.5%)</option>
-            <option value="TOLL">Expressway Toll & FASTag Tariff Hike</option>
-            <option value="CONTRACT">Annual Carrier Contract Renegotiation</option>
-            <option value="GREEN">Green Logistics Rail-Shift Incentive</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Corridor Cost Notes</label>
-        <input type="text" class="form-input" id="tb-freight-notes" value="Test modal-shift viability under volatile diesel fuel prices">
-      </div>
-    `;
-  } else if (type === 'CHANGE_SLA') {
-    container.innerHTML = `
-      <div class="form-group mb-sm">
-        <label class="form-label">Target Customer Tier</label>
-        <select class="form-select" id="tb-sla-tier">
-          <option value="ALL">Network-Wide Standard (All Customer Demand)</option>
-          <option value="METRO">Tier 1 Metro Customers (Delhi, Mumbai, Bengaluru)</option>
-          <option value="REGIONAL">Tier 2 & 3 Regional Markets</option>
-        </select>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">Target On-Time SLA (%)</label>
-          <input type="number" class="form-input" id="tb-sla-target" value="98.0" step="0.5" min="85" max="99.9">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Maximum Delivery Window</label>
-          <select class="form-select" id="tb-sla-window">
-            <option value="24">24 Hours (Next Day Service)</option>
-            <option value="48">48 Hours (Standard Regional)</option>
-            <option value="72">72 Hours (Extended Zone)</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-        <div class="form-group">
-          <label class="form-label">Non-Delivery Penalty (₹/unit)</label>
-          <input type="number" class="form-input" id="tb-sla-penalty" value="75" step="10">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Routing Priority Constraint</label>
-          <select class="form-select" id="tb-sla-strict">
-            <option value="HARD">Strict Feasibility (Zero SLA Breaches Allowed)</option>
-            <option value="SOFT">Soft Penalty Optimization (Cost-Service Trade-off)</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">SLA Strategy Notes</label>
-        <input type="text" class="form-input" id="tb-sla-notes" value="Elevate premium service commitment to gain retail market share">
-      </div>
-    `;
-  }
-}
-
-function openCreateToolbox() {
-  document.getElementById('modal-create-toolbox')?.classList.add('visible');
-  document.getElementById('toolbox-form-body')?.classList.remove('hidden');
-  document.getElementById('agent-execution-view')?.classList.add('hidden');
-
-  // Reset to default type
-  document.querySelectorAll('.scn-type-card').forEach((c, idx) => {
-    if (idx === 0) c.classList.add('active');
-    else c.classList.remove('active');
-  });
-
-  renderToolboxStep2('CHANGE_CAPACITY');
-}
-
-function closeCreateToolbox() {
-  document.getElementById('modal-create-toolbox')?.classList.remove('visible');
-}
-
-// ─── Run Scenario (Solver Pipeline Simulation) ──────────────
-function handleRunScenario() {
-  const formBody = document.getElementById('toolbox-form-body');
-  const agentView = document.getElementById('agent-execution-view');
-  const progressBar = document.getElementById('agent-progress-bar-fill');
-  const telemetryBox = document.getElementById('agent-telemetry-box');
-  const statusText = document.getElementById('agent-live-status-text');
-
-  if (!agentView || !telemetryBox) return;
-
-  // Build Scenario Attributes Based on Specific Type
-  let scnName = '';
-  let scnCardTitle = '';
-  let scnDesc = '';
-  let scnHighlight = '';
-  let totalCost = 1205000;
-  let costChange = -6.2;
-  let sla = 97.2;
-  let delhiUtil = 78.0;
-  let avgUtil = 62.0;
-  let capacityRisk = 'Low';
-  let capacityRiskClass = 'green';
-  let capEx = 250000;
-  let implementationTime = '3–4 weeks';
-  let changesList = [];
-  let whyBullets = [];
-  let rejectionReason = '';
-
-  if (currentToolboxType === 'CHANGE_CAPACITY') {
-    const facSelect = document.getElementById('tb-cap-facility');
-    const facName = facSelect?.options[facSelect.selectedIndex]?.text.split('(')[0].trim() || 'Delhi NCR DC';
-    const dir = document.getElementById('tb-cap-dir')?.value || 'INCREASE';
-    const amount = parseInt(document.getElementById('tb-cap-amount')?.value || '2500', 10);
-    const notes = document.getElementById('tb-cap-notes')?.value || 'Seasonal capacity adjustment';
-
-    scnName = `User: ${dir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facName} (+${formatNumber(amount)} u/d)`;
-    scnCardTitle = `${dir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facName}`;
-    scnDesc = `${dir === 'INCREASE' ? 'Added' : 'Reduced'} capacity by ${formatNumber(amount)} units/day at ${facName}.`;
-    scnHighlight = notes;
-    totalCost = dir === 'INCREASE' ? 1205000 : 1248000;
-    costChange = dir === 'INCREASE' ? -6.2 : -2.9;
-    sla = dir === 'INCREASE' ? 97.4 : 95.1;
-    delhiUtil = facName.includes('Delhi') ? (dir === 'INCREASE' ? 84.0 : 112.0) : 91.0;
-    capEx = 250000;
-    implementationTime = '3–4 weeks';
-    changesList = [{ item: `${facName} Capacity`, change: `${dir === 'INCREASE' ? '+' : '-'}${formatNumber(amount)} units/day`, note: notes }];
-    whyBullets = [
-      `Resolves ${facName} throughput constraints during peak December surge.`,
-      `Maintains healthy 97.4% on-time delivery across northern retail hubs.`,
-      `Total recurring logistics cost drops to ₹12.05L (↓6.2% vs baseline).`,
-    ];
-    rejectionReason = 'Requires minor Capex for temporary facility racking, unlike pure routing optimization.';
-  } else if (currentToolboxType === 'CLOSE_FACILITY') {
-    const facSelect = document.getElementById('tb-close-facility');
-    const facName = facSelect?.options[facSelect.selectedIndex]?.text.split('(')[0].trim() || 'Guwahati DC';
-    const strat = document.getElementById('tb-close-reassign')?.options[document.getElementById('tb-close-reassign')?.selectedIndex]?.text || 'Re-optimize via MILP';
-    const notes = document.getElementById('tb-close-notes')?.value || 'Decommission sub-scale node';
-
-    scnName = `User: Decommission ${facName}`;
-    scnCardTitle = `Decommission ${facName}`;
-    scnDesc = `Closed ${facName} node; redistributed regional flow using strategy: ${strat}.`;
-    scnHighlight = notes;
-    totalCost = 1260000;
-    costChange = -1.9;
-    sla = 94.8;
-    delhiUtil = 93.0;
-    capacityRisk = 'Medium';
-    capacityRiskClass = 'amber';
-    capEx = 450000;
-    implementationTime = '6–8 weeks';
-    changesList = [
-      { item: `${facName} Status`, change: 'Decommissioned (0 units/day)', note: notes },
-      { item: 'Flow Reassignment', change: strat, note: 'Absorbed by adjacent regional network' },
-    ];
-    whyBullets = [
-      `Eliminates ₹1.20L/month in fixed facility lease and warehouse overhead.`,
-      `Slightly increases secondary outbound transit distances to peripheral markets.`,
-      `Net network cost is ₹12.60L with 94.8% SLA.`,
-    ];
-    rejectionReason = 'Higher freight miles to remote tier-3 markets slightly degrades SLA compared to keeping regional presence.';
-  } else if (currentToolboxType === 'OPEN_FACILITY') {
-    const locSelect = document.getElementById('tb-open-location');
-    const locName = locSelect?.options[locSelect.selectedIndex]?.text.split('(')[0].trim() || 'Hyderabad DC';
-    const cap = parseInt(document.getElementById('tb-open-capacity')?.value || '6000', 10);
-    const notes = document.getElementById('tb-open-notes')?.value || 'Commission candidate DC';
-
-    scnName = `User: Open ${locName} (${formatNumber(cap)} u/d)`;
-    scnCardTitle = `Open ${locName}`;
-    scnDesc = `Commissioned new ${locName} with ${formatNumber(cap)} units/day capacity.`;
-    scnHighlight = notes;
-    totalCost = 1195000;
-    costChange = -7.0;
-    sla = 98.1;
-    delhiUtil = 88.0;
-    capacityRisk = 'Low';
-    capacityRiskClass = 'green';
-    capEx = 2200000;
-    implementationTime = '8–12 weeks';
-    changesList = [
-      { item: `New Node: ${locName}`, change: `+${formatNumber(cap)} units/day capacity`, note: notes },
-      { item: 'Network Footprint', change: 'Expanded from 5 to 6 DCs', note: 'New South-Central Hub' },
-    ];
-    whyBullets = [
-      `Significantly reduces secondary delivery lead times in regional corridor.`,
-      `Achieves best-in-class 98.1% on-time SLA.`,
-      `Unlocks ₹11.95L total monthly cost but requires ₹22L initial setup CapEx.`,
-    ];
-    rejectionReason = 'Requires substantial upfront capital expenditure (₹22L) and 2–3 months construction timeline.';
-  } else if (currentToolboxType === 'CHANGE_DEMAND') {
-    const regSelect = document.getElementById('tb-dem-region');
-    const regName = regSelect?.options[regSelect.selectedIndex]?.text.split('(')[0].trim() || 'All Markets';
-    const pct = parseFloat(document.getElementById('tb-dem-pct')?.value || '15.0');
-    const notes = document.getElementById('tb-dem-notes')?.value || 'Demand surge resilience test';
-
-    scnName = `User: ${regName} Demand Surge (+${pct}%)`;
-    scnCardTitle = `Surge (+${pct}%): ${regName}`;
-    scnDesc = `Simulated +${pct}% demand increase across ${regName}.`;
-    scnHighlight = notes;
-    totalCost = 1380000;
-    costChange = +7.4;
-    sla = 95.6;
-    delhiUtil = 96.5;
-    capacityRisk = 'Medium';
-    capacityRiskClass = 'amber';
-    capEx = 0;
-    implementationTime = 'Immediate (Routing)';
-    changesList = [{ item: `${regName} Demand`, change: `+${pct}% Surge`, note: notes }];
-    whyBullets = [
-      `Stress-tests network feasibility under severe peak surge volumes.`,
-      `Dynamic flow reallocations prevent catastrophic bottlenecking.`,
-      `Network delivers 95.6% SLA even under elevated throughput pressure.`,
-    ];
-    rejectionReason = 'Stress scenario representing higher total volume expenditure.';
-  } else if (currentToolboxType === 'CHANGE_TRANSPORT_COST') {
-    const laneSelect = document.getElementById('tb-freight-lane');
-    const laneName = laneSelect?.options[laneSelect.selectedIndex]?.text.split('(')[0].trim() || 'All Active Lanes';
-    const dir = document.getElementById('tb-freight-dir')?.value || 'INCREASE';
-    const pct = parseFloat(document.getElementById('tb-freight-pct')?.value || '12.5');
-    const notes = document.getElementById('tb-freight-notes')?.value || 'Freight rate shift';
-
-    scnName = `User: Freight ${dir === 'INCREASE' ? 'Hike' : 'Discount'} (${dir === 'INCREASE' ? '+' : '-'}${pct}%)`;
-    scnCardTitle = `Freight ${dir === 'INCREASE' ? 'Hike' : 'Drop'} (${pct}%)`;
-    scnDesc = `Adjusted transportation tariffs by ${dir === 'INCREASE' ? '+' : '-'}${pct}% across ${laneName}.`;
-    scnHighlight = notes;
-    totalCost = dir === 'INCREASE' ? 1345000 : 1152000;
-    costChange = dir === 'INCREASE' ? +4.7 : -10.3;
-    sla = 96.5;
-    delhiUtil = 89.0;
-    capEx = 0;
-    implementationTime = 'Immediate';
-    changesList = [{ item: `${laneName} Freight Rate`, change: `${dir === 'INCREASE' ? '+' : '-'}${pct}%`, note: notes }];
-    whyBullets = [
-      `Re-evaluates lane selection and modal trade-offs under modified tariff curves.`,
-      `MILP solver re-routes marginal volume to minimize overall cost impact.`,
-      `Maintains stable 96.5% on-time SLA.`,
-    ];
-    rejectionReason = 'Parametric cost sensitivity test.';
-  } else if (currentToolboxType === 'CHANGE_SLA') {
-    const targetSla = parseFloat(document.getElementById('tb-sla-target')?.value || '98.0');
-    const win = document.getElementById('tb-sla-window')?.value || '24';
-    const notes = document.getElementById('tb-sla-notes')?.value || 'Tighter SLA target';
-
-    scnName = `User: Strict SLA Target (${targetSla}% / ${win}h)`;
-    scnCardTitle = `Strict SLA (${targetSla}%)`;
-    scnDesc = `Enforced hard ${targetSla}% SLA target with maximum ${win}-hour delivery window.`;
-    scnHighlight = notes;
-    totalCost = 1295000;
-    costChange = +0.8;
-    sla = targetSla;
-    delhiUtil = 91.5;
-    capEx = 0;
-    implementationTime = '1–2 weeks';
-    changesList = [
-      { item: 'Minimum SLA Target', change: `${targetSla}%`, note: notes },
-      { item: 'Lead Time Window', change: `Max ${win} hours`, note: 'Fast-lane prioritization' },
-    ];
-    whyBullets = [
-      `Prioritizes direct line-haul connections to fulfill tight ${win}-hour commitments.`,
-      `Guarantees ${targetSla}% on-time customer fulfillment.`,
-      `Marginal freight cost increase of +0.8% to satisfy expedited dispatch requirements.`,
-    ];
-    rejectionReason = 'Tighter lead times increase premium dedicated vehicle runs.';
-  }
-
-  // Transition to Agentic Execution Screen
-  if (formBody) formBody.classList.add('hidden');
-  agentView.classList.remove('hidden');
-  if (progressBar) progressBar.style.width = '15%';
-  if (statusText) statusText.textContent = 'Agent initializing mathematical graph and parameter bounds...';
-
-  telemetryBox.innerHTML = `
-    <div class="telemetry-row">
-      <span class="telemetry-spinner"></span>
-      <span class="telemetry-tag agent">AGENT</span>
-      <span>Ingesting scenario specifications: <strong>${scnCardTitle}</strong>...</span>
-    </div>
-  `;
-
-  // Step 2 (700ms): Echelon calibration
-  setTimeout(() => {
-    if (progressBar) progressBar.style.width = '40%';
-    if (statusText) statusText.textContent = 'Calibrating multi-echelon network balance & candidate arcs...';
-    telemetryBox.innerHTML += `
-      <div class="telemetry-row">
-        <span class="telemetry-spinner"></span>
-        <span class="telemetry-tag agent">AGENT</span>
-        <span>Calibrating 380 active transportation corridors & facility mass-balance...</span>
-      </div>
-    `;
-    telemetryBox.scrollTop = telemetryBox.scrollHeight;
-  }, 700);
-
-  // Step 3 (1500ms): Solving MILP
-  setTimeout(() => {
-    if (progressBar) progressBar.style.width = '68%';
-    if (statusText) statusText.textContent = 'Executing Mixed-Integer Linear Program in PuLP (HiGHS Backend)...';
-    telemetryBox.innerHTML += `
-      <div class="telemetry-row">
-        <span class="telemetry-spinner"></span>
-        <span class="telemetry-tag milp">MILP</span>
-        <span>Formulating dual simplex & branch-and-cut optimization model...</span>
-      </div>
-    `;
-    telemetryBox.scrollTop = telemetryBox.scrollHeight;
-  }, 1500);
-
-  // Step 4 (2300ms): Optimal Solution & Stress Testing
-  setTimeout(() => {
-    if (progressBar) progressBar.style.width = '88%';
-    if (statusText) statusText.textContent = 'Running resilience stress tests (+15% surge & lane disruptions)...';
-    telemetryBox.innerHTML += `
-      <div class="telemetry-row">
-        <span class="telemetry-tag milp" style="background:#10b981">OPTIMAL</span>
-        <span>Deterministic solution found in 0.36s (Cost: ₹${(totalCost / 100000).toFixed(2)}L, SLA: ${sla}%) ✓</span>
-      </div>
-      <div class="telemetry-row">
-        <span class="telemetry-spinner"></span>
-        <span class="telemetry-tag stress">CHALLENGER</span>
-        <span>Simulating resilience stress test... PASS (SLA maintained ≥95.0%) ✓</span>
-      </div>
-    `;
-    telemetryBox.scrollTop = telemetryBox.scrollHeight;
-  }, 2300);
-
-  // Step 5 (3100ms): AI Recommendation Synthesis
-  setTimeout(() => {
-    if (progressBar) progressBar.style.width = '100%';
-    if (statusText) statusText.textContent = 'AI synthesis complete. Formatting executive scorecard...';
-    telemetryBox.innerHTML += `
-      <div class="telemetry-row">
-        <span class="telemetry-tag done">SYNTHESIS</span>
-        <span>Synthesized trade-off provenance: Evaluated and ready for executive inspection.</span>
-      </div>
-    `;
-    telemetryBox.scrollTop = telemetryBox.scrollHeight;
-  }, 3100);
-
-  // Step 6 (3800ms): Finish, append scenario and open drawer
-  setTimeout(() => {
-    const userScnCount = SCENARIOS.filter((s) => s.source === 'user').length + 1;
-    const newScnId = `SCN_CUSTOM_${Date.now()}`;
-    const newScenario = {
-      id: newScnId,
-      num: `My ${userScnCount}`,
-      name: scnName,
-      cardTitle: scnCardTitle,
-      shortName: `My Scen ${userScnCount}`,
-      type: 'USER_CREATED',
-      source: 'user',
-      badge: 'User Created',
-      badgeClass: 'tag-primary',
-      status: 'Evaluated',
-      description: scnDesc,
-      highlight: scnHighlight,
-      totalCost: totalCost,
-      costChange: costChange,
-      transportCost: Math.round(totalCost * 0.68),
-      fixedCost: Math.round(totalCost * 0.27),
-      inventoryCost: Math.round(totalCost * 0.05),
-      sla: sla,
-      avgUtil: avgUtil,
-      maxUtil: delhiUtil,
-      delhiUtil: delhiUtil,
-      capacityRisk: capacityRisk,
-      capacityRiskClass: capacityRiskClass,
-      carbonKg: Math.round(totalCost * 0.11),
-      implementationCost: capEx,
-      implementationTime: implementationTime,
-      confidence: 'High Confidence',
-      stars: 4,
-      robustness: 'High',
-      feasible: true,
-      objective: {
-        goal: scnDesc,
-        primaryMetric: 'Total Cost & SLA',
-        constraint: 'SLA ≥ 95%',
-      },
-      changes: changesList,
-      assumptions: [
-        { label: 'Demand Horizon', value: 'December Peak Surge (+14.2%)', type: 'FORECAST' },
-        { label: 'Footprint Status', value: 'Custom What-If Parameterization', type: 'MODEL FACT' },
-      ],
-      optimisation: {
-        objective: 'Minimise Total Network Logistics Cost',
-        lockedDecisions: 'Specified intervention constraints',
-        allowedDecisions: 'Dynamic lane reallocations',
-        slaConstraint: '≥95.0%',
-      },
-      robustnessTests: [
-        { test: '+15% Demand Surge', status: 'PASS', detail: 'Absorbs peak surge without catastrophic SLA failure' },
-        { test: 'Corridor Resilience', status: 'PASS', detail: 'Alternative transport arcs active' },
-      ],
-      aiAssessment: {
-        recommendation: `Evaluated what-if scenario: ${scnCardTitle}. Yields ₹${(totalCost / 100000).toFixed(2)}L total monthly cost with ${sla}% on-time SLA.`,
-        why: whyBullets,
-        whatIRejected: rejectionReason,
-      },
-    };
-
-    SCENARIOS.push(newScenario);
-    selectedScenarioId = newScnId;
-
-    // Update UI badge & tables
-    const badge = document.getElementById('scn-count-badge');
-    if (badge) badge.textContent = SCENARIOS.length - 1;
-
-    renderMyScenariosGrid();
-    renderComparisonTable();
-    closeCreateToolbox();
-
-    // Open Scenario Details Drawer
-    openScenarioDrawer(newScnId);
-  }, 3800);
-}
-
 
 
 /* ═════════ agent.js ═════════ */
@@ -7693,6 +8031,25 @@ function initHomeSelectors() {
   const selKpiType = document.getElementById('home-kpi-type-select');
   const selForecastType = document.getElementById('home-forecast-type-select');
   const selFacilityPicker = document.getElementById('home-facility-picker');
+  const scnFacility = document.getElementById('scn-global-facility');
+  const scnPeriod = document.getElementById('scn-global-period');
+
+  // Sync Scenario Planning selectors
+  if (scnFacility) {
+    scnFacility.value = state.selectedFacility || 'DC_DELHI';
+    scnFacility.addEventListener('change', () => {
+      state.selectedFacility = scnFacility.value;
+      const selFac = document.getElementById('sel-facility');
+      if (selFac) selFac.value = state.selectedFacility;
+    });
+  }
+  if (scnPeriod) {
+    scnPeriod.value = state.selectedPeriod || 'M_2026_08';
+    scnPeriod.addEventListener('change', () => {
+      state.selectedPeriod = scnPeriod.value;
+      if (selPeriod) selPeriod.value = state.selectedPeriod;
+    });
+  }
 
   // Populate global period selector in topbar
   if (selPeriod) {
@@ -7703,6 +8060,7 @@ function initHomeSelectors() {
 
     selPeriod.addEventListener('change', () => {
       state.selectedPeriod = selPeriod.value;
+      if (scnPeriod) scnPeriod.value = state.selectedPeriod;
       renderHome();
     });
   }

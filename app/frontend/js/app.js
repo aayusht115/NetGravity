@@ -246,6 +246,25 @@ function initHomeSelectors() {
   const selKpiType = document.getElementById('home-kpi-type-select');
   const selForecastType = document.getElementById('home-forecast-type-select');
   const selFacilityPicker = document.getElementById('home-facility-picker');
+  const scnFacility = document.getElementById('scn-global-facility');
+  const scnPeriod = document.getElementById('scn-global-period');
+
+  // Sync Scenario Planning selectors
+  if (scnFacility) {
+    scnFacility.value = state.selectedFacility || 'DC_DELHI';
+    scnFacility.addEventListener('change', () => {
+      state.selectedFacility = scnFacility.value;
+      const selFac = document.getElementById('sel-facility');
+      if (selFac) selFac.value = state.selectedFacility;
+    });
+  }
+  if (scnPeriod) {
+    scnPeriod.value = state.selectedPeriod || 'M_2026_08';
+    scnPeriod.addEventListener('change', () => {
+      state.selectedPeriod = scnPeriod.value;
+      if (selPeriod) selPeriod.value = state.selectedPeriod;
+    });
+  }
 
   // Populate global period selector in topbar
   if (selPeriod) {
@@ -256,6 +275,7 @@ function initHomeSelectors() {
 
     selPeriod.addEventListener('change', () => {
       state.selectedPeriod = selPeriod.value;
+      if (scnPeriod) scnPeriod.value = state.selectedPeriod;
       renderHome();
     });
   }
