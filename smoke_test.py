@@ -9,10 +9,20 @@ Verifies:
 4. Test suite presence (test count >= 202)
 """
 
+import os
 import sys
 import time
 
+# Ensure both local and parent directories are in sys.path for robust module discovery
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_parent_dir = os.path.dirname(_current_dir)
+if _parent_dir not in sys.path:
+    sys.path.insert(0, _parent_dir)
+if _current_dir not in sys.path:
+    sys.path.insert(0, _current_dir)
+
 def run_smoke_test():
+
     start_t = time.perf_counter()
     print("=" * 70)
     print("NetGravity Pre-Submission Smoke Test")
