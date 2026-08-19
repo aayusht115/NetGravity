@@ -2,18 +2,18 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![MILP Core](https://img.shields.io/badge/Solver-PuLP%20%7C%20HiGHS%20%7C%20CBC-purple.svg)](https://github.com/coin-or/pulp)
-[![Tests](https://img.shields.io/badge/Automated%20Tests-215%20Passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Automated%20Tests-215%20Passing-brightgreen.svg)](netgravity/tests/)
 [![Architecture](https://img.shields.io/badge/Architecture-Deterministic%20MILP%20%2B%20AI%20Orchestrator-orange.svg)](#system-architecture)
 
 > **NetGravity** is an enterprise-grade decision-intelligence and network optimization platform designed for modern logistics networks. It bridges the gap between mathematically rigorous Mixed-Integer Linear Programming (MILP) network optimization and intuitive, AI-orchestrated executive decision-making.
 
 ---
 
-## 1. The Core Product Paradigm
+## 1. Executive Summary & Core Paradigm
 
 Traditional supply chain planning tools force a trade-off between complex mathematical solvers that lack executive interpretability, and AI dashboards that generate unverified hallucinations.
 
-NetGravity solves this with a strict separation of concerns:
+NetGravity solves this with an architectural separation of concerns:
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────────────────┐
 │                                    THE NETGRAVITY PIPELINE                                      │
@@ -31,18 +31,22 @@ NetGravity solves this with a strict separation of concerns:
 
 ---
 
-## 2. Repository Structure
+## 2. Clean Repository Directory Structure
+
+The repository is organized into five focused modules designed for clear client evaluation:
 
 ```
 NetGravity/
-├── README.md                          # Master architectural documentation & guide
-├── requirements.txt                   # Production & development dependencies
-├── pyproject.toml                     # Modern Python project configuration
-├── smoke_test.py                      # 1-command sanity & absolute dollar verification
 │
-├── app/                               # Interactive Web Application & Decision Cockpit
+├── README.md                          # Master architectural overview & business impact
+├── requirements.txt                   # Production dependencies (PuLP, HiGHS, Flask, Pydantic)
+├── pyproject.toml                     # Python package metadata & test configurations
+├── smoke_test.py                      # 1-command verification suite (< 0.5s execution)
+│
+├── app/                               # 🌐 Interactive Web Application & Decision Cockpit
 │   ├── backend/
-│   │   └── app.py                     # Lightweight Python Flask server & API
+│   │   ├── app.py                     # Python Flask API & telemetry endpoints
+│   │   └── models/                    # Backend data contracts & schemas
 │   ├── frontend/
 │   │   ├── index.html                 # Executive Decision Cockpit & tab shells
 │   │   ├── css/
@@ -57,10 +61,15 @@ NetGravity/
 │   └── standalone/
 │       └── netgravity_standalone.html # Portable zero-dependency single-file HTML build
 │
-├── netgravity/ (or core solver packages)
+├── docs/                              # 📚 Client & Technical Documentation
+│   ├── mathematical_model.md          # Full mathematical formulation & notation
+│   ├── model_architecture.md          # Echelon architecture & pipeline design
+│   ├── model_foundation.md            # Cost functions & inventory theory
+│   ├── v1_0_audit.md                  # Verification audit trail & benchmark logs
+│   └── *.md                           # Validation reports & Case 16 references
+│
+├── netgravity/                        # ⚡ Mathematical Optimization Engine (Source of Truth)
 │   ├── optimization/                  # Exact MILP formulations (PuLP / HiGHS / CBC)
-│   │   ├── milp.py                    # Multi-echelon capacitated facility location model
-│   │   └── formulations.py            # Mathematical objective & constraint builders
 │   ├── network/                       # Supply chain digital twin (Plants, DCs, Markets, Arcs)
 │   ├── costs/                         # Cost accounting, handling rates & dollar reconciliation
 │   ├── inventory/                     # Safety stock, cycle stock & inventory holding models
@@ -73,11 +82,11 @@ NetGravity/
 │   ├── diagnostics/                   # Infeasibility diagnosis & bottleneck detection
 │   ├── schemas/                       # Pydantic data schemas & validation models
 │   ├── assumptions/                   # Explicit policy constants & constraint definitions
-│   └── tests/                         # Automated test suite (215+ passing tests)
+│   ├── validation/                    # Data integrity & sanity checks
+│   └── tests/                         # Automated test suite (215 passing tests)
 │
-├── docs/                              # Architecture specifications & Case 16 references
-└── scripts/                           # Tooling & single-file bundle build automation
-    └── build_standalone.py            # Automated compiler for standalone HTML
+└── scripts/                           # 🛠️ Tooling & Build Scripts
+    └── build_standalone.py            # Automated single-file HTML compiler
 ```
 
 ---
@@ -86,11 +95,11 @@ NetGravity/
 
 The web application (`app/`) delivers a streamlined executive workflow:
 
-### Key Navigation Modules
+### Primary Modules
 1. **Home (Decision Cockpit)**:
-   - **Executive Top Bar**: Dynamic *View By* (`DC` / `Plant`), *Facility Selector* (`Delhi NCR DC`, `Mumbai DC`, `Bengaluru DC`, etc.), and *Period Selector* (`1 Aug – 31 Aug 2026`, etc.).
+   - **Executive Control Bar**: Dynamic *View By* (`DC` / `Plant`), *Facility Selector* (`Delhi NCR DC`, `Mumbai DC`, `Bengaluru DC`, etc.), and *Period Selector* (`1 Aug – 31 Aug 2026`, etc.).
    - **4 Primary KPI Cards**: Capacity Utilisation, On-Time Service SLA, Total Cost, and Inventory Days of Supply with period-over-period delta comparisons.
-   - **Facility Performance Dashboard**: Dedicated full-page analytics view accessed via `View more KPIs →` showcasing 12-month historical throughput vs capacity limits, cost breakdowns, corridor flow distributions, and live ERP/WMS/TMS sync telemetry.
+   - **Facility Performance & Analytics Dashboard**: Full-page analytics view accessed via `View more KPIs →` showcasing 12-month historical throughput vs capacity limits, cost breakdowns, corridor flow distributions, and live ERP/WMS/TMS sync telemetry.
    - **Structured Insight Cards**: Actionable anomalies with severity color bars, impact tags, and concise "Why I found this" explanations.
    - **Slide-over Evidence Drawer**: Deep-dive evidence chain with explicit provenance badges (`MODEL FACT`, `FORECAST`, `EXTERNAL SIGNAL`, `AI ASSESSMENT`).
 
@@ -130,13 +139,13 @@ Subject to:
 5. **Capital Expenditure (CapEx) Budget Limit**: $\sum_{i} \text{CapEx}_i y_i \le \text{Budget}$
 6. **Carbon Emission Constraints**: $\sum_{(i,j)} \text{Emissions}_{ij} \le \text{Carbon Cap}$
 
-### Validated Reference Benchmarks
-- **Hand-Solvable 2-DC Reference Case**: Evaluates to **`5,400.00`** (Optimal facility: `DC_T1`).
-- **Kearney Case 16 Full Network**: Evaluates to **`115,638.14`** with 100% cost reconciliation.
+### Validated Benchmarks
+- **Hand-Solvable 2-DC Reference Case**: Evaluates to **`$5,400.00`** (Optimal facility: `DC_T1`).
+- **Kearney Case 16 Full Network**: Evaluates to **`$115,638.14/month`** with 100% cost reconciliation.
 
 ---
 
-## 5. Quickstart & Usage
+## 5. Quickstart Guide
 
 ### Prerequisites
 - Python 3.9 or higher
@@ -144,7 +153,7 @@ Subject to:
 
 ### Installation
 ```bash
-# 1. Clone the repository
+# 1. Clone repository
 git clone https://github.com/aayusht115/NetGravity.git
 cd NetGravity
 
@@ -152,38 +161,32 @@ cd NetGravity
 pip install -r requirements.txt
 ```
 
-### Running the Test Suite
+### Running Tests & Smoke Tests
 ```bash
-# Run the complete test suite (215 automated tests)
-pytest tests/ -v
-
-# Run 1-command pre-submission smoke test
+# Run 1-command verification (< 0.5 seconds)
 python smoke_test.py
+
+# Run complete automated test suite (215 tests)
+pytest
 ```
 
 ### Running the Web Application
 ```bash
-# Launch the local Flask server
+# Launch Flask backend server
 python app/backend/app.py
 ```
 Open [http://localhost:5050](http://localhost:5050) in your web browser.
 
-### Using the Portable Standalone Build
-For presentations, sharing, or offline review without running Python:
-- Simply open `app/standalone/netgravity_standalone.html` directly in any web browser.
-- To recompile after modifications:
-  ```bash
-  python scripts/build_standalone.py
-  ```
+### Instant Client Demo (Zero-Dependency)
+Open `app/standalone/netgravity_standalone.html` directly in any web browser without needing any Python server or node environment.
 
 ---
 
-## 6. AI Agent Integration Roadmap
+## 6. AI Agent Roadmap
 
-In upcoming iterations, the NetGravity AI Agent will connect directly via standardized tool-calling interfaces:
+The platform provides standard tool-call schemas for agentic integration:
 
 ```python
-# Agent Tool Interface
 def get_network_summary() -> NetworkSummary: ...
 def get_bottlenecks() -> List[Bottleneck]: ...
 def get_forecast(region: str, horizon_months: int) -> ForecastResult: ...
@@ -195,5 +198,5 @@ def get_data_quality() -> DataQualityReport: ...
 
 ---
 
-## 7. License & Attribution
-Developed for the **Kearney Case Competition**. Proprietary decision intelligence and mathematical network optimization architecture.
+## 7. Attribution
+Developed for the **Kearney Case Competition**. Proprietary decision-intelligence and mathematical optimization architecture.
