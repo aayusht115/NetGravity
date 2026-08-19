@@ -1,0 +1,5 @@
+flask==3.0.3
+flask-cors==4.0.1
+scipy==1.13.1
+numpy==1.26.4
+PuLP==2.8.0

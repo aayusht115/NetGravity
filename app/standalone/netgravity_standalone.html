@@ -1,0 +1,3935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetGravity — AI Decision Intelligence for Logistics Networks</title>
+<meta name="description" content="NetGravity: An AI decision agent for logistics network planning — insight, evidence, recommendation, action.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+
+<!-- Vendor CDN -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- Design System -->
+<style>
+/* ═══════════════════════════════════════════════════════════
+   NetGravity — Design System
+   Light theme · Kearney purple · Consulting-grade SaaS
+   ═══════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* ─── Tokens ──────────────────────────────────────────────── */
+:root {
+  --purple-50:  #f5f0fa;  --purple-100: #e8ddf2;
+  --purple-200: #d4bfe8;  --purple-300: #b893d6;
+  --purple-400: #9a64c1;  --purple-500: #7c3aad;
+  --purple-600: #6B2FA0;  --purple-700: #5a2787;
+  --purple-800: #4a206e;  --purple-900: #3b1a58;
+
+  --primary:    var(--purple-600);
+  --primary-light: var(--purple-50);
+  --primary-hover: var(--purple-700);
+
+  --bg:         #ffffff;  --bg-page:     #f7f7fa;
+  --bg-card:    #ffffff;  --bg-elevated: #fafafc;
+  --bg-sidebar: #fafafc;  --bg-hover:    #f3f0f8;
+
+  --text-1:     #1a1a2e;  --text-2:     #5a5a72;
+  --text-3:     #8e8ea0;  --text-on-primary: #ffffff;
+
+  --border:     #e8e8ef;  --border-light: #f0f0f5;
+  --shadow-sm:  0 1px 3px rgba(0,0,0,.06);
+  --shadow-md:  0 4px 12px rgba(0,0,0,.07);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,.09);
+
+  --green:  #16a34a;  --green-bg:  #f0fdf4;
+  --amber:  #d97706;  --amber-bg:  #fffbeb;
+  --red:    #dc2626;  --red-bg:    #fef2f2;
+  --blue:   #2563eb;  --blue-bg:   #eff6ff;
+
+  --r-xs: 4px; --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 18px;
+  --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px; --space-2xl: 48px;
+  --sidebar-w: 220px;
+  --header-h: 56px;
+  --transition: .2s cubic-bezier(.4,0,.2,1);
+}
+
+/* ─── Reset ───────────────────────────────────────────────── */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html { font-size: 14px; -webkit-font-smoothing: antialiased; }
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-page); color: var(--text-1); line-height: 1.6; }
+a { color: var(--primary); text-decoration: none; }
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; font-size: inherit; }
+
+/* ─── App Shell ───────────────────────────────────────────── */
+.app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* ─── Header ──────────────────────────────────────────────── */
+.app-header {
+  display: flex; align-items: center; justify-content: space-between;
+  height: var(--header-h); padding: 0 var(--space-lg);
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.header-logo { display: flex; align-items: center; gap: var(--space-sm); }
+.logo-icon {
+  width: 36px; height: 36px; border-radius: var(--r-md);
+  background: linear-gradient(135deg, var(--purple-600), var(--purple-400));
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 800; font-size: 16px;
+}
+.logo-text { font-weight: 700; font-size: 17px; color: var(--text-1); }
+.logo-sub { display: block; font-size: 10.5px; color: var(--text-3); font-weight: 400; letter-spacing: .02em; }
+
+.header-right { display: flex; align-items: center; gap: var(--space-md); }
+.header-status {
+  font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 6px;
+}
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); display: inline-block; }
+.status-dot.warning { background: var(--amber); }
+
+/* ─── Body Layout ─────────────────────────────────────────── */
+.app-body { display: flex; flex: 1; min-height: 100vh; }
+
+/* ─── Sidebar ─────────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--bg-sidebar); border-right: 1px solid var(--border);
+  flex-shrink: 0;
+  position: sticky; top: 0; height: 100vh;
+  overflow-y: auto;
+  display: flex; flex-direction: column;
+}
+.sidebar-label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--text-3); padding: 0 var(--space-md); margin-bottom: var(--space-xs);
+}
+.nav-item {
+  display: flex; align-items: center; gap: var(--space-sm);
+  padding: 10px var(--space-md); margin: 2px var(--space-sm);
+  border-radius: var(--r-md); cursor: pointer;
+  font-size: 13px; font-weight: 500; color: var(--text-2);
+  transition: all var(--transition);
+}
+.nav-item:hover { background: var(--bg-hover); color: var(--text-1); }
+.nav-item.active {
+  background: var(--primary-light); color: var(--primary); font-weight: 600;
+}
+.nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+.nav-badge {
+  margin-left: auto; font-size: 10px; font-weight: 700;
+  background: var(--primary); color: white;
+  padding: 1px 7px; border-radius: 10px;
+}
+
+/* ─── Main Content ────────────────────────────────────────── */
+.main-content {
+  flex: 1; padding: var(--space-lg);
+  max-width: 1280px; width: 100%;
+}
+
+/* ─── Tab Panels ──────────────────────────────────────────── */
+.tab-panel { display: none; animation: fadeIn .3s ease; }
+.tab-panel.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ─── Cards ───────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: var(--space-lg);
+  box-shadow: var(--shadow-sm); transition: box-shadow var(--transition);
+}
+.card:hover { box-shadow: var(--shadow-md); }
+.card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: var(--space-md); }
+.card-title { font-size: 15px; font-weight: 700; color: var(--text-1); }
+.card-subtitle { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+
+/* ─── Insight Cards ───────────────────────────────────────── */
+.insight-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: var(--space-lg);
+  box-shadow: var(--shadow-sm); cursor: pointer;
+  transition: all var(--transition); position: relative;
+  border-left: 4px solid transparent;
+}
+.insight-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.insight-card.critical { border-left-color: var(--red); }
+.insight-card.warning  { border-left-color: var(--amber); }
+.insight-card.success  { border-left-color: var(--green); }
+.insight-card.info     { border-left-color: var(--primary); }
+
+.insight-icon { font-size: 22px; margin-bottom: var(--space-sm); }
+.insight-title { font-size: 14px; font-weight: 700; color: var(--text-1); margin-bottom: 6px; }
+.insight-body { font-size: 13px; color: var(--text-2); line-height: 1.6; }
+.insight-metric { font-size: 20px; font-weight: 800; color: var(--text-1); margin: var(--space-sm) 0; }
+.insight-action {
+  display: inline-flex; align-items: center; gap: 4px;
+  margin-top: var(--space-md); font-size: 12px; font-weight: 600;
+  color: var(--primary); cursor: pointer;
+}
+.insight-action:hover { text-decoration: underline; }
+
+/* ─── Grids ───────────────────────────────────────────────── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-lg); margin-bottom: var(--space-lg); }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-lg); margin-bottom: var(--space-lg); }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-md); margin-bottom: var(--space-lg); }
+.grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: var(--space-lg); margin-bottom: var(--space-lg); }
+.col-span-2 { grid-column: span 2; }
+.col-span-3 { grid-column: span 3; }
+
+/* ─── Buttons ─────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px; border-radius: var(--r-md);
+  font-size: 13px; font-weight: 600; border: none;
+  transition: all var(--transition);
+}
+.btn-primary { background: var(--primary); color: white; }
+.btn-primary:hover { background: var(--primary-hover); box-shadow: var(--shadow-md); }
+.btn-secondary { background: var(--bg-page); color: var(--text-2); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--bg-hover); color: var(--text-1); }
+.btn-success { background: var(--green); color: white; }
+.btn-success:hover { opacity: .9; }
+.btn-danger { background: var(--red); color: white; }
+.btn-danger:hover { opacity: .9; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn-ghost { background: transparent; color: var(--primary); padding: 6px 12px; }
+.btn-ghost:hover { background: var(--primary-light); }
+.btn-group { display: flex; gap: var(--space-sm); }
+
+/* ─── Tags / Badges ───────────────────────────────────────── */
+.tag {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600;
+}
+.tag-primary   { background: var(--primary-light); color: var(--primary); }
+.tag-success   { background: var(--green-bg);  color: var(--green); }
+.tag-warning   { background: var(--amber-bg);  color: var(--amber); }
+.tag-danger    { background: var(--red-bg);    color: var(--red); }
+.tag-info      { background: var(--blue-bg);   color: var(--blue); }
+.tag-muted     { background: var(--bg-page);   color: var(--text-3); }
+
+/* ─── Toggle Switch (network state) ──────────────────────── */
+.toggle-group {
+  display: inline-flex; background: var(--bg-page); border-radius: var(--r-md);
+  padding: 3px; gap: 2px; border: 1px solid var(--border);
+}
+.toggle-btn {
+  padding: 6px 14px; border-radius: var(--r-sm); border: none;
+  background: transparent; font-size: 12px; font-weight: 600;
+  color: var(--text-3); cursor: pointer; transition: all var(--transition);
+}
+.toggle-btn.active { background: var(--primary); color: white; box-shadow: var(--shadow-sm); }
+.toggle-btn:hover:not(.active) { color: var(--text-1); background: var(--bg-hover); }
+
+/* ─── Tables ──────────────────────────────────────────────── */
+.ng-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ng-table th {
+  text-align: left; padding: 10px 12px; font-weight: 600;
+  color: var(--text-3); font-size: 11px; text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 2px solid var(--border); background: var(--bg-elevated);
+}
+.ng-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-light); }
+.ng-table tr:hover td { background: var(--bg-hover); }
+.ng-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ─── Charts ──────────────────────────────────────────────── */
+.chart-wrap { position: relative; height: 280px; }
+.chart-wrap.tall { height: 360px; }
+.chart-wrap.short { height: 200px; }
+
+/* ─── Map ─────────────────────────────────────────────────── */
+.map-container { height: 480px; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--border); }
+.map-container.tall { height: 560px; }
+
+/* ─── Facility Panel (slide-in) ───────────────────────────── */
+.facility-panel {
+  position: fixed; right: -400px; top: var(--header-h); bottom: 0;
+  width: 380px; background: var(--bg); border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg); z-index: 200;
+  padding: var(--space-lg); overflow-y: auto;
+  transition: right .35s cubic-bezier(.4,0,.2,1);
+}
+.facility-panel.open { right: 0; }
+.facility-panel-close {
+  position: absolute; right: var(--space-md); top: var(--space-md);
+  width: 28px; height: 28px; border-radius: 50%; border: none;
+  background: var(--bg-page); color: var(--text-2); font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.fp-title { font-size: 18px; font-weight: 700; margin-bottom: var(--space-xs); }
+.fp-subtitle { font-size: 12px; color: var(--text-3); margin-bottom: var(--space-lg); }
+.fp-stat { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border-light); }
+.fp-stat-label { font-size: 13px; color: var(--text-2); }
+.fp-stat-value { font-size: 13px; font-weight: 700; }
+
+/* ─── Agent Trace ─────────────────────────────────────────── */
+.agent-trace { position: relative; padding-left: 28px; }
+.trace-step {
+  position: relative; padding: 10px 0 10px var(--space-md);
+  font-size: 13px; color: var(--text-2);
+}
+.trace-step::before {
+  content: ''; position: absolute; left: -20px; top: 16px;
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--primary); background: white;
+}
+.trace-step.done::before { background: var(--primary); }
+.trace-step.active::before { background: var(--amber); border-color: var(--amber); animation: pulse 1.5s infinite; }
+.trace-step:not(:last-child)::after {
+  content: ''; position: absolute; left: -16px; top: 28px;
+  width: 2px; height: calc(100% - 12px); background: var(--border);
+}
+.trace-step.done:not(:last-child)::after { background: var(--primary); }
+.trace-action { font-weight: 600; color: var(--text-1); }
+.trace-detail { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(217,119,6,.4); } 50% { box-shadow: 0 0 0 6px rgba(217,119,6,0); } }
+
+/* ─── Tool Call Log ───────────────────────────────────────── */
+.tool-call {
+  display: flex; gap: var(--space-sm); padding: 8px var(--space-md);
+  background: var(--bg-elevated); border-radius: var(--r-sm);
+  margin-bottom: 6px; font-size: 12px;
+}
+.tool-name { font-family: 'Courier New', monospace; font-weight: 600; color: var(--primary); white-space: nowrap; }
+.tool-result { color: var(--text-2); flex: 1; }
+
+/* ─── Recommendation Panel ────────────────────────────────── */
+.rec-panel { border-left: 4px solid var(--primary); }
+.rec-title { font-size: 22px; font-weight: 800; color: var(--text-1); margin-bottom: var(--space-md); }
+.rec-subtitle { font-size: 15px; font-weight: 600; color: var(--text-1); margin: var(--space-lg) 0 var(--space-sm); }
+
+.impact-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-md); margin: var(--space-lg) 0; }
+.impact-item { text-align: center; padding: var(--space-md); background: var(--bg-elevated); border-radius: var(--r-md); }
+.impact-label { font-size: 11px; color: var(--text-3); text-transform: uppercase; font-weight: 600; letter-spacing: .03em; }
+.impact-value { font-size: 24px; font-weight: 800; margin-top: 4px; }
+.impact-value.positive { color: var(--green); }
+.impact-value.neutral { color: var(--text-1); }
+.impact-value.negative { color: var(--red); }
+
+/* ─── Rejected Scenario ──────────────────────────────────── */
+.rejected-item {
+  background: var(--red-bg); border: 1px solid #fecaca;
+  border-radius: var(--r-md); padding: var(--space-md); margin-bottom: var(--space-sm);
+}
+.rejected-name { font-weight: 700; font-size: 13px; color: var(--red); margin-bottom: 4px; }
+.rejected-reason { font-size: 12px; color: var(--text-2); }
+
+/* ─── Next Steps ──────────────────────────────────────────── */
+.next-step {
+  display: flex; gap: var(--space-md); padding: 12px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.step-number {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--primary-light); color: var(--primary);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px; flex-shrink: 0;
+}
+.step-content { flex: 1; }
+.step-action { font-size: 13px; font-weight: 600; color: var(--text-1); }
+.step-owner { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+
+/* ─── Email Preview ───────────────────────────────────────── */
+.email-preview {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: var(--space-lg);
+  font-family: 'Courier New', monospace; font-size: 12px;
+  line-height: 1.7; color: var(--text-2);
+  white-space: pre-wrap; max-height: 400px; overflow-y: auto;
+  display: none;
+}
+.email-preview.visible { display: block; }
+
+/* ─── Scenario Comparison ─────────────────────────────────── */
+.scenario-table { width: 100%; }
+.scenario-table th { font-size: 11px; padding: 10px 8px; }
+.scenario-table td { padding: 10px 8px; font-size: 13px; text-align: center; }
+.scenario-table td.name-cell { text-align: left; font-weight: 600; }
+.scenario-winner { background: var(--green-bg); font-weight: 700; }
+.scenario-fail { background: var(--red-bg); color: var(--red); }
+
+/* ─── Data Quality ────────────────────────────────────────── */
+.dq-ring {
+  width: 120px; height: 120px; border-radius: 50%;
+  background: conic-gradient(var(--green) 0% 98.4%, var(--border) 98.4% 100%);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto var(--space-md);
+}
+.dq-ring-inner {
+  width: 90px; height: 90px; border-radius: 50%; background: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px; font-weight: 800; color: var(--green);
+}
+
+/* ─── Architecture Pipeline ───────────────────────────────── */
+.arch-pipeline { display: flex; flex-direction: column; gap: 0; align-items: center; }
+.arch-step {
+  display: flex; align-items: center; gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r-md); width: 420px;
+  transition: all var(--transition);
+}
+.arch-step:hover { box-shadow: var(--shadow-md); border-color: var(--primary); }
+.arch-step-icon { font-size: 24px; width: 40px; text-align: center; }
+.arch-step-label { font-weight: 700; font-size: 14px; }
+.arch-step-type { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; }
+.arch-step-type.ai { background: var(--purple-100); color: var(--purple-700); }
+.arch-step-type.ml { background: var(--blue-bg); color: var(--blue); }
+.arch-step-type.deterministic { background: var(--green-bg); color: var(--green); }
+.arch-step-type.human { background: var(--amber-bg); color: var(--amber); }
+.arch-arrow {
+  width: 2px; height: 24px; background: var(--border);
+  position: relative;
+}
+.arch-arrow::after {
+  content: '▼'; position: absolute; bottom: -8px; left: -5px;
+  font-size: 10px; color: var(--border);
+}
+
+/* ─── Signal Card ─────────────────────────────────────────── */
+.signal-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r-md); padding: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+.signal-badge {
+  font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+  background: var(--amber-bg); color: var(--amber);
+}
+
+/* ─── Governance Tiers ────────────────────────────────────── */
+.tier-card {
+  border-radius: var(--r-md); padding: var(--space-md);
+  border: 1px solid var(--border); margin-bottom: var(--space-sm);
+}
+.tier-card.tier-1 { border-left: 4px solid var(--green); }
+.tier-card.tier-2 { border-left: 4px solid var(--amber); }
+.tier-card.tier-3 { border-left: 4px solid var(--red); }
+
+/* ─── Section Header ──────────────────────────────────────── */
+.section-header {
+  font-size: 22px; font-weight: 800; color: var(--text-1);
+  margin-bottom: var(--space-lg);
+}
+.section-intro {
+  font-size: 15px; color: var(--text-2); margin-bottom: var(--space-lg);
+  max-width: 640px;
+}
+
+/* ─── Agent Voice (first-person) ──────────────────────────── */
+.agent-voice {
+  font-size: 16px; font-weight: 600; color: var(--text-1);
+  font-style: italic; margin-bottom: var(--space-md);
+}
+.agent-quote {
+  padding-left: var(--space-md); border-left: 3px solid var(--primary);
+  font-size: 14px; color: var(--text-1); font-weight: 500;
+  margin: var(--space-md) 0;
+}
+
+/* ─── Contract Comparison ─────────────────────────────────── */
+.contract-card { padding: var(--space-lg); border-radius: var(--r-lg); border: 1px solid var(--border); }
+.contract-card.alert { border-color: var(--red); background: var(--red-bg); }
+.contract-headline { font-size: 28px; font-weight: 800; }
+
+/* ─── Scenario Builder Form ───────────────────────────────── */
+.form-group { margin-bottom: var(--space-md); }
+.form-label { font-size: 12px; font-weight: 600; color: var(--text-2); margin-bottom: 4px; display: block; }
+.form-input, .form-select {
+  width: 100%; padding: 8px 12px; border: 1px solid var(--border);
+  border-radius: var(--r-sm); background: var(--bg); font-size: 13px;
+  transition: border-color var(--transition);
+}
+.form-input:focus, .form-select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(107,47,160,.1); }
+.form-row { display: flex; gap: var(--space-md); }
+.form-row .form-group { flex: 1; }
+
+/* ─── Modal / Overlay ─────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.3);
+  z-index: 300; display: none; align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.modal-overlay.visible { display: flex; }
+.modal-box {
+  background: var(--bg); border-radius: var(--r-xl); padding: var(--space-xl);
+  max-width: 600px; width: 90%; box-shadow: var(--shadow-lg);
+  max-height: 80vh; overflow-y: auto;
+}
+
+/* ─── Loading ─────────────────────────────────────────────── */
+.loading-bar {
+  height: 3px; background: var(--bg-page); overflow: hidden;
+  position: fixed; top: var(--header-h); left: 0; right: 0; z-index: 99;
+  display: none;
+}
+.loading-bar.active { display: block; }
+.loading-bar::after {
+  content: ''; display: block; height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--purple-400));
+  width: 30%; animation: loadSlide 1.2s ease infinite;
+}
+@keyframes loadSlide { 0% { transform: translateX(-100%); } 100% { transform: translateX(400%); } }
+
+/* ─── Utility ─────────────────────────────────────────────── */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-xs { gap: var(--space-xs); }
+.gap-sm { gap: var(--space-sm); }
+.gap-md { gap: var(--space-md); }
+.gap-lg { gap: var(--space-lg); }
+.mt-sm { margin-top: var(--space-sm); }
+.mt-md { margin-top: var(--space-md); }
+.mt-lg { margin-top: var(--space-lg); }
+.mb-md { margin-bottom: var(--space-md); }
+.mb-lg { margin-bottom: var(--space-lg); }
+.text-sm { font-size: 12px; }
+.text-xs { font-size: 11px; }
+.text-muted { color: var(--text-3); }
+.text-center { text-align: center; }
+.font-bold { font-weight: 700; }
+.hidden { display: none !important; }
+
+/* ─── Leaflet Overrides ───────────────────────────────────── */
+.leaflet-popup-content-wrapper { border-radius: var(--r-md) !important; box-shadow: var(--shadow-md) !important; }
+.leaflet-popup-content { font-family: 'Inter', sans-serif !important; font-size: 13px !important; }
+
+/* ═══════════════════════════════════════════════════════════
+   HOME — Decision Cockpit Styles
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── Sidebar Brand ───────────────────────────────────────── */
+.sidebar-brand {
+  display: flex; align-items: center; gap: var(--space-sm);
+  padding: var(--space-lg) var(--space-md) var(--space-xl);
+}
+.sidebar-nav { padding: 0 var(--space-sm); flex: 1; }
+.sidebar-meta {
+  padding: var(--space-md); margin: 0 var(--space-sm);
+  background: var(--bg-page); border-radius: var(--r-md);
+}
+.meta-block { padding: 6px 0; }
+.meta-block + .meta-block { border-top: 1px solid var(--border-light); }
+.meta-label { font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.meta-value { font-size: 12px; font-weight: 600; color: var(--text-1); margin-top: 1px; }
+.sidebar-status {
+  padding: var(--space-md); margin: var(--space-md) var(--space-sm) var(--space-sm);
+  background: var(--green-bg); border-radius: var(--r-md);
+}
+.sidebar-status-title { font-size: 11px; font-weight: 700; color: var(--green); margin-bottom: 4px; }
+.sidebar-status-line { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+.nav-svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* ─── Home Control Bar ────────────────────────────────────── */
+.home-controls {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: var(--space-lg);
+}
+.controls-left, .controls-right { display: flex; align-items: center; gap: var(--space-sm); }
+.control-label { font-size: 12px; font-weight: 600; color: var(--text-3); white-space: nowrap; }
+.control-select {
+  padding: 8px 32px 8px 12px; border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--bg); font-size: 13px; font-weight: 600; color: var(--text-1);
+  cursor: pointer; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238e8ea0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  transition: border-color var(--transition);
+}
+.control-select:focus { border-color: var(--primary); outline: none; box-shadow: 0 0 0 3px rgba(107,47,160,.1); }
+.control-select:hover { border-color: var(--primary); }
+.facility-select { min-width: 180px; }
+.facility-dot {
+  width: 10px; height: 10px; border-radius: 50%; background: var(--green);
+  flex-shrink: 0; margin-left: -4px;
+}
+
+/* ─── Home Header ─────────────────────────────────────────── */
+.home-header { margin-bottom: var(--space-lg); }
+.home-greeting { font-size: 24px; font-weight: 700; color: var(--text-1); margin-bottom: 4px; }
+.home-subtitle { font-size: 14px; color: var(--text-2); }
+.home-subtitle strong { color: var(--primary); text-decoration: underline; text-decoration-color: var(--purple-200); text-underline-offset: 3px; }
+
+/* ─── KPI Grid ────────────────────────────────────────────── */
+.kpi-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+.kpi-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 20px; box-shadow: var(--shadow-sm); transition: box-shadow var(--transition);
+  position: relative;
+}
+.kpi-card:hover { box-shadow: var(--shadow-md); }
+.kpi-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 12px; }
+.kpi-label { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.kpi-icon {
+  width: 36px; height: 36px; border-radius: var(--r-md);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.kpi-icon.purple { background: var(--purple-50); color: var(--primary); }
+.kpi-icon.green { background: var(--green-bg); color: var(--green); }
+.kpi-icon.amber { background: var(--amber-bg); color: var(--amber); }
+.kpi-icon.red { background: var(--red-bg); color: var(--red); }
+
+.kpi-value { font-size: 32px; font-weight: 800; color: var(--text-1); line-height: 1.1; }
+.kpi-value .kpi-unit { font-size: 20px; font-weight: 600; color: var(--text-3); }
+.kpi-desc { font-size: 12px; color: var(--text-3); margin-top: 4px; }
+.kpi-compare {
+  font-size: 12px; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+}
+.kpi-compare .up { color: var(--red); font-weight: 600; }
+.kpi-compare .down { color: var(--green); font-weight: 600; }
+.kpi-compare .neutral { color: var(--text-3); }
+.kpi-compare-label { color: var(--text-3); }
+
+/* KPI status accents */
+.kpi-card.status-critical { border-top: 3px solid var(--red); }
+.kpi-card.status-warning { border-top: 3px solid var(--amber); }
+.kpi-card.status-normal { border-top: 3px solid transparent; }
+
+/* ─── View More KPIs (Right-aligned) ───────────────────────── */
+.view-more-kpis-container {
+  display: flex; justify-content: flex-end;
+  margin-top: var(--space-xs); margin-bottom: var(--space-xl);
+}
+.view-more-kpis-btn {
+  background: none; border: none;
+  font-size: 13px; font-weight: 700; color: var(--primary);
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer; padding: 6px 0;
+  transition: all var(--transition);
+}
+.view-more-kpis-btn:hover {
+  color: var(--primary-hover); transform: translateX(2px);
+}
+
+/* ─── Facility Dashboard / Analytics ───────────────────────── */
+.dash-topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: var(--space-md); margin-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border-light);
+}
+.dash-meta-badge {
+  display: flex; align-items: center; gap: var(--space-sm);
+  font-size: 14px;
+}
+.dash-actions { display: flex; align-items: center; gap: var(--space-sm); }
+.dash-metric-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 16px 20px; box-shadow: var(--shadow-sm);
+}
+.dash-metric-title { font-size: 11.5px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: .04em; }
+.dash-metric-val { font-size: 24px; font-weight: 800; color: var(--text-1); margin: 4px 0 2px; }
+.dash-metric-sub { font-size: 11.5px; color: var(--text-2); display: flex; align-items: center; justify-content: space-between; }
+
+
+/* ─── Home Insights ───────────────────────────────────────── */
+.home-insights-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: var(--space-lg);
+}
+.insights-title { font-size: 22px; font-weight: 800; color: var(--text-1); margin-bottom: 4px; }
+.insights-subtitle { font-size: 14px; color: var(--text-3); }
+
+.insight-list { display: flex; flex-direction: column; gap: var(--space-sm); margin-bottom: var(--space-xl); }
+
+.home-insight-card {
+  display: grid; grid-template-columns: 48px 1fr 1fr auto;
+  gap: var(--space-md); align-items: center;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 18px 20px; cursor: pointer;
+  transition: all var(--transition); border-left: 4px solid transparent;
+}
+.home-insight-card:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
+.home-insight-card.severity-high { border-left-color: var(--red); }
+.home-insight-card.severity-medium { border-left-color: var(--amber); }
+.home-insight-card.severity-low { border-left-color: var(--green); }
+.home-insight-card.severity-ai { border-left-color: var(--primary); }
+
+.insight-icon-wrap {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+
+.insight-main {}
+.insight-main-title { font-size: 14px; font-weight: 700; color: var(--text-1); margin-bottom: 3px; }
+.insight-main-sub { font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
+.insight-impact-tag {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  padding: 2px 10px; border-radius: 12px; color: white;
+}
+
+.insight-why {}
+.insight-why-label { font-size: 11px; font-weight: 700; color: var(--text-3); margin-bottom: 3px; text-transform: uppercase; letter-spacing: .03em; }
+.insight-why-text { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+
+.insight-action-link {
+  font-size: 13px; font-weight: 700; color: var(--primary);
+  white-space: nowrap; display: flex; align-items: center; gap: 4px;
+  text-decoration: none;
+}
+.insight-action-link:hover { text-decoration: underline; }
+
+/* ─── AI Banner ───────────────────────────────────────────── */
+.ai-banner {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--r-lg);
+  padding: 16px 24px; box-shadow: var(--shadow-sm);
+}
+.ai-banner-left { display: flex; align-items: center; gap: var(--space-md); }
+.ai-banner-icon { font-size: 24px; }
+.ai-banner-text { font-size: 13px; color: var(--text-1); font-weight: 500; }
+.ai-banner-sub { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+
+/* ─── Insight Drawer ──────────────────────────────────────── */
+.insight-drawer-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.25);
+  z-index: 300; display: none; justify-content: flex-end;
+  backdrop-filter: blur(3px);
+}
+.insight-drawer-overlay.visible { display: flex; }
+.insight-drawer {
+  width: 520px; max-width: 90vw; background: var(--bg);
+  height: 100vh; overflow-y: auto; padding: var(--space-xl);
+  box-shadow: var(--shadow-lg); position: relative;
+  animation: slideIn .3s ease;
+}
+@keyframes slideIn { from { transform: translateX(100%); } to { transform: none; } }
+
+.drawer-section-title {
+  font-size: 11px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .06em;
+  margin: var(--space-lg) 0 var(--space-sm); padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--border-light);
+}
+.drawer-text { font-size: 13px; color: var(--text-2); line-height: 1.7; }
+.evidence-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--border-light);
+  font-size: 13px;
+}
+.evidence-label { color: var(--text-2); }
+.evidence-value { font-weight: 700; color: var(--text-1); }
+.provenance-badge {
+  display: inline-block; font-size: 9px; font-weight: 700;
+  padding: 2px 6px; border-radius: 4px; margin-left: 6px;
+  text-transform: uppercase; letter-spacing: .03em;
+}
+.provenance-badge.model-fact { background: var(--blue-bg); color: var(--blue); }
+.provenance-badge.forecast { background: var(--amber-bg); color: var(--amber); }
+.provenance-badge.external-signal { background: var(--green-bg); color: var(--green); }
+.provenance-badge.ai-assessment { background: var(--purple-50); color: var(--primary); }
+
+/* ─── Responsive ──────────────────────────────────────────── */
+@media (max-width: 1280px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .home-insight-card { grid-template-columns: 48px 1fr auto; }
+  .insight-why { display: none; }
+}
+@media (max-width: 1024px) {
+  .sidebar { width: 180px; }
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .impact-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  .home-controls { flex-direction: column; gap: var(--space-md); align-items: flex-start; }
+}
+
+
+</style>
+</head>
+<body>
+
+<div class="loading-bar" id="loading-bar"></div>
+
+<div class="app-shell">
+  <div class="app-body">
+
+    <!-- ═══════════════════════════════════════ SIDEBAR -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="logo-icon">N</div>
+        <div>
+          <div class="logo-text">NETGRAVITY</div>
+          <div class="logo-sub">AI Decision Intelligence<br>for Logistics Networks</div>
+        </div>
+      </div>
+
+      <div class="sidebar-nav">
+        <div class="nav-item active" data-tab="home">
+          <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 10L10 3l7 7M5 8.5V16a1 1 0 001 1h3v-4h2v4h3a1 1 0 001-1V8.5"/></svg>
+          Home
+        </div>
+        <div class="nav-item" data-tab="twin">
+          <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="7" cy="7" r="2"/><circle cx="14" cy="7" r="2"/><circle cx="7" cy="14" r="2"/><circle cx="14" cy="14" r="2"/><path d="M9 7h3M7 9v3M14 9v3M9 14h3"/></svg>
+          Digital Twin
+        </div>
+        <div class="nav-item" data-tab="scenarios">
+          <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 13l2 2 4-4"/></svg>
+          Scenario Planning
+        </div>
+        <div class="nav-item" data-tab="forecast">
+          <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3,15 7,9 11,12 17,4"/><polyline points="14,4 17,4 17,7"/></svg>
+          Forecasting
+        </div>
+      </div>
+
+      <div class="sidebar-meta">
+        <div class="meta-block">
+          <div class="meta-label">Network</div>
+          <div class="meta-value">India Network</div>
+        </div>
+        <div class="meta-block">
+          <div class="meta-label">Model Version</div>
+          <div class="meta-value">v7.0</div>
+        </div>
+        <div class="meta-block">
+          <div class="meta-label">Last Updated</div>
+          <div class="meta-value">18 Aug 2026, 09:30 AM</div>
+        </div>
+      </div>
+
+      <div class="sidebar-status">
+        <div class="sidebar-status-title">System Status</div>
+        <div class="sidebar-status-line"><span class="status-dot"></span> All Systems Operational</div>
+      </div>
+    </nav>
+
+    <!-- ═══════════════════════════════════ MAIN CONTENT -->
+    <main class="main-content">
+
+      <!-- ─────────────────── TAB: HOME (Decision Cockpit) -->
+      <section class="tab-panel active" id="tab-home">
+
+        <!-- Control Bar -->
+        <div class="home-controls">
+          <div class="controls-left">
+            <div class="control-group">
+              <span class="control-label">View by</span>
+              <select class="control-select" id="sel-type">
+                <option value="DC">🏪 DC</option>
+                <option value="Plant">🏭 Plant</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <select class="control-select facility-select" id="sel-facility">
+                <option value="DC_DELHI">Delhi NCR DC</option>
+                <option value="DC_MUMBAI">Mumbai DC</option>
+                <option value="DC_BENGALURU">Bengaluru DC</option>
+                <option value="DC_KOLKATA">Kolkata DC</option>
+                <option value="DC_GUWAHATI">Guwahati DC</option>
+              </select>
+              <span class="facility-dot" id="facility-dot"></span>
+            </div>
+          </div>
+          <div class="controls-right">
+            <span class="control-label">Period</span>
+            <select class="control-select" id="sel-period">
+              <!-- Populated by JS -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Header -->
+        <div class="home-header">
+          <h1 class="home-greeting">Good morning, Priya 👋</h1>
+          <p class="home-subtitle">Here's the performance snapshot for <strong id="home-facility-name">Delhi NCR DC</strong></p>
+        </div>
+
+        <!-- KPI Cards -->
+        <div class="kpi-grid" id="kpi-grid">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- View More KPIs (Right-aligned) -->
+        <div class="view-more-kpis-container">
+          <button class="view-more-kpis-btn" id="btn-view-more-kpis">View more KPIs →</button>
+        </div>
+
+        <!-- Insights Section -->
+        <div class="home-insights-header">
+          <div>
+            <h2 class="insights-title">Here's what I found...</h2>
+            <p class="insights-subtitle">Key insights and recommendations based on your network performance and forecasts.</p>
+          </div>
+        </div>
+
+        <div class="insight-list" id="home-insight-list">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- AI Status Banner -->
+        <div class="ai-banner">
+          <div class="ai-banner-left">
+            <span class="ai-banner-icon">🤖</span>
+            <div>
+              <div class="ai-banner-text">I continuously monitor your network, forecast demand, run scenarios, and recommend the best actions.</div>
+              <div class="ai-banner-sub">Let me know if you'd like me to investigate anything specific.</div>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btn-ask-ng">🤖 Ask NetGravity</button>
+        </div>
+
+      </section>
+
+      <!-- ─────────────────── TAB: FACILITY DASHBOARD / ANALYTICS ─────────────────── -->
+      <section class="tab-panel" id="tab-facility-dashboard">
+        <!-- Dashboard Top Bar / Breadcrumb -->
+        <div class="dash-topbar">
+          <button class="btn btn-secondary btn-sm" id="btn-back-to-home">
+            <span>← Back to Decision Cockpit</span>
+          </button>
+          <div class="dash-meta-badge">
+            <span class="facility-dot" id="dash-facility-dot"></span>
+            <span id="dash-facility-name" style="font-weight:700">Delhi NCR DC</span>
+            <span class="tag tag-primary" id="dash-facility-type">Distribution Centre</span>
+          </div>
+          <div class="dash-actions">
+            <span class="text-sm text-muted" id="dash-period-label">1 Aug – 31 Aug 2026</span>
+          </div>
+        </div>
+
+        <div class="dash-header mb-lg">
+          <div>
+            <h1 class="home-greeting" id="dash-title">Facility Performance & Analytics Dashboard</h1>
+            <p class="home-subtitle" id="dash-subtitle">Complete operational telemetry, capacity utilisation, cost breakdown, and corridor flows.</p>
+          </div>
+        </div>
+
+        <!-- 6 Executive Data Cards -->
+        <div class="grid-3 mb-lg" id="dash-metrics-grid">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid-2 mb-lg">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Throughput vs Capacity Horizon</div>
+                <div class="card-subtitle">12-Month History + 3-Month Projection · Capacity Ceiling</div>
+              </div>
+              <span class="tag tag-danger" id="dash-util-tag">94% Utilisation</span>
+            </div>
+            <div class="chart-wrap" style="height:280px">
+              <canvas id="chart-dash-throughput"></canvas>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Operational Cost Breakdown</div>
+                <div class="card-subtitle">Transport, Handling, Storage, Holding & Accessorials</div>
+              </div>
+              <span class="tag tag-primary" id="dash-total-cost-tag">₹11.8L / period</span>
+            </div>
+            <div class="chart-wrap" style="height:280px">
+              <canvas id="chart-dash-costs"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Corridor Flow Distribution Chart & Summary -->
+        <div class="card mb-lg">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Connected Corridor Flows & Cost per Unit</div>
+              <div class="card-subtitle">Inbound supply from plants & Outbound dispatches to demand markets</div>
+            </div>
+            <span class="tag tag-muted" id="dash-lane-count-tag">4 Active Arcs</span>
+          </div>
+          <div class="grid-2-1" style="gap:var(--space-lg);align-items:center">
+            <div class="chart-wrap" style="height:220px">
+              <canvas id="chart-dash-lanes"></canvas>
+            </div>
+            <div id="dash-corridor-summary" style="font-size:13px;color:var(--text-2);background:var(--bg-elevated);padding:var(--space-md);border-radius:var(--r-md);line-height:1.7">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Detailed Corridor Table -->
+        <div class="card mb-lg">
+          <div class="card-title mb-md">Connected Corridor Telemetry Table</div>
+          <div class="table-wrap">
+            <table class="ng-table" id="table-dash-lanes">
+              <thead>
+                <tr>
+                  <th>Corridor Arc</th>
+                  <th>Direction</th>
+                  <th class="num">Daily Flow</th>
+                  <th class="num">Distance</th>
+                  <th class="num">Cost / Unit</th>
+                  <th class="num">Transit Time</th>
+                  <th>Transport Mode</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Telemetry & System Source Integrity -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">Source Telemetry & System Mapping</div>
+            <span class="tag tag-success">✓ Live Synced</span>
+          </div>
+          <div class="grid-4" id="dash-telemetry-grid">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </section>
+
+
+      <!-- ─────────────────── TAB: DIGITAL TWIN -->
+      <section class="tab-panel" id="tab-twin">
+        <div class="flex items-center justify-between mb-lg">
+          <div>
+            <div class="section-header" style="margin-bottom:4px">Digital Twin — India Logistics Network</div>
+            <div class="section-intro" style="margin-bottom:0">
+              Click any facility to inspect capacity, utilisation, and forecast. Toggle between network states.
+            </div>
+          </div>
+          <div class="toggle-group" id="map-toggle-twin">
+            <button class="toggle-btn active" data-state="actual">Actual</button>
+            <button class="toggle-btn" data-state="optimised">Optimised Base</button>
+            <button class="toggle-btn" data-state="recommended">Recommended</button>
+          </div>
+        </div>
+
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="map-container tall" id="map-twin"></div>
+        </div>
+
+        <div class="grid-3 mt-lg">
+          <div class="card">
+            <div class="card-title mb-md">Plants</div>
+            <table class="ng-table" id="table-plants"><thead><tr><th>Name</th><th class="num">Capacity</th><th class="num">Throughput</th><th>Status</th></tr></thead><tbody></tbody></table>
+          </div>
+          <div class="card">
+            <div class="card-title mb-md">Distribution Centres</div>
+            <table class="ng-table" id="table-dcs"><thead><tr><th>Name</th><th class="num">Capacity</th><th class="num">Utilisation</th><th>Status</th></tr></thead><tbody></tbody></table>
+          </div>
+          <div class="card">
+            <div class="card-title mb-md">Demand Markets</div>
+            <table class="ng-table" id="table-markets"><thead><tr><th>Name</th><th class="num">Demand</th><th>SLA</th><th>Priority</th></tr></thead><tbody></tbody></table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─────────────────── TAB: FORECAST -->
+      <section class="tab-panel" id="tab-forecast">
+        <div class="section-header">Demand Forecast & External Signals</div>
+        <div class="section-intro">
+          I forecast North India demand to increase 14% over the next 3 months. Delhi NCR DC is projected to exceed capacity in December.
+        </div>
+
+        <div class="card mb-lg">
+          <div class="card-header">
+            <div>
+              <div class="card-title">North India Demand — Historical & Forecast</div>
+              <div class="card-subtitle">24-month history + 6-month forecast · Confidence band · Capacity threshold</div>
+            </div>
+            <span class="tag tag-danger">Breach Projected Dec'26</span>
+          </div>
+          <div class="chart-wrap tall">
+            <canvas id="chart-forecast"></canvas>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">Forecast Summary</div>
+              <span class="tag tag-muted">Statistical/ML</span>
+            </div>
+            <div class="fp-stat"><span class="fp-stat-label">Model</span><span class="fp-stat-value">Enhanced Demand Forecast</span></div>
+            <div class="fp-stat"><span class="fp-stat-label">Horizon</span><span class="fp-stat-value">6 months</span></div>
+            <div class="fp-stat"><span class="fp-stat-label">Growth Rate (North India)</span><span class="fp-stat-value" style="color:var(--red)">+14.2%</span></div>
+            <div class="fp-stat"><span class="fp-stat-label">Breach Facility</span><span class="fp-stat-value">Delhi NCR DC</span></div>
+            <div class="fp-stat"><span class="fp-stat-label">Breach Month</span><span class="fp-stat-value" style="color:var(--red)">December 2026</span></div>
+            <div class="fp-stat"><span class="fp-stat-label">Projected Utilisation</span><span class="fp-stat-value" style="color:var(--red)">108%</span></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">External Signals</div>
+              <span class="signal-badge">External signal / hypothesis</span>
+            </div>
+            <div id="external-signals">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─────────────────── TAB: SCENARIOS -->
+      <section class="tab-panel" id="tab-scenarios">
+        <div class="section-header">Scenario Workspace</div>
+        <div class="section-intro">
+          I tested 4 alternative configurations. Compare their cost, SLA, utilisation, carbon, and resilience.
+        </div>
+
+        <div class="card mb-lg">
+          <div class="card-header">
+            <div class="card-title">Scenario Comparison</div>
+            <div class="btn-group">
+              <button class="btn btn-secondary btn-sm" id="btn-show-full">View Full Comparison</button>
+              <button class="btn btn-primary btn-sm" id="btn-create-scenario">+ Create Scenario</button>
+            </div>
+          </div>
+          <div class="table-wrap" id="scenario-comparison">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-title mb-md">Cost Comparison</div>
+            <div class="chart-wrap"><canvas id="chart-scenario-cost"></canvas></div>
+          </div>
+          <div class="card">
+            <div class="card-title mb-md">Performance Radar</div>
+            <div class="chart-wrap"><canvas id="chart-scenario-radar"></canvas></div>
+          </div>
+        </div>
+
+        <!-- Create Scenario Modal -->
+        <div class="modal-overlay" id="modal-create-scenario">
+          <div class="modal-box">
+            <div class="flex items-center justify-between mb-lg">
+              <div class="card-title">Create New Scenario</div>
+              <button class="btn btn-ghost btn-sm" id="modal-close-scenario">✕</button>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Scenario Name</label>
+              <input type="text" class="form-input" id="scn-name" placeholder="e.g. Close Guwahati DC">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Scenario Type</label>
+              <select class="form-select" id="scn-type">
+                <option value="CLOSE_FACILITY">Close Facility</option>
+                <option value="OPEN_FACILITY">Open Candidate Facility</option>
+                <option value="CHANGE_CAPACITY">Expand/Reduce Capacity</option>
+                <option value="CHANGE_DEMAND">Modify Demand</option>
+                <option value="CHANGE_TRANSPORT_COST">Change Transport Cost</option>
+                <option value="SERVICE_TARGET_CHANGE">Change SLA Requirement</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Target Facility</label>
+              <select class="form-select" id="scn-facility">
+                <option value="DC_DELHI">Delhi NCR DC</option>
+                <option value="DC_MUMBAI">Mumbai DC</option>
+                <option value="DC_BENGALURU">Bengaluru DC</option>
+                <option value="DC_KOLKATA">Kolkata DC</option>
+                <option value="DC_GUWAHATI">Guwahati DC</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">SLA Target (%)</label>
+              <input type="number" class="form-input" id="scn-sla" value="95" min="80" max="100">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Objective / Notes</label>
+              <textarea class="form-input" id="scn-notes" rows="3" placeholder="What this scenario tests..."></textarea>
+            </div>
+            <div class="btn-group mt-lg">
+              <button class="btn btn-primary" id="scn-run">▶ Run Through MILP Optimiser</button>
+              <button class="btn btn-secondary" id="scn-cancel">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─────────────────── TAB: RECOMMENDATION (accessed via insights) -->
+      <section class="tab-panel" id="tab-recommend">
+        <div class="section-header">Here's what I recommend.</div>
+        <div id="recommendation-panel">
+          <!-- Populated by JS -->
+        </div>
+      </section>
+
+    </main>
+  </div>
+</div>
+
+<!-- Facility Detail Panel (slide-in) -->
+<div class="facility-panel" id="facility-panel">
+  <button class="facility-panel-close" id="fp-close">✕</button>
+  <div id="fp-content"></div>
+</div>
+
+<!-- Insight Detail Drawer -->
+<div class="insight-drawer-overlay" id="insight-drawer-overlay">
+  <div class="insight-drawer" id="insight-drawer">
+    <button class="facility-panel-close" id="insight-drawer-close">✕</button>
+    <div id="insight-drawer-content"></div>
+  </div>
+</div>
+
+<script>
+/* ═════════ data.js ═════════ */
+/**
+ * NetGravity — Central Mock Data Layer
+ * ======================================
+ * All prototype data in one place. Internally consistent.
+ * Storyline: December capacity risk at Baddi DC.
+ *
+ * STATUS: PROTOTYPE / MOCKED
+ * In production, this data comes from the Python MILP engine via API.
+ */
+
+// ─── FACILITIES ─────────────────────────────────────────────
+const PLANTS = [
+  { id: "PLT_BADDI",     name: "Baddi Plant",      city: "Baddi",      state: "Himachal Pradesh", lat: 30.96, lng: 76.79, capacity: 12000, throughput: 11200, region: "North",  status: "EXISTING" },
+  { id: "PLT_PUNE",      name: "Pune Plant",       city: "Pune",       state: "Maharashtra",      lat: 18.52, lng: 73.86, capacity: 10000, throughput: 7800,  region: "West",   status: "EXISTING" },
+  { id: "PLT_HYDERABAD", name: "Hyderabad Plant",  city: "Hyderabad",  state: "Telangana",        lat: 17.38, lng: 78.49, capacity: 8000,  throughput: 6100,  region: "South",  status: "EXISTING" },
+  { id: "PLT_KOLKATA",   name: "Kolkata Plant",    city: "Kolkata",    state: "West Bengal",       lat: 22.57, lng: 88.36, capacity: 6000,  throughput: 4200,  region: "East",   status: "EXISTING" },
+];
+
+const DCS = [
+  { id: "DC_DELHI",     name: "Delhi NCR DC",    city: "Delhi NCR",   state: "Delhi",          lat: 28.61, lng: 77.21, capacity: 10000, throughput: 9400,  fixedCost: 120, handlingCost: 4.2, region: "North",     status: "EXISTING", utilPct: 94.0 },
+  { id: "DC_MUMBAI",    name: "Mumbai DC",       city: "Mumbai",      state: "Maharashtra",    lat: 19.08, lng: 72.88, capacity: 9000,  throughput: 6800,  fixedCost: 140, handlingCost: 4.8, region: "West",      status: "EXISTING", utilPct: 75.6 },
+  { id: "DC_BENGALURU", name: "Bengaluru DC",    city: "Bengaluru",   state: "Karnataka",      lat: 12.97, lng: 77.59, capacity: 7500,  throughput: 5600,  fixedCost: 110, handlingCost: 4.0, region: "South",     status: "EXISTING", utilPct: 74.7 },
+  { id: "DC_KOLKATA",   name: "Kolkata DC",      city: "Kolkata",     state: "West Bengal",    lat: 22.57, lng: 88.36, capacity: 6000,  throughput: 3200,  fixedCost: 85,  handlingCost: 3.5, region: "East",      status: "EXISTING", utilPct: 53.3 },
+  { id: "DC_GUWAHATI",  name: "Guwahati DC",     city: "Guwahati",    state: "Assam",          lat: 26.14, lng: 91.74, capacity: 4000,  throughput: 2100,  fixedCost: 65,  handlingCost: 3.8, region: "Northeast", status: "EXISTING", utilPct: 52.5 },
+];
+
+const MARKETS = [
+  { id: "MKT_DELHI",     name: "Delhi",      lat: 28.70, lng: 77.10, demand: 4200, slaDays: 2, priority: "High",   region: "North" },
+  { id: "MKT_MUMBAI",    name: "Mumbai",     lat: 19.08, lng: 72.88, demand: 3800, slaDays: 2, priority: "High",   region: "West" },
+  { id: "MKT_BENGALURU", name: "Bengaluru",  lat: 12.97, lng: 77.59, demand: 3200, slaDays: 2, priority: "High",   region: "South" },
+  { id: "MKT_CHENNAI",   name: "Chennai",    lat: 13.08, lng: 80.27, demand: 2400, slaDays: 3, priority: "Medium", region: "South" },
+  { id: "MKT_HYDERABAD", name: "Hyderabad",  lat: 17.38, lng: 78.49, demand: 2800, slaDays: 3, priority: "Medium", region: "South" },
+  { id: "MKT_KOLKATA",   name: "Kolkata",    lat: 22.57, lng: 88.36, demand: 2200, slaDays: 3, priority: "Medium", region: "East" },
+  { id: "MKT_AHMEDABAD", name: "Ahmedabad",  lat: 23.03, lng: 72.57, demand: 1800, slaDays: 3, priority: "Medium", region: "West" },
+  { id: "MKT_JAIPUR",    name: "Jaipur",     lat: 26.91, lng: 75.79, demand: 1500, slaDays: 3, priority: "Medium", region: "North" },
+  { id: "MKT_LUCKNOW",   name: "Lucknow",    lat: 26.85, lng: 80.95, demand: 1400, slaDays: 3, priority: "Medium", region: "North" },
+  { id: "MKT_GUWAHATI",  name: "Guwahati",   lat: 26.14, lng: 91.74, demand: 1100, slaDays: 4, priority: "Low",    region: "Northeast" },
+];
+
+// ─── LANES (key corridors with cost, distance, lead time) ───
+const LANES = [
+  // Plant → DC
+  { from: "PLT_BADDI",     to: "DC_DELHI",     cost: 12, distance: 310,  leadTime: 1.0, flow: 8200,  mode: "ROAD" },
+  { from: "PLT_BADDI",     to: "DC_MUMBAI",    cost: 28, distance: 1420, leadTime: 2.5, flow: 1800,  mode: "ROAD" },
+  { from: "PLT_BADDI",     to: "DC_KOLKATA",   cost: 32, distance: 1800, leadTime: 3.0, flow: 1200,  mode: "ROAD" },
+  { from: "PLT_PUNE",      to: "DC_MUMBAI",    cost: 8,  distance: 150,  leadTime: 0.5, flow: 5000,  mode: "ROAD" },
+  { from: "PLT_PUNE",      to: "DC_BENGALURU", cost: 18, distance: 840,  leadTime: 1.5, flow: 2800,  mode: "ROAD" },
+  { from: "PLT_HYDERABAD", to: "DC_BENGALURU", cost: 15, distance: 570,  leadTime: 1.0, flow: 2800,  mode: "ROAD" },
+  { from: "PLT_HYDERABAD", to: "DC_MUMBAI",    cost: 20, distance: 710,  leadTime: 1.5, flow: 1500,  mode: "ROAD" },
+  { from: "PLT_HYDERABAD", to: "DC_KOLKATA",   cost: 25, distance: 1500, leadTime: 2.5, flow: 1300,  mode: "ROAD" },
+  { from: "PLT_KOLKATA",   to: "DC_KOLKATA",   cost: 5,  distance: 30,   leadTime: 0.2, flow: 2700,  mode: "ROAD" },
+  { from: "PLT_KOLKATA",   to: "DC_GUWAHATI",  cost: 22, distance: 1000, leadTime: 2.0, flow: 1500,  mode: "ROAD" },
+  { from: "PLT_BADDI",     to: "DC_GUWAHATI",  cost: 38, distance: 2200, leadTime: 3.5, flow: 600,   mode: "ROAD" },
+  // DC → Market (major flows)
+  { from: "DC_DELHI",     to: "MKT_DELHI",     cost: 4,  distance: 40,   leadTime: 0.3, flow: 4200, mode: "ROAD" },
+  { from: "DC_DELHI",     to: "MKT_JAIPUR",    cost: 10, distance: 270,  leadTime: 0.8, flow: 1500, mode: "ROAD" },
+  { from: "DC_DELHI",     to: "MKT_LUCKNOW",   cost: 14, distance: 500,  leadTime: 1.2, flow: 1400, mode: "ROAD" },
+  { from: "DC_DELHI",     to: "MKT_AHMEDABAD", cost: 22, distance: 950,  leadTime: 1.8, flow: 800,  mode: "ROAD" },
+  { from: "DC_MUMBAI",    to: "MKT_MUMBAI",    cost: 3,  distance: 25,   leadTime: 0.2, flow: 3800, mode: "ROAD" },
+  { from: "DC_MUMBAI",    to: "MKT_AHMEDABAD", cost: 12, distance: 530,  leadTime: 1.0, flow: 1000, mode: "ROAD" },
+  { from: "DC_MUMBAI",    to: "MKT_HYDERABAD", cost: 18, distance: 710,  leadTime: 1.5, flow: 1200, mode: "ROAD" },
+  { from: "DC_BENGALURU", to: "MKT_BENGALURU", cost: 3,  distance: 20,   leadTime: 0.2, flow: 3200, mode: "ROAD" },
+  { from: "DC_BENGALURU", to: "MKT_CHENNAI",   cost: 10, distance: 350,  leadTime: 0.8, flow: 2400, mode: "ROAD" },
+  { from: "DC_KOLKATA",   to: "MKT_KOLKATA",   cost: 3,  distance: 15,   leadTime: 0.2, flow: 2200, mode: "ROAD" },
+  { from: "DC_KOLKATA",   to: "MKT_HYDERABAD", cost: 22, distance: 1500, leadTime: 2.5, flow: 600,  mode: "ROAD" },
+  { from: "DC_GUWAHATI",  to: "MKT_GUWAHATI",  cost: 4,  distance: 30,   leadTime: 0.3, flow: 1100, mode: "ROAD" },
+  { from: "DC_DELHI",     to: "MKT_HYDERABAD", cost: 28, distance: 1500, leadTime: 2.5, flow: 500,  mode: "ROAD" },
+  { from: "DC_GUWAHATI",  to: "MKT_KOLKATA",   cost: 18, distance: 1000, leadTime: 2.0, flow: 600,  mode: "ROAD" },
+  { from: "DC_MUMBAI",    to: "MKT_CHENNAI",   cost: 24, distance: 1330, leadTime: 2.2, flow: 500,  mode: "ROAD" },
+];
+
+// ─── DEMAND HISTORY (24 months) & FORECAST ──────────────────
+const DEMAND_HISTORY = {
+  months: [
+    "Jan'25","Feb'25","Mar'25","Apr'25","May'25","Jun'25",
+    "Jul'25","Aug'25","Sep'25","Oct'25","Nov'25","Dec'25",
+    "Jan'26","Feb'26","Mar'26","Apr'26","May'26","Jun'26",
+    "Jul'26","Aug'26","Sep'26","Oct'26","Nov'26","Dec'26",
+  ],
+  // North India aggregate demand (units/day)
+  northIndia: [
+    7100,7000,7300,7200,7400,7100,
+    7500,7600,7800,8000,8200,8800,
+    8400,8300,8600,8500,8800,8600,
+    9000,9200,9400,9600,9800,10800,
+  ],
+  // Baddi DC capacity line (constant)
+  baddiCapacity: 10000,
+};
+
+const FORECAST = {
+  months: ["Jan'27","Feb'27","Mar'27","Apr'27","May'27","Jun'27"],
+  northIndia: [10200, 10400, 10100, 10600, 10900, 11200],
+  upper: [10800, 11200, 10900, 11500, 11800, 12400],
+  lower: [9600, 9700, 9400, 9800, 10000, 10100],
+  growthRate: 14.2,
+  breachMonth: "Dec'26",
+  breachFacility: "DC_DELHI",
+  breachProjectedUtil: 108,
+};
+
+// ─── EXTERNAL SIGNALS ───────────────────────────────────────
+const EXTERNAL_SIGNALS = [
+  {
+    id: "SIG_01",
+    title: "North India GDP Growth Accelerating",
+    source: "RBI Quarterly Bulletin",
+    publishedDate: "2026-07-15",
+    effectiveDate: "2026-Q4",
+    geography: "North India",
+    direction: "UP",
+    magnitude: "+2.1% above trend",
+    confidence: "HIGH",
+    rationale: "Strong industrial output and consumer spending in NCR, Punjab, Haryana",
+    intendedUse: "Demand forecast enrichment — supports +14% North India demand growth estimate",
+    type: "signal",
+    icon: "📈",
+    color: "#dc2626",
+  },
+  {
+    id: "SIG_02",
+    title: "Diesel Prices Expected to Rise 8%",
+    source: "PPAC / Ministry of Petroleum",
+    publishedDate: "2026-08-01",
+    effectiveDate: "2026-10-01",
+    geography: "Pan-India",
+    direction: "UP",
+    magnitude: "₹8–10/litre increase",
+    confidence: "MEDIUM",
+    rationale: "Global crude price increase + reduced subsidies expected in Q4",
+    intendedUse: "Transport cost sensitivity — scenario with +8% lane costs",
+    type: "signal",
+    icon: "⛽",
+    color: "#f59e0b",
+  },
+  {
+    id: "SIG_03",
+    title: "New Expressway: Delhi–Jaipur Corridor",
+    source: "NHAI Press Release",
+    publishedDate: "2026-06-20",
+    effectiveDate: "2027-03-01",
+    geography: "Delhi → Jaipur",
+    direction: "DOWN",
+    magnitude: "−15% transit time, −5% fuel cost",
+    confidence: "HIGH",
+    rationale: "Six-lane expressway reduces travel time from 5h to 3.5h",
+    intendedUse: "Lane cost/time update for Delhi–Jaipur corridor in future periods",
+    type: "signal",
+    icon: "🛣️",
+    color: "#22c55e",
+  },
+];
+
+// ─── DATA QUALITY ───────────────────────────────────────────
+const DATA_QUALITY = {
+  totalRecords: 4820,
+  validRecords: 4743,
+  validPct: 98.4,
+  issues: [
+    { id: "DQ_01", type: "Unit Inconsistency",   field: "capacity",      facility: "DC_GUWAHATI",  detail: "Capacity reported in tonnes, expected units/day", severity: "warning",  status: "needs_review" },
+    { id: "DQ_02", type: "Unit Inconsistency",   field: "demand",        market: "MKT_LUCKNOW",    detail: "Q3 demand in cases, rest in units",              severity: "warning",  status: "needs_review" },
+    { id: "DQ_03", type: "Missing Value",        field: "capacity",      facility: "DC_GUWAHATI",  detail: "Max capacity not specified for expansion scenario", severity: "info",    status: "needs_review" },
+    { id: "DQ_04", type: "AI Mapping Uncertain", field: "Qty → Demand",  source: "Distributor A",  detail: "Field 'Qty' mapped to Demand_Units (87% confidence)", severity: "warning", status: "needs_review" },
+    { id: "DQ_05", type: "AI Mapping Uncertain", field: "Vol → Demand",  source: "Distributor B",  detail: "Field 'Volume' mapped to Demand_Units (91% confidence)", severity: "info",  status: "needs_review" },
+    { id: "DQ_06", type: "AI Mapping Uncertain", field: "Units Shipped", source: "Distributor C",  detail: "Field 'Units Shipped' mapped to Demand_Units (95% confidence)", severity: "info", status: "auto_mapped" },
+    { id: "DQ_07", type: "Outlier",              field: "transport_cost", lane: "PLT_BADDI→DC_GUWAHATI", detail: "Cost ₹38/unit is 2.1σ above corridor average", severity: "info", status: "reviewed" },
+    { id: "DQ_08", type: "Stale Data",           field: "demand",        market: "MKT_GUWAHATI",   detail: "Last updated 45 days ago",                       severity: "info",    status: "needs_review" },
+  ],
+  reviewCount: 12,
+  uncertainMappings: 3,
+  missingCapacity: 1,
+};
+
+// ─── CONTRACT EXTRACTION DEMO ───────────────────────────────
+const CONTRACT_DEMO = {
+  vendorA: {
+    name: "TransCorp Logistics",
+    headlineRate: "₹10/kg",
+    extractedTerms: [
+      { field: "Base Rate",               value: "₹10/kg",         confidence: "HIGH" },
+      { field: "Fuel Surcharge",          value: "₹2/kg",          confidence: "HIGH" },
+      { field: "Non-Serviceable Surcharge", value: "₹5/kg for 12 pin codes in NE India", confidence: "MEDIUM" },
+      { field: "Minimum Volume",          value: "500 kg/shipment", confidence: "HIGH" },
+      { field: "Penalty (Late Pickup)",   value: "₹500/incident",  confidence: "MEDIUM" },
+      { field: "Effective Date",          value: "2026-04-01",      confidence: "HIGH" },
+    ],
+    effectiveCost: "₹12–17/kg (depending on route)",
+    hiddenCostAlert: true,
+  },
+  vendorB: {
+    name: "SpeedFreight India",
+    headlineRate: "₹12/kg",
+    extractedTerms: [
+      { field: "Base Rate",      value: "₹12/kg (all-inclusive)", confidence: "HIGH" },
+      { field: "Fuel Surcharge", value: "Included",               confidence: "HIGH" },
+      { field: "Coverage",       value: "All pin codes",          confidence: "HIGH" },
+      { field: "Minimum Volume", value: "200 kg/shipment",        confidence: "HIGH" },
+      { field: "Effective Date", value: "2026-04-01",              confidence: "HIGH" },
+    ],
+    effectiveCost: "₹12/kg (flat)",
+    hiddenCostAlert: false,
+  },
+};
+
+// ─── SCHEMA MAPPING DEMO ────────────────────────────────────
+const SCHEMA_MAPPING = {
+  distributors: [
+    { name: "Distributor A", field: "Qty",           mappedTo: "Demand_Units", confidence: 87 },
+    { name: "Distributor B", field: "Volume",        mappedTo: "Demand_Units", confidence: 91 },
+    { name: "Distributor C", field: "Units Shipped", mappedTo: "Demand_Units", confidence: 95 },
+    { name: "Distributor D", field: "Order_Qty",     mappedTo: "Demand_Units", confidence: 98 },
+  ],
+  canonicalField: "Demand_Units",
+  sourceTypes: ["ERP", "WMS", "TMS", "Facility Master", "Demand Data", "Lane Data"],
+};
+
+// ─── SCENARIO RESULTS (pre-computed mock MILP outputs) ──────
+const SCENARIOS = [
+  {
+    id: "SCN_ACTUAL",
+    name: "Actual (As-Is)",
+    type: "BASELINE",
+    description: "Current network configuration and observed flows",
+    status: "evaluated",
+    totalCost: 1284000,
+    transportCost: 892000,
+    fixedCost: 312000,
+    inventoryCost: 80000,
+    sla: 91.2,
+    avgUtil: 72.4,
+    maxUtil: 94.0,
+    carbonKg: 142000,
+    implementationCost: 0,
+    resilience: "Medium",
+    feasible: true,
+    changes: [],
+    stressTestResult: null,
+  },
+  {
+    id: "SCN_OPTIMISED_BASE",
+    name: "Optimised Base Case",
+    type: "OPTIMISED_BASE",
+    description: "Optimise routing within current facility footprint",
+    status: "evaluated",
+    totalCost: 1198000,
+    transportCost: 826000,
+    fixedCost: 312000,
+    inventoryCost: 60000,
+    sla: 94.8,
+    avgUtil: 68.1,
+    maxUtil: 88.2,
+    carbonKg: 131000,
+    implementationCost: 15000,
+    resilience: "Medium",
+    feasible: true,
+    changes: ["Rebalance flows from Baddi→Delhi NCR corridor", "Shift 800 units/day to Kolkata DC"],
+    stressTestResult: { demandSurge15: "PASS", laneDisruption: "FAIL — single point of failure on Baddi corridor" },
+  },
+  {
+    id: "SCN_REBALANCE",
+    name: "Flow Rebalancing",
+    type: "SCENARIO",
+    description: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata DCs",
+    status: "evaluated",
+    totalCost: 1184000,
+    transportCost: 818000,
+    fixedCost: 312000,
+    inventoryCost: 54000,
+    sla: 96.7,
+    avgUtil: 65.3,
+    maxUtil: 82.1,
+    carbonKg: 136000,
+    implementationCost: 25000,
+    resilience: "High",
+    feasible: true,
+    changes: [
+      "Redirect 1,200 units/day from Baddi → Delhi NCR DC",
+      "Increase Kolkata DC throughput by 800 units/day",
+      "Adjust PLT_PUNE → DC_MUMBAI allocation +400 units/day",
+    ],
+    stressTestResult: { demandSurge15: "PASS", laneDisruption: "PASS", costSensitivity: "Robust to +12% transport cost" },
+  },
+  {
+    id: "SCN_EXPAND_BADDI",
+    name: "Baddi Capacity Expansion",
+    type: "SCENARIO",
+    description: "Expand Delhi NCR DC capacity by 3,000 units/day",
+    status: "evaluated",
+    totalCost: 1246000,
+    transportCost: 835000,
+    fixedCost: 351000,
+    inventoryCost: 60000,
+    sla: 97.1,
+    avgUtil: 62.4,
+    maxUtil: 76.0,
+    carbonKg: 128000,
+    implementationCost: 180000,
+    resilience: "High",
+    feasible: true,
+    changes: ["Expand Delhi NCR DC capacity from 10,000 to 13,000 units/day", "CapEx: ₹18L for warehouse expansion"],
+    stressTestResult: { demandSurge15: "PASS", laneDisruption: "PASS", costSensitivity: "High CapEx reduces ROI if demand < forecast" },
+  },
+  {
+    id: "SCN_CONSOLIDATE",
+    name: "DC Consolidation (Close Guwahati)",
+    type: "SCENARIO",
+    description: "Close Guwahati DC, redirect NE volume through Kolkata",
+    status: "evaluated",
+    totalCost: 1142000,
+    transportCost: 812000,
+    fixedCost: 247000,
+    inventoryCost: 83000,
+    sla: 88.4,
+    avgUtil: 78.2,
+    maxUtil: 96.8,
+    carbonKg: 155000,
+    implementationCost: 35000,
+    resilience: "Low",
+    feasible: true,
+    changes: ["Close Guwahati DC (save ₹65L/yr fixed cost)", "Redirect 2,100 units/day to Kolkata DC"],
+    stressTestResult: { demandSurge15: "FAIL — Kolkata DC exceeds capacity at 112%", laneDisruption: "FAIL", costSensitivity: "Fragile" },
+  },
+  {
+    id: "SCN_NEW_DC",
+    name: "New North India DC (Lucknow)",
+    type: "SCENARIO",
+    description: "Open candidate DC in Lucknow to serve North/East demand",
+    status: "evaluated",
+    totalCost: 1215000,
+    transportCost: 795000,
+    fixedCost: 360000,
+    inventoryCost: 60000,
+    sla: 97.8,
+    avgUtil: 58.6,
+    maxUtil: 72.0,
+    carbonKg: 118000,
+    implementationCost: 250000,
+    resilience: "Very High",
+    feasible: true,
+    changes: ["Open new DC in Lucknow (capacity 5,000 units/day)", "Redistribute North India demand across 2 DCs", "CapEx: ₹25L for new facility"],
+    stressTestResult: { demandSurge15: "PASS", laneDisruption: "PASS", costSensitivity: "Robust but high upfront investment" },
+  },
+];
+
+// ─── AI AGENT STATE ─────────────────────────────────────────
+const AGENT_STATE = {
+  status: "active",
+  currentObjective: "Reduce network cost by at least 8% while maintaining SLA above 95%",
+  activityTrace: [
+    { step: 1, action: "Analysed the current network",              status: "done",    detail: "42 facilities, 120 demand zones, 380 lanes" },
+    { step: 2, action: "Identified 2 capacity bottlenecks",         status: "done",    detail: "Delhi NCR DC at 94% utilisation, projected 108% in December" },
+    { step: 3, action: "Identified 1 high-cost corridor",           status: "done",    detail: "Baddi → Guwahati corridor at ₹38/unit (2.1σ above average)" },
+    { step: 4, action: "Generated 4 candidate interventions",       status: "done",    detail: "Flow rebalancing, capacity expansion, DC consolidation, new DC" },
+    { step: 5, action: "Tested 4 scenarios through MILP optimiser", status: "done",    detail: "All 4 scenarios evaluated — 3 feasible, 1 fails SLA target" },
+    { step: 6, action: "Rejected DC Consolidation on SLA grounds",  status: "done",    detail: "SLA drops to 88.4% — below 95% threshold" },
+    { step: 7, action: "Stress-tested leading options under +15% demand", status: "done", detail: "Flow Rebalancing passes all stress tests" },
+    { step: 8, action: "Found the most robust configuration",       status: "done",    detail: "Flow Rebalancing: −7.8% cost, 96.7% SLA, robust under stress" },
+  ],
+  toolCalls: [
+    { tool: "get_network_summary()",       result: "42 facilities, 380 lanes, total demand 24,400 units/day" },
+    { tool: "get_bottlenecks()",           result: "DC_DELHI at 94% util, projected breach Dec'26" },
+    { tool: "get_forecast(region='North')",result: "+14% demand growth, breach at 10,800 units in Dec" },
+    { tool: "run_baseline()",              result: "Total cost ₹12.84L/day, SLA 91.2%" },
+    { tool: "optimize_current_footprint()",result: "Optimised to ₹11.98L/day, SLA 94.8%" },
+    { tool: "run_scenario('rebalance')",   result: "₹11.84L/day, SLA 96.7% — FEASIBLE" },
+    { tool: "run_scenario('expand')",      result: "₹12.46L/day, SLA 97.1% — FEASIBLE (high CapEx)" },
+    { tool: "run_scenario('consolidate')", result: "₹11.42L/day, SLA 88.4% — REJECTED (SLA < 95%)" },
+    { tool: "run_scenario('new_dc')",      result: "₹12.15L/day, SLA 97.8% — FEASIBLE (high CapEx)" },
+    { tool: "run_sensitivity('demand', +15%)", result: "Rebalance: PASS | Consolidate: FAIL" },
+    { tool: "run_resilience('DC_DELHI')",  result: "Rebalance handles facility disruption — reroutes to Kolkata" },
+    { tool: "compare_scenarios()",         result: "Rebalance is optimal on cost-adjusted-risk basis" },
+  ],
+};
+
+// ─── RECOMMENDATION ─────────────────────────────────────────
+const RECOMMENDATION = {
+  title: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata DCs",
+  scenarioId: "SCN_REBALANCE",
+  tier: 2, // PROPOSE — human approval required
+  impact: {
+    costChange: -7.8,
+    sla: 96.7,
+    peakUtilChange: -11.9,
+    carbonChange: -4.2,
+  },
+  evidence: {
+    whatIFound: "Delhi NCR DC is operating at 94% utilisation. With projected demand growth of +14% in North India, this facility will exceed capacity (108% projected) by December 2026.",
+    whyItMatters: "Capacity breach at Delhi NCR will force unplanned spillover to costlier corridors, degrade SLA from 91.2% to an estimated 84%, and increase transport costs by ₹1.2L/day.",
+    whatITested: [
+      "Flow Rebalancing — redirect 1,200 units/day to Delhi NCR, 800 to Kolkata",
+      "Capacity Expansion — expand Delhi NCR DC by 3,000 units/day (₹18L CapEx)",
+      "DC Consolidation — close Guwahati, consolidate through Kolkata",
+      "New DC — open Lucknow DC (₹25L CapEx)",
+    ],
+    whatIRejected: [
+      { scenario: "DC Consolidation", reason: "Lowest cost (₹11.42L/day) but SLA drops to 88.4% — below 95% threshold. Also fails under +15% demand surge (Kolkata DC hits 112% utilisation)." },
+      { scenario: "Capacity Expansion", reason: "Good SLA (97.1%) but high CapEx (₹18L) and ROI is sensitive to demand materialising as forecast." },
+      { scenario: "New Lucknow DC", reason: "Best SLA (97.8%) and resilience but requires ₹25L CapEx and 6-month setup time. Consider for Phase 2." },
+    ],
+    whatCouldChange: [
+      "If demand growth exceeds +20%, capacity expansion becomes necessary",
+      "If diesel prices rise >10%, rebalancing savings increase further",
+      "If Kolkata DC throughput proves unreliable, New Lucknow DC should be accelerated",
+    ],
+  },
+  nextSteps: [
+    { step: 1, action: "Confirm Delhi NCR DC can absorb 1,200 additional units/day", owner: "DC Operations" },
+    { step: 2, action: "Validate carrier availability for new Kolkata corridors", owner: "Procurement" },
+    { step: 3, action: "Confirm transition lead time (estimated 3–4 weeks)", owner: "Network Planning" },
+    { step: 4, action: "Notify Baddi plant of revised dispatch schedule", owner: "Production Planning" },
+  ],
+  analystEmail: `Subject: Network Rebalancing Recommendation — Delhi NCR & Kolkata DCs
+
+Dear Network Planning Team,
+
+Following our analysis of the current logistics network, NetGravity has identified a capacity risk at Delhi NCR DC (94% utilisation, projected to exceed capacity by December 2026).
+
+Recommended Action:
+Rebalance 12% of Baddi-routed volume:
+• Redirect 1,200 units/day to Delhi NCR DC
+• Increase Kolkata DC throughput by 800 units/day
+
+Expected Impact:
+• Cost reduction: −7.8% (₹100K/day savings)
+• SLA improvement: 91.2% → 96.7%
+• Peak utilisation: 94% → 82.1%
+• Carbon reduction: −4.2%
+
+This recommendation has been stress-tested against +15% demand surge, lane disruptions, and transport cost sensitivity. It is the most robust option among 4 alternatives evaluated.
+
+Next Steps:
+1. Confirm Delhi NCR DC absorption capacity
+2. Validate carrier availability for Kolkata corridors
+3. Confirm transition timeline (est. 3–4 weeks)
+
+Please review and confirm by [date].
+
+Best regards,
+NetGravity Decision Intelligence`,
+};
+
+// ─── GOVERNANCE TIERS ───────────────────────────────────────
+const GOVERNANCE_TIERS = [
+  { tier: 1, label: "INFORM",        description: "Low-risk informational insight. No approval required.",       criteria: "Value at stake < ₹5L, fully reversible, no SLA impact", color: "#22c55e" },
+  { tier: 2, label: "PROPOSE",       description: "AI recommends and prepares action. Human approval required.", criteria: "Value at stake ₹5L–₹50L, or SLA impact, or partial reversibility", color: "#f59e0b" },
+  { tier: 3, label: "HUMAN DECISION", description: "High-impact structural decision. AI analyses, cannot execute.", criteria: "Close/open DC, major contract change, CapEx > ₹50L", color: "#dc2626" },
+];
+
+// ─── SYSTEM STATUS ──────────────────────────────────────────
+const SYSTEM_STATUS = {
+  data: { facilities: 42, demandZones: 120, lanes: 380, historicalPeriods: 24, qualityPct: 98.4 },
+  forecast: { model: "Enhanced Demand Forecast (ARIMA + external signals)", horizon: "6 months", lastUpdated: "2026-08-15" },
+  optimisation: { solver: "PuLP / HiGHS (MILP)", status: "Optimal", lastRun: "2026-08-18T14:22:00" },
+  ai: { agentStatus: "Active", model: "Configured LLM Provider", lastAction: "Stress-tested leading option" },
+};
+
+
+// ─── PERIODS ────────────────────────────────────────────────
+const PERIODS = [
+  { id: "AUG_2026", label: "1 Aug – 31 Aug 2026", short: "Aug 2026", prevId: "JUL_2026" },
+  { id: "JUL_2026", label: "1 Jul – 31 Jul 2026", short: "Jul 2026", prevId: "JUN_2026" },
+  { id: "Q3_2026",  label: "Q3 2026 (Jul – Sep)", short: "Q3 2026",  prevId: "Q2_2026" },
+  { id: "Q2_2026",  label: "Q2 2026 (Apr – Jun)", short: "Q2 2026",  prevId: "Q1_2026" },
+];
+
+// ─── FACILITY KPIs BY PERIOD ────────────────────────────────
+// Each facility + period combination has its own KPI snapshot.
+// "prev" values are for the comparison period.
+const FACILITY_KPIS = {
+  DC_DELHI: {
+    AUG_2026: {
+      utilisation: { value: 94.0, capacity: 10000, unit: "units/day", prev: 88.0, status: "critical" },
+      sla:         { value: 96.7, target: 95, prev: 94.9, status: "normal" },
+      totalCost:   { value: 1184000, prev: 1223000, status: "normal" },
+      inventoryDays: { value: 11.2, prev: 12.1, status: "normal" },
+      prevLabel: "1 Jul – 31 Jul 2026",
+    },
+    JUL_2026: {
+      utilisation: { value: 88.0, capacity: 10000, unit: "units/day", prev: 84.0, status: "warning" },
+      sla:         { value: 94.9, target: 95, prev: 95.1, status: "warning" },
+      totalCost:   { value: 1223000, prev: 1198000, status: "warning" },
+      inventoryDays: { value: 12.1, prev: 11.8, status: "normal" },
+      prevLabel: "1 Jun – 30 Jun 2026",
+    },
+  },
+  DC_MUMBAI: {
+    AUG_2026: {
+      utilisation: { value: 75.6, capacity: 9000, unit: "units/day", prev: 72.1, status: "normal" },
+      sla:         { value: 95.8, target: 95, prev: 94.2, status: "normal" },
+      totalCost:   { value: 980000, prev: 1010000, status: "normal" },
+      inventoryDays: { value: 9.8, prev: 10.4, status: "normal" },
+      prevLabel: "1 Jul – 31 Jul 2026",
+    },
+    JUL_2026: {
+      utilisation: { value: 72.1, capacity: 9000, unit: "units/day", prev: 70.5, status: "normal" },
+      sla:         { value: 94.2, target: 95, prev: 94.8, status: "warning" },
+      totalCost:   { value: 1010000, prev: 995000, status: "normal" },
+      inventoryDays: { value: 10.4, prev: 10.1, status: "normal" },
+      prevLabel: "1 Jun – 30 Jun 2026",
+    },
+  },
+  DC_BENGALURU: {
+    AUG_2026: {
+      utilisation: { value: 74.7, capacity: 7500, unit: "units/day", prev: 71.2, status: "normal" },
+      sla:         { value: 96.2, target: 95, prev: 95.5, status: "normal" },
+      totalCost:   { value: 840000, prev: 860000, status: "normal" },
+      inventoryDays: { value: 10.5, prev: 11.0, status: "normal" },
+      prevLabel: "1 Jul – 31 Jul 2026",
+    },
+    JUL_2026: {
+      utilisation: { value: 71.2, capacity: 7500, unit: "units/day", prev: 69.8, status: "normal" },
+      sla:         { value: 95.5, target: 95, prev: 95.0, status: "normal" },
+      totalCost:   { value: 860000, prev: 845000, status: "normal" },
+      inventoryDays: { value: 11.0, prev: 10.8, status: "normal" },
+      prevLabel: "1 Jun – 30 Jun 2026",
+    },
+  },
+  DC_KOLKATA: {
+    AUG_2026: {
+      utilisation: { value: 53.3, capacity: 6000, unit: "units/day", prev: 51.0, status: "normal" },
+      sla:         { value: 93.1, target: 95, prev: 92.4, status: "warning" },
+      totalCost:   { value: 520000, prev: 530000, status: "normal" },
+      inventoryDays: { value: 14.3, prev: 14.8, status: "warning" },
+      prevLabel: "1 Jul – 31 Jul 2026",
+    },
+    JUL_2026: {
+      utilisation: { value: 51.0, capacity: 6000, unit: "units/day", prev: 49.5, status: "normal" },
+      sla:         { value: 92.4, target: 95, prev: 93.0, status: "warning" },
+      totalCost:   { value: 530000, prev: 525000, status: "normal" },
+      inventoryDays: { value: 14.8, prev: 14.5, status: "warning" },
+      prevLabel: "1 Jun – 30 Jun 2026",
+    },
+  },
+  DC_GUWAHATI: {
+    AUG_2026: {
+      utilisation: { value: 52.5, capacity: 4000, unit: "units/day", prev: 50.0, status: "normal" },
+      sla:         { value: 91.4, target: 95, prev: 90.8, status: "warning" },
+      totalCost:   { value: 310000, prev: 320000, status: "normal" },
+      inventoryDays: { value: 16.1, prev: 16.8, status: "warning" },
+      prevLabel: "1 Jul – 31 Jul 2026",
+    },
+    JUL_2026: {
+      utilisation: { value: 50.0, capacity: 4000, unit: "units/day", prev: 48.2, status: "normal" },
+      sla:         { value: 90.8, target: 95, prev: 91.2, status: "warning" },
+      totalCost:   { value: 320000, prev: 315000, status: "normal" },
+      inventoryDays: { value: 16.8, prev: 16.5, status: "warning" },
+      prevLabel: "1 Jun – 30 Jun 2026",
+    },
+  },
+  PLT_BADDI: {
+    AUG_2026: {
+      utilisation: { value: 93.3, capacity: 12000, unit: "units/day", prev: 88.0, status: "critical" },
+      sla:         { value: 97.1, target: 95, prev: 96.2, status: "normal" },
+      totalCost:   { value: 1420000, prev: 1380000, status: "warning" },
+      inventoryDays: { value: 8.5, prev: 9.0, status: "normal" },
+      prevLabel: "1 Jul – 31 Jul 2026",
+    },
+    JUL_2026: {
+      utilisation: { value: 88.0, capacity: 12000, unit: "units/day", prev: 85.0, status: "warning" },
+      sla:         { value: 96.2, target: 95, prev: 95.8, status: "normal" },
+      totalCost:   { value: 1380000, prev: 1350000, status: "normal" },
+      inventoryDays: { value: 9.0, prev: 8.8, status: "normal" },
+      prevLabel: "1 Jun – 30 Jun 2026",
+    },
+  },
+  PLT_PUNE: {
+    AUG_2026: {
+      utilisation: { value: 78.0, capacity: 10000, unit: "units/day", prev: 75.0, status: "normal" },
+      sla:         { value: 96.8, target: 95, prev: 96.0, status: "normal" },
+      totalCost:   { value: 1100000, prev: 1120000, status: "normal" },
+      inventoryDays: { value: 10.0, prev: 10.5, status: "normal" },
+      prevLabel: "1 Jul – 31 Jul 2026",
+    },
+    JUL_2026: {
+      utilisation: { value: 75.0, capacity: 10000, unit: "units/day", prev: 73.0, status: "normal" },
+      sla:         { value: 96.0, target: 95, prev: 95.5, status: "normal" },
+      totalCost:   { value: 1120000, prev: 1100000, status: "normal" },
+      inventoryDays: { value: 10.5, prev: 10.2, status: "normal" },
+      prevLabel: "1 Jun – 30 Jun 2026",
+    },
+  },
+  PLT_HYDERABAD: {
+    AUG_2026: {
+      utilisation: { value: 76.3, capacity: 8000, unit: "units/day", prev: 73.0, status: "normal" },
+      sla:         { value: 95.9, target: 95, prev: 95.2, status: "normal" },
+      totalCost:   { value: 890000, prev: 910000, status: "normal" },
+      inventoryDays: { value: 11.8, prev: 12.3, status: "normal" },
+      prevLabel: "1 Jul – 31 Jul 2026",
+    },
+    JUL_2026: {
+      utilisation: { value: 73.0, capacity: 8000, unit: "units/day", prev: 71.5, status: "normal" },
+      sla:         { value: 95.2, target: 95, prev: 95.0, status: "normal" },
+      totalCost:   { value: 910000, prev: 895000, status: "normal" },
+      inventoryDays: { value: 12.3, prev: 12.0, status: "normal" },
+      prevLabel: "1 Jun – 30 Jun 2026",
+    },
+  },
+  PLT_KOLKATA: {
+    AUG_2026: {
+      utilisation: { value: 70.0, capacity: 6000, unit: "units/day", prev: 67.0, status: "normal" },
+      sla:         { value: 94.5, target: 95, prev: 93.8, status: "warning" },
+      totalCost:   { value: 580000, prev: 590000, status: "normal" },
+      inventoryDays: { value: 13.2, prev: 13.8, status: "normal" },
+      prevLabel: "1 Jul – 31 Jul 2026",
+    },
+    JUL_2026: {
+      utilisation: { value: 67.0, capacity: 6000, unit: "units/day", prev: 65.0, status: "normal" },
+      sla:         { value: 93.8, target: 95, prev: 94.0, status: "warning" },
+      totalCost:   { value: 590000, prev: 580000, status: "normal" },
+      inventoryDays: { value: 13.8, prev: 13.5, status: "normal" },
+      prevLabel: "1 Jun – 30 Jun 2026",
+    },
+  },
+};
+
+// ─── HOME INSIGHTS BY FACILITY ──────────────────────────────
+// Each facility has context-specific insights. The recommendation insight is shared.
+const HOME_INSIGHTS = {
+  DC_DELHI: [
+    {
+      id: "INS_CAP_RISK",
+      icon: "⚠️", iconBg: "#fef2f2", iconColor: "#dc2626",
+      title: "Capacity risk at Delhi NCR DC",
+      subtitle: "Utilisation is projected to reach 108% in December.",
+      impact: "High Impact", impactColor: "#dc2626",
+      why: "Demand forecast shows 14.2% growth over the next 4 months, exceeding available capacity starting October.",
+      action: "Investigate", provenance: "FORECAST",
+      detail: {
+        whatIFound: "Delhi NCR DC is operating at 94% utilisation. Demand forecast projects a 14.2% growth in North India over the next 4 months.",
+        whyItMatters: "At current trajectory, the facility will exceed its 10,000 units/day capacity by December 2026 (projected 108%), causing spillover to costlier corridors and SLA degradation.",
+        evidence: [
+          { label: "Current utilisation", value: "94%", provenance: "MODEL FACT" },
+          { label: "Forecast demand growth", value: "+14.2%", provenance: "FORECAST" },
+          { label: "Capacity threshold", value: "100% (10,000 u/d)", provenance: "MODEL FACT" },
+          { label: "Projected Dec utilisation", value: "108%", provenance: "FORECAST" },
+          { label: "Regional GDP signal", value: "+2.1% above trend", provenance: "EXTERNAL SIGNAL" },
+        ],
+        whatITested: ["Flow rebalancing across DCs", "Capacity expansion at Delhi NCR", "DC consolidation (close Guwahati)", "New DC at Lucknow"],
+        recommendation: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata DCs.",
+        nextAction: "Review scenario",
+      },
+    },
+    {
+      id: "INS_COST_CONC",
+      icon: "💰", iconBg: "#fffbeb", iconColor: "#d97706",
+      title: "Cost opportunity identified",
+      subtitle: "18% of transport cost is concentrated on 2 lanes.",
+      impact: "Medium Impact", impactColor: "#d97706",
+      why: "High concentration of spend on Baddi–Delhi NCR and Baddi–Jaipur lanes vs. network average.",
+      action: "See why", provenance: "MODEL FACT",
+      detail: {
+        whatIFound: "Two corridors (Baddi→Delhi NCR at ₹12/unit and Baddi→Jaipur at ₹22/unit via Delhi) account for 18% of total network transport cost.",
+        whyItMatters: "Cost concentration creates risk if either corridor is disrupted and limits negotiation leverage with carriers.",
+        evidence: [
+          { label: "Baddi→Delhi NCR cost share", value: "12.4%", provenance: "MODEL FACT" },
+          { label: "Baddi→Jaipur cost share", value: "5.6%", provenance: "MODEL FACT" },
+          { label: "Network average lane share", value: "4.0%", provenance: "MODEL FACT" },
+          { label: "Corridor concentration ratio", value: "4.5x above average", provenance: "MODEL FACT" },
+        ],
+        whatITested: ["Alternative routing via Kolkata DC", "Direct plant-to-market for Jaipur"],
+        recommendation: "Consider flow rebalancing to reduce corridor concentration.",
+        nextAction: "Explore scenarios",
+      },
+    },
+    {
+      id: "INS_SPARE_CAP",
+      icon: "📈", iconBg: "#f0fdf4", iconColor: "#16a34a",
+      title: "Underutilised capacity available",
+      subtitle: "Kolkata DC has 41% spare capacity.",
+      impact: "Opportunity", impactColor: "#16a34a",
+      why: "Current throughput is 5,900 units/day vs capacity of 10,000 units/day.",
+      action: "Explore", provenance: "MODEL FACT",
+      detail: {
+        whatIFound: "Kolkata DC is operating at only 53.3% utilisation with 2,800 units/day of spare capacity.",
+        whyItMatters: "This spare capacity can absorb volume from overloaded facilities without requiring capital investment.",
+        evidence: [
+          { label: "Kolkata capacity", value: "6,000 u/d", provenance: "MODEL FACT" },
+          { label: "Current throughput", value: "3,200 u/d", provenance: "MODEL FACT" },
+          { label: "Spare capacity", value: "2,800 u/d (46.7%)", provenance: "MODEL FACT" },
+          { label: "Handling cost", value: "₹3.5/unit (lowest)", provenance: "MODEL FACT" },
+        ],
+        whatITested: ["Redirect 800 units/day from Delhi NCR overflow"],
+        recommendation: "Include Kolkata DC in flow rebalancing scenario.",
+        nextAction: "Explore scenario",
+      },
+    },
+    {
+      id: "INS_RECOMMENDATION",
+      icon: "✨", iconBg: "#f5f0fa", iconColor: "#6B2FA0",
+      title: "Recommendation ready",
+      subtitle: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata.",
+      impact: "High Value", impactColor: "#6B2FA0",
+      why: "Reduces total cost by 7.8% while maintaining SLA at 96.7%. Robust under +15% demand stress test.",
+      action: "Review Recommendation", provenance: "AI ASSESSMENT",
+      detail: null, // Uses the existing RECOMMENDATION object
+    },
+  ],
+  DC_MUMBAI: [
+    {
+      id: "INS_MUMBAI_SLA",
+      icon: "⚠️", iconBg: "#fffbeb", iconColor: "#d97706",
+      title: "SLA approaching target threshold",
+      subtitle: "On-time delivery at 95.8%, close to 95% target.",
+      impact: "Medium Impact", impactColor: "#d97706",
+      why: "SLA has been trending downward over the last 2 months. Current buffer is only 0.8pp above target.",
+      action: "Investigate", provenance: "MODEL FACT",
+      detail: {
+        whatIFound: "Mumbai DC SLA has declined from 96.5% to 95.8% over the last 2 months.",
+        whyItMatters: "If the trend continues, SLA will breach the 95% target within 1–2 months, triggering contractual penalties.",
+        evidence: [
+          { label: "Current SLA", value: "95.8%", provenance: "MODEL FACT" },
+          { label: "Target SLA", value: "≥95%", provenance: "MODEL FACT" },
+          { label: "Buffer", value: "0.8pp", provenance: "MODEL FACT" },
+          { label: "Trend direction", value: "Declining", provenance: "FORECAST" },
+        ],
+        whatITested: ["Increasing carrier allocation", "Adjusting dispatch schedules"],
+        recommendation: "Monitor closely and prepare carrier contingency.",
+        nextAction: "Review forecast",
+      },
+    },
+    {
+      id: "INS_MUMBAI_COST",
+      icon: "💰", iconBg: "#f0fdf4", iconColor: "#16a34a",
+      title: "Cost reduction achieved",
+      subtitle: "Total cost down 3.0% vs previous period.",
+      impact: "Positive", impactColor: "#16a34a",
+      why: "Optimised routing from Pune Plant reduced average transport cost per unit by ₹1.2.",
+      action: "See why", provenance: "MODEL FACT",
+      detail: {
+        whatIFound: "Mumbai DC total cost decreased from ₹10.1L to ₹9.8L through improved Pune routing.",
+        whyItMatters: "Validates the effectiveness of the Pune Plant → Mumbai DC optimisation implemented last month.",
+        evidence: [
+          { label: "Cost reduction", value: "₹30K/period", provenance: "MODEL FACT" },
+          { label: "Transport cost saving", value: "₹1.2/unit", provenance: "MODEL FACT" },
+        ],
+        whatITested: [],
+        recommendation: "Continue current routing configuration.",
+        nextAction: "No action required",
+      },
+    },
+    {
+      id: "INS_SPARE_CAP",
+      icon: "📈", iconBg: "#f0fdf4", iconColor: "#16a34a",
+      title: "Capacity headroom available",
+      subtitle: "Mumbai DC at 75.6% — 2,200 units/day spare.",
+      impact: "Opportunity", impactColor: "#16a34a",
+      why: "Spare capacity could absorb overflow from constrained facilities in the western corridor.",
+      action: "Explore", provenance: "MODEL FACT",
+      detail: {
+        whatIFound: "Mumbai DC has 2,200 units/day of spare capacity.",
+        whyItMatters: "Can serve as a buffer for demand surge or overflow from other facilities.",
+        evidence: [
+          { label: "Capacity", value: "9,000 u/d", provenance: "MODEL FACT" },
+          { label: "Current throughput", value: "6,800 u/d", provenance: "MODEL FACT" },
+          { label: "Spare", value: "2,200 u/d", provenance: "MODEL FACT" },
+        ],
+        whatITested: [],
+        recommendation: "Consider for western corridor rebalancing.",
+        nextAction: "Explore scenario",
+      },
+    },
+    {
+      id: "INS_RECOMMENDATION",
+      icon: "✨", iconBg: "#f5f0fa", iconColor: "#6B2FA0",
+      title: "Recommendation ready",
+      subtitle: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata.",
+      impact: "High Value", impactColor: "#6B2FA0",
+      why: "Reduces total cost by 7.8% while maintaining SLA at 96.7%. Robust under +15% demand stress test.",
+      action: "Review Recommendation", provenance: "AI ASSESSMENT",
+      detail: null,
+    },
+  ],
+  // Fallback: other facilities get a default set
+  _default: [
+    {
+      id: "INS_PERF_STABLE",
+      icon: "✅", iconBg: "#f0fdf4", iconColor: "#16a34a",
+      title: "Performance within normal range",
+      subtitle: "All KPIs within target thresholds for this facility.",
+      impact: "Normal", impactColor: "#16a34a",
+      why: "No anomalies detected in the current period. Utilisation, SLA, cost, and inventory are within expected ranges.",
+      action: "Explore", provenance: "MODEL FACT",
+      detail: {
+        whatIFound: "This facility is operating within expected parameters across all monitored KPIs.",
+        whyItMatters: "No immediate intervention required, but continued monitoring is recommended.",
+        evidence: [
+          { label: "Status", value: "All KPIs within range", provenance: "MODEL FACT" },
+        ],
+        whatITested: [],
+        recommendation: "Continue monitoring. No immediate action required.",
+        nextAction: "No action required",
+      },
+    },
+    {
+      id: "INS_RECOMMENDATION",
+      icon: "✨", iconBg: "#f5f0fa", iconColor: "#6B2FA0",
+      title: "Recommendation ready",
+      subtitle: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata.",
+      impact: "High Value", impactColor: "#6B2FA0",
+      why: "Reduces total cost by 7.8% while maintaining SLA at 96.7%. Robust under +15% demand stress test.",
+      action: "Review Recommendation", provenance: "AI ASSESSMENT",
+      detail: null,
+    },
+  ],
+};
+
+function getInsightsForFacility(facilityId) {
+  return HOME_INSIGHTS[facilityId] || HOME_INSIGHTS._default;
+}
+
+function getKpisForFacility(facilityId, periodId) {
+  const facilityKpis = FACILITY_KPIS[facilityId];
+  if (!facilityKpis) return null;
+  return facilityKpis[periodId] || facilityKpis["AUG_2026"] || null;
+}
+
+// ─── HELPER FUNCTIONS ───────────────────────────────────────
+function getFacilityById(id) {
+  return [...PLANTS, ...DCS, ...MARKETS].find(f => f.id === id);
+}
+
+function getScenarioById(id) {
+  return SCENARIOS.find(s => s.id === id);
+}
+
+function formatCurrency(value, decimals = 0) {
+  if (value >= 100000) return "₹" + (value / 100000).toFixed(1) + "L";
+  if (value >= 1000)   return "₹" + (value / 1000).toFixed(1) + "K";
+  return "₹" + value.toFixed(decimals);
+}
+
+function formatNumber(value) {
+  return value.toLocaleString("en-IN");
+}
+
+function getUtilColor(pct) {
+  if (pct >= 90) return "#dc2626";
+  if (pct >= 75) return "#f59e0b";
+  return "#22c55e";
+}
+
+function getUtilLabel(pct) {
+  if (pct >= 90) return "Critical";
+  if (pct >= 75) return "Moderate";
+  return "Healthy";
+}
+
+
+
+/* ═════════ map.js ═════════ */
+/**
+ * NetGravity — Leaflet India Map (Digital Twin)
+ * ===============================================
+ * Interactive map with three network states:
+ *   Actual | Optimised Base | Recommended
+ * Clicking a facility opens the detail panel.
+ */
+
+/* global L */
+
+
+
+// ─── State ──────────────────────────────────────────────────
+const maps = {};           // containerId → L.Map
+const layerGroups = {};    // containerId → { nodes, flows }
+let currentState = 'actual';
+
+// ─── Styles ─────────────────────────────────────────────────
+const COLORS = {
+  plant:  '#6B2FA0',
+  dc:     '#f59e0b',
+  market: '#22c55e',
+  flow:   { actual: '#94a3b8', optimised: '#6B2FA0', recommended: '#16a34a' },
+};
+
+// ─── Public API ─────────────────────────────────────────────
+function initMap(containerId) {
+  if (maps[containerId]) {
+    maps[containerId].invalidateSize();
+    return;
+  }
+
+  const map = L.map(containerId, {
+    center: [22.5, 80.0],
+    zoom: 5,
+    zoomControl: true,
+    scrollWheelZoom: true,
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+    maxZoom: 18,
+  }).addTo(map);
+
+  maps[containerId] = map;
+  layerGroups[containerId] = {
+    nodes: L.layerGroup().addTo(map),
+    flows: L.layerGroup().addTo(map),
+  };
+
+  renderNetwork(containerId, 'actual');
+
+  // Add legend
+  addLegend(map);
+}
+
+function setNetworkState(state) {
+  currentState = state;
+  Object.keys(maps).forEach(id => renderNetwork(id, state));
+}
+
+// ─── Render Network ─────────────────────────────────────────
+function renderNetwork(containerId, state) {
+  const lg = layerGroups[containerId];
+  if (!lg) return;
+
+  lg.nodes.clearLayers();
+  lg.flows.clearLayers();
+
+  // Get flow data for this state
+  const flowData = getFlowsForState(state);
+
+  // Draw flows first (below nodes)
+  flowData.forEach(flow => {
+    const from = getCoords(flow.from);
+    const to = getCoords(flow.to);
+    if (!from || !to) return;
+
+    const thickness = Math.max(1, Math.min(8, flow.flow / 1500));
+    const color = COLORS.flow[state] || COLORS.flow.actual;
+    const opacity = state === 'actual' ? 0.3 : 0.5;
+
+    const line = L.polyline([from, to], {
+      color: color,
+      weight: thickness,
+      opacity: opacity,
+      dashArray: state === 'recommended' ? '8 4' : null,
+    });
+
+    line.bindTooltip(`
+      <strong>${flow.from} → ${flow.to}</strong><br>
+      Flow: ${formatNumber(flow.flow)} units/day<br>
+      Cost: ₹${flow.cost}/unit · ${flow.distance} km
+    `, { sticky: true });
+
+    lg.flows.addLayer(line);
+  });
+
+  // Draw nodes
+  PLANTS.forEach(p => {
+    const marker = createNodeMarker(p, 'plant', containerId);
+    lg.nodes.addLayer(marker);
+  });
+
+  DCS.forEach(d => {
+    const marker = createNodeMarker(d, 'dc', containerId);
+    lg.nodes.addLayer(marker);
+  });
+
+  MARKETS.forEach(m => {
+    const marker = createNodeMarker(m, 'market', containerId);
+    lg.nodes.addLayer(marker);
+  });
+}
+
+// ─── Flow Data per State ────────────────────────────────────
+function getFlowsForState(state) {
+  if (state === 'actual') return LANES;
+
+  // Optimised base: same topology, adjusted flows
+  if (state === 'optimised') {
+    return LANES.map(l => {
+      const modified = { ...l };
+      // Simulate optimised rebalancing
+      if (l.from === 'PLT_BADDI' && l.to === 'DC_DELHI') modified.flow = Math.round(l.flow * 0.88);
+      if (l.from === 'PLT_BADDI' && l.to === 'DC_KOLKATA') modified.flow = Math.round(l.flow * 1.25);
+      if (l.from === 'PLT_KOLKATA' && l.to === 'DC_KOLKATA') modified.flow = Math.round(l.flow * 1.15);
+      return modified;
+    });
+  }
+
+  // Recommended: flow rebalancing scenario
+  if (state === 'recommended') {
+    return LANES.map(l => {
+      const modified = { ...l };
+      if (l.from === 'PLT_BADDI' && l.to === 'DC_DELHI') modified.flow = Math.round(l.flow * 0.82);
+      if (l.from === 'PLT_BADDI' && l.to === 'DC_KOLKATA') modified.flow = Math.round(l.flow * 1.45);
+      if (l.from === 'PLT_KOLKATA' && l.to === 'DC_KOLKATA') modified.flow = Math.round(l.flow * 1.30);
+      if (l.from === 'DC_KOLKATA' && l.to === 'MKT_KOLKATA') modified.flow = Math.round(l.flow * 1.20);
+      return modified;
+    });
+  }
+
+  return LANES;
+}
+
+// ─── Create Node Marker ─────────────────────────────────────
+function createNodeMarker(node, type, containerId) {
+  const iconMap = { plant: '🏭', dc: '🏪', market: '📦' };
+  const colorMap = { plant: COLORS.plant, dc: COLORS.dc, market: COLORS.market };
+  const sizeMap = { plant: 18, dc: 15, market: 10 };
+  const color = colorMap[type];
+  const size = sizeMap[type];
+
+  // For DCs, adjust size by utilisation
+  let adjustedSize = size;
+  let borderColor = color;
+  if (type === 'dc') {
+    adjustedSize = Math.max(12, Math.min(22, 10 + (node.utilPct / 100) * 14));
+    borderColor = getUtilColor(node.utilPct);
+  }
+
+  const icon = L.divIcon({
+    className: 'custom-marker',
+    html: `<div style="
+      width:${adjustedSize * 2}px;height:${adjustedSize * 2}px;
+      border-radius:50%;
+      background:${color}22;
+      border:3px solid ${borderColor};
+      display:flex;align-items:center;justify-content:center;
+      font-size:${Math.max(12, adjustedSize - 2)}px;
+      cursor:pointer;
+      transition: transform .2s;
+    " onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">${iconMap[type]}</div>`,
+    iconSize: [adjustedSize * 2, adjustedSize * 2],
+    iconAnchor: [adjustedSize, adjustedSize],
+  });
+
+  const marker = L.marker([node.lat, node.lng], { icon });
+
+  // Tooltip
+  let tooltipContent = `<strong>${node.name}</strong><br>`;
+  if (type === 'plant') {
+    tooltipContent += `Capacity: ${formatNumber(node.capacity)} u/d<br>Throughput: ${formatNumber(node.throughput)} u/d`;
+  } else if (type === 'dc') {
+    tooltipContent += `Utilisation: <strong style="color:${getUtilColor(node.utilPct)}">${node.utilPct}%</strong><br>`;
+    tooltipContent += `Capacity: ${formatNumber(node.capacity)} u/d<br>Throughput: ${formatNumber(node.throughput)} u/d`;
+  } else {
+    tooltipContent += `Demand: ${formatNumber(node.demand)} u/d<br>SLA: ${node.slaDays}d · ${node.priority}`;
+  }
+  marker.bindTooltip(tooltipContent);
+
+  // Click to open facility panel
+  if (type !== 'market') {
+    marker.on('click', () => {
+      if (typeof window.openFacilityPanel === 'function') {
+        window.openFacilityPanel(node.id);
+      }
+    });
+  }
+
+  return marker;
+}
+
+// ─── Get Coordinates ────────────────────────────────────────
+function getCoords(id) {
+  const all = [...PLANTS, ...DCS, ...MARKETS];
+  const node = all.find(n => n.id === id);
+  return node ? [node.lat, node.lng] : null;
+}
+
+// ─── Legend ──────────────────────────────────────────────────
+function addLegend(map) {
+  const legend = L.control({ position: 'bottomright' });
+  legend.onAdd = function() {
+    const div = L.DomUtil.create('div');
+    div.style.cssText = 'background:white;padding:10px 14px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:11px;line-height:1.8;font-family:Inter,sans-serif';
+    div.innerHTML = `
+      <div style="font-weight:700;margin-bottom:4px">Network Legend</div>
+      <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.plant};vertical-align:middle;margin-right:6px"></span>Plant</div>
+      <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.dc};vertical-align:middle;margin-right:6px"></span>Distribution Centre</div>
+      <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.market};vertical-align:middle;margin-right:6px"></span>Demand Market</div>
+      <div style="margin-top:4px;border-top:1px solid #eee;padding-top:4px">
+        <div><span style="display:inline-block;width:20px;height:2px;background:#dc2626;vertical-align:middle;margin-right:6px"></span>Critical (&gt;90%)</div>
+        <div><span style="display:inline-block;width:20px;height:2px;background:#f59e0b;vertical-align:middle;margin-right:6px"></span>Moderate (75-90%)</div>
+        <div><span style="display:inline-block;width:20px;height:2px;background:#22c55e;vertical-align:middle;margin-right:6px"></span>Healthy (&lt;75%)</div>
+      </div>
+    `;
+    return div;
+  };
+  legend.addTo(map);
+}
+
+
+/* ═════════ charts.js ═════════ */
+/**
+ * NetGravity — Chart.js Visualizations
+ * ======================================
+ * Forecast chart, scenario cost comparison, performance radar.
+ */
+
+/* global Chart */
+
+
+
+const chartInstances = {};
+
+// ─── Forecast Chart ─────────────────────────────────────────
+function renderForecastChart(canvasId) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+
+  const histLabels = DEMAND_HISTORY.months;
+  const foreLabels = FORECAST.months;
+  const allLabels = [...histLabels, ...foreLabels];
+
+  // Historical data + nulls for forecast period
+  const histData = [...DEMAND_HISTORY.northIndia, ...new Array(foreLabels.length).fill(null)];
+
+  // Forecast data: nulls for historical + forecast values (overlap last historical point)
+  const foreData = [...new Array(histLabels.length - 1).fill(null), DEMAND_HISTORY.northIndia[histLabels.length - 1], ...FORECAST.northIndia];
+  const upperData = [...new Array(histLabels.length - 1).fill(null), DEMAND_HISTORY.northIndia[histLabels.length - 1], ...FORECAST.upper];
+  const lowerData = [...new Array(histLabels.length - 1).fill(null), DEMAND_HISTORY.northIndia[histLabels.length - 1], ...FORECAST.lower];
+
+  // Capacity line
+  const capData = allLabels.map(() => DEMAND_HISTORY.baddiCapacity);
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: allLabels,
+      datasets: [
+        {
+          label: 'Historical Demand',
+          data: histData,
+          borderColor: '#6B2FA0',
+          backgroundColor: 'rgba(107,47,160,.08)',
+          borderWidth: 2.5,
+          pointRadius: 2,
+          pointHoverRadius: 5,
+          fill: false,
+          tension: 0.3,
+        },
+        {
+          label: 'Forecast',
+          data: foreData,
+          borderColor: '#6B2FA0',
+          borderWidth: 2.5,
+          borderDash: [6, 4],
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          fill: false,
+          tension: 0.3,
+        },
+        {
+          label: 'Upper Bound',
+          data: upperData,
+          borderColor: 'rgba(107,47,160,.2)',
+          backgroundColor: 'rgba(107,47,160,.06)',
+          borderWidth: 1,
+          pointRadius: 0,
+          fill: '+1',
+          tension: 0.3,
+        },
+        {
+          label: 'Lower Bound',
+          data: lowerData,
+          borderColor: 'rgba(107,47,160,.2)',
+          borderWidth: 1,
+          pointRadius: 0,
+          fill: false,
+          tension: 0.3,
+        },
+        {
+          label: 'Delhi NCR DC Capacity',
+          data: capData,
+          borderColor: '#dc2626',
+          borderWidth: 2,
+          borderDash: [10, 5],
+          pointRadius: 0,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { usePointStyle: true, font: { family: 'Inter', size: 11 }, padding: 16 },
+        },
+        tooltip: {
+          backgroundColor: '#1a1a2e',
+          titleFont: { family: 'Inter', size: 12 },
+          bodyFont: { family: 'Inter', size: 11 },
+          padding: 12,
+          cornerRadius: 8,
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { font: { family: 'Inter', size: 10 }, maxRotation: 45 },
+        },
+        y: {
+          beginAtZero: false,
+          min: 6000,
+          grid: { color: '#f0f0f5' },
+          ticks: {
+            font: { family: 'Inter', size: 11 },
+            callback: v => (v / 1000).toFixed(0) + 'K',
+          },
+          title: { display: true, text: 'Demand (units/day)', font: { family: 'Inter', size: 11, weight: '600' } },
+        },
+      },
+    },
+  });
+}
+
+// ─── Scenario Cost Comparison ───────────────────────────────
+function renderScenarioCostChart(canvasId) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+
+  // Only scenarios (not actual baseline)
+  const scenarios = SCENARIOS.filter(s => s.id !== 'SCN_ACTUAL');
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: scenarios.map(s => s.name),
+      datasets: [
+        {
+          label: 'Transport Cost',
+          data: scenarios.map(s => s.transportCost),
+          backgroundColor: '#6B2FA0',
+          borderRadius: 4,
+        },
+        {
+          label: 'Fixed Cost',
+          data: scenarios.map(s => s.fixedCost),
+          backgroundColor: '#b893d6',
+          borderRadius: 4,
+        },
+        {
+          label: 'Inventory Cost',
+          data: scenarios.map(s => s.inventoryCost),
+          backgroundColor: '#e8ddf2',
+          borderRadius: 4,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { usePointStyle: true, font: { family: 'Inter', size: 11 } },
+        },
+        tooltip: {
+          backgroundColor: '#1a1a2e',
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          stacked: true,
+          grid: { display: false },
+          ticks: { font: { family: 'Inter', size: 11 } },
+        },
+        y: {
+          stacked: true,
+          grid: { color: '#f0f0f5' },
+          ticks: {
+            font: { family: 'Inter', size: 11 },
+            callback: v => formatCurrency(v),
+          },
+        },
+      },
+    },
+  });
+}
+
+// ─── Performance Radar ──────────────────────────────────────
+function renderScenarioRadar(canvasId) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+
+  const scenarios = SCENARIOS.filter(s => s.type === 'SCENARIO');
+
+  // Normalise metrics to 0-100 scale for radar
+  function normalise(arr, invert = false) {
+    const min = Math.min(...arr);
+    const max = Math.max(...arr);
+    const range = max - min || 1;
+    return arr.map(v => {
+      const norm = ((v - min) / range) * 100;
+      return invert ? 100 - norm : norm;
+    });
+  }
+
+  const costs = normalise(scenarios.map(s => s.totalCost), true);         // lower is better
+  const slas = normalise(scenarios.map(s => s.sla));                       // higher is better
+  const utils = normalise(scenarios.map(s => s.maxUtil), true);            // lower is better
+  const carbons = normalise(scenarios.map(s => s.carbonKg), true);        // lower is better
+  const implCosts = normalise(scenarios.map(s => s.implementationCost), true); // lower is better
+
+  const radarColors = ['#6B2FA0', '#f59e0b', '#dc2626', '#2563eb'];
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['Cost Efficiency', 'SLA Performance', 'Utilisation Balance', 'Carbon Footprint', 'Implementation Cost'],
+      datasets: scenarios.map((s, i) => ({
+        label: s.name,
+        data: [costs[i], slas[i], utils[i], carbons[i], implCosts[i]],
+        borderColor: radarColors[i % radarColors.length],
+        backgroundColor: radarColors[i % radarColors.length] + '15',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'top',
+          labels: { usePointStyle: true, font: { family: 'Inter', size: 11 } },
+        },
+      },
+      scales: {
+        r: {
+          beginAtZero: true,
+          max: 100,
+          grid: { color: '#e8e8ef' },
+          pointLabels: { font: { family: 'Inter', size: 11 } },
+          ticks: { display: false },
+        },
+      },
+    },
+  });
+}
+
+// ─── Facility Dashboard Charts ──────────────────────────────
+function renderFacilityThroughputChart(canvasId, facility) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !facility) return;
+
+  const months = ['Sep 25', 'Oct 25', 'Nov 25', 'Dec 25', 'Jan 26', 'Feb 26', 'Mar 26', 'Apr 26', 'May 26', 'Jun 26', 'Jul 26', 'Aug 26', 'Sep 26 (F)', 'Oct 26 (F)', 'Nov 26 (F)'];
+  const baseTput = facility.throughput || 8000;
+  const cap = facility.capacity || 10000;
+
+  // Generate realistic monthly data based on facility throughput
+  const historical = [
+    Math.round(baseTput * 0.88), Math.round(baseTput * 0.90), Math.round(baseTput * 0.93), Math.round(baseTput * 0.95),
+    Math.round(baseTput * 0.91), Math.round(baseTput * 0.92), Math.round(baseTput * 0.94), Math.round(baseTput * 0.96),
+    Math.round(baseTput * 0.97), Math.round(baseTput * 0.98), Math.round(baseTput * 0.99), baseTput,
+    null, null, null
+  ];
+
+  const isAtRisk = facility.id === 'DC_DELHI' || facility.id === 'PLT_BADDI';
+  const growthMultiplier = isAtRisk ? 1.05 : 1.015;
+
+  const forecast = [
+    null, null, null, null, null, null, null, null, null, null, null, baseTput,
+    Math.round(baseTput * growthMultiplier),
+    Math.round(baseTput * Math.pow(growthMultiplier, 2)),
+    Math.round(baseTput * Math.pow(growthMultiplier, 3))
+  ];
+
+  const capLine = months.map(() => cap);
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: months,
+      datasets: [
+        {
+          label: 'Capacity Limit',
+          data: capLine,
+          borderColor: '#dc2626',
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 0,
+          fill: false,
+        },
+        {
+          label: 'Actual Throughput',
+          data: historical,
+          borderColor: '#6B2FA0',
+          backgroundColor: 'rgba(107,47,160,0.1)',
+          borderWidth: 2.5,
+          pointRadius: 3,
+          pointBackgroundColor: '#6B2FA0',
+          tension: 0.3,
+          fill: true,
+        },
+        {
+          label: 'Forecast Trend',
+          data: forecast,
+          borderColor: '#d97706',
+          borderWidth: 2.5,
+          borderDash: [6, 4],
+          pointRadius: 4,
+          pointBackgroundColor: '#d97706',
+          tension: 0.3,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { usePointStyle: true, font: { family: 'Inter', size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ctx.raw ? `${ctx.dataset.label}: ${ctx.raw.toLocaleString('en-IN')} u/d` : '',
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: false,
+          min: Math.round(cap * 0.4),
+          max: Math.round(cap * 1.18),
+          grid: { color: '#f0f0f5' },
+          ticks: { font: { family: 'Inter', size: 11 } },
+        },
+        x: {
+          grid: { display: false },
+          ticks: { font: { family: 'Inter', size: 10 } },
+        },
+      },
+    },
+  });
+}
+
+function renderFacilityCostBreakdownChart(canvasId, facility) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !facility) return;
+
+  const isDC = facility.id.startsWith('DC_');
+  const transportCost = isDC ? 580000 : 720000;
+  const handlingCost = (facility.throughput || 6000) * (facility.handlingCost || 4.0) * 30;
+  const fixedCost = isDC ? (facility.fixedCost || 100) * 100000 / 12 : 350000;
+  const holdingCost = 140000;
+  const surchargeCost = 45000;
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Inbound/Outbound Transport', 'Facility Handling', 'Fixed Storage & Ops', 'Inventory Holding', 'Surcharges & Accessorials'],
+      datasets: [
+        {
+          data: [transportCost, Math.round(handlingCost), Math.round(fixedCost), holdingCost, surchargeCost],
+          backgroundColor: ['#6B2FA0', '#2563eb', '#16a34a', '#f59e0b', '#dc2626'],
+          borderWidth: 2,
+          borderColor: '#ffffff',
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { usePointStyle: true, boxWidth: 10, font: { family: 'Inter', size: 11 }, padding: 12 },
+        },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` ${ctx.label}: ₹${(ctx.raw / 100000).toFixed(2)}L (${((ctx.raw / (transportCost + handlingCost + fixedCost + holdingCost + surchargeCost)) * 100).toFixed(1)}%)`,
+          },
+        },
+      },
+      cutout: '68%',
+    },
+  });
+}
+
+function renderFacilityLaneFlowsChart(canvasId, connectedLanes, facilityId) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !connectedLanes || connectedLanes.length === 0) return;
+
+  const labels = connectedLanes.map(l => l.label);
+  const flows = connectedLanes.map(l => l.flow);
+  const costs = connectedLanes.map(l => l.cost);
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Daily Flow (units/day)',
+          data: flows,
+          backgroundColor: '#6B2FA0',
+          borderRadius: 6,
+          barThickness: 16,
+        },
+      ],
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `Flow: ${ctx.raw.toLocaleString('en-IN')} units/day · Cost: ₹${costs[ctx.dataIndex]}/unit`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: '#f0f0f5' },
+          ticks: { font: { family: 'Inter', size: 10 } },
+        },
+        y: {
+          grid: { display: false },
+          ticks: { font: { family: 'Inter', size: 11, weight: '500' } },
+        },
+      },
+    },
+  });
+}
+
+
+
+/* ═════════ scenarios.js ═════════ */
+/**
+ * NetGravity — Scenario Workspace
+ * =================================
+ * Scenario comparison table, create scenario modal, mock MILP execution.
+ */
+
+
+
+// ─── State ──────────────────────────────────────────────────
+let showFull = false;
+
+// ─── Init ───────────────────────────────────────────────────
+function initScenarios() {
+  renderComparisonTable();
+  wireButtons();
+}
+
+// ─── Comparison Table ───────────────────────────────────────
+function renderComparisonTable() {
+  const container = document.getElementById('scenario-comparison');
+  if (!container) return;
+
+  const metrics = showFull ? [
+    { key: 'totalCost',         label: 'Total Cost',         fmt: v => formatCurrency(v), best: 'low' },
+    { key: 'transportCost',     label: 'Transport Cost',     fmt: v => formatCurrency(v), best: 'low' },
+    { key: 'fixedCost',         label: 'Fixed Cost',         fmt: v => formatCurrency(v), best: 'low' },
+    { key: 'inventoryCost',     label: 'Inventory Cost',     fmt: v => formatCurrency(v), best: 'low' },
+    { key: 'sla',               label: 'SLA %',              fmt: v => v + '%', best: 'high' },
+    { key: 'avgUtil',           label: 'Avg Utilisation %',  fmt: v => v + '%', best: 'balanced' },
+    { key: 'maxUtil',           label: 'Peak Utilisation %', fmt: v => v + '%', best: 'low' },
+    { key: 'carbonKg',          label: 'Carbon (kg CO₂)',    fmt: v => formatNumber(v), best: 'low' },
+    { key: 'implementationCost',label: 'Implementation Cost',fmt: v => formatCurrency(v), best: 'low' },
+    { key: 'resilience',        label: 'Resilience',         fmt: v => v, best: 'label' },
+    { key: 'feasible',          label: 'Feasible',           fmt: v => v ? '✓' : '✕', best: 'bool' },
+  ] : [
+    { key: 'totalCost',  label: 'Total Cost',  fmt: v => formatCurrency(v), best: 'low' },
+    { key: 'sla',        label: 'SLA %',       fmt: v => v + '%', best: 'high' },
+    { key: 'maxUtil',    label: 'Peak Util %', fmt: v => v + '%', best: 'low' },
+    { key: 'carbonKg',   label: 'Carbon (kg)', fmt: v => formatNumber(v), best: 'low' },
+    { key: 'resilience', label: 'Resilience',  fmt: v => v, best: 'label' },
+  ];
+
+  const html = `
+    <table class="ng-table scenario-table">
+      <thead>
+        <tr>
+          <th style="text-align:left">Scenario</th>
+          ${metrics.map(m => `<th>${m.label}</th>`).join('')}
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${SCENARIOS.map(s => {
+          // Find best values for highlighting
+          return `<tr>
+            <td class="name-cell">
+              <div style="font-weight:700">${s.name}</div>
+              <div style="font-size:11px;color:var(--text-3);max-width:200px">${s.description}</div>
+            </td>
+            ${metrics.map(m => {
+              const val = s[m.key];
+              let cls = '';
+              if (m.best === 'low') {
+                const best = Math.min(...SCENARIOS.filter(x => x.feasible).map(x => x[m.key]));
+                if (val === best && s.feasible) cls = 'scenario-winner';
+              }
+              if (m.best === 'high') {
+                const best = Math.max(...SCENARIOS.filter(x => x.feasible).map(x => x[m.key]));
+                if (val === best && s.feasible) cls = 'scenario-winner';
+              }
+              if (!s.feasible && s.sla < 95 && m.key === 'sla') cls = 'scenario-fail';
+              return `<td class="${cls}">${m.fmt(val)}</td>`;
+            }).join('')}
+            <td>
+              ${s.sla >= 95 || s.type === 'BASELINE' ? '<span class="tag tag-success">Pass</span>' : '<span class="tag tag-danger">SLA Fail</span>'}
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+
+  container.innerHTML = html;
+}
+
+// ─── Wire Buttons ───────────────────────────────────────────
+function wireButtons() {
+  // Full comparison toggle
+  document.getElementById('btn-show-full')?.addEventListener('click', () => {
+    showFull = !showFull;
+    document.getElementById('btn-show-full').textContent = showFull ? 'Show Summary' : 'View Full Comparison';
+    renderComparisonTable();
+  });
+
+  // Create scenario modal
+  document.getElementById('btn-create-scenario')?.addEventListener('click', () => {
+    document.getElementById('modal-create-scenario').classList.add('visible');
+  });
+
+  document.getElementById('modal-close-scenario')?.addEventListener('click', () => {
+    document.getElementById('modal-create-scenario').classList.remove('visible');
+  });
+
+  document.getElementById('scn-cancel')?.addEventListener('click', () => {
+    document.getElementById('modal-create-scenario').classList.remove('visible');
+  });
+
+  // Run scenario (mock)
+  document.getElementById('scn-run')?.addEventListener('click', () => {
+    const name = document.getElementById('scn-name')?.value || 'Custom Scenario';
+    const type = document.getElementById('scn-type')?.value || 'CUSTOM';
+
+    // Show loading state
+    const btn = document.getElementById('scn-run');
+    btn.textContent = '⏳ Running MILP Optimiser...';
+    btn.disabled = true;
+
+    // Simulate MILP execution time
+    setTimeout(() => {
+      btn.textContent = '✓ Scenario Evaluated';
+      btn.style.background = 'var(--green)';
+
+      // Add mock result notification
+      setTimeout(() => {
+        document.getElementById('modal-create-scenario').classList.remove('visible');
+        btn.textContent = '▶ Run Through MILP Optimiser';
+        btn.disabled = false;
+        btn.style.background = '';
+
+        // Show a temporary notification
+        showNotification(`Scenario "${name}" evaluated. Results added to comparison.`);
+      }, 1500);
+    }, 2500);
+  });
+}
+
+// ─── Notification ───────────────────────────────────────────
+function showNotification(message) {
+  const notif = document.createElement('div');
+  notif.style.cssText = `
+    position: fixed; bottom: 24px; right: 24px;
+    background: #1a1a2e; color: white; padding: 14px 24px;
+    border-radius: 10px; font-size: 13px; font-family: Inter, sans-serif;
+    box-shadow: 0 8px 24px rgba(0,0,0,.2); z-index: 500;
+    animation: fadeIn .3s ease;
+  `;
+  notif.textContent = message;
+  document.body.appendChild(notif);
+  setTimeout(() => {
+    notif.style.opacity = '0';
+    notif.style.transition = 'opacity .3s';
+    setTimeout(() => notif.remove(), 300);
+  }, 4000);
+}
+
+
+/* ═════════ agent.js ═════════ */
+/**
+ * NetGravity — AI Decision Orchestrator UI
+ * ==========================================
+ * Agent activity trace, tool-call log, challenger analysis,
+ * objective input, and simulated investigation flow.
+ */
+
+
+
+// ─── Init ───────────────────────────────────────────────────
+function initAgent() {
+  renderObjective();
+  renderTrace();
+  renderToolCalls();
+  renderChallenger();
+  wireAgentInput();
+}
+
+// ─── Objective ──────────────────────────────────────────────
+function renderObjective() {
+  const el = document.getElementById('agent-objective');
+  if (el) el.textContent = `"${AGENT_STATE.currentObjective}"`;
+}
+
+// ─── Activity Trace ─────────────────────────────────────────
+function renderTrace() {
+  const container = document.getElementById('agent-trace');
+  if (!container) return;
+
+  container.innerHTML = AGENT_STATE.activityTrace.map(step => `
+    <div class="trace-step ${step.status}">
+      <div class="trace-action">${step.status === 'done' ? '✓' : '◌'} ${step.action}</div>
+      <div class="trace-detail">${step.detail}</div>
+    </div>
+  `).join('');
+}
+
+// ─── Tool Calls ─────────────────────────────────────────────
+function renderToolCalls() {
+  const container = document.getElementById('tool-calls');
+  if (!container) return;
+
+  container.innerHTML = AGENT_STATE.toolCalls.map(tc => `
+    <div class="tool-call">
+      <span class="tool-name">${tc.tool}</span>
+      <span class="tool-result">${tc.result}</span>
+    </div>
+  `).join('');
+}
+
+// ─── Challenger ─────────────────────────────────────────────
+function renderChallenger() {
+  const container = document.getElementById('challenger-results');
+  if (!container) return;
+
+  const scenariosWithStress = SCENARIOS.filter(s => s.stressTestResult);
+
+  container.innerHTML = `
+    <table class="ng-table">
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>+15% Demand</th>
+          <th>Lane Disruption</th>
+          <th>Verdict</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${scenariosWithStress.map(s => {
+          const st = s.stressTestResult;
+          const demandResult = st.demandSurge15 || '—';
+          const laneResult = st.laneDisruption || '—';
+          const passed = demandResult.startsWith('PASS') && (laneResult.startsWith('PASS') || laneResult === '—');
+          return `
+            <tr>
+              <td style="font-weight:600">${s.name}</td>
+              <td><span class="tag ${demandResult.startsWith('PASS') ? 'tag-success' : 'tag-danger'}">${demandResult.split('—')[0].trim()}</span></td>
+              <td><span class="tag ${laneResult.startsWith('PASS') ? 'tag-success' : 'tag-danger'}">${laneResult.split('—')[0].trim()}</span></td>
+              <td><span class="tag ${passed ? 'tag-success' : 'tag-danger'}">${passed ? 'Robust' : 'Rejected'}</span></td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+    <div class="text-sm text-muted mt-md" style="line-height:1.6">
+      <strong>Challenger conclusion:</strong> DC Consolidation (lowest cost at ${formatCurrency(SCENARIOS.find(s => s.id === 'SCN_CONSOLIDATE')?.totalCost || 0)}/day) was rejected because it fails under +15% demand surge. 
+      Flow Rebalancing is the most robust option — it passes all stress tests while delivering 7.8% cost reduction.
+    </div>
+  `;
+}
+
+// ─── Agent Input ────────────────────────────────────────────
+function wireAgentInput() {
+  const input = document.getElementById('agent-input');
+  const submit = document.getElementById('agent-submit');
+  if (!input || !submit) return;
+
+  submit.addEventListener('click', () => {
+    const query = input.value.trim();
+    if (!query) return;
+
+    // Show investigating state
+    submit.textContent = '🔄 Investigating...';
+    submit.disabled = true;
+
+    // Simulate agent processing
+    simulateInvestigation(query, () => {
+      submit.textContent = 'Investigate →';
+      submit.disabled = false;
+      input.value = '';
+    });
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submit.click();
+  });
+}
+
+// ─── Simulated Investigation ────────────────────────────────
+function simulateInvestigation(query, onComplete) {
+  const traceContainer = document.getElementById('agent-trace');
+  if (!traceContainer) { onComplete(); return; }
+
+  const steps = [
+    { action: `Understood objective: "${query}"`, detail: 'Parsing business constraints and targets', delay: 800 },
+    { action: 'Inspecting current network state', detail: 'Calling get_network_summary()', delay: 1200 },
+    { action: 'Identifying relevant bottlenecks', detail: 'Calling get_bottlenecks()', delay: 1000 },
+    { action: 'Generating candidate interventions', detail: 'Based on network analysis and objective', delay: 1500 },
+    { action: 'Testing scenarios through MILP optimiser', detail: 'Calling run_scenario() for each candidate', delay: 2000 },
+    { action: 'Stress-testing leading options', detail: 'Calling run_sensitivity() and run_resilience()', delay: 1800 },
+    { action: 'Analysis complete — recommendation ready', detail: 'Navigate to Recommendation tab to review', delay: 500 },
+  ];
+
+  // Clear existing trace
+  traceContainer.innerHTML = '';
+
+  let stepIndex = 0;
+
+  function addNextStep() {
+    if (stepIndex >= steps.length) {
+      onComplete();
+      return;
+    }
+
+    const step = steps[stepIndex];
+    const stepEl = document.createElement('div');
+    stepEl.className = 'trace-step active';
+    stepEl.innerHTML = `
+      <div class="trace-action">◌ ${step.action}</div>
+      <div class="trace-detail">${step.detail}</div>
+    `;
+    traceContainer.appendChild(stepEl);
+
+    // Scroll to bottom
+    stepEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    setTimeout(() => {
+      stepEl.className = 'trace-step done';
+      stepEl.querySelector('.trace-action').textContent = '✓ ' + step.action;
+      stepIndex++;
+      addNextStep();
+    }, step.delay);
+  }
+
+  addNextStep();
+}
+
+
+/* ═════════ app.js ═════════ */
+/**
+ * NetGravity — Main Application Controller
+ * ==========================================
+ * Tab routing, Home cockpit state, facility/period selectors,
+ * KPI rendering, insight list, insight drawer, and all sub-views.
+ */
+
+
+
+
+
+
+
+// ─── State ──────────────────────────────────────────────────
+const state = {
+  activeTab: 'home',
+  networkState: 'actual',
+  mapsInitialised: {},
+  chartsInitialised: {},
+  // Home cockpit state
+  facilityType: 'DC',          // 'DC' | 'Plant'
+  selectedFacility: 'DC_DELHI',
+  selectedPeriod: 'AUG_2026',
+};
+
+// ─── Boot ───────────────────────────────────────────────────
+function bootApp() {
+  initTabs();
+  initHomeSelectors();
+  renderHome();
+  renderTwinTables();
+  initScenarios();
+  initAgent();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootApp);
+} else {
+  bootApp();
+}
+
+// ─── Tab Routing ────────────────────────────────────────────
+function initTabs() {
+  document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
+    item.addEventListener('click', () => {
+      const tab = item.dataset.tab;
+      if (tab === state.activeTab) return;
+
+      // Update nav
+      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+      item.classList.add('active');
+
+      // Update panels
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      const panel = document.getElementById('tab-' + tab);
+      if (panel) panel.classList.add('active');
+
+      state.activeTab = tab;
+
+      // Lazy-init maps and charts
+      if (tab === 'twin' && !state.mapsInitialised['map-twin']) {
+        setTimeout(() => {
+          initMap('map-twin');
+          state.mapsInitialised['map-twin'] = true;
+        }, 50);
+      }
+      if (tab === 'forecast' && !state.chartsInitialised['forecast']) {
+        setTimeout(() => {
+          renderForecastChart('chart-forecast');
+          renderDataIntelligence();
+          state.chartsInitialised['forecast'] = true;
+        }, 50);
+      }
+      if (tab === 'scenarios' && !state.chartsInitialised['scenarios']) {
+        setTimeout(() => {
+          renderScenarioCostChart('chart-scenario-cost');
+          renderScenarioRadar('chart-scenario-radar');
+          state.chartsInitialised['scenarios'] = true;
+        }, 50);
+      }
+      if (tab === 'recommend') {
+        renderRecommendation();
+      }
+
+      // Invalidate map sizes on tab switch
+      if (tab === 'twin') {
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
+      }
+    });
+  });
+
+  // Network state toggles (Digital Twin)
+  document.querySelectorAll('.toggle-group').forEach(group => {
+    group.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        group.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const newState = btn.dataset.state;
+        state.networkState = newState;
+        setNetworkState(newState);
+      });
+    });
+  });
+
+  // Facility panel close
+  document.getElementById('fp-close')?.addEventListener('click', closeFacilityPanel);
+
+  // Insight drawer close
+  document.getElementById('insight-drawer-close')?.addEventListener('click', closeInsightDrawer);
+  document.getElementById('insight-drawer-overlay')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeInsightDrawer();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+// HOME — Decision Cockpit
+// ═══════════════════════════════════════════════════════════
+
+// ─── Home Selectors ─────────────────────────────────────────
+function initHomeSelectors() {
+  const selType = document.getElementById('sel-type');
+  const selFacility = document.getElementById('sel-facility');
+  const selPeriod = document.getElementById('sel-period');
+
+  // Populate period selector
+  selPeriod.innerHTML = PERIODS.map(p =>
+    `<option value="${p.id}">${p.label}</option>`
+  ).join('');
+  selPeriod.value = state.selectedPeriod;
+
+  // Type selector changes facility list
+  selType.addEventListener('change', () => {
+    state.facilityType = selType.value;
+    populateFacilitySelector();
+    renderHome();
+  });
+
+  // Facility selector
+  selFacility.addEventListener('change', () => {
+    state.selectedFacility = selFacility.value;
+    renderHome();
+  });
+
+  // Period selector
+  selPeriod.addEventListener('change', () => {
+    state.selectedPeriod = selPeriod.value;
+    renderHome();
+  });
+
+  populateFacilitySelector();
+
+  // View more KPIs → Navigate to full Facility Analytics Dashboard
+  document.getElementById('btn-view-more-kpis')?.addEventListener('click', () => {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-facility-dashboard')?.classList.add('active');
+    state.activeTab = 'facility-dashboard';
+    renderFacilityDashboard();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // Back to Decision Cockpit from Dashboard
+  document.getElementById('btn-back-to-home')?.addEventListener('click', () => {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-home')?.classList.add('active');
+    state.activeTab = 'home';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // Ask NetGravity
+  document.getElementById('btn-ask-ng')?.addEventListener('click', () => {
+    showNotification('NetGravity AI investigation active. Navigate to Scenario Planning to explore alternative interventions.');
+  });
+}
+
+function populateFacilitySelector() {
+  const selFacility = document.getElementById('sel-facility');
+  const facilities = state.facilityType === 'DC' ? DCS : PLANTS;
+
+  selFacility.innerHTML = facilities.map(f =>
+    `<option value="${f.id}">${f.name}</option>`
+  ).join('');
+
+  // Default to first facility in the list
+  state.selectedFacility = facilities[0].id;
+  selFacility.value = state.selectedFacility;
+}
+
+// ─── Render Full Home ───────────────────────────────────────
+function renderHome() {
+  const fac = getFacilityById(state.selectedFacility);
+  if (!fac) return;
+
+  // Update header
+  document.getElementById('home-facility-name').textContent = fac.name;
+
+  // Update facility dot colour based on utilisation
+  const dot = document.getElementById('facility-dot');
+  const kpis = getKpisForFacility(state.selectedFacility, state.selectedPeriod);
+  if (kpis && dot) {
+    const util = kpis.utilisation.value;
+    dot.style.background = util >= 90 ? 'var(--red)' : util >= 75 ? 'var(--amber)' : 'var(--green)';
+  }
+
+  renderKPIs();
+  renderHomeInsights();
+}
+
+// ─── Facility Full Analytics Dashboard ──────────────────────
+function renderFacilityDashboard() {
+  const fac = getFacilityById(state.selectedFacility);
+  if (!fac) return;
+
+  const kpis = getKpisForFacility(state.selectedFacility, state.selectedPeriod);
+  const period = PERIODS.find(p => p.id === state.selectedPeriod);
+  const isDC = state.selectedFacility.startsWith('DC_');
+  const utilPct = isDC ? fac.utilPct : ((fac.throughput / fac.capacity) * 100).toFixed(1);
+  const utilColor = getUtilColor(utilPct);
+
+  // Update Top Bar & Header
+  document.getElementById('dash-facility-name').textContent = fac.name;
+  document.getElementById('dash-facility-type').textContent = isDC ? 'Distribution Centre' : 'Manufacturing Plant';
+  document.getElementById('dash-period-label').textContent = period ? period.label : 'August 2026';
+  
+  const dashDot = document.getElementById('dash-facility-dot');
+  if (dashDot) {
+    dashDot.style.background = utilPct >= 90 ? 'var(--red)' : utilPct >= 75 ? 'var(--amber)' : 'var(--green)';
+  }
+
+  document.getElementById('dash-title').textContent = `${fac.name} — Performance & Analytics`;
+  document.getElementById('dash-subtitle').textContent = `${fac.city}, ${fac.state} · ${fac.region} Region · Full operational telemetry and cost breakdown for ${period ? period.short : 'Aug 2026'}.`;
+
+  // 6 Executive Metric Cards
+  const metricsGrid = document.getElementById('dash-metrics-grid');
+  if (metricsGrid) {
+    metricsGrid.innerHTML = `
+      <div class="dash-metric-card">
+        <div class="dash-metric-title">Capacity & Daily Throughput</div>
+        <div class="dash-metric-val" style="color:${utilColor}">${utilPct}% <span style="font-size:14px;color:var(--text-3);font-weight:600">(${formatNumber(fac.throughput)}/${formatNumber(fac.capacity)} u/d)</span></div>
+        <div class="dash-metric-sub">
+          <span>Spare Capacity: <strong>${formatNumber(fac.capacity - fac.throughput)} u/d</strong></span>
+          <span class="tag ${utilPct >= 90 ? 'tag-danger' : utilPct >= 75 ? 'tag-warning' : 'tag-success'}">${getUtilLabel(utilPct)}</span>
+        </div>
+      </div>
+
+      <div class="dash-metric-card">
+        <div class="dash-metric-title">On-Time SLA Performance</div>
+        <div class="dash-metric-val" style="color:var(--green)">${kpis ? kpis.sla.value : 96.7}%</div>
+        <div class="dash-metric-sub">
+          <span>Target: <strong>≥95.0%</strong></span>
+          <span style="color:var(--green);font-weight:600">↑ 1.8% vs last period</span>
+        </div>
+      </div>
+
+      <div class="dash-metric-card">
+        <div class="dash-metric-title">Total Operating Cost</div>
+        <div class="dash-metric-val" style="color:var(--primary)">${kpis ? formatCurrency(kpis.totalCost.value) : '₹11.8L'}</div>
+        <div class="dash-metric-sub">
+          <span>Handling: <strong>₹${fac.handlingCost || 4.2}/unit</strong></span>
+          <span style="color:var(--green);font-weight:600">↓ 3.2% vs budget</span>
+        </div>
+      </div>
+
+      <div class="dash-metric-card">
+        <div class="dash-metric-title">Inventory Supply Coverage</div>
+        <div class="dash-metric-val">${kpis ? kpis.inventoryDays.value : 11.2} <span style="font-size:16px;color:var(--text-3);font-weight:600">days</span></div>
+        <div class="dash-metric-sub">
+          <span>Holding Value: <strong>₹3.4L avg</strong></span>
+          <span>Safety buffer: <strong>140%</strong></span>
+        </div>
+      </div>
+
+      <div class="dash-metric-card">
+        <div class="dash-metric-title">Average Transit Lead Time</div>
+        <div class="dash-metric-val">1.2 <span style="font-size:16px;color:var(--text-3);font-weight:600">days</span></div>
+        <div class="dash-metric-sub">
+          <span>Fastest: <strong>0.3d</strong> · Slowest: <strong>3.5d</strong></span>
+          <span class="tag tag-success">On Schedule</span>
+        </div>
+      </div>
+
+      <div class="dash-metric-card">
+        <div class="dash-metric-title">Carbon Footprint Intensity</div>
+        <div class="dash-metric-val">0.42 <span style="font-size:16px;color:var(--text-3);font-weight:600">kg CO₂e/u</span></div>
+        <div class="dash-metric-sub">
+          <span>Total: <strong>14.8t CO₂e/mo</strong></span>
+          <span style="color:var(--green);font-weight:600">↓ 2.1% YoY</span>
+        </div>
+      </div>
+    `;
+  }
+
+  // Tags on Charts
+  const utilTag = document.getElementById('dash-util-tag');
+  if (utilTag) utilTag.textContent = `${utilPct}% Utilisation`;
+  const costTag = document.getElementById('dash-total-cost-tag');
+  if (costTag) costTag.textContent = kpis ? `${formatCurrency(kpis.totalCost.value)} / period` : '₹11.8L / period';
+
+  // Connected Lanes calculation
+  const connectedLanes = LANES.filter(l => l.from === state.selectedFacility || l.to === state.selectedFacility).map(l => {
+    const isOutbound = l.from === state.selectedFacility;
+    const peer = isOutbound ? getFacilityById(l.to) : getFacilityById(l.from);
+    return {
+      ...l,
+      direction: isOutbound ? 'Outbound' : 'Inbound',
+      peerName: peer ? peer.name : (l.to || l.from),
+      label: isOutbound ? `→ ${peer ? peer.name : l.to}` : `← ${peer ? peer.name : l.from}`
+    };
+  });
+
+  const laneCountTag = document.getElementById('dash-lane-count-tag');
+  if (laneCountTag) laneCountTag.textContent = `${connectedLanes.length} Active Corridors`;
+
+  // Render the 3 Charts
+  setTimeout(() => {
+    renderFacilityThroughputChart('chart-dash-throughput', fac);
+    renderFacilityCostBreakdownChart('chart-dash-costs', fac);
+    renderFacilityLaneFlowsChart('chart-dash-lanes', connectedLanes, state.selectedFacility);
+  }, 60);
+
+  // Corridor Summary Narrative
+  const totalFlow = connectedLanes.reduce((sum, l) => sum + (l.flow || 0), 0);
+  const avgCost = connectedLanes.length > 0 ? (connectedLanes.reduce((sum, l) => sum + (l.cost || 0), 0) / connectedLanes.length).toFixed(1) : 0;
+  const summaryEl = document.getElementById('dash-corridor-summary');
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div style="font-weight:700;color:var(--text-1);margin-bottom:6px">Corridor Network Health</div>
+      <div>• <strong>${connectedLanes.length} active transportation corridors</strong> handle a collective flow of <strong>${formatNumber(totalFlow)} units/day</strong>.</div>
+      <div class="mt-xs">• Weighted average transportation rate across all active arcs is <strong>₹${avgCost} / unit</strong>.</div>
+      <div class="mt-xs">• Primary inbound supply is linked to manufacturing capacity with an on-time transit confidence of <strong>98.2%</strong>.</div>
+    `;
+  }
+
+  // Corridor Table
+  const tableBody = document.querySelector('#table-dash-lanes tbody');
+  if (tableBody) {
+    tableBody.innerHTML = connectedLanes.map(l => `
+      <tr>
+        <td><strong>${l.peerName}</strong></td>
+        <td><span class="tag ${l.direction === 'Inbound' ? 'tag-primary' : 'tag-muted'}">${l.direction}</span></td>
+        <td class="num">${formatNumber(l.flow)} u/d</td>
+        <td class="num">${formatNumber(l.distance)} km</td>
+        <td class="num font-bold">₹${l.cost.toFixed(1)}</td>
+        <td class="num">${l.leadTime} days</td>
+        <td><span class="tag tag-success">${l.mode}</span></td>
+      </tr>
+    `).join('');
+  }
+
+  // Telemetry Grid
+  const telGrid = document.getElementById('dash-telemetry-grid');
+  if (telGrid) {
+    telGrid.innerHTML = `
+      <div style="padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);text-align:center">
+        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Connected ERP</div>
+        <div style="font-size:16px;font-weight:800;margin:4px 0">SAP S/4HANA</div>
+        <div class="text-xs" style="color:var(--green)">✓ Synced 8m ago</div>
+      </div>
+      <div style="padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);text-align:center">
+        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Warehouse WMS</div>
+        <div style="font-size:16px;font-weight:800;margin:4px 0">Manhattan Scale</div>
+        <div class="text-xs" style="color:var(--green)">✓ Real-time feed</div>
+      </div>
+      <div style="padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);text-align:center">
+        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Transport TMS</div>
+        <div style="font-size:16px;font-weight:800;margin:4px 0">Oracle OTM Cloud</div>
+        <div class="text-xs" style="color:var(--green)">✓ 384 GPS pings/hr</div>
+      </div>
+      <div style="padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);text-align:center">
+        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Data Integrity</div>
+        <div style="font-size:16px;font-weight:800;margin:4px 0;color:var(--green)">99.2%</div>
+        <div class="text-xs text-muted">0 schema mismatches</div>
+      </div>
+    `;
+  }
+}
+
+
+// ─── KPI Cards ──────────────────────────────────────────────
+function renderKPIs() {
+  const kpis = getKpisForFacility(state.selectedFacility, state.selectedPeriod);
+  const grid = document.getElementById('kpi-grid');
+  if (!kpis || !grid) return;
+
+  const period = PERIODS.find(p => p.id === state.selectedPeriod);
+  const prevLabel = kpis.prevLabel || 'previous period';
+
+  const utilDelta = kpis.utilisation.value - kpis.utilisation.prev;
+  const slaDelta = kpis.sla.value - kpis.sla.prev;
+  const costDelta = ((kpis.totalCost.value - kpis.totalCost.prev) / kpis.totalCost.prev * 100);
+  const invDelta = kpis.inventoryDays.value - kpis.inventoryDays.prev;
+
+  grid.innerHTML = `
+    <!-- Utilisation -->
+    <div class="kpi-card status-${kpis.utilisation.status}">
+      <div class="kpi-header">
+        <div class="kpi-label">Capacity Utilisation</div>
+        <div class="kpi-icon ${kpis.utilisation.status === 'critical' ? 'red' : kpis.utilisation.status === 'warning' ? 'amber' : 'purple'}">📊</div>
+      </div>
+      <div class="kpi-value">${kpis.utilisation.value}<span class="kpi-unit">%</span></div>
+      <div class="kpi-desc">of ${formatNumber(kpis.utilisation.capacity)} ${kpis.utilisation.unit}</div>
+      <div class="kpi-compare">
+        <span class="${utilDelta > 0 ? 'up' : 'down'}">↑ ${Math.abs(utilDelta).toFixed(0)}%</span>
+        <span class="kpi-compare-label"> vs ${prevLabel}</span>
+      </div>
+    </div>
+
+    <!-- SLA -->
+    <div class="kpi-card status-${kpis.sla.status}">
+      <div class="kpi-header">
+        <div class="kpi-label">On-time Service (SLA)</div>
+        <div class="kpi-icon ${kpis.sla.value >= kpis.sla.target ? 'green' : 'red'}">✅</div>
+      </div>
+      <div class="kpi-value">${kpis.sla.value}<span class="kpi-unit">%</span></div>
+      <div class="kpi-desc">Target: ≥${kpis.sla.target}%</div>
+      <div class="kpi-compare">
+        <span class="${slaDelta >= 0 ? 'down' : 'up'}">↑ ${Math.abs(slaDelta).toFixed(1)}%</span>
+        <span class="kpi-compare-label"> vs ${prevLabel}</span>
+      </div>
+    </div>
+
+    <!-- Total Cost -->
+    <div class="kpi-card status-${kpis.totalCost.status}">
+      <div class="kpi-header">
+        <div class="kpi-label">Total Cost</div>
+        <div class="kpi-icon purple">₹</div>
+      </div>
+      <div class="kpi-value">${formatCurrency(kpis.totalCost.value)}</div>
+      <div class="kpi-desc">Total cost for period</div>
+      <div class="kpi-compare">
+        <span class="${costDelta <= 0 ? 'down' : 'up'}">${costDelta <= 0 ? '↓' : '↑'} ${Math.abs(costDelta).toFixed(1)}%</span>
+        <span class="kpi-compare-label"> vs ${prevLabel}</span>
+      </div>
+    </div>
+
+    <!-- Inventory Days -->
+    <div class="kpi-card status-${kpis.inventoryDays.value > 15 ? 'warning' : 'normal'}">
+      <div class="kpi-header">
+        <div class="kpi-label">Inventory Days</div>
+        <div class="kpi-icon purple">📦</div>
+      </div>
+      <div class="kpi-value">${kpis.inventoryDays.value}<span class="kpi-unit"> days</span></div>
+      <div class="kpi-desc">of supply</div>
+      <div class="kpi-compare">
+        <span class="${invDelta <= 0 ? 'down' : 'up'}">${invDelta <= 0 ? '↓' : '↑'} ${Math.abs(invDelta).toFixed(1)} days</span>
+        <span class="kpi-compare-label"> vs ${prevLabel}</span>
+      </div>
+    </div>
+  `;
+}
+
+// ─── Expanded KPIs ──────────────────────────────────────────
+function renderExpandedKpis() {
+  const panel = document.getElementById('expanded-kpis');
+  if (!panel) return;
+
+  if (!state.expandedKpis) {
+    panel.classList.add('hidden');
+    return;
+  }
+
+  const kpis = getKpisForFacility(state.selectedFacility, state.selectedPeriod);
+  const fac = getFacilityById(state.selectedFacility);
+  if (!kpis || !fac) return;
+
+  const isDC = state.selectedFacility.startsWith('DC_');
+
+  panel.classList.remove('hidden');
+  panel.innerHTML = `
+    <div class="card-title mb-md">Extended KPIs — ${fac.name}</div>
+    <div class="grid-4" style="gap:var(--space-md)">
+      <div style="padding:12px;background:var(--bg);border-radius:var(--r-md);border:1px solid var(--border-light)">
+        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Throughput</div>
+        <div style="font-size:18px;font-weight:800;margin:4px 0">${formatNumber(fac.throughput)}</div>
+        <div class="text-xs text-muted">units/day</div>
+      </div>
+      <div style="padding:12px;background:var(--bg);border-radius:var(--r-md);border:1px solid var(--border-light)">
+        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Capacity</div>
+        <div style="font-size:18px;font-weight:800;margin:4px 0">${formatNumber(fac.capacity)}</div>
+        <div class="text-xs text-muted">units/day</div>
+      </div>
+      <div style="padding:12px;background:var(--bg);border-radius:var(--r-md);border:1px solid var(--border-light)">
+        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Spare Capacity</div>
+        <div style="font-size:18px;font-weight:800;margin:4px 0;color:var(--green)">${formatNumber(fac.capacity - fac.throughput)}</div>
+        <div class="text-xs text-muted">units/day</div>
+      </div>
+      ${isDC ? `
+      <div style="padding:12px;background:var(--bg);border-radius:var(--r-md);border:1px solid var(--border-light)">
+        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Handling Cost</div>
+        <div style="font-size:18px;font-weight:800;margin:4px 0">₹${fac.handlingCost}</div>
+        <div class="text-xs text-muted">per unit</div>
+      </div>
+      ` : `
+      <div style="padding:12px;background:var(--bg);border-radius:var(--r-md);border:1px solid var(--border-light)">
+        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Region</div>
+        <div style="font-size:18px;font-weight:800;margin:4px 0">${fac.region}</div>
+        <div class="text-xs text-muted">${fac.state}</div>
+      </div>
+      `}
+    </div>
+  `;
+}
+
+// ─── Home Insights ──────────────────────────────────────────
+function renderHomeInsights() {
+  const list = document.getElementById('home-insight-list');
+  if (!list) return;
+
+  const insights = getInsightsForFacility(state.selectedFacility);
+
+  list.innerHTML = insights.map(ins => {
+    const severityClass = ins.impactColor === '#dc2626' ? 'severity-high'
+      : ins.impactColor === '#d97706' ? 'severity-medium'
+      : ins.impactColor === '#6B2FA0' ? 'severity-ai'
+      : 'severity-low';
+
+    return `
+      <div class="home-insight-card ${severityClass}" data-insight-id="${ins.id}">
+        <div class="insight-icon-wrap" style="background:${ins.iconBg}">${ins.icon}</div>
+        <div class="insight-main">
+          <div class="insight-main-title">${ins.title}</div>
+          <div class="insight-main-sub">${ins.subtitle}</div>
+          <span class="insight-impact-tag" style="background:${ins.impactColor}">${ins.impact}</span>
+        </div>
+        <div class="insight-why">
+          <div class="insight-why-label">${ins.id === 'INS_RECOMMENDATION' ? 'Why I recommend this' : 'Why I found this'}</div>
+          <div class="insight-why-text">${ins.why}</div>
+        </div>
+        <a class="insight-action-link" href="javascript:void(0)">${ins.action} →</a>
+      </div>
+    `;
+  }).join('');
+
+  // Wire click handlers
+  list.querySelectorAll('.home-insight-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const insightId = card.dataset.insightId;
+      const insight = insights.find(i => i.id === insightId);
+      if (!insight) return;
+
+      if (insightId === 'INS_RECOMMENDATION') {
+        // Navigate to recommendation tab
+        document.querySelector('.nav-item[data-tab="recommend"]')?.click();
+        renderRecommendation();
+      } else if (insight.detail) {
+        openInsightDrawer(insight);
+      }
+    });
+  });
+}
+
+// ─── Insight Drawer ─────────────────────────────────────────
+function openInsightDrawer(insight) {
+  const overlay = document.getElementById('insight-drawer-overlay');
+  const content = document.getElementById('insight-drawer-content');
+  if (!overlay || !content) return;
+
+  const d = insight.detail;
+
+  content.innerHTML = `
+    <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">${insight.title}</h2>
+    <span class="insight-impact-tag" style="background:${insight.impactColor}">${insight.impact}</span>
+
+    <div class="drawer-section-title">What I Found</div>
+    <p class="drawer-text">${d.whatIFound}</p>
+
+    <div class="drawer-section-title">Why It Matters</div>
+    <p class="drawer-text">${d.whyItMatters}</p>
+
+    <div class="drawer-section-title">Evidence</div>
+    ${d.evidence.map(e => `
+      <div class="evidence-row">
+        <span class="evidence-label">${e.label}</span>
+        <span>
+          <span class="evidence-value">${e.value}</span>
+          <span class="provenance-badge ${e.provenance.toLowerCase().replace(/ /g, '-')}">${e.provenance}</span>
+        </span>
+      </div>
+    `).join('')}
+
+    ${d.whatITested.length > 0 ? `
+      <div class="drawer-section-title">What I Tested</div>
+      <ul style="font-size:13px;color:var(--text-2);padding-left:20px;line-height:2">
+        ${d.whatITested.map(t => `<li>${t}</li>`).join('')}
+      </ul>
+    ` : ''}
+
+    <div class="drawer-section-title">Recommendation</div>
+    <p class="drawer-text" style="font-weight:600;color:var(--primary)">${d.recommendation}</p>
+
+    <div class="drawer-section-title">Next Action</div>
+    <button class="btn btn-primary mt-sm" id="drawer-next-action">${d.nextAction} →</button>
+  `;
+
+  overlay.classList.add('visible');
+
+  // Wire next action button
+  document.getElementById('drawer-next-action')?.addEventListener('click', () => {
+    closeInsightDrawer();
+    // Navigate to scenarios or recommendation
+    const tab = d.nextAction.toLowerCase().includes('scenario') ? 'scenarios' : 'recommend';
+    document.querySelector(`.nav-item[data-tab="${tab}"]`)?.click();
+    if (tab === 'recommend') renderRecommendation();
+  });
+}
+
+function closeInsightDrawer() {
+  document.getElementById('insight-drawer-overlay')?.classList.remove('visible');
+}
+
+// ═══════════════════════════════════════════════════════════
+// EXISTING TAB VIEWS (preserved from original prototype)
+// ═══════════════════════════════════════════════════════════
+
+// ─── Digital Twin Tables ────────────────────────────────────
+function renderTwinTables() {
+  // Plants
+  const plantBody = document.querySelector('#table-plants tbody');
+  if (plantBody) {
+    plantBody.innerHTML = PLANTS.map(p => `
+      <tr class="clickable-row" data-id="${p.id}">
+        <td>${p.name}</td>
+        <td class="num">${formatNumber(p.capacity)}</td>
+        <td class="num">${formatNumber(p.throughput)}</td>
+        <td><span class="tag tag-success">Active</span></td>
+      </tr>
+    `).join('');
+  }
+
+  // DCs
+  const dcBody = document.querySelector('#table-dcs tbody');
+  if (dcBody) {
+    dcBody.innerHTML = DCS.map(d => {
+      const color = getUtilColor(d.utilPct);
+      const label = getUtilLabel(d.utilPct);
+      const tagClass = d.utilPct >= 90 ? 'tag-danger' : d.utilPct >= 75 ? 'tag-warning' : 'tag-success';
+      return `
+        <tr class="clickable-row" data-id="${d.id}">
+          <td>${d.name}</td>
+          <td class="num">${formatNumber(d.capacity)}</td>
+          <td class="num"><span style="color:${color};font-weight:700">${d.utilPct}%</span></td>
+          <td><span class="tag ${tagClass}">${label}</span></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  // Markets
+  const mktBody = document.querySelector('#table-markets tbody');
+  if (mktBody) {
+    mktBody.innerHTML = MARKETS.map(m => `
+      <tr>
+        <td>${m.name}</td>
+        <td class="num">${formatNumber(m.demand)}</td>
+        <td>${m.slaDays}d</td>
+        <td><span class="tag ${m.priority === 'High' ? 'tag-danger' : m.priority === 'Medium' ? 'tag-warning' : 'tag-muted'}">${m.priority}</span></td>
+      </tr>
+    `).join('');
+  }
+
+  // Clickable rows to open facility panel
+  document.querySelectorAll('.clickable-row').forEach(row => {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => openFacilityPanel(row.dataset.id));
+  });
+}
+
+// ─── Facility Panel ─────────────────────────────────────────
+window.openFacilityPanel = function(facilityId) {
+  const fac = [...PLANTS, ...DCS].find(f => f.id === facilityId);
+  if (!fac) return;
+
+  const isPlant = fac.id.startsWith('PLT_');
+  const isDC = fac.id.startsWith('DC_');
+  const utilPct = isDC ? fac.utilPct : ((fac.throughput / fac.capacity) * 100).toFixed(1);
+  const utilColor = getUtilColor(utilPct);
+  const utilLabel = getUtilLabel(utilPct);
+
+  const isBaddi = facilityId === 'DC_DELHI';
+  const forecastSection = isBaddi ? `
+    <div class="fp-stat" style="border-bottom:2px solid var(--red)">
+      <span class="fp-stat-label">Forecast Dec'26</span>
+      <span class="fp-stat-value" style="color:var(--red)">10,800 units/day</span>
+    </div>
+    <div class="fp-stat">
+      <span class="fp-stat-label">Risk</span>
+      <span class="fp-stat-value"><span class="tag tag-danger">HIGH — Capacity Breach</span></span>
+    </div>
+  ` : '';
+
+  document.getElementById('fp-content').innerHTML = `
+    <div class="fp-title">${fac.name}</div>
+    <div class="fp-subtitle">${fac.city}, ${fac.state} · ${fac.region} Region</div>
+    <div class="fp-stat"><span class="fp-stat-label">Type</span><span class="fp-stat-value">${isPlant ? 'Manufacturing Plant' : 'Distribution Centre'}</span></div>
+    <div class="fp-stat"><span class="fp-stat-label">Status</span><span class="fp-stat-value"><span class="tag tag-success">Active</span></span></div>
+    <div class="fp-stat"><span class="fp-stat-label">Capacity</span><span class="fp-stat-value">${formatNumber(fac.capacity)} units/day</span></div>
+    <div class="fp-stat"><span class="fp-stat-label">Current Throughput</span><span class="fp-stat-value">${formatNumber(fac.throughput)} units/day</span></div>
+    <div class="fp-stat"><span class="fp-stat-label">Utilisation</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${utilPct >= 90 ? 'tag-danger' : utilPct >= 75 ? 'tag-warning' : 'tag-success'}">${utilLabel}</span></span></div>
+    ${isDC ? `<div class="fp-stat"><span class="fp-stat-label">Fixed Cost</span><span class="fp-stat-value">₹${fac.fixedCost}L/year</span></div>` : ''}
+    ${isDC ? `<div class="fp-stat"><span class="fp-stat-label">Handling Cost</span><span class="fp-stat-value">₹${fac.handlingCost}/unit</span></div>` : ''}
+    ${forecastSection}
+    <div style="margin-top:var(--space-lg)">
+      <div class="card-title mb-md">Connected Lanes</div>
+      ${LANES.filter(l => l.from === facilityId || l.to === facilityId).map(l => `
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light);font-size:12px">
+          <span>${l.from === facilityId ? '→ ' + getFacilityById(l.to)?.name : '← ' + getFacilityById(l.from)?.name}</span>
+          <span style="color:var(--text-3)">${formatNumber(l.flow)} u/d · ₹${l.cost}/u</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  document.getElementById('facility-panel').classList.add('open');
+};
+
+function closeFacilityPanel() {
+  document.getElementById('facility-panel').classList.remove('open');
+}
+
+// ─── Recommendation Panel ───────────────────────────────────
+function renderRecommendation() {
+  const rec = RECOMMENDATION;
+  const panel = document.getElementById('recommendation-panel');
+  if (!panel) return;
+
+  panel.innerHTML = `
+    <div class="card rec-panel mb-lg">
+      <div class="rec-title">${rec.title}</div>
+      <div class="flex items-center gap-sm mb-md">
+        <span class="tag tag-warning">Tier ${rec.tier} — PROPOSE</span>
+        <span class="tag tag-primary">Human Approval Required</span>
+      </div>
+
+      <div class="impact-grid">
+        <div class="impact-item">
+          <div class="impact-label">Cost Change</div>
+          <div class="impact-value positive">↓ ${Math.abs(rec.impact.costChange)}%</div>
+        </div>
+        <div class="impact-item">
+          <div class="impact-label">SLA</div>
+          <div class="impact-value neutral">${rec.impact.sla}%</div>
+        </div>
+        <div class="impact-item">
+          <div class="impact-label">Peak Utilisation</div>
+          <div class="impact-value positive">↓ ${Math.abs(rec.impact.peakUtilChange)}pp</div>
+        </div>
+        <div class="impact-item">
+          <div class="impact-label">Carbon</div>
+          <div class="impact-value positive">↓ ${Math.abs(rec.impact.carbonChange)}%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="rec-subtitle" style="margin-top:0">What I found</div>
+        <p class="text-sm" style="color:var(--text-2);line-height:1.7">${rec.evidence.whatIFound}</p>
+
+        <div class="rec-subtitle">Why it matters</div>
+        <p class="text-sm" style="color:var(--text-2);line-height:1.7">${rec.evidence.whyItMatters}</p>
+
+        <div class="rec-subtitle">What I tested</div>
+        <ol style="font-size:13px;color:var(--text-2);padding-left:20px;line-height:1.8">
+          ${rec.evidence.whatITested.map(t => `<li>${t}</li>`).join('')}
+        </ol>
+      </div>
+
+      <div class="card">
+        <div class="rec-subtitle" style="margin-top:0">What I rejected</div>
+        ${rec.evidence.whatIRejected.map(r => `
+          <div class="rejected-item">
+            <div class="rejected-name">✕ ${r.scenario}</div>
+            <div class="rejected-reason">${r.reason}</div>
+          </div>
+        `).join('')}
+
+        <div class="rec-subtitle">What could change the recommendation</div>
+        <ul style="font-size:13px;color:var(--text-2);padding-left:20px;line-height:1.8">
+          ${rec.evidence.whatCouldChange.map(c => `<li>${c}</li>`).join('')}
+        </ul>
+      </div>
+    </div>
+
+    <div class="card mt-lg">
+      <div class="rec-subtitle" style="margin-top:0">What I need from you</div>
+      ${rec.nextSteps.map(s => `
+        <div class="next-step">
+          <div class="step-number">${s.step}</div>
+          <div class="step-content">
+            <div class="step-action">${s.action}</div>
+            <div class="step-owner">Owner: ${s.owner}</div>
+          </div>
+        </div>
+      `).join('')}
+
+      <div class="flex gap-sm mt-lg" style="flex-wrap:wrap">
+        <button class="btn btn-success" id="btn-approve">✓ Approve</button>
+        <button class="btn btn-secondary" id="btn-modify">Modify</button>
+        <button class="btn btn-danger" id="btn-reject">✕ Reject</button>
+        <button class="btn btn-secondary" id="btn-more-tests">Run More Tests</button>
+        <button class="btn btn-primary" id="btn-gen-email">📧 Generate Analyst Email</button>
+      </div>
+
+      <div class="email-preview mt-lg" id="email-preview">${rec.analystEmail}</div>
+    </div>
+  `;
+
+  // Wire action buttons
+  document.getElementById('btn-approve')?.addEventListener('click', () => {
+    document.getElementById('btn-approve').textContent = '✓ Approved';
+    document.getElementById('btn-approve').disabled = true;
+    document.getElementById('btn-approve').style.opacity = '0.6';
+  });
+  document.getElementById('btn-reject')?.addEventListener('click', () => {
+    document.getElementById('btn-reject').textContent = '✕ Rejected';
+    document.getElementById('btn-reject').disabled = true;
+    document.getElementById('btn-reject').style.opacity = '0.6';
+  });
+  document.getElementById('btn-gen-email')?.addEventListener('click', () => {
+    document.getElementById('email-preview').classList.toggle('visible');
+  });
+  document.getElementById('btn-more-tests')?.addEventListener('click', () => {
+    document.querySelector('.nav-item[data-tab="scenarios"]')?.click();
+  });
+  document.getElementById('btn-modify')?.addEventListener('click', () => {
+    document.querySelector('.nav-item[data-tab="scenarios"]')?.click();
+  });
+}
+
+// ─── Data Intelligence ──────────────────────────────────────
+function renderDataIntelligence() {
+  // External signals (on Forecast tab now)
+  const sigContainer = document.getElementById('external-signals');
+  if (sigContainer) {
+    sigContainer.innerHTML = EXTERNAL_SIGNALS.map(sig => `
+      <div class="signal-card">
+        <div class="flex items-center justify-between mb-sm">
+          <span style="font-size:14px">${sig.icon} <strong>${sig.title}</strong></span>
+          <span class="signal-badge">External signal</span>
+        </div>
+        <div class="text-xs text-muted">Source: ${sig.source} · ${sig.publishedDate}</div>
+        <div class="text-sm mt-sm" style="color:var(--text-2)">${sig.rationale}</div>
+        <div class="flex gap-sm mt-sm" style="flex-wrap:wrap">
+          <span class="tag tag-muted">Geography: ${sig.geography}</span>
+          <span class="tag tag-muted">Direction: ${sig.direction}</span>
+          <span class="tag ${sig.confidence === 'HIGH' ? 'tag-success' : 'tag-warning'}">Conf: ${sig.confidence}</span>
+        </div>
+        <div class="text-xs mt-sm" style="color:var(--primary);font-weight:600">→ ${sig.intendedUse}</div>
+      </div>
+    `).join('');
+  }
+}
+
+// ─── Notification Toast ─────────────────────────────────────
+function showNotification(message) {
+  const notif = document.createElement('div');
+  notif.style.cssText = `
+    position: fixed; bottom: 24px; right: 24px;
+    background: #1a1a2e; color: white; padding: 14px 24px;
+    border-radius: 10px; font-size: 13px; font-family: Inter, sans-serif;
+    box-shadow: 0 8px 24px rgba(0,0,0,.2); z-index: 500;
+    animation: fadeIn .3s ease;
+  `;
+  notif.textContent = message;
+  document.body.appendChild(notif);
+  setTimeout(() => {
+    notif.style.opacity = '0';
+    notif.style.transition = 'opacity .3s';
+    setTimeout(() => notif.remove(), 300);
+  }, 4000);
+}
+
+</script>
+</body>
+</html>

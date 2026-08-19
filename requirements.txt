@@ -1,4 +1,13 @@
+# NetGravity Mathematical Optimization Core & Web Application Dependencies
+
+# MILP Solver & Optimization Engine
 pulp>=2.8.0,<3.0.0
 pydantic>=2.0.0
-pytest>=8.0.0
 highspy>=1.5.0
+
+# Testing & Verification
+pytest>=8.0.0
+
+# Web Application & Agent API
+flask>=3.0.0
+flask-cors>=4.0.0
