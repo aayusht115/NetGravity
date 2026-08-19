@@ -1057,13 +1057,13 @@ export const HOME_INSIGHTS = {
 };
 
 export function getInsightsForFacility(facilityId) {
-  return HOME_INSIGHTS[facilityId] || HOME_INSIGHTS._default;
+  return HOME_INSIGHTS[facilityId] || HOME_INSIGHTS.DC_DELHI || HOME_INSIGHTS._default || [];
 }
 
 export function getKpisForFacility(facilityId, periodId) {
-  const facilityKpis = FACILITY_KPIS[facilityId];
+  const facilityKpis = FACILITY_KPIS[facilityId] || FACILITY_KPIS.DC_DELHI;
   if (!facilityKpis) return null;
-  return facilityKpis[periodId] || facilityKpis["AUG_2026"] || null;
+  return facilityKpis[periodId] || facilityKpis["AUG_2026"] || facilityKpis[Object.keys(facilityKpis)[0]] || null;
 }
 
 // ─── HELPER FUNCTIONS ───────────────────────────────────────

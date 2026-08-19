@@ -12,6 +12,7 @@ import { PLANTS, DCS, MARKETS, LANES, DATA_QUALITY, SCHEMA_MAPPING,
          formatCurrency, formatNumber, getUtilColor, getUtilLabel,
          getFacilityById, getInsightsForFacility, getKpisForFacility } from './data.js';
 import { initMap, setNetworkState } from './map.js';
+import { initTwin3D, setTwin3DState, resizeTwin3D, resumeTwin3D } from './twin3d.js';
 import { renderForecastChart,
          renderFacilityThroughputChart, renderFacilityCostBreakdownChart, renderFacilityLaneFlowsChart } from './charts.js';
 import { initScenarios } from './scenarios.js';
@@ -31,12 +32,12 @@ const state = {
 
 // ─── Boot ───────────────────────────────────────────────────
 function bootApp() {
-  initTabs();
-  initHomeSelectors();
-  renderHome();
-  renderTwinTables();
-  initScenarios();
-  initAgent();
+  try { initTabs(); } catch (e) { console.error('initTabs error:', e); }
+  try { initHomeSelectors(); } catch (e) { console.error('initHomeSelectors error:', e); }
+  try { renderHome(); } catch (e) { console.error('renderHome error:', e); }
+  try { renderTwinTables(); } catch (e) { console.error('renderTwinTables error:', e); }
+  try { initScenarios(); } catch (e) { console.error('initScenarios error:', e); }
+  try { initAgent(); } catch (e) { console.error('initAgent error:', e); }
 }
 
 if (document.readyState === 'loading') {
@@ -63,11 +64,20 @@ function initTabs() {
 
       state.activeTab = tab;
 
-      // Lazy-init maps and charts
-      if (tab === 'twin' && !state.mapsInitialised['map-twin']) {
+      // Lazy-init maps, 3D twin and charts
+      if (tab === 'twin') {
         setTimeout(() => {
-          initMap('map-twin');
-          state.mapsInitialised['map-twin'] = true;
+          try {
+            if (!state.mapsInitialised['twin-3d']) {
+              initTwin3D('twin3d-canvas');
+              state.mapsInitialised['twin-3d'] = true;
+            } else {
+              resumeTwin3D();
+              resizeTwin3D();
+            }
+          } catch (err) {
+            console.error('Twin 3D initialization warning:', err);
+          }
         }, 50);
       }
       if (tab === 'forecast' && !state.chartsInitialised['forecast']) {
@@ -87,24 +97,80 @@ function initTabs() {
         renderRecommendation();
       }
 
-      // Invalidate map sizes on tab switch
+      // Invalidate map/3D canvas sizes on tab switch
       if (tab === 'twin') {
-        setTimeout(() => window.dispatchEvent(new Event('resize')), 100);
+        setTimeout(() => {
+          window.dispatchEvent(new Event('resize'));
+          resizeTwin3D();
+        }, 100);
       }
     });
   });
 
-  // Network state toggles (Digital Twin)
-  document.querySelectorAll('.toggle-group').forEach(group => {
-    group.querySelectorAll('.toggle-btn').forEach(btn => {
+  // 2D / 3D View Toggle (Digital Twin)
+  const viewToggle = document.getElementById('twin-view-toggle');
+  if (viewToggle) {
+    viewToggle.querySelectorAll('.toggle-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        group.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        viewToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const view = btn.dataset.view;
+
+        const panel2d = document.getElementById('twin-2d-panel');
+        const panel3d = document.getElementById('twin-3d-panel');
+
+        if (view === '2d') {
+          if (panel2d) panel2d.style.display = 'block';
+          if (panel3d) panel3d.style.display = 'none';
+          if (!state.mapsInitialised['map-twin']) {
+            initMap('map-twin');
+            state.mapsInitialised['map-twin'] = true;
+          }
+          setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+        } else {
+          if (panel2d) panel2d.style.display = 'none';
+          if (panel3d) panel3d.style.display = 'block';
+          if (!state.mapsInitialised['twin-3d']) {
+            initTwin3D('twin3d-canvas');
+            state.mapsInitialised['twin-3d'] = true;
+          } else {
+            resumeTwin3D();
+            resizeTwin3D();
+          }
+        }
+      });
+    });
+  }
+
+  // Network state toggles (Digital Twin)
+  const mapToggle = document.getElementById('map-toggle-twin');
+  if (mapToggle) {
+    mapToggle.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        mapToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         const newState = btn.dataset.state;
         state.networkState = newState;
+
+        // Update 2D map
         setNetworkState(newState);
+
+        // Update 3D twin
+        setTwin3DState(newState);
+
+        // Update 3D stats overlay
+        const stateLabel = document.getElementById('twin3d-state-label');
+        if (stateLabel) {
+          const names = { actual: 'Actual', optimised: 'Optimised Base', recommended: 'Recommended' };
+          stateLabel.textContent = names[newState] || newState;
+        }
       });
     });
+  }
+
+  // Window resize handler for 3D canvas
+  window.addEventListener('resize', () => {
+    resizeTwin3D();
   });
 
   // Facility panel close
@@ -128,29 +194,34 @@ function initHomeSelectors() {
   const selPeriod = document.getElementById('sel-period');
 
   // Populate period selector
-  selPeriod.innerHTML = PERIODS.map(p =>
-    `<option value="${p.id}">${p.label}</option>`
-  ).join('');
-  selPeriod.value = state.selectedPeriod;
+  if (selPeriod) {
+    selPeriod.innerHTML = (PERIODS || []).map(p =>
+      `<option value="${p.id}">${p.label}</option>`
+    ).join('');
+    selPeriod.value = state.selectedPeriod;
+
+    selPeriod.addEventListener('change', () => {
+      state.selectedPeriod = selPeriod.value;
+      renderHome();
+    });
+  }
 
   // Type selector changes facility list
-  selType.addEventListener('change', () => {
-    state.facilityType = selType.value;
-    populateFacilitySelector();
-    renderHome();
-  });
+  if (selType) {
+    selType.addEventListener('change', () => {
+      state.facilityType = selType.value;
+      populateFacilitySelector();
+      renderHome();
+    });
+  }
 
   // Facility selector
-  selFacility.addEventListener('change', () => {
-    state.selectedFacility = selFacility.value;
-    renderHome();
-  });
-
-  // Period selector
-  selPeriod.addEventListener('change', () => {
-    state.selectedPeriod = selPeriod.value;
-    renderHome();
-  });
+  if (selFacility) {
+    selFacility.addEventListener('change', () => {
+      state.selectedFacility = selFacility.value;
+      renderHome();
+    });
+  }
 
   populateFacilitySelector();
 
@@ -179,24 +250,28 @@ function initHomeSelectors() {
 
 function populateFacilitySelector() {
   const selFacility = document.getElementById('sel-facility');
+  if (!selFacility) return;
+
   const facilities = state.facilityType === 'DC' ? DCS : PLANTS;
 
   selFacility.innerHTML = facilities.map(f =>
     `<option value="${f.id}">${f.name}</option>`
   ).join('');
 
-  // Default to first facility in the list
-  state.selectedFacility = facilities[0].id;
+  if (!state.selectedFacility || !facilities.some(f => f.id === state.selectedFacility)) {
+    state.selectedFacility = facilities[0].id;
+  }
   selFacility.value = state.selectedFacility;
 }
 
 // ─── Render Full Home ───────────────────────────────────────
 function renderHome() {
-  const fac = getFacilityById(state.selectedFacility);
+  const fac = getFacilityById(state.selectedFacility) || DCS[0];
   if (!fac) return;
 
   // Update header
-  document.getElementById('home-facility-name').textContent = fac.name;
+  const nameEl = document.getElementById('home-facility-name');
+  if (nameEl) nameEl.textContent = fac.name;
 
   // Update facility dot colour based on utilisation
   const dot = document.getElementById('facility-dot');

@@ -15,6 +15,10 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
+  <!-- Three.js (3D Digital Twin Engine) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
   <!-- Design System -->
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -291,15 +295,48 @@
                 Click any facility to inspect capacity, utilisation, and forecast. Toggle between network states.
               </div>
             </div>
-            <div class="toggle-group" id="map-toggle-twin">
-              <button class="toggle-btn active" data-state="actual">Actual</button>
-              <button class="toggle-btn" data-state="optimised">Optimised Base</button>
-              <button class="toggle-btn" data-state="recommended">Recommended</button>
+            <div class="flex items-center gap-sm">
+              <!-- 2D / 3D View Toggle -->
+              <div class="toggle-group" id="twin-view-toggle">
+                <button class="toggle-btn" data-view="2d">2D Map</button>
+                <button class="toggle-btn active" data-view="3d">3D Twin</button>
+              </div>
+              <!-- Network State Toggle -->
+              <div class="toggle-group" id="map-toggle-twin">
+                <button class="toggle-btn active" data-state="actual">Actual</button>
+                <button class="toggle-btn" data-state="optimised">Optimised Base</button>
+                <button class="toggle-btn" data-state="recommended">Recommended</button>
+              </div>
             </div>
           </div>
 
-          <div class="card" style="padding:0;overflow:hidden">
+          <!-- 2D Leaflet Map (hidden by default) -->
+          <div class="card twin-view-panel" id="twin-2d-panel" style="padding:0;overflow:hidden;display:none">
             <div class="map-container tall" id="map-twin"></div>
+          </div>
+
+          <!-- 3D Three.js Canvas -->
+          <div class="card twin-view-panel twin3d-card" id="twin-3d-panel" style="padding:0;overflow:hidden;position:relative">
+            <div class="twin3d-container" id="twin3d-canvas"></div>
+            <!-- Floating Stats Overlay -->
+            <div class="twin3d-stats-overlay" id="twin3d-stats">
+              <div class="twin3d-stat">
+                <span class="twin3d-stat-value">19</span>
+                <span class="twin3d-stat-label">Network Nodes</span>
+              </div>
+              <div class="twin3d-stat">
+                <span class="twin3d-stat-value" id="twin3d-flow-count">20</span>
+                <span class="twin3d-stat-label">Active Corridors</span>
+              </div>
+              <div class="twin3d-stat">
+                <span class="twin3d-stat-value" id="twin3d-state-label">Actual</span>
+                <span class="twin3d-stat-label">Network State</span>
+              </div>
+            </div>
+            <!-- Camera Controls Hint -->
+            <div class="twin3d-hint">
+              <span>🖱️ Drag to rotate · Scroll to zoom · Click node to inspect</span>
+            </div>
           </div>
 
           <div class="grid-3 mt-lg">

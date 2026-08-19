@@ -1425,4 +1425,175 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   .home-controls { flex-direction: column; gap: var(--space-md); align-items: flex-start; }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   3D Digital Twin — Three.js Styles (Light Mode · India Map)
+   ═══════════════════════════════════════════════════════════ */
+
+.twin3d-card {
+  border-radius: var(--r-lg);
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+  position: relative;
+}
+
+.twin3d-container {
+  width: 100%;
+  height: 560px;
+  position: relative;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  cursor: grab;
+  background: #f8fafc;
+}
+.twin3d-container:active { cursor: grabbing; }
+
+.twin3d-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: var(--r-lg);
+}
+
+/* ─── Floating Stats Overlay (Light Theme) ───────────────── */
+.twin3d-stats-overlay {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  display: flex;
+  gap: 10px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.twin3d-stat {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 10px;
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+}
+
+.twin3d-stat-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-1);
+  line-height: 1.2;
+}
+
+.twin3d-stat-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ─── Camera Hint (Light Theme) ──────────────────────────── */
+.twin3d-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.twin3d-hint span {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 20px;
+  padding: 6px 18px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  letter-spacing: 0.02em;
+}
+
+/* ─── Dynamic 3D HUD Tooltip (Light Theme) ───────────────── */
+.twin3d-node-tooltip {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: var(--text-1);
+  min-width: 220px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.04);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.twin3d-node-tooltip.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.95);
+}
+
+.hud-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: 6px;
+}
+
+.hud-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.hud-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.hud-badge.plant { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
+.hud-badge.dc { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+.hud-badge.market { background: #f0f9ff; color: #0284c7; border: 1px solid #bae6fd; }
+
+.hud-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.hud-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.hud-row strong {
+  color: var(--text-1);
+  font-weight: 700;
+}
+
+.hud-footer {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--primary);
+  text-align: right;
+  border-top: 1px solid var(--border-light);
+  padding-top: 5px;
+}
 
