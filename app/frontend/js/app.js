@@ -8,7 +8,7 @@
 import { PLANTS, DCS, MARKETS, LANES, DATA_QUALITY, SCHEMA_MAPPING,
          CONTRACT_DEMO, SYSTEM_STATUS, GOVERNANCE_TIERS, EXTERNAL_SIGNALS,
          AGENT_STATE, SCENARIOS, RECOMMENDATION, FORECAST, DEMAND_HISTORY,
-         PERIODS, FACILITY_KPIS, HOME_INSIGHTS,
+         PERIODS, FACILITY_KPIS, HOME_INSIGHTS, HOME_ACTION_ITEMS,
          formatCurrency, formatNumber, getUtilColor, getUtilLabel,
          getFacilityById, getInsightsForFacility, getKpisForFacility } from './data.js';
 import { initMap, setNetworkState } from './map.js';
@@ -46,68 +46,110 @@ if (document.readyState === 'loading') {
   bootApp();
 }
 
-// ─── Tab Routing ────────────────────────────────────────────
+// ─── Tab Routing & Sub-Navigation ───────────────────────────
+export function navigateToTab(tab) {
+  if (tab === 'facility-dashboard') {
+    // Show sub-menu under Home in sidebar
+    const subKpi = document.getElementById('nav-sub-kpi');
+    if (subKpi) {
+      subKpi.style.display = 'flex';
+      subKpi.classList.add('active');
+    }
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('nav-item-home')?.classList.add('active');
+
+    // Show panel
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-facility-dashboard')?.classList.add('active');
+    state.activeTab = 'facility-dashboard';
+    renderFacilityDashboard();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  // If navigating to Home or other top tabs
+  const subKpi = document.getElementById('nav-sub-kpi');
+  if (subKpi) {
+    if (tab === 'home') {
+      subKpi.classList.remove('active');
+      subKpi.style.display = 'none';
+    } else {
+      subKpi.style.display = 'none';
+      subKpi.classList.remove('active');
+    }
+  }
+
+  // Update nav highlights
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelector(`.nav-item[data-tab="${tab}"]`)?.classList.add('active');
+
+  // Update panels
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('tab-' + tab);
+  if (panel) panel.classList.add('active');
+
+  state.activeTab = tab;
+
+  // Lazy-init maps, 3D twin and charts
+  if (tab === 'home') {
+    setTimeout(() => {
+      renderHome();
+      window.dispatchEvent(new Event('resize'));
+    }, 50);
+  }
+  if (tab === 'twin') {
+    setTimeout(() => {
+      try {
+        if (!state.mapsInitialised['twin-3d']) {
+          initTwin3D('twin3d-canvas');
+          state.mapsInitialised['twin-3d'] = true;
+        } else {
+          resumeTwin3D();
+          resizeTwin3D();
+        }
+        if (!state.mapsInitialised['map-twin']) {
+          initMap('map-twin');
+          state.mapsInitialised['map-twin'] = true;
+        }
+      } catch (err) {
+        console.error('Twin initialization warning:', err);
+      }
+      window.dispatchEvent(new Event('resize'));
+    }, 50);
+  }
+  if (tab === 'forecast' && !state.chartsInitialised['forecast']) {
+    setTimeout(() => {
+      renderForecastChart('chart-forecast');
+      renderDataIntelligence();
+      state.chartsInitialised['forecast'] = true;
+    }, 50);
+  }
+  if (tab === 'scenarios') {
+    setTimeout(() => {
+      initScenarios();
+      state.chartsInitialised['scenarios'] = true;
+    }, 50);
+  }
+  if (tab === 'recommend') {
+    renderRecommendation();
+  }
+}
+
 function initTabs() {
+  // Primary nav items
   document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
     item.addEventListener('click', () => {
       const tab = item.dataset.tab;
-      if (tab === state.activeTab) return;
-
-      // Update nav
-      document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-      item.classList.add('active');
-
-      // Update panels
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      const panel = document.getElementById('tab-' + tab);
-      if (panel) panel.classList.add('active');
-
-      state.activeTab = tab;
-
-      // Lazy-init maps, 3D twin and charts
-      if (tab === 'twin') {
-        setTimeout(() => {
-          try {
-            if (!state.mapsInitialised['twin-3d']) {
-              initTwin3D('twin3d-canvas');
-              state.mapsInitialised['twin-3d'] = true;
-            } else {
-              resumeTwin3D();
-              resizeTwin3D();
-            }
-          } catch (err) {
-            console.error('Twin 3D initialization warning:', err);
-          }
-        }, 50);
-      }
-      if (tab === 'forecast' && !state.chartsInitialised['forecast']) {
-        setTimeout(() => {
-          renderForecastChart('chart-forecast');
-          renderDataIntelligence();
-          state.chartsInitialised['forecast'] = true;
-        }, 50);
-      }
-      if (tab === 'scenarios') {
-        setTimeout(() => {
-          initScenarios();
-          state.chartsInitialised['scenarios'] = true;
-        }, 50);
-      }
-      if (tab === 'recommend') {
-        renderRecommendation();
-      }
-
-      // Invalidate map/3D canvas sizes on tab switch
-      if (tab === 'twin') {
-        setTimeout(() => {
-          window.dispatchEvent(new Event('resize'));
-          resizeTwin3D();
-        }, 100);
-      }
+      navigateToTab(tab);
     });
   });
 
-  // 2D / 3D View Toggle (Digital Twin)
+  // Sub-nav item for KPI Dashboard
+  document.getElementById('nav-sub-kpi')?.addEventListener('click', () => {
+    navigateToTab('facility-dashboard');
+  });
+
+  // 2D / 3D View Toggle (Digital Twin Tab)
   const viewToggle = document.getElementById('twin-view-toggle');
   if (viewToggle) {
     viewToggle.querySelectorAll('.toggle-btn').forEach(btn => {
@@ -142,7 +184,7 @@ function initTabs() {
     });
   }
 
-  // Network state toggles (Digital Twin)
+  // Network state toggles (Digital Twin Tab)
   const mapToggle = document.getElementById('map-toggle-twin');
   if (mapToggle) {
     mapToggle.querySelectorAll('.toggle-btn').forEach(btn => {
@@ -168,7 +210,7 @@ function initTabs() {
     });
   }
 
-  // Window resize handler for 3D canvas
+  // Window resize handler for 3D canvas and maps
   window.addEventListener('resize', () => {
     resizeTwin3D();
   });
@@ -181,19 +223,31 @@ function initTabs() {
   document.getElementById('insight-drawer-overlay')?.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeInsightDrawer();
   });
+
+  // Action drawer close
+  document.getElementById('action-drawer-close')?.addEventListener('click', closeActionDrawer);
+  document.getElementById('action-drawer-overlay')?.addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeActionDrawer();
+  });
+
+  // Back to Home from Facility Dashboard
+  document.getElementById('btn-back-to-home')?.addEventListener('click', () => {
+    navigateToTab('home');
+  });
 }
 
 // ═══════════════════════════════════════════════════════════
-// HOME — Decision Cockpit
+// HOME — Decision Cockpit (2/3 + 1/3 Layout)
 // ═══════════════════════════════════════════════════════════
 
 // ─── Home Selectors ─────────────────────────────────────────
 function initHomeSelectors() {
-  const selType = document.getElementById('sel-type');
-  const selFacility = document.getElementById('sel-facility');
   const selPeriod = document.getElementById('sel-period');
+  const selKpiType = document.getElementById('home-kpi-type-select');
+  const selForecastType = document.getElementById('home-forecast-type-select');
+  const selFacilityPicker = document.getElementById('home-facility-picker');
 
-  // Populate period selector
+  // Populate global period selector in topbar
   if (selPeriod) {
     selPeriod.innerHTML = (PERIODS || []).map(p =>
       `<option value="${p.id}">${p.label}</option>`
@@ -206,83 +260,94 @@ function initHomeSelectors() {
     });
   }
 
-  // Type selector changes facility list
-  if (selType) {
-    selType.addEventListener('change', () => {
-      state.facilityType = selType.value;
+  // KPI Section "View by" (DC / Plant)
+  if (selKpiType) {
+    selKpiType.value = state.facilityType;
+    selKpiType.addEventListener('change', () => {
+      state.facilityType = selKpiType.value;
+      if (selForecastType) selForecastType.value = state.facilityType;
       populateFacilitySelector();
       renderHome();
     });
   }
 
-  // Facility selector
-  if (selFacility) {
-    selFacility.addEventListener('change', () => {
-      state.selectedFacility = selFacility.value;
+  // Forecast Section "View by" (DC / Plant)
+  if (selForecastType) {
+    selForecastType.value = state.facilityType;
+    selForecastType.addEventListener('change', () => {
+      state.facilityType = selForecastType.value;
+      if (selKpiType) selKpiType.value = state.facilityType;
+      populateFacilitySelector();
+      renderHome();
+    });
+  }
+
+  // Facility Picker (if visible/available)
+  if (selFacilityPicker) {
+    selFacilityPicker.addEventListener('change', () => {
+      state.selectedFacility = selFacilityPicker.value;
       renderHome();
     });
   }
 
   populateFacilitySelector();
 
-  // View more KPIs → Navigate to full Facility Analytics Dashboard
-  document.getElementById('btn-view-more-kpis')?.addEventListener('click', () => {
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    document.getElementById('tab-facility-dashboard')?.classList.add('active');
-    state.activeTab = 'facility-dashboard';
-    renderFacilityDashboard();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Click entire KPI Block or "View more KPIs →"
+  document.getElementById('home-kpi-block')?.addEventListener('click', () => {
+    navigateToTab('facility-dashboard');
+  });
+  document.getElementById('btn-view-more-kpis')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    navigateToTab('facility-dashboard');
   });
 
-  // Back to Decision Cockpit from Dashboard
-  document.getElementById('btn-back-to-home')?.addEventListener('click', () => {
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    document.getElementById('tab-home')?.classList.add('active');
-    state.activeTab = 'home';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Click entire Forecast Block or "View more details (open Forecasting) →"
+  document.getElementById('home-forecast-block')?.addEventListener('click', () => {
+    navigateToTab('forecast');
+  });
+  document.getElementById('btn-view-forecast-details')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    navigateToTab('forecast');
   });
 
-  // Ask NetGravity
-  document.getElementById('btn-ask-ng')?.addEventListener('click', () => {
-    showNotification('NetGravity AI investigation active. Navigate to Scenario Planning to explore alternative interventions.');
+  // Click entire Digital Twin map block → Navigate to Digital Twin
+  document.getElementById('home-twin-block')?.addEventListener('click', () => {
+    navigateToTab('twin');
+  });
+
+  // Chatbot Send Button & Enter Key
+  document.getElementById('home-chat-send')?.addEventListener('click', handleHomeChat);
+  document.getElementById('home-chat-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleHomeChat();
   });
 }
 
 function populateFacilitySelector() {
-  const selFacility = document.getElementById('sel-facility');
-  if (!selFacility) return;
-
+  const selFacilityPicker = document.getElementById('home-facility-picker');
   const facilities = state.facilityType === 'DC' ? DCS : PLANTS;
 
-  selFacility.innerHTML = facilities.map(f =>
-    `<option value="${f.id}">${f.name}</option>`
-  ).join('');
-
-  if (!state.selectedFacility || !facilities.some(f => f.id === state.selectedFacility)) {
-    state.selectedFacility = facilities[0].id;
+  if (selFacilityPicker) {
+    selFacilityPicker.innerHTML = facilities.map(f =>
+      `<option value="${f.id}">${f.name}</option>`
+    ).join('');
+    if (!state.selectedFacility || !facilities.some(f => f.id === state.selectedFacility)) {
+      state.selectedFacility = facilities[0].id;
+    }
+    selFacilityPicker.value = state.selectedFacility;
+  } else {
+    if (!state.selectedFacility || !facilities.some(f => f.id === state.selectedFacility)) {
+      state.selectedFacility = facilities[0].id;
+    }
   }
-  selFacility.value = state.selectedFacility;
 }
 
 // ─── Render Full Home ───────────────────────────────────────
 function renderHome() {
-  const fac = getFacilityById(state.selectedFacility) || DCS[0];
-  if (!fac) return;
-
-  // Update header
-  const nameEl = document.getElementById('home-facility-name');
-  if (nameEl) nameEl.textContent = fac.name;
-
-  // Update facility dot colour based on utilisation
-  const dot = document.getElementById('facility-dot');
-  const kpis = getKpisForFacility(state.selectedFacility, state.selectedPeriod);
-  if (kpis && dot) {
-    const util = kpis.utilisation.value;
-    dot.style.background = util >= 90 ? 'var(--red)' : util >= 75 ? 'var(--amber)' : 'var(--green)';
-  }
-
-  renderKPIs();
+  renderHomeKPIs();
+  renderHomeForecast();
+  renderHomeDigitalTwin();
   renderHomeInsights();
+  renderHomeActions();
 }
 
 // ─── Facility Full Analytics Dashboard ──────────────────────
@@ -455,177 +520,216 @@ export function renderFacilityDashboard() {
 }
 
 
-// ─── KPI Cards ──────────────────────────────────────────────
-function renderKPIs() {
+// ─── Home KPI Cards (2x2 Compact Grid) ───────────────────────
+function renderHomeKPIs() {
   const kpis = getKpisForFacility(state.selectedFacility, state.selectedPeriod);
-  const grid = document.getElementById('kpi-grid');
+  const grid = document.getElementById('home-kpi-grid');
   if (!kpis || !grid) return;
 
-  const period = PERIODS.find(p => p.id === state.selectedPeriod);
-  const prevLabel = kpis.prevLabel || 'previous period';
-
-  const utilDelta = kpis.utilisation.value - kpis.utilisation.prev;
-  const slaDelta = kpis.sla.value - kpis.sla.prev;
-  const costDelta = ((kpis.totalCost.value - kpis.totalCost.prev) / kpis.totalCost.prev * 100);
-  const invDelta = kpis.inventoryDays.value - kpis.inventoryDays.prev;
-
   grid.innerHTML = `
-    <!-- Utilisation -->
-    <div class="kpi-card status-${kpis.utilisation.status}">
-      <div class="kpi-header">
-        <div class="kpi-label">Capacity Utilisation</div>
-        <div class="kpi-icon ${kpis.utilisation.status === 'critical' ? 'red' : kpis.utilisation.status === 'warning' ? 'amber' : 'purple'}">📊</div>
+    <!-- Card 1: Capacity Utilisation -->
+    <div class="home-kpi-item">
+      <div class="home-kpi-item-header">
+        <div class="home-kpi-name">Capacity Utilisation</div>
+        <div class="home-kpi-icon-badge" style="background:#f5f0fa;color:var(--primary)">📊</div>
       </div>
-      <div class="kpi-value">${kpis.utilisation.value}<span class="kpi-unit">%</span></div>
-      <div class="kpi-desc">of ${formatNumber(kpis.utilisation.capacity)} ${kpis.utilisation.unit}</div>
-      <div class="kpi-compare">
-        <span class="${utilDelta > 0 ? 'up' : 'down'}">↑ ${Math.abs(utilDelta).toFixed(0)}%</span>
-        <span class="kpi-compare-label"> vs ${prevLabel}</span>
-      </div>
+      <div class="home-kpi-val">${kpis.utilisation.value}%</div>
+      <div class="home-kpi-sub">of ${formatNumber(kpis.utilisation.capacity)} ${kpis.utilisation.unit}</div>
     </div>
 
-    <!-- SLA -->
-    <div class="kpi-card status-${kpis.sla.status}">
-      <div class="kpi-header">
-        <div class="kpi-label">On-time Service (SLA)</div>
-        <div class="kpi-icon ${kpis.sla.value >= kpis.sla.target ? 'green' : 'red'}">✅</div>
+    <!-- Card 2: On-time Service (SLA) -->
+    <div class="home-kpi-item">
+      <div class="home-kpi-item-header">
+        <div class="home-kpi-name">On-time Service (SLA)</div>
+        <div class="home-kpi-icon-badge" style="background:#f0fdf4;color:var(--green)">✅</div>
       </div>
-      <div class="kpi-value">${kpis.sla.value}<span class="kpi-unit">%</span></div>
-      <div class="kpi-desc">Target: ≥${kpis.sla.target}%</div>
-      <div class="kpi-compare">
-        <span class="${slaDelta >= 0 ? 'down' : 'up'}">↑ ${Math.abs(slaDelta).toFixed(1)}%</span>
-        <span class="kpi-compare-label"> vs ${prevLabel}</span>
-      </div>
+      <div class="home-kpi-val">${kpis.sla.value}%</div>
+      <div class="home-kpi-sub">Target: ≥${kpis.sla.target}%</div>
     </div>
 
-    <!-- Total Cost -->
-    <div class="kpi-card status-${kpis.totalCost.status}">
-      <div class="kpi-header">
-        <div class="kpi-label">Total Cost</div>
-        <div class="kpi-icon purple">₹</div>
+    <!-- Card 3: Total Cost -->
+    <div class="home-kpi-item">
+      <div class="home-kpi-item-header">
+        <div class="home-kpi-name">Total Cost</div>
+        <div class="home-kpi-icon-badge" style="background:#f5f0fa;color:var(--primary);font-weight:700">₹</div>
       </div>
-      <div class="kpi-value">${formatCurrency(kpis.totalCost.value)}</div>
-      <div class="kpi-desc">Total cost for period</div>
-      <div class="kpi-compare">
-        <span class="${costDelta <= 0 ? 'down' : 'up'}">${costDelta <= 0 ? '↓' : '↑'} ${Math.abs(costDelta).toFixed(1)}%</span>
-        <span class="kpi-compare-label"> vs ${prevLabel}</span>
-      </div>
+      <div class="home-kpi-val">${formatCurrency(kpis.totalCost.value)}</div>
+      <div class="home-kpi-sub">Total cost for period</div>
     </div>
 
-    <!-- Inventory Days -->
-    <div class="kpi-card status-${kpis.inventoryDays.value > 15 ? 'warning' : 'normal'}">
-      <div class="kpi-header">
-        <div class="kpi-label">Inventory Days</div>
-        <div class="kpi-icon purple">📦</div>
+    <!-- Card 4: Inventory Days -->
+    <div class="home-kpi-item">
+      <div class="home-kpi-item-header">
+        <div class="home-kpi-name">Inventory Days</div>
+        <div class="home-kpi-icon-badge" style="background:#fffbeb;color:var(--amber)">📦</div>
       </div>
-      <div class="kpi-value">${kpis.inventoryDays.value}<span class="kpi-unit"> days</span></div>
-      <div class="kpi-desc">of supply</div>
-      <div class="kpi-compare">
-        <span class="${invDelta <= 0 ? 'down' : 'up'}">${invDelta <= 0 ? '↓' : '↑'} ${Math.abs(invDelta).toFixed(1)} days</span>
-        <span class="kpi-compare-label"> vs ${prevLabel}</span>
-      </div>
+      <div class="home-kpi-val">${kpis.inventoryDays.value} days</div>
+      <div class="home-kpi-sub">of supply</div>
     </div>
   `;
 }
 
-// ─── Expanded KPIs ──────────────────────────────────────────
-function renderExpandedKpis() {
-  const panel = document.getElementById('expanded-kpis');
-  if (!panel) return;
-
-  if (!state.expandedKpis) {
-    panel.classList.add('hidden');
-    return;
+// ─── Home Forecast Section ──────────────────────────────────
+function renderHomeForecast() {
+  const banner = document.getElementById('home-forecast-banner');
+  if (banner) {
+    banner.textContent = 'I forecast North India demand to increase 14% over the next 3 months.';
   }
 
-  const kpis = getKpisForFacility(state.selectedFacility, state.selectedPeriod);
-  const fac = getFacilityById(state.selectedFacility);
-  if (!kpis || !fac) return;
-
-  const isDC = state.selectedFacility.startsWith('DC_');
-
-  panel.classList.remove('hidden');
-  panel.innerHTML = `
-    <div class="card-title mb-md">Extended KPIs — ${fac.name}</div>
-    <div class="grid-4" style="gap:var(--space-md)">
-      <div style="padding:12px;background:var(--bg);border-radius:var(--r-md);border:1px solid var(--border-light)">
-        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Throughput</div>
-        <div style="font-size:18px;font-weight:800;margin:4px 0">${formatNumber(fac.throughput)}</div>
-        <div class="text-xs text-muted">units/day</div>
-      </div>
-      <div style="padding:12px;background:var(--bg);border-radius:var(--r-md);border:1px solid var(--border-light)">
-        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Capacity</div>
-        <div style="font-size:18px;font-weight:800;margin:4px 0">${formatNumber(fac.capacity)}</div>
-        <div class="text-xs text-muted">units/day</div>
-      </div>
-      <div style="padding:12px;background:var(--bg);border-radius:var(--r-md);border:1px solid var(--border-light)">
-        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Spare Capacity</div>
-        <div style="font-size:18px;font-weight:800;margin:4px 0;color:var(--green)">${formatNumber(fac.capacity - fac.throughput)}</div>
-        <div class="text-xs text-muted">units/day</div>
-      </div>
-      ${isDC ? `
-      <div style="padding:12px;background:var(--bg);border-radius:var(--r-md);border:1px solid var(--border-light)">
-        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Handling Cost</div>
-        <div style="font-size:18px;font-weight:800;margin:4px 0">₹${fac.handlingCost}</div>
-        <div class="text-xs text-muted">per unit</div>
-      </div>
-      ` : `
-      <div style="padding:12px;background:var(--bg);border-radius:var(--r-md);border:1px solid var(--border-light)">
-        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Region</div>
-        <div style="font-size:18px;font-weight:800;margin:4px 0">${fac.region}</div>
-        <div class="text-xs text-muted">${fac.state}</div>
-      </div>
-      `}
-    </div>
-  `;
+  // Render compact forecast chart
+  setTimeout(() => {
+    renderForecastChart('chart-forecast-home');
+  }, 40);
 }
 
-// ─── Home Insights ──────────────────────────────────────────
+// ─── Home Digital Twin Map Preview ──────────────────────────
+function renderHomeDigitalTwin() {
+  setTimeout(() => {
+    try {
+      if (!state.mapsInitialised['home-map-twin']) {
+        initMap('home-map-twin');
+        state.mapsInitialised['home-map-twin'] = true;
+      } else {
+        window.dispatchEvent(new Event('resize'));
+      }
+    } catch (e) {
+      console.warn('Home map init:', e);
+    }
+  }, 50);
+}
+
+// ─── Home Numbered Insights (Right Rail) ─────────────────────
 function renderHomeInsights() {
-  const list = document.getElementById('home-insight-list');
+  const list = document.getElementById('home-insights-list');
   if (!list) return;
 
   const insights = getInsightsForFacility(state.selectedFacility);
 
-  list.innerHTML = insights.map(ins => {
-    const severityClass = ins.impactColor === '#dc2626' ? 'severity-high'
-      : ins.impactColor === '#d97706' ? 'severity-medium'
-      : ins.impactColor === '#6B2FA0' ? 'severity-ai'
-      : 'severity-low';
-
+  list.innerHTML = insights.map((ins, idx) => {
+    const num = ins.num || (idx + 1);
+    const actionText = ins.action || 'click → overlay';
     return `
-      <div class="home-insight-card ${severityClass}" data-insight-id="${ins.id}">
-        <div class="insight-icon-wrap" style="background:${ins.iconBg}">${ins.icon}</div>
-        <div class="insight-main">
-          <div class="insight-main-title">${ins.title}</div>
-          <div class="insight-main-sub">${ins.subtitle}</div>
-          <span class="insight-impact-tag" style="background:${ins.impactColor}">${ins.impact}</span>
+      <div class="home-insight-row" data-insight-id="${ins.id}">
+        <div class="insight-row-left">
+          <span class="insight-num-badge">${num}</span>
+          <span>${ins.title}</span>
+          <span class="insight-info-icon">ⓘ</span>
         </div>
-        <div class="insight-why">
-          <div class="insight-why-label">${ins.id === 'INS_RECOMMENDATION' ? 'Why I recommend this' : 'Why I found this'}</div>
-          <div class="insight-why-text">${ins.why}</div>
-        </div>
-        <a class="insight-action-link" href="javascript:void(0)">${ins.action} →</a>
+        ${actionText ? `<span class="insight-overlay-hint">${actionText}</span>` : ''}
       </div>
     `;
   }).join('');
 
-  // Wire click handlers
-  list.querySelectorAll('.home-insight-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const insightId = card.dataset.insightId;
+  // Wire click handlers to open drawer
+  list.querySelectorAll('.home-insight-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const insightId = row.dataset.insightId;
       const insight = insights.find(i => i.id === insightId);
       if (!insight) return;
 
       if (insightId === 'INS_RECOMMENDATION') {
-        // Navigate to recommendation tab
-        document.querySelector('.nav-item[data-tab="recommend"]')?.click();
-        renderRecommendation();
+        navigateToTab('scenarios');
       } else if (insight.detail) {
         openInsightDrawer(insight);
       }
     });
   });
+}
+
+// ─── Home Action Items (Right Rail) ──────────────────────────
+function renderHomeActions() {
+  const list = document.getElementById('home-actions-list');
+  if (!list) return;
+
+  list.innerHTML = HOME_ACTION_ITEMS.map(act => `
+    <div class="home-action-row" data-action-id="${act.id}">
+      <div class="home-action-checkbox">☐</div>
+      <div class="home-action-text">
+        ${act.title}
+        <span class="home-action-tag" style="color:${act.tagColor}">(${act.tag})</span>
+      </div>
+    </div>
+  `).join('');
+
+  // Wire click handlers to open Action Drawer
+  list.querySelectorAll('.home-action-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const actionId = row.dataset.actionId;
+      const action = HOME_ACTION_ITEMS.find(a => a.id === actionId);
+      if (action) {
+        openActionDrawer(action);
+      }
+    });
+  });
+}
+
+// ─── Action Detail Drawer ───────────────────────────────────
+function openActionDrawer(action) {
+  const overlay = document.getElementById('action-drawer-overlay');
+  const content = document.getElementById('action-drawer-content');
+  if (!overlay || !content) return;
+
+  content.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <h2 style="font-size:20px;font-weight:800;margin:0;color:var(--text-1)">${action.title}</h2>
+      <span class="tag" style="background:var(--purple-50);color:${action.tagColor};font-weight:700">${action.tag}</span>
+    </div>
+    <span class="provenance-badge ai-assessment">AI RECOMMENDATION</span>
+
+    <div class="drawer-section-title">Why am I recommending this?</div>
+    <p class="drawer-text" style="font-size:13.5px;line-height:1.6;color:var(--text-2)">${action.why}</p>
+
+    <div class="drawer-section-title">Root Cause & Network Telemetry</div>
+    ${action.rootCause.map(r => `
+      <div class="evidence-row">
+        <span class="evidence-label">${r.label}</span>
+        <span>
+          <span class="evidence-value">${r.value}</span>
+          <span class="provenance-badge ${r.provenance.toLowerCase().replace(/ /g, '-')}">${r.provenance}</span>
+        </span>
+      </div>
+    `).join('')}
+
+    <div class="drawer-section-title">Expected Impact</div>
+    <div class="grid-3" style="gap:10px;margin-top:8px">
+      <div style="background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:var(--r-md);padding:10px;text-align:center">
+        <div class="text-xs text-muted" style="font-weight:600;text-transform:uppercase">Cost</div>
+        <div style="font-size:16px;font-weight:800;color:var(--green);margin-top:2px">${action.expectedImpact.cost}</div>
+      </div>
+      <div style="background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:var(--r-md);padding:10px;text-align:center">
+        <div class="text-xs text-muted" style="font-weight:600;text-transform:uppercase">SLA</div>
+        <div style="font-size:16px;font-weight:800;color:var(--green);margin-top:2px">${action.expectedImpact.sla}</div>
+      </div>
+      <div style="background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:var(--r-md);padding:10px;text-align:center">
+        <div class="text-xs text-muted" style="font-weight:600;text-transform:uppercase">Capacity Risk</div>
+        <div style="font-size:16px;font-weight:800;color:var(--green);margin-top:2px">${action.expectedImpact.risk}</div>
+      </div>
+    </div>
+
+    <div class="drawer-section-title">What I Tested</div>
+    <ul style="font-size:13px;color:var(--text-2);padding-left:20px;line-height:2">
+      ${action.whatITested.map(t => `<li>${t}</li>`).join('')}
+    </ul>
+
+    <div class="drawer-section-title">Next Step</div>
+    <button class="btn btn-primary mt-sm" id="action-drawer-scenario-btn" style="width:100%">
+      Review Scenario in Scenario Planning →
+    </button>
+  `;
+
+  overlay.classList.add('visible');
+
+  // Wire CTA button to navigate directly to Scenario Planning
+  document.getElementById('action-drawer-scenario-btn')?.addEventListener('click', () => {
+    closeActionDrawer();
+    navigateToTab('scenarios');
+  });
+}
+
+function closeActionDrawer() {
+  document.getElementById('action-drawer-overlay')?.classList.remove('visible');
 }
 
 // ─── Insight Drawer ─────────────────────────────────────────
@@ -676,15 +780,48 @@ function openInsightDrawer(insight) {
   // Wire next action button
   document.getElementById('drawer-next-action')?.addEventListener('click', () => {
     closeInsightDrawer();
-    // Navigate to scenarios or recommendation
-    const tab = d.nextAction.toLowerCase().includes('scenario') ? 'scenarios' : 'recommend';
-    document.querySelector(`.nav-item[data-tab="${tab}"]`)?.click();
-    if (tab === 'recommend') renderRecommendation();
+    navigateToTab('scenarios');
   });
 }
 
 function closeInsightDrawer() {
   document.getElementById('insight-drawer-overlay')?.classList.remove('visible');
+}
+
+// ─── Contextual Home Chatbot ────────────────────────────────
+function handleHomeChat() {
+  const input = document.getElementById('home-chat-input');
+  const messages = document.getElementById('home-chat-messages');
+  if (!input || !input.value.trim()) return;
+
+  const query = input.value.trim();
+  input.value = '';
+
+  if (messages) {
+    messages.style.display = 'block';
+    messages.innerHTML += `<div class="home-chat-msg user">You: ${query}</div>`;
+
+    // Contextual intelligent responses based on active facility and query
+    let responseText = '';
+    const qLower = query.toLowerCase();
+
+    if (qLower.includes('delhi') || qLower.includes('risk') || qLower.includes('capacity')) {
+      responseText = `Delhi NCR DC is operating at 94% utilisation. With demand projected to surge +14.2% by December (108% peak utilisation), NetGravity recommends flow rebalancing to Kolkata DC to avoid bottlenecks. You can explore this intervention under <strong>Scenario Planning</strong>.`;
+    } else if (qLower.includes('kolkata') || qLower.includes('spare') || qLower.includes('underutilised')) {
+      responseText = `Kolkata DC has 41% spare capacity (2,800 units/day) with the lowest handling cost in the network (₹3.5/unit). It can absorb 800–1,200 units/day from Baddi manufacturing to alleviate Northern corridor pressure.`;
+    } else if (qLower.includes('forecast') || qLower.includes('demand') || qLower.includes('surge')) {
+      responseText = `North India regional demand is forecast to grow 14% over the next 3 months, crossing the 10,000 units/day DC ceiling by October. View complete confidence bands in the <strong>Forecasting</strong> tab.`;
+    } else if (qLower.includes('cost') || qLower.includes('save') || qLower.includes('rebalance')) {
+      responseText = `The recommended flow rebalancing scenario reduces total operating cost by <strong>7.8% (₹8.4L/month)</strong> while preserving on-time delivery SLA at <strong>96.7%</strong>. Review the scenario comparison under <strong>Scenario Planning</strong>.`;
+    } else {
+      responseText = `Based on current network telemetry for ${state.selectedPeriod}, Delhi NCR is operating near capacity ceiling while Kolkata has significant headroom. Would you like to review the flow rebalancing scenario in <strong>Scenario Planning</strong>?`;
+    }
+
+    setTimeout(() => {
+      messages.innerHTML += `<div class="home-chat-msg bot">🤖 NetGravity: ${responseText}</div>`;
+      messages.scrollTop = messages.scrollHeight;
+    }, 250);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════

@@ -866,17 +866,18 @@ export const FACILITY_KPIS = {
 };
 
 // ─── HOME INSIGHTS BY FACILITY ──────────────────────────────
-// Each facility has context-specific insights. The recommendation insight is shared.
+// Each facility has context-specific insights matching the 5 numbered items.
 export const HOME_INSIGHTS = {
   DC_DELHI: [
     {
       id: "INS_CAP_RISK",
+      num: 1,
       icon: "⚠️", iconBg: "#fef2f2", iconColor: "#dc2626",
       title: "Capacity risk at Delhi NCR DC",
       subtitle: "Utilisation is projected to reach 108% in December.",
       impact: "High Impact", impactColor: "#dc2626",
       why: "Demand forecast shows 14.2% growth over the next 4 months, exceeding available capacity starting October.",
-      action: "Investigate", provenance: "FORECAST",
+      action: "click → overlay", provenance: "FORECAST",
       detail: {
         whatIFound: "Delhi NCR DC is operating at 94% utilisation. Demand forecast projects a 14.2% growth in North India over the next 4 months.",
         whyItMatters: "At current trajectory, the facility will exceed its 10,000 units/day capacity by December 2026 (projected 108%), causing spillover to costlier corridors and SLA degradation.",
@@ -889,62 +890,97 @@ export const HOME_INSIGHTS = {
         ],
         whatITested: ["Flow rebalancing across DCs", "Capacity expansion at Delhi NCR", "DC consolidation (close Guwahati)", "New DC at Lucknow"],
         recommendation: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata DCs.",
-        nextAction: "Review scenario",
+        nextAction: "Review Scenario",
       },
     },
     {
-      id: "INS_COST_CONC",
-      icon: "💰", iconBg: "#fffbeb", iconColor: "#d97706",
-      title: "Cost opportunity identified",
-      subtitle: "18% of transport cost is concentrated on 2 lanes.",
-      impact: "Medium Impact", impactColor: "#d97706",
-      why: "High concentration of spend on Baddi–Delhi NCR and Baddi–Jaipur lanes vs. network average.",
-      action: "See why", provenance: "MODEL FACT",
+      id: "INS_INVESTIGATE_DELHI",
+      num: 2,
+      icon: "🔍", iconBg: "#fef2f2", iconColor: "#dc2626",
+      title: "Investigate Delhi capacity risk",
+      subtitle: "Exceeds 10,000 units/day threshold by Q4.",
+      impact: "High Impact", impactColor: "#dc2626",
+      why: "North India regional surge requires immediate throughput reallocation or hub capacity expansion.",
+      action: "click → overlay", provenance: "MODEL FACT",
       detail: {
-        whatIFound: "Two corridors (Baddi→Delhi NCR at ₹12/unit and Baddi→Jaipur at ₹22/unit via Delhi) account for 18% of total network transport cost.",
-        whyItMatters: "Cost concentration creates risk if either corridor is disrupted and limits negotiation leverage with carriers.",
+        whatIFound: "Delhi NCR DC operates at 94% utilisation. Projected volume crosses critical threshold in Q4 2026.",
+        whyItMatters: "Unmitigated capacity bottleneck will trigger ₹2.4L in emergency transport penalties and drop SLA below 95%.",
         evidence: [
-          { label: "Baddi→Delhi NCR cost share", value: "12.4%", provenance: "MODEL FACT" },
-          { label: "Baddi→Jaipur cost share", value: "5.6%", provenance: "MODEL FACT" },
-          { label: "Network average lane share", value: "4.0%", provenance: "MODEL FACT" },
-          { label: "Corridor concentration ratio", value: "4.5x above average", provenance: "MODEL FACT" },
+          { label: "Capacity ceiling", value: "10,000 u/d", provenance: "MODEL FACT" },
+          { label: "Headroom remaining", value: "600 u/d (6.0%)", provenance: "MODEL FACT" },
+          { label: "Spillover corridor cost", value: "+18.4% surcharge", provenance: "MODEL FACT" },
         ],
-        whatITested: ["Alternative routing via Kolkata DC", "Direct plant-to-market for Jaipur"],
-        recommendation: "Consider flow rebalancing to reduce corridor concentration.",
-        nextAction: "Explore scenarios",
+        whatITested: ["Brownfield expansion (+3,000 u/d)", "Cross-dock volume bypass"],
+        recommendation: "Investigate corridor rebalancing scenario to absorb northern overflow.",
+        nextAction: "Review Scenario",
       },
     },
     {
-      id: "INS_SPARE_CAP",
+      id: "INS_EXPLORE_UNDERUTIL",
+      num: 3,
       icon: "📈", iconBg: "#f0fdf4", iconColor: "#16a34a",
-      title: "Underutilised capacity available",
-      subtitle: "Kolkata DC has 41% spare capacity.",
+      title: "Explore underutilised capacity",
+      subtitle: "Kolkata DC has 41% spare capacity available.",
       impact: "Opportunity", impactColor: "#16a34a",
-      why: "Current throughput is 5,900 units/day vs capacity of 10,000 units/day.",
-      action: "Explore", provenance: "MODEL FACT",
+      why: "Current throughput is 3,200 units/day vs capacity of 6,000 units/day.",
+      action: "click → overlay", provenance: "MODEL FACT",
       detail: {
         whatIFound: "Kolkata DC is operating at only 53.3% utilisation with 2,800 units/day of spare capacity.",
-        whyItMatters: "This spare capacity can absorb volume from overloaded facilities without requiring capital investment.",
+        whyItMatters: "This spare capacity can absorb volume from overloaded northern facilities without capital expenditure.",
         evidence: [
           { label: "Kolkata capacity", value: "6,000 u/d", provenance: "MODEL FACT" },
           { label: "Current throughput", value: "3,200 u/d", provenance: "MODEL FACT" },
           { label: "Spare capacity", value: "2,800 u/d (46.7%)", provenance: "MODEL FACT" },
-          { label: "Handling cost", value: "₹3.5/unit (lowest)", provenance: "MODEL FACT" },
+          { label: "Handling cost", value: "₹3.5/unit (lowest in network)", provenance: "MODEL FACT" },
         ],
-        whatITested: ["Redirect 800 units/day from Delhi NCR overflow"],
+        whatITested: ["Redirect 800 units/day from Delhi NCR overflow to Kolkata"],
         recommendation: "Include Kolkata DC in flow rebalancing scenario.",
-        nextAction: "Explore scenario",
+        nextAction: "Review Scenario",
       },
     },
     {
-      id: "INS_RECOMMENDATION",
-      icon: "✨", iconBg: "#f5f0fa", iconColor: "#6B2FA0",
-      title: "Recommendation ready",
-      subtitle: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata.",
-      impact: "High Value", impactColor: "#6B2FA0",
-      why: "Reduces total cost by 7.8% while maintaining SLA at 96.7%. Robust under +15% demand stress test.",
-      action: "Review Recommendation", provenance: "AI ASSESSMENT",
-      detail: null, // Uses the existing RECOMMENDATION object
+      id: "INS_UNDERUTIL_CAP",
+      num: 4,
+      icon: "⚡", iconBg: "#eff6ff", iconColor: "#2563eb",
+      title: "Underutilised capable capacity",
+      subtitle: "Western and Eastern network headroom can absorb surges.",
+      impact: "Optimization", impactColor: "#2563eb",
+      why: "Network-wide aggregate DC utilisation is 72.4%, leaving 27.6% overall capacity headroom.",
+      action: "", provenance: "MODEL FACT",
+      detail: {
+        whatIFound: "Aggregate network DC utilisation is 72.4%, with spare handling bandwidth concentrated in Kolkata and Mumbai.",
+        whyItMatters: "Enables multi-echelon load leveling across the supply chain network without adding fixed warehouse footprint.",
+        evidence: [
+          { label: "Network DC Capacity", value: "37,500 u/d", provenance: "MODEL FACT" },
+          { label: "Active Throughput", value: "27,150 u/d", provenance: "MODEL FACT" },
+          { label: "System Headroom", value: "10,350 u/d (27.6%)", provenance: "MODEL FACT" },
+        ],
+        whatITested: ["Network-wide multi-echelon MILP optimization"],
+        recommendation: "Activate optimized base case routing.",
+        nextAction: "Review Scenario",
+      },
+    },
+    {
+      id: "INS_KOLKATA_SPARE",
+      num: 5,
+      icon: "🏪", iconBg: "#f0fdf4", iconColor: "#16a34a",
+      title: "Kolkata DC has spare capacity",
+      subtitle: "Operating at 53.3% with ₹3.5/unit handling rate.",
+      impact: "Opportunity", impactColor: "#16a34a",
+      why: "East corridor provides a cost-effective alternative for North-East demand fulfillment.",
+      action: "click → overlay", provenance: "MODEL FACT",
+      detail: {
+        whatIFound: "Kolkata DC handles 3,200 u/d against 6,000 u/d total capacity with highest SLA reliability (97.4%).",
+        whyItMatters: "Provides high SLA buffer and immediate absorption capacity for Baddi plant volume rebalancing.",
+        evidence: [
+          { label: "Kolkata SLA", value: "97.4%", provenance: "MODEL FACT" },
+          { label: "Available Buffer", value: "2,800 u/d", provenance: "MODEL FACT" },
+          { label: "Lead time to East markets", value: "1.1 days", provenance: "MODEL FACT" },
+        ],
+        whatITested: ["Routing Baddi → Kolkata DC → Patna/Ranchi markets"],
+        recommendation: "Reallocate 12% Baddi volume to Kolkata DC.",
+        nextAction: "Review Scenario",
+      },
     },
   ],
   DC_MUMBAI: [
@@ -1055,6 +1091,80 @@ export const HOME_INSIGHTS = {
     },
   ],
 };
+
+// ─── HOME ACTION ITEMS ───────────────────────────────────────
+export const HOME_ACTION_ITEMS = [
+  {
+    id: "ACT_REBALANCE_BADDI",
+    title: "Rebalance Baddi volume",
+    tag: "High Value",
+    tagColor: "#6B2FA0",
+    scenarioId: "SCENARIO_REBALANCE",
+    why: "I identified a capacity constraint at Delhi NCR and found that reallocating Baddi volume can reduce cost while maintaining SLA.",
+    rootCause: [
+      { label: "Delhi NCR utilisation", value: "94%", provenance: "MODEL FACT" },
+      { label: "Forecast demand growth", value: "14.2%", provenance: "FORECAST" },
+      { label: "December capacity risk", value: "High (108% projected)", provenance: "FORECAST" },
+    ],
+    expectedImpact: {
+      cost: "↓ 7.8%",
+      sla: "96.7%",
+      risk: "Low",
+    },
+    whatITested: [
+      "Rebalancing 12% of Baddi volume to Delhi NCR and Kolkata",
+      "Capacity expansion at Delhi NCR (+3,000 u/d)",
+      "Redistribution to Kolkata DC (absorbs 800 u/d spare capacity)",
+    ],
+    nextAction: "Review Scenario",
+  },
+  {
+    id: "ACT_INVESTIGATE_DELHI",
+    title: "Investigate Delhi capacity risk",
+    tag: "High Impact",
+    tagColor: "#dc2626",
+    scenarioId: "SCENARIO_EXPAND_DELHI",
+    why: "Demand forecast shows North India volume will cross the 10,000 units/day threshold by October 2026.",
+    rootCause: [
+      { label: "Current Throughput", value: "9,400 u/d", provenance: "MODEL FACT" },
+      { label: "Facility Capacity", value: "10,000 u/d", provenance: "MODEL FACT" },
+      { label: "Headroom Remaining", value: "600 u/d (6.0%)", provenance: "MODEL FACT" },
+    ],
+    expectedImpact: {
+      cost: "Avoids ₹2.4L penalty",
+      sla: "≥96.5%",
+      risk: "Eliminated",
+    },
+    whatITested: [
+      "On-site brownfield facility expansion",
+      "Shift-timing adjustments and bottleneck staging",
+    ],
+    nextAction: "Review Scenario",
+  },
+  {
+    id: "ACT_EXPLORE_UNDERUTIL",
+    title: "Explore underutilised capacity",
+    tag: "Opportunity",
+    tagColor: "#16a34a",
+    scenarioId: "SCENARIO_REBALANCE",
+    why: "Kolkata DC has 41% (2,800 units/day) of spare handling capacity available at low unit cost.",
+    rootCause: [
+      { label: "Kolkata DC Capacity", value: "6,000 u/d", provenance: "MODEL FACT" },
+      { label: "Current Throughput", value: "3,200 u/d", provenance: "MODEL FACT" },
+      { label: "Spare Capacity", value: "2,800 u/d (46.7%)", provenance: "MODEL FACT" },
+    ],
+    expectedImpact: {
+      cost: "Lowest handling cost (₹3.5/u)",
+      sla: "97.1%",
+      risk: "Optimal",
+    },
+    whatITested: [
+      "Absorbing eastern overflow directly through Kolkata DC",
+      "Corridor flow rerouting from Baddi manufacturing plant",
+    ],
+    nextAction: "Review Scenario",
+  },
+];
 
 export function getInsightsForFacility(facilityId) {
   return HOME_INSIGHTS[facilityId] || HOME_INSIGHTS.DC_DELHI || HOME_INSIGHTS._default || [];

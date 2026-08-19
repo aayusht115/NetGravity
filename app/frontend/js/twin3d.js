@@ -1,47 +1,63 @@
 /**
- * NetGravity — 3D Digital Twin (India Map Base · Light Mode)
+ * NetGravity — 3D Digital Twin (Flat India Map · Light Mode)
  * ==========================================================
- * Executive-grade 3D spatial network visualization rendered in clean light theme.
- * Features:
- *   - High-resolution dynamic 3D India Map base plate with authentic coastlines & state boundaries
- *   - Precise geographic coordinate projection for all 19 supply chain nodes (Plants, DCs, Markets)
- *   - Distinct 3D mesh representations (Hex Beacons, Tiered Hubs, Pulse Nodes)
- *   - 3D flight arcs with animated photon pulses
- *   - Interactive hover HUD tooltips and direct facility panel integration
+ * A flat, real-world basemap of India (extracted directly from the same
+ * CARTO/Leaflet tiles used by the 2D map) sits as the ground plane, with the
+ * supply chain network rendered as glowing 3D beacons and flight-style flow
+ * arcs standing on top of it. Coordinates use the exact Web Mercator
+ * projection the basemap was captured with, so every node lines up
+ * pixel-accurately with the real geography beneath it.
  */
 
 /* global THREE */
 import { PLANTS, DCS, MARKETS, LANES, formatNumber, getUtilColor } from './data.js';
+import { INDIA_BASEMAP_DATA_URI } from './basemap-data.js';
 
-// ─── Geographic Bounds & Dimensions ─────────────────────────
-const GEO_BOUNDS = {
-  latMin: 6.5,
-  latMax: 37.0,
-  lngMin: 67.5,
-  lngMax: 97.5,
+// ─── Basemap Calibration ─────────────────────────────────────
+// The basemap image was captured from a live Leaflet map (CARTO "light_all"
+// tiles) centred at MERCATOR_CENTER, at MERCATOR_ZOOM, then cropped to the
+// pixel box below. Reproducing the same Web Mercator projection here means
+// any lat/lng maps onto the exact same pixel the real tile imagery shows.
+const MERCATOR_ZOOM = 5;
+const MERCATOR_CENTER = { lat: 22.5, lng: 80.0 };
+const CAPTURE_SIZE = { w: 1400, h: 1200 };       // container the basemap was captured at
+const CROP_BOUNDS = { latMax: 39.0, lngMin: 65.0, latMin: 4.0, lngMax: 100.0 }; // crop corners (lat/lng)
+
+function mercatorWorldXY(lat, lng, zoom) {
+  const worldSize = 256 * Math.pow(2, zoom);
+  const x = worldSize * (lng + 180) / 360;
+  const siny = Math.max(Math.min(Math.sin(lat * Math.PI / 180), 0.9999), -0.9999);
+  const y = worldSize * (0.5 - Math.log((1 + siny) / (1 - siny)) / (4 * Math.PI));
+  return { x, y };
+}
+
+const captureCenterPx = mercatorWorldXY(MERCATOR_CENTER.lat, MERCATOR_CENTER.lng, MERCATOR_ZOOM);
+const captureTopLeftPx = {
+  x: captureCenterPx.x - CAPTURE_SIZE.w / 2,
+  y: captureCenterPx.y - CAPTURE_SIZE.h / 2,
 };
+const cropTopLeftPx = mercatorWorldXY(CROP_BOUNDS.latMax, CROP_BOUNDS.lngMin, MERCATOR_ZOOM);
+const cropBottomRightPx = mercatorWorldXY(CROP_BOUNDS.latMin, CROP_BOUNDS.lngMax, MERCATOR_ZOOM);
+const IMG_W = cropBottomRightPx.x - cropTopLeftPx.x;
+const IMG_H = cropBottomRightPx.y - cropTopLeftPx.y;
 
-const MAP_WIDTH = 80;
-const MAP_HEIGHT = 80 * ((GEO_BOUNDS.latMax - GEO_BOUNDS.latMin) / (GEO_BOUNDS.lngMax - GEO_BOUNDS.lngMin)); // ~81.3
+// 3D ground-plane size (world units) — matches the basemap's aspect ratio
+const MAP_WIDTH = 84;
+const MAP_HEIGHT = MAP_WIDTH * (IMG_H / IMG_W);
 
-// Light-theme color palette
+// ─── Light-theme color palette ───────────────────────────────
 const THEME_COLORS = {
   bg:          0xf8fafc, // Slate 50
-  landFill:    '#ffffff',
-  landBorder:  '#94a3b8',
-  oceanFill:   '#f1f5f9',
-  gridLine:    '#e2e8f0',
-  textSubtle:  '#94a3b8',
-  plant:       0x7c3aed, // Kearney Purple
-  plantGlow:   0xa855f7,
-  dcHealthy:   0x10b981, // Emerald
-  dcWarning:   0xf59e0b, // Amber
-  dcCritical:  0xef4444, // Red
-  market:      0x0284c7, // Sky Blue
-  marketGlow:  0x38bdf8,
-  flowActual:  0x64748b, // Slate 500
-  flowOptim:   0x7c3aed, // Purple
-  flowRecom:   0x059669, // Emerald
+  plant:       0x5b21b6, // Kearney Purple (deep)
+  plantGlow:   0x8b5cf6,
+  dcHealthy:   0x047857, // Emerald (deep)
+  dcWarning:   0xb45309, // Amber (deep)
+  dcCritical:  0xb91c1c, // Red (deep)
+  market:      0x075985, // Sky Blue (deep)
+  marketGlow:  0x0ea5e9,
+  flowActual:  0x334155, // Slate 700
+  flowOptim:   0x5b21b6, // Purple (deep)
+  flowRecom:   0x065f46, // Emerald (deep)
 };
 
 // ─── Module State ───────────────────────────────────────────
@@ -49,9 +65,9 @@ let scene, camera, renderer, controls;
 let containerEl = null;
 let animationId = null;
 let isInitialised = false;
-let currentState = 'actual';
+let twin3dState = 'actual';
 
-let nodeGroup, flowGroup, pulseGroup, terrainGroup;
+let terrainGroup, nodeGroup, flowGroup, pulseGroup;
 let nodeMeshes = [];      // { id, type, coreMesh, hitMesh, baseRing, data, pos3D }
 let flowArcs = [];        // { from, to, curve, line, tube, data }
 let photonStreams = [];   // { particles, curve, offsets, speeds, count }
@@ -61,13 +77,14 @@ let hoveredNode = null;
 let clock;
 let hudTooltipEl = null;
 
-// ─── Coordinate Conversion ──────────────────────────────────
+// ─── Coordinate Conversion (lat/lng → point on the flat map) ─
 export function geoTo3D(lat, lng, height = 0) {
-  const normX = (lng - GEO_BOUNDS.lngMin) / (GEO_BOUNDS.lngMax - GEO_BOUNDS.lngMin);
-  const normZ = (lat - GEO_BOUNDS.latMin) / (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin);
+  const worldPx = mercatorWorldXY(lat, lng, MERCATOR_ZOOM);
+  const u = (worldPx.x - captureTopLeftPx.x - (cropTopLeftPx.x - captureTopLeftPx.x)) / IMG_W;
+  const v = (worldPx.y - captureTopLeftPx.y - (cropTopLeftPx.y - captureTopLeftPx.y)) / IMG_H;
 
-  const x = (normX - 0.5) * MAP_WIDTH;
-  const z = -(normZ - 0.5) * MAP_HEIGHT;
+  const x = (u - 0.5) * MAP_WIDTH;
+  const z = (v - 0.5) * MAP_HEIGHT;
 
   return new THREE.Vector3(x, height, z);
 }
@@ -83,13 +100,22 @@ export function initTwin3D(containerId) {
     return;
   }
 
+  if (typeof THREE === 'undefined') {
+    containerEl.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:center;height:100%;' +
+      'font:500 14px Inter,system-ui,sans-serif;color:#64748b;text-align:center;padding:24px">' +
+      '3D engine (three.js) failed to load.<br>Check your network connection, then reload.</div>';
+    console.error('[NetGravity 3D] THREE is undefined - three.min.js did not load.');
+    return;
+  }
+
   clock = new THREE.Clock();
   raycaster = new THREE.Raycaster();
   mouse = new THREE.Vector2(-999, -999);
 
   setupScene();
   setupLighting();
-  setupIndiaMapBase();
+  setupMapBase();
   setupNetworkNodes();
   setupFlowArcs('actual');
   setupControls();
@@ -100,8 +126,8 @@ export function initTwin3D(containerId) {
 }
 
 export function setTwin3DState(state) {
-  if (state === currentState) return;
-  currentState = state;
+  if (state === twin3dState) return;
+  twin3dState = state;
   setupFlowArcs(state);
 }
 
@@ -132,21 +158,22 @@ function setupScene() {
 
   scene = new THREE.Scene();
   scene.background = new THREE.Color(THEME_COLORS.bg);
-  scene.fog = new THREE.FogExp2(THEME_COLORS.bg, 0.005);
+  scene.fog = new THREE.FogExp2(THEME_COLORS.bg, 0.006);
 
-  // Isometric viewpoint focused on central India
+  // Isometric viewpoint over India
   camera = new THREE.PerspectiveCamera(40, w / h, 1, 400);
-  camera.position.set(0, 75, 62);
+  camera.position.set(0, 78, 64);
   camera.lookAt(0, 0, -2);
 
-  // WebGL Renderer
+  // WebGL Renderer (Light theme clear color)
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+  renderer.setClearColor(THEME_COLORS.bg, 1);
   renderer.setSize(w, h);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 1.05;
 
   containerEl.innerHTML = '';
   containerEl.appendChild(renderer.domElement);
@@ -165,12 +192,10 @@ function setupScene() {
 
 // ─── Lighting ───────────────────────────────────────────────
 function setupLighting() {
-  // Soft, bright studio ambient light
-  const ambient = new THREE.AmbientLight(0xffffff, 1.4);
+  const ambient = new THREE.AmbientLight(0xffffff, 1.0);
   scene.add(ambient);
 
-  // Main sun light casting crisp directional shadows
-  const mainSun = new THREE.DirectionalLight(0xffffff, 1.8);
+  const mainSun = new THREE.DirectionalLight(0xffffff, 1.2);
   mainSun.position.set(45, 90, 45);
   mainSun.castShadow = true;
   mainSun.shadow.mapSize.width = 2048;
@@ -184,238 +209,60 @@ function setupLighting() {
   mainSun.shadow.bias = -0.0005;
   scene.add(mainSun);
 
-  // Cool fill light from opposite angle
-  const fillLight = new THREE.DirectionalLight(0xe2e8f0, 0.8);
+  const fillLight = new THREE.DirectionalLight(0xe2e8f0, 0.5);
   fillLight.position.set(-45, 50, -45);
   scene.add(fillLight);
 
-  // Soft purple accent rim light
-  const accentLight = new THREE.DirectionalLight(0xddd6fe, 0.5);
+  const accentLight = new THREE.DirectionalLight(0xddd6fe, 0.3);
   accentLight.position.set(0, 30, -50);
   scene.add(accentLight);
 }
 
-// ─── India Map Base (High-Resolution Canvas Texture) ────────
-function setupIndiaMapBase() {
-  // Create 2048x2048 dynamic canvas for the India base map
-  const canvas = document.createElement('canvas');
-  canvas.width = 2048;
-  canvas.height = 2048;
-  const ctx = canvas.getContext('2d');
-
-  renderIndiaCanvasMap(ctx, canvas.width, canvas.height);
-
-  const mapTexture = new THREE.CanvasTexture(canvas);
-  mapTexture.anisotropy = 16;
-
-  // 3D Base Plate Geometry
-  const baseGeo = new THREE.BoxGeometry(MAP_WIDTH * 1.15, 1.2, MAP_HEIGHT * 1.15);
-  const baseMat = new THREE.MeshStandardMaterial({
-    map: mapTexture,
-    roughness: 0.7,
-    metalness: 0.05,
+// ─── Map Base (real basemap image, extracted from the 2D map) ─────
+function setupMapBase() {
+  const baseGeo = new THREE.PlaneGeometry(MAP_WIDTH, MAP_HEIGHT);
+  
+  // Create resilient base material with immediate light-gray fallback
+  const baseMat = new THREE.MeshBasicMaterial({
+    color: 0xf1f5f9,
+    toneMapped: false,
   });
-
   const basePlate = new THREE.Mesh(baseGeo, baseMat);
-  basePlate.position.set(0, -0.6, 0);
-  basePlate.receiveShadow = true;
+  basePlate.rotation.x = -Math.PI / 2;
+  basePlate.position.y = 0;
   terrainGroup.add(basePlate);
 
-  // Subtle beveled border trim around base plate
+  // Subtle border trim
   const borderGeo = new THREE.EdgesGeometry(baseGeo);
-  const borderMat = new THREE.LineBasicMaterial({ color: 0xcbd5e1, linewidth: 1 });
+  const borderMat = new THREE.LineBasicMaterial({ color: 0xcbd5e1 });
   const borderLines = new THREE.LineSegments(borderGeo, borderMat);
-  borderLines.position.copy(basePlate.position);
+  borderLines.rotation.x = -Math.PI / 2;
+  borderLines.position.y = 0.02;
   terrainGroup.add(borderLines);
 
-  // Soft ground shadow plane underneath base plate
-  const shadowGeo = new THREE.PlaneGeometry(MAP_WIDTH * 1.4, MAP_HEIGHT * 1.4);
+  // Load basemap texture asynchronously and attach once ready
+  const loader = new THREE.TextureLoader();
+  loader.load(INDIA_BASEMAP_DATA_URI, (texture) => {
+    texture.anisotropy = 16;
+    texture.generateMipmaps = true;
+    baseMat.color.setHex(0xffffff);
+    baseMat.map = texture;
+    baseMat.needsUpdate = true;
+  }, undefined, (err) => {
+    console.warn('[NetGravity 3D] Using fallback terrain styling:', err);
+  });
+
+  // Soft ground shadow plane underneath, so the map reads as slightly raised
+  const shadowGeo = new THREE.PlaneGeometry(MAP_WIDTH * 1.06, MAP_HEIGHT * 1.06);
   const shadowMat = new THREE.MeshBasicMaterial({
-    color: 0xe2e8f0,
+    color: 0xcbd5e1,
     transparent: true,
-    opacity: 0.6,
+    opacity: 0.5,
   });
   const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
   shadowMesh.rotation.x = -Math.PI / 2;
-  shadowMesh.position.y = -1.25;
+  shadowMesh.position.y = -0.35;
   terrainGroup.add(shadowMesh);
-}
-
-// Draw accurate, beautiful light-mode vector cartography of India
-function renderIndiaCanvasMap(ctx, w, h) {
-  // 1. Ocean Background
-  ctx.fillStyle = '#f1f5f9'; // Slate 100
-  ctx.fillRect(0, 0, w, h);
-
-  // Lat/Lng to Canvas XY helper
-  const toXY = (lat, lng) => {
-    const normX = (lng - GEO_BOUNDS.lngMin) / (GEO_BOUNDS.lngMax - GEO_BOUNDS.lngMin);
-    const normY = (lat - GEO_BOUNDS.latMin) / (GEO_BOUNDS.latMax - GEO_BOUNDS.latMin);
-    return {
-      x: normX * w,
-      y: (1 - normY) * h,
-    };
-  };
-
-  // 2. Latitude / Longitude Cartographic Grid
-  ctx.strokeStyle = '#e2e8f0';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 6]);
-
-  for (let lat = 10; lat <= 35; lat += 5) {
-    const p1 = toXY(lat, GEO_BOUNDS.lngMin);
-    const p2 = toXY(lat, GEO_BOUNDS.lngMax);
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-
-    // Lat label
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 22px Inter, sans-serif';
-    ctx.fillText(`${lat}°N`, 25, p1.y - 6);
-  }
-
-  for (let lng = 70; lng <= 95; lng += 5) {
-    const p1 = toXY(GEO_BOUNDS.latMin, lng);
-    const p2 = toXY(GEO_BOUNDS.latMax, lng);
-    ctx.beginPath();
-    ctx.moveTo(p1.x, p1.y);
-    ctx.lineTo(p2.x, p2.y);
-    ctx.stroke();
-
-    // Lng label
-    ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 22px Inter, sans-serif';
-    ctx.fillText(`${lng}°E`, p1.x + 6, h - 25);
-  }
-
-  ctx.setLineDash([]); // Reset dash
-
-  // 3. Indian Subcontinent Geographic Polygon Contour
-  // High-fidelity polygon tracing India's coastal & land boundaries
-  const indiaPolygon = [
-    [35.5, 74.8], [34.8, 76.5], [33.2, 77.8], [32.0, 78.8], [30.4, 79.5],
-    [30.2, 80.8], [28.8, 80.2], [27.4, 83.5], [26.8, 88.0], [27.2, 88.8],
-    [27.8, 89.8], [28.2, 92.5], [28.5, 94.5], [28.0, 96.5], [27.2, 97.2],
-    [25.5, 95.2], [24.0, 93.5], [23.5, 92.8], [22.0, 92.2], [22.5, 90.0],
-    [21.8, 89.0], [21.5, 87.2], [20.5, 86.8], [19.8, 85.8], [18.2, 84.0],
-    [17.0, 82.3], [16.0, 81.0], [15.2, 80.2], [13.2, 80.3], [11.8, 79.8],
-    [10.2, 79.8], [9.2, 79.2],  [8.1, 77.5],  [8.8, 76.6],  [10.0, 75.8],
-    [11.5, 75.8], [12.8, 74.8], [14.5, 74.2], [15.5, 73.8], [17.5, 73.3],
-    [18.9, 72.8], [20.5, 72.7], [21.2, 72.5], [21.0, 70.0], [21.8, 69.2],
-    [22.4, 69.0], [23.0, 68.4], [23.8, 68.6], [24.5, 71.0], [25.5, 70.2],
-    [27.0, 70.8], [28.5, 71.8], [30.0, 73.2], [32.0, 74.8], [34.0, 74.2],
-    [35.5, 74.8]
-  ];
-
-  ctx.beginPath();
-  indiaPolygon.forEach((pt, i) => {
-    const xy = toXY(pt[0], pt[1]);
-    if (i === 0) ctx.moveTo(xy.x, xy.y);
-    else ctx.lineTo(xy.x, xy.y);
-  });
-  ctx.closePath();
-
-  // Fill landmass in crisp white with soft drop shadow
-  ctx.fillStyle = '#ffffff';
-  ctx.shadowColor = 'rgba(15, 23, 42, 0.08)';
-  ctx.shadowBlur = 24;
-  ctx.shadowOffsetX = 4;
-  ctx.shadowOffsetY = 8;
-  ctx.fill();
-
-  // Reset shadow
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0;
-
-  // Land boundary stroke
-  ctx.strokeStyle = '#94a3b8';
-  ctx.lineWidth = 4;
-  ctx.stroke();
-
-  // 4. Subtle Internal State Divider Lines
-  const internalLines = [
-    // North / West / Central lines
-    [[30.0, 75.0], [28.5, 77.0], [26.5, 78.0], [24.0, 79.0]],
-    [[24.5, 71.0], [23.5, 74.5], [22.0, 76.0], [21.0, 79.0]],
-    // Deccan & South
-    [[20.0, 73.5], [19.0, 77.0], [17.5, 80.5], [18.0, 84.0]],
-    [[16.0, 74.5], [15.0, 77.5], [14.0, 80.0]],
-    [[12.5, 75.0], [12.0, 78.0], [11.0, 79.8]],
-    // East & Northeast
-    [[26.5, 80.0], [25.0, 84.0], [24.0, 87.5], [22.5, 88.5]],
-    [[26.8, 88.0], [26.0, 90.0], [26.2, 92.5], [27.0, 95.0]],
-  ];
-
-  ctx.strokeStyle = '#cbd5e1';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([4, 4]);
-  internalLines.forEach(line => {
-    ctx.beginPath();
-    line.forEach((pt, i) => {
-      const xy = toXY(pt[0], pt[1]);
-      if (i === 0) ctx.moveTo(xy.x, xy.y);
-      else ctx.lineTo(xy.x, xy.y);
-    });
-    ctx.stroke();
-  });
-  ctx.setLineDash([]);
-
-  // 5. Geographic Watermark Labels
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = 'bold 36px Inter, sans-serif';
-  ctx.textAlign = 'center';
-
-  const sea1 = toXY(15.0, 70.0);
-  ctx.fillText('ARABIAN SEA', sea1.x, sea1.y);
-
-  const sea2 = toXY(15.0, 87.0);
-  ctx.fillText('BAY OF BENGAL', sea2.x, sea2.y);
-
-  const sea3 = toXY(7.5, 78.5);
-  ctx.fillText('INDIAN OCEAN', sea3.x, sea3.y);
-
-  // Region Watermarks
-  ctx.fillStyle = '#e2e8f0';
-  ctx.font = '800 48px Inter, sans-serif';
-  const rNorth = toXY(29.5, 77.0);
-  ctx.fillText('NORTH', rNorth.x, rNorth.y);
-
-  const rWest = toXY(21.5, 74.0);
-  ctx.fillText('WEST', rWest.x, rWest.y);
-
-  const rSouth = toXY(14.5, 77.5);
-  ctx.fillText('SOUTH', rSouth.x, rSouth.y);
-
-  const rEast = toXY(23.5, 86.0);
-  ctx.fillText('EAST', rEast.x, rEast.y);
-
-  // 6. City Target Circles on Map Surface
-  [...PLANTS, ...DCS, ...MARKETS].forEach(n => {
-    const xy = toXY(n.lat, n.lng);
-
-    // Subtle outer anchor ring
-    ctx.strokeStyle = '#cbd5e1';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(xy.x, xy.y, 14, 0, Math.PI * 2);
-    ctx.stroke();
-
-    // Center point
-    ctx.fillStyle = '#64748b';
-    ctx.beginPath();
-    ctx.arc(xy.x, xy.y, 3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // City Name
-    ctx.fillStyle = '#475569';
-    ctx.font = '600 20px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(n.city || n.name, xy.x, xy.y + 30);
-  });
 }
 
 // ─── Network Nodes ──────────────────────────────────────────
@@ -494,7 +341,7 @@ function createPlant3D(data, pos) {
   const coreMat = new THREE.MeshStandardMaterial({
     color: THEME_COLORS.plant,
     emissive: THEME_COLORS.plantGlow,
-    emissiveIntensity: 0.6,
+    emissiveIntensity: 0.7,
     roughness: 0.15,
     metalness: 0.3,
   });
@@ -568,7 +415,7 @@ function createDC3D(data, pos) {
   const coreMat = new THREE.MeshStandardMaterial({
     color: dcColor,
     emissive: dcColor,
-    emissiveIntensity: 0.65,
+    emissiveIntensity: 0.75,
     roughness: 0.2,
     metalness: 0.2,
   });
@@ -622,7 +469,7 @@ function createMarket3D(data, pos) {
   const coreMat = new THREE.MeshStandardMaterial({
     color: THEME_COLORS.market,
     emissive: THEME_COLORS.marketGlow,
-    emissiveIntensity: 0.5,
+    emissiveIntensity: 0.65,
     roughness: 0.3,
     metalness: 0.1,
   });
@@ -670,7 +517,7 @@ function setupFlowArcs(state) {
   flowArcs = [];
   photonStreams = [];
 
-  const flowData = getFlowsForState(state);
+  const flowData = getTwin3DFlowsForState(state);
 
   let colorHex = THEME_COLORS.flowActual;
   if (state === 'optimised') colorHex = THEME_COLORS.flowOptim;
@@ -698,9 +545,9 @@ function setupFlowArcs(state) {
     const tubeMat = new THREE.MeshStandardMaterial({
       color: colorHex,
       emissive: colorHex,
-      emissiveIntensity: 0.25,
+      emissiveIntensity: 0.3,
       transparent: true,
-      opacity: state === 'actual' ? 0.35 : 0.55,
+      opacity: state === 'actual' ? 0.4 : 0.6,
       roughness: 0.3,
     });
     const tube = new THREE.Mesh(tubeGeo, tubeMat);
@@ -740,7 +587,7 @@ function setupFlowArcs(state) {
   });
 }
 
-function getFlowsForState(state) {
+function getTwin3DFlowsForState(state) {
   if (state === 'actual') return LANES;
   if (state === 'optimised') {
     return LANES.map(l => {
@@ -768,22 +615,142 @@ function findNode(id) {
   return [...PLANTS, ...DCS, ...MARKETS].find(n => n.id === id);
 }
 
-// ─── Orbital Controls ───────────────────────────────────────
+// ─── Orbital Controls (with built-in fallback) ──────────────
+/**
+ * Minimal built-in orbit controller.
+ * Used only when THREE.OrbitControls (CDN) is unavailable, so the 3D twin
+ * stays interactive offline / when the CDN is blocked.
+ * Implements the same subset of the API this module actually uses.
+ */
+function createFallbackControls(cam, dom) {
+  const spherical = new THREE.Spherical();
+  const target = new THREE.Vector3(0, 0, 0);
+  const offset = new THREE.Vector3().copy(cam.position).sub(target);
+  spherical.setFromVector3(offset);
+
+  let dragging = false;
+  let panning = false;
+  let px = 0, py = 0;
+  let thetaDelta = 0, phiDelta = 0, scaleDelta = 1;
+  const panOffset = new THREE.Vector3();
+
+  const api = {
+    target,
+    enabled: true,
+    enableDamping: true,
+    dampingFactor: 0.07,
+    enablePan: true,
+    panSpeed: 0.8,
+    rotateSpeed: 0.55,
+    minDistance: 25,
+    maxDistance: 150,
+    maxPolarAngle: Math.PI / 2.2,
+    minPolarAngle: Math.PI / 12,
+    autoRotate: false,
+    autoRotateSpeed: 0.3,
+  };
+
+  function onDown(e) {
+    if (!api.enabled) return;
+    dragging = true;
+    panning = (e.button === 2 || e.button === 1 || e.shiftKey);
+    px = e.clientX; py = e.clientY;
+    dom.style.cursor = 'grabbing';
+  }
+  function onMove(e) {
+    if (!dragging || !api.enabled) return;
+    const dx = e.clientX - px;
+    const dy = e.clientY - py;
+    px = e.clientX; py = e.clientY;
+    const h = dom.clientHeight || 1;
+    if (panning && api.enablePan) {
+      const dist = spherical.radius * Math.tan((cam.fov / 2) * Math.PI / 180) * 2;
+      const vx = new THREE.Vector3().setFromMatrixColumn(cam.matrix, 0);
+      const vy = new THREE.Vector3().setFromMatrixColumn(cam.matrix, 1);
+      panOffset.add(vx.multiplyScalar(-dx * dist / h * api.panSpeed));
+      panOffset.add(vy.multiplyScalar(dy * dist / h * api.panSpeed));
+    } else {
+      thetaDelta -= 2 * Math.PI * dx / h * api.rotateSpeed;
+      phiDelta -= 2 * Math.PI * dy / h * api.rotateSpeed;
+    }
+  }
+  function onUp() {
+    dragging = false; panning = false;
+    dom.style.cursor = 'grab';
+  }
+  function onWheel(e) {
+    if (!api.enabled) return;
+    e.preventDefault();
+    scaleDelta *= (e.deltaY > 0) ? 1.08 : 0.92;
+  }
+  function onCtx(e) { e.preventDefault(); }
+
+  dom.addEventListener('pointerdown', onDown);
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  dom.addEventListener('wheel', onWheel, { passive: false });
+  dom.addEventListener('contextmenu', onCtx);
+
+  api.update = function () {
+    if (api.autoRotate && !dragging) {
+      thetaDelta -= (2 * Math.PI / 60 / 60) * api.autoRotateSpeed * 12;
+    }
+    const damp = api.enableDamping ? api.dampingFactor : 1;
+
+    spherical.theta += thetaDelta * damp;
+    spherical.phi += phiDelta * damp;
+    spherical.phi = Math.max(api.minPolarAngle, Math.min(api.maxPolarAngle, spherical.phi));
+    spherical.makeSafe();
+    spherical.radius *= 1 + (scaleDelta - 1) * damp;
+    spherical.radius = Math.max(api.minDistance, Math.min(api.maxDistance, spherical.radius));
+
+    target.addScaledVector(panOffset, damp);
+
+    const off = new THREE.Vector3().setFromSpherical(spherical);
+    cam.position.copy(target).add(off);
+    cam.lookAt(target);
+
+    if (api.enableDamping) {
+      thetaDelta *= (1 - damp);
+      phiDelta *= (1 - damp);
+      scaleDelta = 1 + (scaleDelta - 1) * (1 - damp);
+      panOffset.multiplyScalar(1 - damp);
+    } else {
+      thetaDelta = 0; phiDelta = 0; scaleDelta = 1; panOffset.set(0, 0, 0);
+    }
+    return true;
+  };
+
+  api.dispose = function () {
+    dom.removeEventListener('pointerdown', onDown);
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    dom.removeEventListener('wheel', onWheel);
+    dom.removeEventListener('contextmenu', onCtx);
+  };
+
+  return api;
+}
+
 function setupControls() {
-  const OrbitControlsClass = (typeof THREE !== 'undefined' && THREE.OrbitControls) ? THREE.OrbitControls : (typeof window !== 'undefined' ? window.OrbitControls : null);
-  if (!OrbitControlsClass) {
-    console.warn('OrbitControls not found.');
-    return;
+  const OrbitControlsClass =
+    (typeof THREE !== 'undefined' && THREE.OrbitControls) ? THREE.OrbitControls :
+    (typeof window !== 'undefined' && window.OrbitControls) ? window.OrbitControls : null;
+
+  if (OrbitControlsClass) {
+    controls = new OrbitControlsClass(camera, renderer.domElement);
+  } else {
+    console.warn('[NetGravity 3D] THREE.OrbitControls unavailable — using built-in fallback controller.');
+    controls = createFallbackControls(camera, renderer.domElement);
   }
 
-  controls = new OrbitControlsClass(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.07;
   controls.enablePan = true;
   controls.panSpeed = 0.8;
   controls.rotateSpeed = 0.55;
   controls.minDistance = 25;
-  controls.maxDistance = 140;
+  controls.maxDistance = 150;
   controls.maxPolarAngle = Math.PI / 2.2;
   controls.minPolarAngle = Math.PI / 12;
   controls.autoRotate = true;
@@ -830,12 +797,12 @@ function setupInteraction() {
 
   let idleTimer;
   canvas.addEventListener('pointerdown', () => {
-    controls.autoRotate = false;
+    if (controls) controls.autoRotate = false;
     clearTimeout(idleTimer);
   });
 
   canvas.addEventListener('pointerup', () => {
-    idleTimer = setTimeout(() => { controls.autoRotate = true; }, 5000);
+    idleTimer = setTimeout(() => { if (controls) controls.autoRotate = true; }, 5000);
   });
 }
 
@@ -893,8 +860,8 @@ function resetNodeHighlight(node) {
   if (node.baseRing) node.baseRing.scale.setScalar(1.0);
 
   flowArcs.forEach(fa => {
-    fa.tube.material.opacity = currentState === 'actual' ? 0.35 : 0.55;
-    fa.tube.material.emissiveIntensity = 0.25;
+    fa.tube.material.opacity = twin3dState === 'actual' ? 0.4 : 0.6;
+    fa.tube.material.emissiveIntensity = 0.3;
   });
 }
 
@@ -948,7 +915,7 @@ function animate() {
   const delta = clock.getDelta();
   const time = clock.getElapsedTime();
 
-  controls.update();
+  if (controls) controls.update();
   updateHoverState();
 
   // Animate Photons

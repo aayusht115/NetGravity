@@ -41,11 +41,15 @@
         </div>
 
         <div class="sidebar-nav">
-          <div class="nav-item active" data-tab="home">
+          <div class="nav-item active" data-tab="home" id="nav-item-home">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M3 10L10 3l7 7M5 8.5V16a1 1 0 001 1h3v-4h2v4h3a1 1 0 001-1V8.5" />
             </svg>
-            Home
+            <span>Home</span>
+          </div>
+          <!-- Sub-menu for KPI Dashboard (expands when active) -->
+          <div class="nav-sub-item" id="nav-sub-kpi" data-tab="facility-dashboard" style="display:none">
+            <span class="sub-nav-indicator">└─</span> KPI Dashboard
           </div>
           <div class="nav-item" data-tab="twin">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -55,20 +59,20 @@
               <circle cx="14" cy="14" r="2" />
               <path d="M9 7h3M7 9v3M14 9v3M9 14h3" />
             </svg>
-            Digital Twin
+            <span>Digital Twin</span>
           </div>
           <div class="nav-item" data-tab="scenarios">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 13l2 2 4-4" />
             </svg>
-            Scenario Planning
+            <span>Scenario Planning</span>
           </div>
           <div class="nav-item" data-tab="forecast">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
               <polyline points="3,15 7,9 11,12 17,4" />
               <polyline points="14,4 17,4 17,7" />
             </svg>
-            Forecasting
+            <span>Forecasting</span>
           </div>
         </div>
 
@@ -96,81 +100,134 @@
       <!-- ═══════════════════════════════════ MAIN CONTENT -->
       <main class="main-content">
 
-        <!-- ─────────────────── TAB: HOME (Decision Cockpit) -->
+        <!-- Global Top Bar (Period Selector) -->
+        <header class="app-topbar">
+          <span class="control-label" style="font-size:12px;font-weight:600;color:var(--text-2)">Period</span>
+          <select class="control-select topbar-period-select" id="sel-period">
+            <!-- Populated by JS: 1 Aug – 31 Aug 2026 -->
+          </select>
+        </header>
+
+        <!-- ─────────────────── TAB: HOME (Decision Cockpit 2/3 + 1/3 Command Centre) -->
         <section class="tab-panel active" id="tab-home">
+          <div class="home-2col-layout">
+            
+            <!-- 2/3 LEFT COLUMN -->
+            <div class="home-left-col">
+              
+              <!-- ROW 1: KPI Section (Left) & Forecast Section (Right) -->
+              <div class="home-top-row">
+                
+                <!-- KPI SECTION CARD -->
+                <div class="home-card kpi-card-section" id="home-kpi-block" style="cursor:pointer">
+                  <div class="home-card-header">
+                    <h2 class="home-card-title">KPI Section</h2>
+                    <div class="home-view-by-wrap" onclick="event.stopPropagation()">
+                      <span class="view-by-label">View by</span>
+                      <select class="control-select-sm" id="home-kpi-type-select">
+                        <option value="DC">🇮🇳 DC</option>
+                        <option value="Plant">🏭 Plant</option>
+                      </select>
+                      <select class="control-select-sm" id="home-facility-picker" style="display:none"></select>
+                    </div>
+                  </div>
 
-          <!-- Control Bar -->
-          <div class="home-controls">
-            <div class="controls-left">
-              <div class="control-group">
-                <span class="control-label">View by</span>
-                <select class="control-select" id="sel-type">
-                  <option value="DC">🏪 DC</option>
-                  <option value="Plant">🏭 Plant</option>
-                </select>
+                  <!-- 4 KPI Items Grid (2x2) -->
+                  <div class="home-kpi-2x2-grid" id="home-kpi-grid">
+                    <!-- Populated by JS -->
+                  </div>
+
+                  <div class="home-card-footer">
+                    <button class="link-btn" id="btn-view-more-kpis">View more KPIs →</button>
+                  </div>
+                </div>
+
+                <!-- FORECAST SECTION CARD -->
+                <div class="home-card forecast-card-section" id="home-forecast-block" style="cursor:pointer">
+                  <div class="home-card-header">
+                    <h2 class="home-card-title">Forecast Section</h2>
+                    <div class="home-view-by-wrap" onclick="event.stopPropagation()">
+                      <span class="view-by-label">View by</span>
+                      <select class="control-select-sm" id="home-forecast-type-select">
+                        <option value="DC">🇮🇳 DC</option>
+                        <option value="Plant">🏭 Plant</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Sub-banner message -->
+                  <div class="home-forecast-insight-banner" id="home-forecast-banner">
+                    I forecast North India demand to increase 14% over the next 3 months.
+                  </div>
+
+                  <!-- Compact Chart Canvas -->
+                  <div class="home-forecast-chart-container">
+                    <canvas id="chart-forecast-home"></canvas>
+                  </div>
+
+                  <div class="home-card-footer">
+                    <button class="link-btn" id="btn-view-forecast-details">View more details (open Forecasting) →</button>
+                  </div>
+                </div>
+
               </div>
-              <div class="control-group">
-                <select class="control-select facility-select" id="sel-facility">
-                  <option value="DC_DELHI">Delhi NCR DC</option>
-                  <option value="DC_MUMBAI">Mumbai DC</option>
-                  <option value="DC_BENGALURU">Bengaluru DC</option>
-                  <option value="DC_KOLKATA">Kolkata DC</option>
-                  <option value="DC_GUWAHATI">Guwahati DC</option>
-                </select>
-                <span class="facility-dot" id="facility-dot"></span>
+
+              <!-- ROW 2: DIGITAL TWIN MAP CARD -->
+              <div class="home-card digital-twin-preview-card" id="home-twin-block" style="cursor:pointer">
+                <div class="home-card-header">
+                  <h2 class="home-card-title">Digital Twin — India Logistics Network</h2>
+                </div>
+                
+                <div class="home-map-wrap" id="home-map-twin">
+                  <!-- Leaflet Baseline Network Map populated by JS -->
+                </div>
               </div>
+
             </div>
-            <div class="controls-right">
-              <span class="control-label">Period</span>
-              <select class="control-select" id="sel-period">
-                <!-- Populated by JS -->
-              </select>
-            </div>
-          </div>
 
-          <!-- Header -->
-          <div class="home-header">
-            <h1 class="home-greeting">Good morning, Priya 👋</h1>
-            <p class="home-subtitle">Here's the performance snapshot for <strong id="home-facility-name">Delhi NCR
-                DC</strong></p>
-          </div>
+            <!-- 1/3 RIGHT COLUMN -->
+            <div class="home-right-col">
+              
+              <!-- BLOCK 1: INSIGHTS -->
+              <div class="home-card insights-card-section">
+                <div class="home-card-header">
+                  <h2 class="home-right-title">INSIGHTS</h2>
+                </div>
 
-          <!-- KPI Cards -->
-          <div class="kpi-grid" id="kpi-grid">
-            <!-- Populated by JS -->
-          </div>
-
-          <!-- View More KPIs (Right-aligned) -->
-          <div class="view-more-kpis-container">
-            <button class="view-more-kpis-btn" id="btn-view-more-kpis">View more KPIs →</button>
-          </div>
-
-          <!-- Insights Section -->
-          <div class="home-insights-header">
-            <div>
-              <h2 class="insights-title">Here's what I found...</h2>
-              <p class="insights-subtitle">Key insights and recommendations based on your network performance and
-                forecasts.</p>
-            </div>
-          </div>
-
-          <div class="insight-list" id="home-insight-list">
-            <!-- Populated by JS -->
-          </div>
-
-          <!-- AI Status Banner -->
-          <div class="ai-banner">
-            <div class="ai-banner-left">
-              <span class="ai-banner-icon">🤖</span>
-              <div>
-                <div class="ai-banner-text">I continuously monitor your network, forecast demand, run scenarios, and
-                  recommend the best actions.</div>
-                <div class="ai-banner-sub">Let me know if you'd like me to investigate anything specific.</div>
+                <div class="home-numbered-insights" id="home-insights-list">
+                  <!-- Populated by JS: 5 numbered items -->
+                </div>
               </div>
-            </div>
-            <button class="btn btn-primary" id="btn-ask-ng">🤖 Ask NetGravity</button>
-          </div>
 
+              <!-- BLOCK 2: ACTION ITEMS -->
+              <div class="home-card actions-card-section">
+                <div class="home-card-header">
+                  <h2 class="home-right-title">ACTION ITEMS</h2>
+                </div>
+
+                <div class="home-actions-list" id="home-actions-list">
+                  <!-- Populated by JS: 3 action items -->
+                </div>
+              </div>
+
+              <!-- BLOCK 3: CHATBOT -->
+              <div class="home-card chatbot-card-section">
+                <div class="home-card-header">
+                  <h2 class="home-right-title">Chatbot <span style="font-size:12px;opacity:0.7">✨</span></h2>
+                </div>
+
+                <div class="home-chat-body">
+                  <div class="home-chat-messages" id="home-chat-messages" style="display:none"></div>
+                  <div class="home-chat-input-row">
+                    <input type="text" class="home-chat-input" id="home-chat-input" placeholder="Ask NetGravity" />
+                    <button class="btn btn-primary btn-sm home-chat-send" id="home-chat-send">Send</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
         </section>
 
         <!-- ─────────────────── TAB: FACILITY DASHBOARD / ANALYTICS ─────────────────── -->
@@ -788,6 +845,14 @@
     <div class="insight-drawer" id="insight-drawer">
       <button class="facility-panel-close" id="insight-drawer-close">✕</button>
       <div id="insight-drawer-content"></div>
+    </div>
+  </div>
+
+  <!-- Action Detail Drawer -->
+  <div class="insight-drawer-overlay" id="action-drawer-overlay">
+    <div class="insight-drawer" id="action-drawer">
+      <button class="facility-panel-close" id="action-drawer-close">✕</button>
+      <div id="action-drawer-content"></div>
     </div>
   </div>
 
