@@ -24,9 +24,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from netgravity.ingestion.ai.client import get_client
+from netgravity.ingestion.ai.client import LLM_FAILURE_MARKER, get_client
 from netgravity.ingestion.ai.column_mapper import propose_mapping
 from netgravity.ingestion.config import IngestionConfig
+from netgravity.ingestion.field_aliases import (
+    infer_period_from_name,
+    monthly_conversion_factor,
+)
 from netgravity.ingestion.schemas.ingest_result import FileResult, RowIssue, Severity
 from netgravity.ingestion.schemas.mapping import DistributorMapping
 from netgravity.ingestion.storage.base import StorageBackend
@@ -191,6 +195,7 @@ def ingest_file(path: Path, config: IngestionConfig, storage: StorageBackend,
             known_ids=sorted(known_ids or []),
         )
         result.ai_stubbed = mapping.proposed_by == "stub"
+        result.ai_failed = LLM_FAILURE_MARKER in note
         result.ai_notes.append(note)
         save_mapping(mapping, storage)
 
@@ -213,10 +218,62 @@ def ingest_file(path: Path, config: IngestionConfig, storage: StorageBackend,
 
     mapped_rows, issues = apply_mapping(rows, mapping, path.name)
     result.issues.extend(issues)
+    mapped_rows, period_issues = normalise_periods_to_month(
+        mapped_rows, mapping, path.name)
+    result.issues.extend(period_issues)
     result.rows_accepted = len(mapped_rows)
     result.rows_rejected = result.rows_read - result.rows_accepted
 
     return mapped_rows, mapping, result
+
+
+def normalise_periods_to_month(rows: List[Dict[str, Any]],
+                               mapping: DistributorMapping,
+                               file: str) -> Tuple[List[Dict[str, Any]], List[RowIssue]]:
+    """
+    Put distributor quantities on the engine's MONTH basis.
+
+    The structured path already does this. Without the same step here, a
+    distributor sending daily figures loads ~30x light against monthly
+    facility cost — the exact bug already fixed on the other route.
+
+    The period is read from the distributor's OWN column name (e.g. a column
+    called "Daily Qty"), since that is the only place it is stated. A column
+    that says nothing is assumed already monthly, matching the engine
+    convention and the structured path.
+    """
+    issues: List[RowIssue] = []
+    if not rows:
+        return rows, issues
+
+    # Which source column became "quantity"?
+    source_col = next((m.source_column for m in mapping.mappings
+                       if m.target_field == "quantity"), None)
+    if source_col is None:
+        return rows, issues
+
+    period = infer_period_from_name(source_col)
+    if not period or period == "MONTH":
+        return rows, issues
+
+    factor = monthly_conversion_factor(period)
+    for row in rows:
+        value = row.get("quantity")
+        if value in (None, ""):
+            continue
+        try:
+            row["quantity"] = float(value) * factor
+        except (TypeError, ValueError):
+            continue
+
+    issues.append(RowIssue(
+        severity=Severity.INFO, code="R-020",
+        message=f"distributor column '{source_col}' is {period}-native; "
+                f"quantities converted to MONTH by x{factor:g} to match the "
+                f"engine convention.",
+        source_file=file,
+    ))
+    return rows, issues
 
 
 def ingest_directory(distributor_dir: Path, config: IngestionConfig,

@@ -1,0 +1,320 @@
+"""
+LLM client tests — provider routing, failure handling, config resolution.
+
+No network calls: the vendor SDK is replaced with a fake, so these run
+offline and in CI exactly as they do locally.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from netgravity.ingestion.ai.client import (
+    LLMCallError,
+    LLMClient,
+    _is_unsupported_param,
+    _parse_json,
+)
+from netgravity.ingestion.config import IngestionConfig
+
+
+# --- fakes ------------------------------------------------------------------
+
+class _Msg:
+    def __init__(self, content):
+        self.content = content
+
+
+class _Choice:
+    def __init__(self, content, finish_reason="stop"):
+        self.message = _Msg(content)
+        self.finish_reason = finish_reason
+
+
+class _Resp:
+    def __init__(self, content, finish_reason="stop"):
+        self.choices = [_Choice(content, finish_reason)]
+
+
+class _FakeCompletions:
+    def __init__(self, content='{"ok": true}', finish_reason="stop",
+                 fail_with=None, record=None):
+        self._content = content
+        self._finish = finish_reason
+        self._fail_with = fail_with
+        self.record = record if record is not None else []
+
+    def create(self, **kwargs):
+        self.record.append(kwargs)
+        if self._fail_with is not None:
+            exc, self._fail_with = self._fail_with, None
+            raise exc
+        return _Resp(self._content, self._finish)
+
+
+class _FakeOpenAI:
+    def __init__(self, completions):
+        self.chat = type("chat", (), {"completions": completions})()
+
+
+def _live_config(**over) -> IngestionConfig:
+    cfg = IngestionConfig()
+    cfg.llm_api_key = "test-key"          # forces live mode
+    cfg.llm_provider = "openai"
+    cfg.llm_model = "gpt-4o-mini"
+    for k, v in over.items():
+        setattr(cfg, k, v)
+    return cfg
+
+
+# --- config resolution ------------------------------------------------------
+
+def test_default_provider_is_openai():
+    assert IngestionConfig().llm_provider == "openai"
+
+
+def test_model_defaults_follow_the_provider():
+    """Switching provider must not leave the other vendor's model name behind."""
+    cfg = IngestionConfig()
+    cfg.llm_model = None
+
+    cfg.llm_provider = "openai"
+    assert cfg.resolved_model.startswith("gpt")
+
+    cfg.llm_provider = "anthropic"
+    assert cfg.resolved_model.startswith("claude")
+
+
+def test_explicit_model_always_wins():
+    cfg = IngestionConfig()
+    cfg.llm_provider = "openai"
+    cfg.llm_model = "some-custom-model"
+    assert cfg.resolved_model == "some-custom-model"
+
+
+def test_no_key_means_stub_mode():
+    cfg = IngestionConfig()
+    cfg.llm_api_key = None
+    assert cfg.stub_mode is True
+    assert LLMClient(cfg).stub_mode is True
+
+
+# --- provider routing -------------------------------------------------------
+
+def test_codex_is_accepted_as_an_openai_alias():
+    """The team says 'codex'; it speaks the OpenAI API. Don't make them care."""
+    client = LLMClient(_live_config(llm_provider="codex"))
+    client._sdk = _FakeOpenAI(_FakeCompletions('{"ok": true}'))
+    assert client._call_live("give me json", max_tokens=100) == '{"ok": true}'
+
+
+def test_unknown_provider_is_named_clearly():
+    client = LLMClient(_live_config(llm_provider="llama"))
+    with pytest.raises(NotImplementedError) as exc:
+        client._call_live("p", max_tokens=10)
+    assert "llama" in str(exc.value)
+    assert "openai" in str(exc.value)
+
+
+def test_openai_call_requests_json_mode():
+    """JSON mode is what stops the model wrapping output in prose."""
+    completions = _FakeCompletions('{"ok": true}')
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(completions)
+    client._call_live("return json", max_tokens=123)
+    sent = completions.record[0]
+    assert sent["response_format"] == {"type": "json_object"}
+    assert sent["model"] == "gpt-4o-mini"
+
+
+def test_falls_back_to_max_tokens_when_model_rejects_the_new_name():
+    """
+    Newer models renamed max_tokens -> max_completion_tokens. We try the new
+    name and switch on the specific complaint, rather than hardcoding a model
+    list that goes stale.
+    """
+    completions = _FakeCompletions(
+        '{"ok": true}',
+        fail_with=TypeError("Unsupported parameter: 'max_completion_tokens'"),
+    )
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(completions)
+    client._call_live("return json", max_tokens=77)
+
+    assert "max_completion_tokens" in completions.record[0]
+    assert completions.record[1]["max_tokens"] == 77
+
+
+def test_an_unrelated_error_is_not_swallowed_by_the_retry():
+    completions = _FakeCompletions(fail_with=ValueError("billing quota exceeded"))
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(completions)
+    with pytest.raises(ValueError, match="billing"):
+        client._call_live("p", max_tokens=10)
+
+
+def test_truncated_response_names_the_real_cause():
+    """A cut-off response is invalid JSON; say why instead of a parse error."""
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(_FakeCompletions('{"ok": tr', finish_reason="length"))
+    with pytest.raises(ValueError, match="truncated"):
+        client._call_live("p", max_tokens=10)
+
+
+# --- failure handling -------------------------------------------------------
+
+def test_failure_degrades_to_stub_but_is_marked_as_a_failure():
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(_FakeCompletions(fail_with=RuntimeError("network down")))
+    resp = client.extract_json(task="t", prompt="p", stub_key="contract")
+
+    assert resp.stubbed is True
+    assert resp.failed is True                    # not ordinary stub mode
+    assert "LLM CALL FAILED" in resp.notes
+    assert "NOT a real extraction" in resp.notes
+
+
+def test_strict_mode_raises_instead_of_substituting_stub_data():
+    client = LLMClient(_live_config(llm_strict=True))
+    client._sdk = _FakeOpenAI(_FakeCompletions(fail_with=RuntimeError("network down")))
+    with pytest.raises(LLMCallError, match="refusing to substitute stub data"):
+        client.extract_json(task="t", prompt="p", stub_key="contract")
+
+
+def test_ordinary_stub_mode_is_not_flagged_as_a_failure():
+    cfg = IngestionConfig()
+    cfg.llm_api_key = None
+    resp = LLMClient(cfg).extract_json(task="t", prompt="p", stub_key="contract")
+    assert resp.stubbed is True
+    assert resp.failed is False
+
+
+# --- helpers ----------------------------------------------------------------
+
+def test_unsupported_param_detection_is_specific():
+    assert _is_unsupported_param(
+        Exception("Unsupported parameter: 'max_completion_tokens'"),
+        "max_completion_tokens",
+    )
+    assert not _is_unsupported_param(Exception("rate limit exceeded"),
+                                     "max_completion_tokens")
+
+
+def test_json_parser_tolerates_fences_and_prose():
+    assert _parse_json('```json\n{"a": 1}\n```') == {"a": 1}
+    assert _parse_json('Sure!\n{"a": 1}\nHope that helps.') == {"a": 1}
+
+
+# --- the provider switch ----------------------------------------------------
+
+def test_default_is_openai_when_flag_is_absent(monkeypatch):
+    monkeypatch.delenv("NETGRAVITY_USE_CLAUDE", raising=False)
+    assert IngestionConfig().llm_provider == "openai"
+
+
+@pytest.mark.parametrize("value", ["true", "TRUE", "1", "yes", "on"])
+def test_flag_switches_to_claude(monkeypatch, value):
+    monkeypatch.setenv("NETGRAVITY_USE_CLAUDE", value)
+    assert IngestionConfig().llm_provider == "anthropic"
+
+
+@pytest.mark.parametrize("value", ["false", "0", "no", ""])
+def test_falsey_flag_stays_on_openai(monkeypatch, value):
+    monkeypatch.setenv("NETGRAVITY_USE_CLAUDE", value)
+    assert IngestionConfig().llm_provider == "openai"
+
+
+def test_the_flag_is_the_only_provider_switch(monkeypatch):
+    """
+    One switch, no precedence rules. A stray NETGRAVITY_LLM_PROVIDER left in
+    an old .env must not silently change the vendor.
+    """
+    monkeypatch.setenv("NETGRAVITY_LLM_PROVIDER", "anthropic")
+    monkeypatch.delenv("NETGRAVITY_USE_CLAUDE", raising=False)
+    assert IngestionConfig().llm_provider == "openai"
+
+
+def test_azure_openai_is_not_silently_routed_to_public_openai(monkeypatch):
+    """
+    Azure needs a different client class. Accepting it here would quietly call
+    api.openai.com instead of the Azure deployment — worse than not supporting
+    it, because it would look like it worked.
+    """
+    client = LLMClient(_live_config(llm_provider="azure_openai"))
+    with pytest.raises(NotImplementedError, match="azure_openai"):
+        client._call_live("p", max_tokens=10)
+
+
+# --- key resolution ---------------------------------------------------------
+
+def test_flag_picks_up_the_matching_key(monkeypatch):
+    """
+    The point of per-provider keys: with both set, flipping the switch is the
+    ONLY edit needed. An OpenAI key is not valid at Anthropic.
+    """
+    monkeypatch.delenv("NETGRAVITY_LLM_API_KEY", raising=False)
+    monkeypatch.setenv("NETGRAVITY_OPENAI_API_KEY", "sk-openai-one")
+    monkeypatch.setenv("NETGRAVITY_ANTHROPIC_API_KEY", "sk-ant-two")
+
+    monkeypatch.setenv("NETGRAVITY_USE_CLAUDE", "false")
+    assert IngestionConfig().llm_api_key == "sk-openai-one"
+
+    monkeypatch.setenv("NETGRAVITY_USE_CLAUDE", "true")
+    assert IngestionConfig().llm_api_key == "sk-ant-two"
+
+
+def test_generic_key_still_works_on_its_own(monkeypatch):
+    """The original variable name keeps working — no forced migration."""
+    for var in ("NETGRAVITY_OPENAI_API_KEY", "NETGRAVITY_ANTHROPIC_API_KEY",
+                "NETGRAVITY_USE_CLAUDE"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("NETGRAVITY_LLM_API_KEY", "sk-generic")
+    cfg = IngestionConfig()
+    assert cfg.llm_api_key == "sk-generic"
+    assert cfg.stub_mode is False
+
+
+def test_provider_specific_key_beats_the_generic_one(monkeypatch):
+    monkeypatch.delenv("NETGRAVITY_USE_CLAUDE", raising=False)
+    monkeypatch.setenv("NETGRAVITY_LLM_API_KEY", "sk-generic")
+    monkeypatch.setenv("NETGRAVITY_OPENAI_API_KEY", "sk-specific")
+    assert IngestionConfig().llm_api_key == "sk-specific"
+
+
+def test_no_key_anywhere_means_stub_mode(monkeypatch):
+    for var in ("NETGRAVITY_LLM_API_KEY", "NETGRAVITY_OPENAI_API_KEY",
+                "NETGRAVITY_ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    assert IngestionConfig().stub_mode is True
+
+
+# --- the mismatch guard -----------------------------------------------------
+
+def test_warns_when_switched_to_claude_with_an_openai_key(monkeypatch):
+    """Otherwise this surfaces only as an opaque 401 mid-run."""
+    monkeypatch.delenv("NETGRAVITY_ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setenv("NETGRAVITY_USE_CLAUDE", "true")
+    monkeypatch.setenv("NETGRAVITY_LLM_API_KEY", "sk-proj-abc")
+    warning = IngestionConfig().key_warning
+    assert warning and "looks like an OpenAI key" in warning
+
+
+def test_warns_when_on_openai_with_an_anthropic_key(monkeypatch):
+    monkeypatch.delenv("NETGRAVITY_OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("NETGRAVITY_USE_CLAUDE", raising=False)
+    monkeypatch.setenv("NETGRAVITY_LLM_API_KEY", "sk-ant-abc")
+    warning = IngestionConfig().key_warning
+    assert warning and "looks like an Anthropic key" in warning
+
+
+def test_matching_key_produces_no_warning(monkeypatch):
+    monkeypatch.delenv("NETGRAVITY_USE_CLAUDE", raising=False)
+    monkeypatch.setenv("NETGRAVITY_OPENAI_API_KEY", "sk-proj-abc")
+    assert IngestionConfig().key_warning is None
+
+
+def test_no_key_produces_no_warning(monkeypatch):
+    for var in ("NETGRAVITY_LLM_API_KEY", "NETGRAVITY_OPENAI_API_KEY",
+                "NETGRAVITY_ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+    assert IngestionConfig().key_warning is None

@@ -150,4 +150,11 @@ data/standardized/*
 data/curated/*
 !data/curated/.gitkeep
 
-# data/mock/ IS committed — it is the shared India demo dataset.
+# Sample / demo datasets are NOT committed.
+# data/mock/india/ is fabricated demo data used to exercise the pipeline.
+# Team members need it shared separately (or regenerated) before running:
+#     python -m netgravity.ingestion --source data/mock/india
+data/mock/
+
+# Local transfer scratch — not part of the project
+_to_delete/

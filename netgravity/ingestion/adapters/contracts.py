@@ -14,11 +14,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-from netgravity.ingestion.ai.client import get_client
+from netgravity.ingestion.ai.cache import load_cached_contract, save_contract
+from netgravity.ingestion.ai.client import LLM_FAILURE_MARKER, get_client
 from netgravity.ingestion.ai.contract_reader import extract_contract
 from netgravity.ingestion.config import IngestionConfig
 from netgravity.ingestion.schemas.contract import ContractRule
 from netgravity.ingestion.schemas.ingest_result import FileResult, RowIssue, Severity
+from netgravity.ingestion.storage.base import StorageBackend
 
 SUPPORTED_SUFFIXES = {".pdf", ".txt", ".md"}
 
@@ -56,9 +58,17 @@ def read_text(path: Path) -> Tuple[str, Optional[str]]:
 
 
 def ingest_file(path: Path, config: IngestionConfig,
-                known_locations: Optional[List[str]] = None
+                known_locations: Optional[List[str]] = None,
+                storage: Optional[StorageBackend] = None,
+                *, use_cache: bool = True
                 ) -> Tuple[Optional[ContractRule], FileResult]:
-    """Extract one contract file."""
+    """
+    Extract one contract file.
+
+    `storage` enables the extraction cache. A contract whose text is unchanged
+    since a previous run is served from cache and costs no model call. Pass
+    use_cache=False (or omit storage) to force a fresh extraction.
+    """
     result = FileResult(
         source_file=path.name, adapter="contracts", rows_read=1, ai_used=True,
     )
@@ -74,6 +84,20 @@ def ingest_file(path: Path, config: IngestionConfig,
         result.ai_stubbed = config.stub_mode
         return None, result
 
+    # --- reuse a previous extraction of this exact document, if we have one ---
+    cached = load_cached_contract(text, storage) if use_cache else None
+    if cached is not None:
+        result.ai_used = False
+        result.ai_stubbed = False
+        result.rows_accepted = 1
+        result.ai_notes.append(
+            f"reused cached extraction for '{path.name}' "
+            f"(originally by {cached.extracted_by}; document text unchanged) "
+            f"— no model call needed"
+        )
+        _flag_hidden_costs(cached, result, path.name)
+        return cached, result
+
     client = get_client(config)
     rule, note = extract_contract(
         client, text,
@@ -84,10 +108,28 @@ def ingest_file(path: Path, config: IngestionConfig,
     )
 
     result.ai_stubbed = rule.extracted_by == "stub"
+    result.ai_failed = LLM_FAILURE_MARKER in note
     result.ai_notes.append(note)
     result.rows_accepted = 1
 
-    # Surface the business finding as a first-class issue, not buried in a log
+    # Only genuine model output is cached — never stub data. See ai/cache.py.
+    if use_cache and save_contract(rule, text, storage):
+        result.ai_notes.append("extraction cached for future runs")
+
+    _flag_hidden_costs(rule, result, path.name)
+    return rule, result
+
+
+def _flag_hidden_costs(rule: ContractRule, result: FileResult,
+                       filename: str) -> None:
+    """
+    Raise the business findings as first-class issues.
+
+    Runs for cached extractions too — a cached result must produce exactly the
+    same warnings as a fresh one, otherwise the hidden-surcharge finding (the
+    whole point of reading contracts) would quietly disappear on the second
+    run and reappear only when the cache was cleared.
+    """
     if rule.has_hidden_cost:
         for s in rule.surcharges:
             if not (s.applies_to_location_ids or s.applies_to_pin_codes):
@@ -101,7 +143,7 @@ def ingest_file(path: Path, config: IngestionConfig,
                     f"understates true cost — a {s.rate:g} {s.rate_unit} "
                     f"{s.surcharge_type.value} surcharge applies to {scope}"
                 ),
-                source_file=path.name,
+                source_file=filename,
             ))
 
     # Low-confidence extractions must be reviewed, not trusted silently
@@ -111,14 +153,14 @@ def ingest_file(path: Path, config: IngestionConfig,
                 severity=Severity.WARNING, code="R-015",
                 message=f"low-confidence extraction of "
                         f"{s.surcharge_type.value} surcharge — verify against source",
-                source_file=path.name,
+                source_file=filename,
             ))
-
-    return rule, result
 
 
 def ingest_directory(contract_dir: Path, config: IngestionConfig,
-                     known_locations: Optional[List[str]] = None
+                     known_locations: Optional[List[str]] = None,
+                     storage: Optional[StorageBackend] = None,
+                     *, use_cache: bool = True
                      ) -> Tuple[List[ContractRule], List[FileResult]]:
     contract_dir = Path(contract_dir)
     rules: List[ContractRule] = []
@@ -127,7 +169,8 @@ def ingest_directory(contract_dir: Path, config: IngestionConfig,
     for path in sorted(contract_dir.iterdir()):
         if not path.is_file() or path.suffix.lower() not in SUPPORTED_SUFFIXES:
             continue
-        rule, result = ingest_file(path, config, known_locations)
+        rule, result = ingest_file(path, config, known_locations,
+                                   storage, use_cache=use_cache)
         results.append(result)
         if rule is not None:
             rules.append(rule)

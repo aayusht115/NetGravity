@@ -63,6 +63,7 @@ def build_network(
         raise NetworkBuildError("Cannot build a network with zero products.")
 
     issues.extend(_annotate_contract_effects(lanes, contracts or []))
+    issues.extend(_check_period_consistency(facilities, demands))
 
     try:
         network = CanonicalNetwork(
@@ -81,6 +82,74 @@ def build_network(
     # traced back to the exact inputs that produced it.
     network.data_version = network.compute_data_version()
     return network, issues
+
+
+# Ratios that signal a period mix-up rather than a real capacity shortfall.
+# Tolerance is wide because real networks are never exactly at one of these.
+_PERIOD_RATIOS = {
+    30.0: "daily capacity against monthly demand",
+    7.0:  "weekly capacity against monthly demand",
+    12.0: "monthly capacity against annual demand",
+    4.3:  "weekly capacity against monthly demand",
+}
+_RATIO_TOLERANCE = 0.45      # +/- 45% around the ratio
+
+
+def _check_period_consistency(facilities: List[FacilityRecord],
+                              demands: List[DemandRecord]) -> List[RowIssue]:
+    """
+    Catch demand and capacity landing on DIFFERENT time periods.
+
+    This is the safety net for a real ambiguity in the client workbook:
+    Daily_Demand_Units states its period in its name, but Capacity_Units does
+    not (the workbook calls it "units/day or units/year" and then gives a
+    "units/month" example). If demand is scaled to MONTH and capacity is not,
+    the model reports a confident INFEASIBLE for a network that is actually
+    healthy — the worst possible failure, because it looks like a real answer.
+
+    Names cannot always tell us, so this checks the NUMBERS: a demand-to-
+    capacity ratio sitting near 30, 12 or 7 is far more likely to be a unit
+    error than a genuine 30x shortfall.
+    """
+    issues: List[RowIssue] = []
+    total_demand = sum(d.quantity for d in demands)
+    total_capacity = sum(
+        f.capacity_units_per_period for f in facilities
+        if not f.is_market and f.capacity_units_per_period < 1e11
+    )
+    if total_demand <= 0 or total_capacity <= 0:
+        return issues
+
+    ratio = total_demand / total_capacity
+    if ratio <= 1.0:
+        return issues      # capacity covers demand; nothing to suspect
+
+    for factor, explanation in _PERIOD_RATIOS.items():
+        if abs(ratio - factor) / factor <= _RATIO_TOLERANCE:
+            issues.append(RowIssue(
+                severity=Severity.ERROR,
+                code="R-021",
+                message=(
+                    f"demand ({total_demand:,.0f}) exceeds total capacity "
+                    f"({total_capacity:,.0f}) by {ratio:.1f}x, which is close to "
+                    f"{factor:g}x — this looks like {explanation}, not a real "
+                    f"shortfall. State the period explicitly in the capacity "
+                    f"column name (e.g. Monthly_Capacity_Units) so it is "
+                    f"converted like demand. Solving as-is would report a false "
+                    f"INFEASIBLE."
+                ),
+            ))
+            return issues
+
+    issues.append(RowIssue(
+        severity=Severity.WARNING, code="R-021",
+        message=(
+            f"demand ({total_demand:,.0f}) exceeds total capacity "
+            f"({total_capacity:,.0f}) by {ratio:.1f}x. If this is not a genuine "
+            f"shortfall, check that demand and capacity are on the same period."
+        ),
+    ))
+    return issues
 
 
 def _annotate_contract_effects(lanes: List[LaneRecord],

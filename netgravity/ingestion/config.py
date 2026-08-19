@@ -19,12 +19,27 @@ ENVIRONMENT VARIABLES
     NETGRAVITY_DATA_ROOT          Root folder for data zones (default: <repo>/data)
     NETGRAVITY_STORAGE_BACKEND    "local" | "azure_blob"   (default: local)
     NETGRAVITY_AZURE_CONN_STR     Azure Blob connection string (azure_blob only)
-    NETGRAVITY_LLM_API_KEY        LLM provider key. If ABSENT, the AI client
-                                  runs in STUB MODE and returns canned
-                                  responses so the pipeline still runs.
-    NETGRAVITY_LLM_MODEL          Model identifier (default below)
-    NETGRAVITY_LLM_PROVIDER       "anthropic" (default). Provider is isolated
-                                  in ai/client.py — swapping is a one-file change.
+    NETGRAVITY_USE_CLAUDE         THE switch — the only one. Unset/false =>
+                                  OpenAI (default). "true" => Anthropic Claude.
+    NETGRAVITY_LLM_API_KEY        Generic key, used for whichever provider is
+                                  active. If ABSENT, the AI client runs in
+                                  STUB MODE and returns canned responses so
+                                  the pipeline still runs.
+    NETGRAVITY_OPENAI_API_KEY     Per-provider keys. Optional, and preferred
+    NETGRAVITY_ANTHROPIC_API_KEY  over the generic one when set: keeping both
+                                  in .env means flipping NETGRAVITY_USE_CLAUDE
+                                  switches vendor with no other edit.
+    NETGRAVITY_LLM_MODEL          Model identifier. Blank => a per-provider
+                                  default from DEFAULT_MODELS below, so the
+                                  model always follows the switch.
+    NETGRAVITY_LLM_TIMEOUT_SECONDS  Per-request timeout (default 60).
+    NETGRAVITY_LLM_MAX_RETRIES    Transient-error retries, handled by the
+                                  vendor SDK (default 3).
+    NETGRAVITY_LLM_STRICT         "true" => a failed live call FAILS the run.
+                                  Default false => degrade to stub data, which
+                                  is then labelled "[AI: FAILED -> STUB DATA]"
+                                  in the report. Set true for any run whose
+                                  numbers someone might act on.
 """
 
 from __future__ import annotations
@@ -54,12 +69,58 @@ STUB_MODE_BANNER = (
     "Set NETGRAVITY_LLM_API_KEY to enable live extraction."
 )
 
+# Default model per provider, used when NETGRAVITY_LLM_MODEL is not set.
+# Model names move fast — override with the env var rather than editing code.
+DEFAULT_MODELS = {
+    "openai": "gpt-4o-mini",
+    "anthropic": "claude-sonnet-4-5",
+}
+
 
 def _env(name: str, default: Optional[str] = None) -> Optional[str]:
     value = os.environ.get(name)
     if value is None or value.strip() == "":
         return default
     return value.strip()
+
+
+def _flag(name: str, default: bool = False) -> bool:
+    raw = _env(name)
+    if raw is None:
+        return default
+    return raw.lower() in {"1", "true", "yes", "y", "on"}
+
+
+# Per-provider key variables. Setting these lets BOTH keys live in .env at
+# once, so flipping NETGRAVITY_USE_CLAUDE switches provider without also
+# having to swap the key value by hand — an OpenAI key is not valid for
+# Anthropic, so a single shared key variable would break on every switch.
+PROVIDER_KEY_VARS = {
+    "openai": "NETGRAVITY_OPENAI_API_KEY",
+    "anthropic": "NETGRAVITY_ANTHROPIC_API_KEY",
+}
+
+
+def resolve_provider() -> str:
+    """
+    Decide which provider to call. ONE switch, no precedence rules to remember.
+
+        NETGRAVITY_USE_CLAUDE unset/false  ->  openai   (default)
+        NETGRAVITY_USE_CLAUDE true         ->  anthropic
+    """
+    return "anthropic" if _flag("NETGRAVITY_USE_CLAUDE") else "openai"
+
+
+def resolve_api_key(provider: str) -> Optional[str]:
+    """
+    Find the key for this provider.
+
+    The provider-specific variable wins; NETGRAVITY_LLM_API_KEY remains a
+    valid fallback so existing setups keep working untouched.
+    """
+    specific_var = PROVIDER_KEY_VARS.get((provider or "").lower())
+    specific = _env(specific_var) if specific_var else None
+    return specific or _env("NETGRAVITY_LLM_API_KEY")
 
 
 @dataclass
@@ -76,19 +137,100 @@ class IngestionConfig:
     # --- LLM ---
     # PLACEHOLDER: leave unset until the team confirms provider + key.
     # Absent key => stub mode => pipeline still runs end to end.
-    llm_api_key: Optional[str] = field(default_factory=lambda: _env("NETGRAVITY_LLM_API_KEY"))
-    llm_provider: str = field(default_factory=lambda: _env("NETGRAVITY_LLM_PROVIDER", "anthropic"))
-    llm_model: str = field(default_factory=lambda: _env("NETGRAVITY_LLM_MODEL", "claude-sonnet-4-5"))
+    # Provider comes first: the key that gets picked depends on it.
+    llm_provider: str = field(default_factory=resolve_provider)
+    # Left None so __post_init__ can resolve it against the chosen provider.
+    # Passing it explicitly still works and is never overridden.
+    llm_api_key: Optional[str] = None
+    llm_model: Optional[str] = field(default_factory=lambda: _env("NETGRAVITY_LLM_MODEL"))
+
+    # Network behaviour. A hung request must not hang the whole pipeline, and
+    # a transient 429/5xx should be retried rather than degrading the run.
+    llm_timeout_seconds: float = field(
+        default_factory=lambda: float(_env("NETGRAVITY_LLM_TIMEOUT_SECONDS", "60") or 60)
+    )
+    llm_max_retries: int = field(
+        default_factory=lambda: int(_env("NETGRAVITY_LLM_MAX_RETRIES", "3") or 3)
+    )
+
+    # When a LIVE call fails, do we raise or silently fall back to stub data?
+    # Default False keeps a demo running; set true in any run whose numbers
+    # someone might actually act on, so a failure is impossible to miss.
+    llm_strict: bool = field(
+        default_factory=lambda: str(_env("NETGRAVITY_LLM_STRICT", "false")).lower()
+        in {"1", "true", "yes", "y"}
+    )
 
     # --- Behaviour ---
     # Rows failing a WARNING-level check are kept but flagged; ERROR-level rows
     # are always dropped from the assembled network.
     strict: bool = False
 
+    def __post_init__(self) -> None:
+        if self.llm_api_key is None:
+            self.llm_api_key = resolve_api_key(self.llm_provider)
+
+    @property
+    def key_warning(self) -> Optional[str]:
+        """
+        Catch the switch-provider-but-forget-the-key trap.
+
+        Flipping NETGRAVITY_USE_CLAUDE changes which vendor we call, but an
+        OpenAI key is not valid at Anthropic and vice versa. If the only key
+        present looks like it belongs to the other vendor, say so plainly —
+        otherwise the run just fails with an opaque 401.
+        """
+        key = self.llm_api_key
+        if not key:
+            return None
+        provider = (self.llm_provider or "").lower()
+        looks_anthropic = key.startswith("sk-ant-")
+        # OpenAI keys start sk- but NOT sk-ant-.
+        looks_openai = key.startswith("sk-") and not looks_anthropic
+
+        if provider == "anthropic" and looks_openai:
+            return ("provider is 'anthropic' but the key looks like an OpenAI "
+                    "key. Set NETGRAVITY_ANTHROPIC_API_KEY, or unset "
+                    "NETGRAVITY_USE_CLAUDE to go back to OpenAI.")
+        if provider == "openai" and looks_anthropic:
+            return ("provider is 'openai' but the key looks like an Anthropic "
+                    "key. Set NETGRAVITY_OPENAI_API_KEY, or set "
+                    "NETGRAVITY_USE_CLAUDE=true to use Claude.")
+        return None
+
     @property
     def stub_mode(self) -> bool:
         """True when no LLM key is configured — AI adapters return canned data."""
         return not bool(self.llm_api_key)
+
+    @property
+    def key_source(self) -> str:
+        """Which variable supplied the key — shown in the report, never the key itself."""
+        if not self.llm_api_key:
+            return "none"
+        specific_var = PROVIDER_KEY_VARS.get((self.llm_provider or "").lower())
+        if specific_var and _env(specific_var) == self.llm_api_key:
+            return specific_var
+        if _env("NETGRAVITY_LLM_API_KEY") == self.llm_api_key:
+            return "NETGRAVITY_LLM_API_KEY"
+        return "explicit"
+
+    @property
+    def resolved_model(self) -> str:
+        """
+        The model to call.
+
+        Explicit NETGRAVITY_LLM_MODEL always wins. Otherwise pick a sane
+        default for the configured provider, so switching provider does not
+        leave a model name from the previous vendor in place — which would
+        fail with a confusing 'unknown model' error rather than an obvious
+        configuration one.
+        """
+        if self.llm_model:
+            return self.llm_model
+        return DEFAULT_MODELS.get(
+            (self.llm_provider or "").lower(), DEFAULT_MODELS["openai"]
+        )
 
     def zone_path(self, zone: str) -> Path:
         return self.data_root / zone
@@ -109,9 +251,14 @@ class IngestionConfig:
         lines = [
             f"  data root       : {self.data_root}",
             f"  storage backend : {self.storage_backend}",
-            f"  LLM provider    : {self.llm_provider} ({self.llm_model})",
-            f"  LLM mode        : {'STUB (no key set)' if self.stub_mode else 'LIVE'}",
-            f"  strict mode     : {self.strict}",
+            f"  LLM provider    : {self.llm_provider} ({self.resolved_model})"
+            + ("" if self.stub_mode else f"   key from {self.key_source}"),
+            f"  LLM mode        : {'STUB (no key set)' if self.stub_mode else 'LIVE'}"
+            + ("" if self.stub_mode else
+               f", timeout {self.llm_timeout_seconds:g}s, "
+               f"{self.llm_max_retries} retries, "
+               f"{'STRICT' if self.llm_strict else 'fallback-on-error'}"),
+            f"  row strict mode : {self.strict}  (--strict: treat row warnings as failures)",
         ]
         return "\n".join(lines)
 

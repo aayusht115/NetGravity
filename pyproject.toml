@@ -37,6 +37,7 @@ dependencies = [
 
 [project.optional-dependencies.llm]
 # Live LLM extraction. Not required — ingestion falls back to stub mode.
+openai = ["openai>=1.40.0"]
 anthropic = ["anthropic>=0.40.0"]
 
 [project.optional-dependencies]

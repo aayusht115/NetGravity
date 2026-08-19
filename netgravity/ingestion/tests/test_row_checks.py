@@ -131,12 +131,38 @@ def test_self_referencing_lane_is_rejected():
 
 # --- R-009 unit / magnitude sanity -----------------------------------------
 
-def test_service_level_given_as_percentage_is_rejected():
-    """95 instead of 0.95 is a classic and dangerous unit error."""
+def test_service_level_given_as_percentage_is_repaired_not_dropped():
+    """
+    95 instead of 0.95 is a classic unit error. Rejecting the row would delete
+    this market's demand and let the optimizer solve the wrong problem
+    confidently — so we repair it and say so loudly instead.
+    """
     rows = [{"market_id": "MKT_A", "product_id": "P001",
              "quantity": "100", "service_level": "95"}]
-    _, result = structured.parse_demand(rows, {"MKT_A"}, {"P001"})
+    records, result = structured.parse_demand(rows, {"MKT_A"}, {"P001"})
+
     assert "R-009" in codes(result)
+    assert not errors(result), "the row must survive, not be dropped"
+    assert len(records) == 1
+    assert records[0].service_level == 0.95
+    assert records[0].quantity == 100.0, "demand must be preserved intact"
+
+
+def test_uninterpretable_service_level_is_rejected():
+    """Above 100 there is no sensible reading, so reject rather than guess."""
+    rows = [{"market_id": "MKT_A", "product_id": "P001",
+             "quantity": "100", "service_level": "9500"}]
+    _, result = structured.parse_demand(rows, {"MKT_A"}, {"P001"})
+    assert errors(result)
+    assert result.rows_accepted == 0
+
+
+def test_valid_fractional_service_level_is_untouched():
+    rows = [{"market_id": "MKT_A", "product_id": "P001",
+             "quantity": "100", "service_level": "0.98"}]
+    records, result = structured.parse_demand(rows, {"MKT_A"}, {"P001"})
+    assert not result.issues
+    assert records[0].service_level == 0.98
 
 
 # --- R-011 capacity vs throughput ------------------------------------------

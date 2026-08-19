@@ -95,7 +95,9 @@ def run_ingestion(
         contract_dir = source / "contracts"
         if contract_dir.exists():
             from netgravity.ingestion.adapters import contracts as contracts_adapter
-            contracts, results = contracts_adapter.ingest_directory(contract_dir, cfg)
+            contracts, results = contracts_adapter.ingest_directory(
+                contract_dir, cfg, storage=storage
+            )
             report.files.extend(results)
 
     # --- 2b. Distributor files (AI or stub) ------------------------------

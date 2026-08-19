@@ -46,7 +46,10 @@ def render(report: IngestionReport, *, max_issues: int = 25,
             bits.append(f"⚠ {flagged} flagged")
 
         tag = ""
-        if f.ai_used:
+        if f.ai_failed:
+            # Loudest possible label: the call was meant to be live and broke.
+            tag = "  [AI: FAILED -> STUB DATA]"
+        elif f.ai_used:
             tag = "  [AI: STUBBED]" if f.ai_stubbed else "  [AI: live]"
 
         out.append(f"  {name:<26} {f.rows_read:>5} rows   {'  '.join(bits)}{tag}")

@@ -2,7 +2,8 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![MILP Core](https://img.shields.io/badge/Solver-PuLP%20%7C%20HiGHS%20%7C%20CBC-purple.svg)](https://github.com/coin-or/pulp)
-[![Tests](https://img.shields.io/badge/Automated%20Tests-215%20Passing-brightgreen.svg)](netgravity/tests/)
+[![Tests](https://img.shields.io/badge/Automated%20Tests-348%20Passing-brightgreen.svg)](netgravity/tests/)
+[![Ingestion](https://img.shields.io/badge/Ingestion-Structured%20%7C%20Excel%20%7C%20PDF%20%7C%20Signals-teal.svg)](#4-data-ingestion-pipeline-layer-1)
 [![Architecture](https://img.shields.io/badge/Architecture-Deterministic%20MILP%20%2B%20AI%20Orchestrator-orange.svg)](#system-architecture)
 
 > **NetGravity** is an enterprise-grade decision-intelligence and network optimization platform designed for modern logistics networks. It bridges the gap between mathematically rigorous Mixed-Integer Linear Programming (MILP) network optimization and intuitive, AI-orchestrated executive decision-making.
@@ -62,13 +63,35 @@ NetGravity/
 │       └── netgravity_standalone.html # Portable zero-dependency single-file HTML build
 │
 ├── docs/                              # 📚 Client & Technical Documentation
+│   ├── ingestion_business_rules.md    # Plain-language ingestion rules reference
 │   ├── mathematical_model.md          # Full mathematical formulation & notation
 │   ├── model_architecture.md          # Echelon architecture & pipeline design
 │   ├── model_foundation.md            # Cost functions & inventory theory
 │   ├── v1_0_audit.md                  # Verification audit trail & benchmark logs
 │   └── *.md                           # Validation reports & Case 16 references
 │
+├── data/                              # 📥 Data zones (gitignored; .gitkeep only)
+│   ├── raw/                           # Immutable source files, never edited
+│   ├── standardized/                  # Post-mapping intermediates + AI caches
+│   ├── curated/                       # Immutable versioned network snapshots
+│   └── mock/india/                    # Sample dataset for local runs & demos
+│
+├── .env.example                       # Every environment variable, documented
+│
 ├── netgravity/                        # ⚡ Mathematical Optimization Engine (Source of Truth)
+│   ├── ingestion/                     # 📥 Layer 1 — Data Ingestion Pipeline
+│   │   ├── cli.py                     # `python -m netgravity.ingestion`
+│   │   ├── pipeline.py                # Orchestrates one end-to-end run
+│   │   ├── builder.py                 # Assembles the CanonicalNetwork
+│   │   ├── config.py                  # All env vars & the provider switch
+│   │   ├── field_aliases.py           # Client workbook names -> engine names
+│   │   ├── snapshot.py                # Content-hashed versioned snapshots
+│   │   ├── adapters/                  # structured | distributor | contracts | signals
+│   │   ├── ai/                        # LLM client, prompts, stubs, extraction cache
+│   │   ├── guardrails/                # External-signal bucket policy (thresholds.yaml)
+│   │   ├── storage/                   # Local / Azure Blob abstraction
+│   │   ├── validation/                # Row-level checks (R-001..R-020)
+│   │   └── tests/                     # Ingestion test suite
 │   ├── optimization/                  # Exact MILP formulations (PuLP / HiGHS / CBC)
 │   ├── network/                       # Supply chain digital twin (Plants, DCs, Markets, Arcs)
 │   ├── costs/                         # Cost accounting, handling rates & dollar reconciliation
@@ -83,7 +106,7 @@ NetGravity/
 │   ├── schemas/                       # Pydantic data schemas & validation models
 │   ├── assumptions/                   # Explicit policy constants & constraint definitions
 │   ├── validation/                    # Data integrity & sanity checks
-│   └── tests/                         # Automated test suite (215 passing tests)
+│   └── tests/                         # Engine test suite
 │
 └── scripts/                           # 🛠️ Tooling & Build Scripts
     └── build_standalone.py            # Automated single-file HTML compiler
@@ -124,7 +147,144 @@ The web application (`app/`) delivers a streamlined executive workflow:
 
 ---
 
-## 4. Mathematical Optimization Core (MILP)
+## 4. Data Ingestion Pipeline (Layer 1)
+
+Turns messy real-world inputs into one validated `CanonicalNetwork` — the single
+data contract the MILP engine consumes. Nothing reaches the solver without
+passing through here.
+
+### Four Source Paths
+
+| Path | Input | AI? | What it produces |
+|---|---|---|---|
+| **Structured** | ERP / WMS / TMS exports in a known format | No — pure deterministic parsing | Facility, market, product, demand, lane records |
+| **Distributor** | Excel files, a different layout from every distributor | Yes — column mapping | The same records, re-mapped onto canonical fields |
+| **Contracts** | Freight contracts & rate-card PDFs | Yes — clause extraction | Base rates + hidden surcharge rules |
+| **Signals** | Dated external news / macro / weather records | Guardrail scoring | Bucketed, scored signals for forecast & scenario use |
+
+**Core principle — logic calculates, AI narrates.** The AI proposes mappings and
+extracts clauses; every number that reaches the optimizer is computed by
+deterministic code. Unit conversions, effective rates and cost adjustments are
+arithmetic, never model output.
+
+### Two Validation Layers
+
+Both run; they answer different questions and neither replaces the other.
+
+- **Row-level** (`ingestion/validation/`, codes `R-001`–`R-020`) — *is this row
+  even parseable?* Runs before assembly. Unambiguous unit errors are **repaired
+  loudly** rather than rejected: dropping a row silently deletes real demand and
+  the solver then returns a confident answer to the wrong problem.
+- **Network-level** (`netgravity/validation/checks.py`, codes `V-001`–`V-014`) —
+  *will this network actually solve?* Runs after assembly.
+
+### Data Conventions
+
+- **Client field names are the contract.** `field_aliases.py` maps the names in
+  `NetGravity_Input_Data_Fields.xlsx` (`Facility_ID`, `Daily_Demand_Units`,
+  `Unit_Cost`, …) onto internal engine fields. Matching ignores case and
+  separators; unrecognised columns are preserved, not dropped. When the workbook
+  changes, update that file — not the parsers.
+- **Everything is normalised to MONTH.** `OptimizationConfig.cost_period`
+  defaults to `MONTH`, so a `Daily_Demand_Units` column is converted on the way
+  in (×30), with the conversion recorded as an `R-020` note. Standard deviation
+  scales by √30, not 30 — it is a deviation of independent daily draws, not a
+  sum. Skipping this understates monthly demand against monthly facility cost by
+  ~30× and biases the optimizer toward closing sites that should stay open.
+
+### AI Provider — One Switch
+
+The pipeline runs **without any API key**: the AI client returns canned stub
+responses, every stubbed result is labelled as such, and the full test suite
+passes offline. Supplying a key is the only change needed to go live.
+
+```bash
+NETGRAVITY_USE_CLAUDE=false        # OpenAI / ChatGPT  (default)
+NETGRAVITY_USE_CLAUDE=true         # Anthropic Claude
+
+NETGRAVITY_OPENAI_API_KEY=...      # keep both keys set and flipping the
+NETGRAVITY_ANTHROPIC_API_KEY=...   # switch is the only edit ever needed
+```
+
+The model follows the switch automatically (`gpt-4o-mini` / `claude-sonnet-4-5`);
+override with `NETGRAVITY_LLM_MODEL`. A key that doesn't match the selected
+provider is detected and warned about *before* any call is made. Every vendor
+call is isolated in `ai/client.py` — adding a provider is a single-file change.
+
+**Failures are never silent.** If a live call fails, the run degrades to stub
+data but the report shows `[AI: FAILED -> STUB DATA]` and states plainly that
+the numbers are not a real extraction. Set `NETGRAVITY_LLM_STRICT=true` — for
+any run whose numbers someone might act on — and a failed call fails the run
+instead.
+
+### Cost Control
+
+- **Distributor mappings are cached per distributor.** The AI proposes a mapping
+  once, a human confirms it via CLI, and every later file from that distributor
+  skips the model entirely. Only 5 sample rows are ever sent, so file size does
+  not affect cost.
+- **Contract extractions are cached by document content.** Keyed on a hash of
+  the extracted text, not the filename — so an amended rate card re-extracts
+  automatically, while an unchanged one costs nothing on every subsequent run.
+  Stub output is never cached, which prevents canned demo data from being served
+  after a real key is added.
+
+### Ingestion CLI
+
+```bash
+# Ingest the sample dataset and print a validation report
+python -m netgravity.ingestion --source data/mock/india
+
+# Ingest, then hand the network to the MILP engine
+python -m netgravity.ingestion --source data/mock/india --solve
+
+# Show what the AI proposed and why (mappings, extracted clauses, signal verdicts)
+python -m netgravity.ingestion --source data/mock/india --explain
+
+# Parse and validate only — write nothing
+python -m netgravity.ingestion --source data/mock/india --dry-run
+
+# Human-in-the-loop mapping confirmation
+python -m netgravity.ingestion --list-mappings
+python -m netgravity.ingestion --confirm-mapping distributor_north_raw
+```
+
+Each successful run writes an immutable, content-hashed snapshot to
+`data/curated/`, so any result can be traced back to the exact inputs that
+produced it.
+
+### Runs Locally; Built to Scale Later
+
+**Today this runs entirely on a local machine** — local filesystem, local
+sample data, no cloud account required. That is the supported setup.
+
+Cloud portability is handled as a *discipline*, not a pending migration: it
+costs nothing now and removes rework later. Three habits carry it:
+
+- **No hardcoded paths.** Every read and write goes through the storage
+  abstraction in `ingestion/storage/`, which exposes a blob-like
+  `zone` + `key` interface. `LocalStorage` writes to disk today; swapping the
+  implementation is the entire change.
+- **All configuration from environment variables.** Nothing is compiled in —
+  credentials, paths, provider choice and model all come from `config.py`,
+  documented in `.env.example`.
+- **Vendor calls isolated to one function.** `ai/client.py` is the only file
+  that imports an SDK.
+
+When the team is ready to deploy, the migration is configuration rather than a
+rewrite — `NETGRAVITY_STORAGE_BACKEND=local` becomes `azure_blob`, and the API
+key moves from `.env` to a secret store. No ingestion code changes.
+
+> **Not yet built:** the Azure Blob backend is a deployment stub, and Azure
+> OpenAI is deliberately rejected rather than silently routed to public OpenAI
+> (it needs a distinct client with `azure_endpoint` / `api_version` /
+> `azure_deployment`). Both are follow-on work for when deployment actually
+> starts — flagged here so nobody mistakes the abstraction for a finished
+> integration.
+
+---
+
+## 5. Mathematical Optimization Core (MILP)
 
 The optimization engine is built in Python using **PuLP** with support for **HiGHS** and **CBC** solvers.
 
@@ -145,7 +305,7 @@ Subject to:
 
 ---
 
-## 5. Quickstart Guide
+## 6. Quickstart Guide
 
 ### Prerequisites
 - Python 3.9 or higher
@@ -159,16 +319,35 @@ cd NetGravity
 
 # 2. Install dependencies
 pip install -r requirements.txt
+
+# 3. (Optional) configure environment — everything works without this
+cp .env.example .env
 ```
+
+With no `.env`, the pipeline runs against local disk in AI stub mode, and the
+full test suite passes. That is the intended behaviour on a fresh clone: no
+credentials required to evaluate the system.
 
 ### Running Tests & Smoke Tests
 ```bash
 # Run 1-command verification (< 0.5 seconds)
 python smoke_test.py
 
-# Run complete automated test suite (215 tests)
+# Run complete automated test suite (348 tests: engine + ingestion)
 pytest
+
+# Engine only / ingestion only
+pytest netgravity/tests
+pytest netgravity/ingestion/tests
 ```
+
+### Running the Ingestion Pipeline
+```bash
+# Ingest the bundled sample network, validate, and solve it
+python -m netgravity.ingestion --source data/mock/india --solve
+```
+See [§4](#4-data-ingestion-pipeline-layer-1) for the full command set and
+configuration.
 
 ### Running the Web Application
 ```bash
@@ -185,7 +364,7 @@ Open `app/standalone/netgravity_standalone.html` (or `netgravity_standalone.html
 
 ---
 
-## 6. AI Agent Roadmap
+## 7. AI Agent Roadmap
 
 The platform provides standard tool-call schemas for agentic integration:
 
@@ -201,5 +380,5 @@ def get_data_quality() -> DataQualityReport: ...
 
 ---
 
-## 7. Attribution
+## 8. Attribution
 Developed for the **Kearney Case Competition**. Proprietary decision-intelligence and mathematical optimization architecture.

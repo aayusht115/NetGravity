@@ -58,6 +58,9 @@ class FileResult(BaseModel):
     # Set by AI-backed adapters so a reader can tell live extraction from stubs
     ai_used: bool = False
     ai_stubbed: bool = False
+    # True when a LIVE call was attempted and failed. ai_stubbed alone is
+    # ambiguous: it is also set when running deliberately without a key.
+    ai_failed: bool = False
     ai_notes: List[str] = Field(default_factory=list)
 
     @property

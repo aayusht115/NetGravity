@@ -24,6 +24,22 @@ import io
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from netgravity.ingestion.field_aliases import (
+    DAYS_PER_MONTH,
+    FACILITY_ALIASES,
+    DEMAND_ALIASES,
+    DEMAND_LOOKUP,
+    FACILITY_LOOKUP,
+    HISTORY_LOOKUP,
+    LANE_LOOKUP,
+    MARKET_ALIASES,
+    MARKET_LOOKUP,
+    PRODUCT_LOOKUP,
+    detect_native_period,
+    infer_period_from_name,
+    monthly_conversion_factor,
+    rename_rows,
+)
 from netgravity.ingestion.schemas.ingest_result import FileResult, RowIssue, Severity
 from netgravity.ingestion.validation import row_checks as rc
 from netgravity.schemas.network import (
@@ -48,6 +64,10 @@ LANES_FILE = "lanes.csv"
 HISTORY_FILE = "historical_volume.csv"
 
 
+def _normalise_header(name: object) -> str:
+    return "".join(ch for ch in str(name).lower() if ch.isalnum())
+
+
 def _truthy(value: Any, default: bool = False) -> bool:
     if value is None or str(value).strip() == "":
         return default
@@ -69,9 +89,33 @@ def _read_csv_bytes(data: bytes) -> List[Dict[str, str]]:
 
 def parse_facilities(rows: List[Dict[str, str]],
                      file: str = FACILITIES_FILE) -> Tuple[List[FacilityRecord], FileResult]:
+    # Capacity and throughput are per-period quantities, exactly like demand,
+    # and must land on the SAME period or the model compares monthly demand to
+    # daily capacity and reports a false infeasibility. The workbook is
+    # ambiguous here — Capacity_Units is described as "units/day or units/year"
+    # with a "units/month" example — so we convert whatever the column NAME
+    # states, and where it states nothing we assume MONTH and say so.
+    cap_periods = {
+        f: detect_native_period(rows, FACILITY_ALIASES, f, default=None)
+        for f in ("capacity_units_per_period", "min_throughput_per_period",
+                  "observed_throughput")
+    }
+
+    rows = rename_rows(rows, FACILITY_LOOKUP)
     result = FileResult(source_file=file, adapter="structured", rows_read=len(rows))
     records: List[FacilityRecord] = []
     ids: List[str] = []
+
+    cap_factors: Dict[str, float] = {}
+    for fname, period in cap_periods.items():
+        cap_factors[fname] = monthly_conversion_factor(period) if period else 1.0
+        if period and period != "MONTH":
+            result.issues.append(RowIssue(
+                severity=Severity.INFO, code="R-020",
+                message=f"'{fname}' column is {period}-native; converted to "
+                        f"MONTH by x{cap_factors[fname]:g} to match demand.",
+                source_file=file,
+            ))
 
     for n, row in enumerate(rows, start=2):   # start=2: row 1 is the header in Excel
         issues: List[RowIssue] = []
@@ -88,9 +132,23 @@ def parse_facilities(rows: List[Dict[str, str]],
 
         cap, i = rc.as_float(row, "capacity_units_per_period", file, n, default=1e12); issues += i
         thr, i = rc.as_float(row, "observed_throughput", file, n, default=None); issues += i
+        # Never rescale the "effectively unlimited" sentinel.
+        if cap is not None and cap < 1e11:
+            cap *= cap_factors["capacity_units_per_period"]
+        if thr is not None:
+            thr *= cap_factors["observed_throughput"]
         fixed, i = rc.as_float(row, "fixed_cost_per_year", file, n, default=0.0); issues += i
         handling, i = rc.as_float(row, "handling_cost_per_unit", file, n, default=0.0); issues += i
         lead, i = rc.as_float(row, "replenishment_lead_time_days", file, n, default=1.0); issues += i
+        # Aliased in the workbook (Opening_Cost / Closure_Cost / CapEx /
+        # Min_Throughput_Per_Period) but previously never read — FacilityRecord
+        # has had fields for all four since v1.1; they were just never wired up.
+        opening, i = rc.as_float(row, "opening_cost", file, n, default=0.0); issues += i
+        closure, i = rc.as_float(row, "closure_cost", file, n, default=0.0); issues += i
+        capex_val, i = rc.as_float(row, "capex", file, n, default=0.0); issues += i
+        min_thr, i = rc.as_float(row, "min_throughput_per_period", file, n, default=0.0); issues += i
+        if min_thr is not None:
+            min_thr *= cap_factors["min_throughput_per_period"]
 
         fid = (row.get("facility_id") or "").strip()
         issues += rc.check_capacity_vs_throughput(cap, thr, fid, file, n)
@@ -114,8 +172,12 @@ def parse_facilities(rows: List[Dict[str, str]],
             is_mandatory=_truthy(row.get("is_mandatory")),
             is_closable=_truthy(row.get("is_closable"), default=True),
             replenishment_lead_time_days=lead if lead is not None else 1.0,
+            opening_cost=opening or 0.0,
+            closure_cost=closure or 0.0,
+            capex=capex_val or 0.0,
+            min_throughput_per_period=min_thr or 0.0,
             region=(row.get("region") or "").strip() or None,
-            country="India",
+            country=(row.get("country") or "").strip() or "India",
             tags=[t for t in [(row.get("city") or "").strip(),
                               (row.get("state") or "").strip()] if t],
         ))
@@ -128,6 +190,7 @@ def parse_facilities(rows: List[Dict[str, str]],
 def parse_markets(rows: List[Dict[str, str]],
                   file: str = MARKETS_FILE) -> Tuple[List[FacilityRecord], FileResult]:
     """Markets become MARKET-role facilities — the engine models them as nodes."""
+    rows = rename_rows(rows, MARKET_LOOKUP)
     result = FileResult(source_file=file, adapter="structured", rows_read=len(rows))
     records: List[FacilityRecord] = []
     ids: List[str] = []
@@ -170,6 +233,7 @@ def parse_markets(rows: List[Dict[str, str]],
 
 def parse_products(rows: List[Dict[str, str]],
                    file: str = PRODUCTS_FILE) -> Tuple[List[ProductRecord], FileResult]:
+    rows = rename_rows(rows, PRODUCT_LOOKUP)
     result = FileResult(source_file=file, adapter="structured", rows_read=len(rows))
     records: List[ProductRecord] = []
     ids: List[str] = []
@@ -208,8 +272,36 @@ def parse_products(rows: List[Dict[str, str]],
 def parse_demand(rows: List[Dict[str, str]], market_ids: Set[str],
                  product_ids: Set[str],
                  file: str = DEMAND_FILE) -> Tuple[List[DemandRecord], FileResult]:
+    # Detect the quantity column's native period BEFORE renaming discards the
+    # original header — e.g. 'Daily_Demand_Units' is DAY-native even though
+    # it renames to the period-agnostic 'quantity'. The engine standardizes
+    # on MONTH (OptimizationConfig.cost_period default), so every quantity is
+    # converted to MONTH here, once, with the factor recorded for audit.
+    native_period = detect_native_period(rows, DEMAND_ALIASES)
+    qty_factor = monthly_conversion_factor(native_period)
+    # std_dev is scaled from ITS OWN column name, not from the quantity
+    # column's. The workbook mixes periods within one sheet: Daily_Demand_Units
+    # is daily, but the Demand_Variability example reads "Std dev 200
+    # units/month". Inheriting the quantity period would inflate variability
+    # ~5.5x, and variability drives safety stock and inventory cost.
+    # When it IS daily, scaling is sqrt(N) not N: summing N independent daily
+    # draws scales the mean by N but the deviation by sqrt(N).
+    std_period = detect_native_period(rows, DEMAND_ALIASES, "std_dev", default=None)
+    std_factor = monthly_conversion_factor(std_period) ** 0.5 if std_period else 1.0
+
+    rows = rename_rows(rows, DEMAND_LOOKUP)
     result = FileResult(source_file=file, adapter="structured", rows_read=len(rows))
     records: List[DemandRecord] = []
+
+    if qty_factor != 1.0:
+        result.issues.append(RowIssue(
+            severity=Severity.INFO, code="R-020",
+            message=f"quantity column is {native_period}-native; converted "
+                    f"to MONTH (engine convention) by x{qty_factor:g} "
+                    f"(std_dev x{std_factor:.4g}, from its own column name). "
+                    f"Assumes {DAYS_PER_MONTH} days/month.",
+            source_file=file,
+        ))
 
     for n, row in enumerate(rows, start=2):
         issues: List[RowIssue] = []
@@ -224,14 +316,40 @@ def parse_demand(rows: List[Dict[str, str]], market_ids: Set[str],
         period, i = rc.as_float(row, "period", file, n, default=1.0); issues += i
         priority, i = rc.as_float(row, "priority", file, n, default=1.0); issues += i
 
-        if svc is not None and not (0.0 <= svc <= 1.0):
-            issues.append(RowIssue(
-                severity=Severity.ERROR, code="R-009",
-                message=f"service_level {svc} must be a fraction in [0, 1] — "
-                        f"a value like 95 should be written as 0.95",
-                source_file=file, row_number=n, column="service_level",
-                raw_value=str(svc),
-            ))
+        if qty is not None:
+            qty = qty * qty_factor
+        if std is not None:
+            std = std * std_factor
+
+        # R-009 — service_level unit repair.
+        #
+        # A value like 95 clearly means 95%, not 9500%. Rejecting the row would
+        # silently remove this market's demand from the network, and the
+        # optimizer would then return a confident "optimal" answer to the wrong
+        # problem — a far worse outcome than repairing an obvious unit error.
+        # So: repair loudly inside the plausible range, reject only what cannot
+        # be interpreted at all.
+        if svc is not None and svc > 1.0:
+            if svc <= 100.0:
+                corrected = svc / 100.0
+                issues.append(RowIssue(
+                    severity=Severity.WARNING, code="R-009",
+                    message=f"service_level {svc:g} looks like a percentage; "
+                            f"interpreted as {corrected:.4g}. State it as a "
+                            f"fraction in the source to remove this warning.",
+                    source_file=file, row_number=n, column="service_level",
+                    raw_value=str(svc),
+                ))
+                svc = corrected
+            else:
+                issues.append(RowIssue(
+                    severity=Severity.ERROR, code="R-009",
+                    message=f"service_level {svc:g} cannot be interpreted — "
+                            f"expected a fraction in [0, 1] or a percentage in "
+                            f"(1, 100]",
+                    source_file=file, row_number=n, column="service_level",
+                    raw_value=str(svc),
+                ))
 
         result.issues.extend(issues)
         if any(x.severity == Severity.ERROR for x in issues):
@@ -253,8 +371,116 @@ def parse_demand(rows: List[Dict[str, str]], market_ids: Set[str],
     return records, result
 
 
+def parse_demand_from_markets(rows: List[Dict[str, str]], market_ids: Set[str],
+                              product_ids: Set[str],
+                              file: str = MARKETS_FILE
+                              ) -> Tuple[List[DemandRecord], FileResult]:
+    """
+    Derive demand records from a demand-zones sheet that carries demand columns.
+
+    The client-facing workbook defines ONE 'Demand Zones' sheet holding both the
+    zone attributes and Daily_Demand_Units, rather than a separate demand table.
+    Rather than force clients to split their file, we read demand straight off
+    the zones sheet when no dedicated demand file is supplied.
+
+    With a single product in the catalogue, demand is attributed to it. With
+    several, a Product_ID column is required, because splitting a zone's total
+    across products would be a guess — and a guess here silently changes the
+    optimum.
+
+    Same MONTH normalization as parse_demand(): 'Daily_Demand_Units' is
+    DAY-native and is converted here, once, with the factor recorded.
+    """
+    native_period = detect_native_period(rows, MARKET_ALIASES)
+    qty_factor = monthly_conversion_factor(native_period)
+    std_period = detect_native_period(rows, MARKET_ALIASES, "std_dev", default=None)
+    std_factor = monthly_conversion_factor(std_period) ** 0.5 if std_period else 1.0
+
+    rows = rename_rows(rows, MARKET_LOOKUP)
+    result = FileResult(source_file=f"{file} (demand columns)",
+                        adapter="structured")
+
+    has_demand = any(r.get("quantity") not in (None, "") for r in rows)
+    if not has_demand:
+        return [], result
+
+    result.rows_read = len(rows)
+    products = sorted(product_ids)
+    single_product = products[0] if len(products) == 1 else None
+
+    if qty_factor != 1.0:
+        result.issues.append(RowIssue(
+            severity=Severity.INFO, code="R-020",
+            message=f"quantity column is {native_period}-native; converted "
+                    f"to MONTH (engine convention) by x{qty_factor:g} "
+                    f"(std_dev x{std_factor:.4g}, from its own column name). "
+                    f"Assumes {DAYS_PER_MONTH} days/month.",
+            source_file=file,
+        ))
+
+    records: List[DemandRecord] = []
+    for n, row in enumerate(rows, start=2):
+        issues: List[RowIssue] = []
+        qty, i = rc.as_float(row, "quantity", file, n); issues += i
+        if qty is None:
+            result.issues.extend(issues)
+            continue
+        qty = qty * qty_factor
+
+        product_id = (row.get("product_id") or single_product or "").strip()
+        if not product_id:
+            issues.append(RowIssue(
+                severity=Severity.ERROR, code="R-019",
+                message="demand is on the zones sheet and the catalogue holds "
+                        "multiple products, so a Product_ID column is required "
+                        "— splitting the total across products would be a guess",
+                source_file=file, row_number=n,
+            ))
+        else:
+            issues += rc.check_reference(product_id, product_ids, "product_id", file, n)
+        issues += rc.check_reference(row.get("market_id"), market_ids,
+                                     "market_id", file, n)
+
+        std, i = rc.as_float(row, "std_dev", file, n, default=0.0); issues += i
+        if std is not None:
+            std = std * std_factor
+        sla, i = rc.as_float(row, "sla_days", file, n, default=None); issues += i
+
+        result.issues.extend(issues)
+        if any(x.severity == Severity.ERROR for x in issues):
+            result.rows_rejected += 1
+            continue
+
+        records.append(DemandRecord(
+            market_id=(row.get("market_id") or "").strip(),
+            product_id=product_id,
+            period=1,
+            quantity=qty,
+            std_dev=std or 0.0,
+            sla_days=sla,
+        ))
+        result.rows_accepted += 1
+
+    return records, result
+
+
 def parse_lanes(rows: List[Dict[str, str]], node_ids: Set[str],
                 file: str = LANES_FILE) -> Tuple[List[LaneRecord], FileResult]:
+    # LaneRecord.lane_capacity is a PER-PERIOD flow cap, enforced as a hard
+    # upper bound in the MILP. The workbook's Capacity_Per_Trip is per
+    # SHIPMENT ("maximum a single shipment can carry"). Loading one into the
+    # other caps a lane at, say, 500 units/month when it really moves 500 per
+    # trip every day = 15,000/month, which makes a healthy network infeasible.
+    # Converting needs Transit_Frequency (trips per period); where that is
+    # absent we leave the lane UNCAPACITATED and say so, because a wrong cap
+    # is worse than no cap — no cap loses a real constraint, a wrong cap
+    # invents a false one and silently changes the answer.
+    per_trip_column = any(
+        _normalise_header(k) == "capacitypertrip"
+        for k in (rows[0].keys() if rows else []) if k is not None
+    )
+
+    rows = rename_rows(rows, LANE_LOOKUP)
     result = FileResult(source_file=file, adapter="structured", rows_read=len(rows))
     records: List[LaneRecord] = []
 
@@ -271,6 +497,24 @@ def parse_lanes(rows: List[Dict[str, str]], node_ids: Set[str],
         dist, i = rc.as_float(row, "distance_km", file, n, default=0.0); issues += i
         lead, i = rc.as_float(row, "lead_time_days", file, n, default=1.0); issues += i
         cap, i = rc.as_float(row, "lane_capacity", file, n, default=None); issues += i
+        if cap is not None and per_trip_column:
+            trips, ti = rc.as_float(row, "transit_frequency", file, n, default=None)
+            issues += ti
+            if trips and trips > 0:
+                cap = cap * trips
+            else:
+                issues.append(RowIssue(
+                    severity=Severity.WARNING, code="R-022",
+                    message=f"Capacity_Per_Trip={cap:g} is per shipment, but the "
+                            f"model needs a per-period cap and Transit_Frequency "
+                            f"(trips per month) is missing. Lane left "
+                            f"uncapacitated rather than capped at a wrong value.",
+                    source_file=file, row_number=n, column="Capacity_Per_Trip",
+                ))
+                cap = None
+        # Aliased (Emission_Factor_Override) but previously never read — the
+        # field has existed on LaneRecord since v1.1.
+        emis, i = rc.as_float(row, "emission_factor_override", file, n, default=None); issues += i
 
         issues += rc.check_lane_plausibility(dist, lead, file, n)
 
@@ -296,6 +540,7 @@ def parse_lanes(rows: List[Dict[str, str]], node_ids: Set[str],
             distance_km=dist or 0.0,
             lead_time_days=lead if lead is not None else 1.0,
             lane_capacity=cap,
+            emission_factor_override=emis,
             is_active_baseline=_truthy(row.get("is_active_baseline"), default=True),
         ))
         result.rows_accepted += 1
@@ -310,6 +555,7 @@ def parse_history(rows: List[Dict[str, str]], node_ids: Set[str],
     consume it. It is retained for the forecasting layer and written to the
     standardized zone, so it is validated and reported like everything else.
     """
+    rows = rename_rows(rows, HISTORY_LOOKUP)
     result = FileResult(source_file=file, adapter="structured", rows_read=len(rows))
     records: List[Dict[str, Any]] = []
 
@@ -392,11 +638,22 @@ def ingest_directory(source_dir: Path) -> StructuredSource:
         src.results.append(res)
     product_ids = {p.id for p in src.products}
 
+    # Demand may arrive either as its own file, or as columns on the demand-zones
+    # sheet — the workbook (NetGravity_Input_Data_Fields.xlsx, sheet 2) puts
+    # Daily_Demand_Units on the zones sheet itself. Support both, preferring an
+    # explicit demand file when one is present.
     dem_path = source_dir / DEMAND_FILE
     if dem_path.exists():
         recs, res = parse_demand(_read_csv(dem_path), market_ids, product_ids)
         src.demands = recs
         src.results.append(res)
+    elif mkt_path.exists() and product_ids:
+        recs, res = parse_demand_from_markets(
+            _read_csv(mkt_path), market_ids, product_ids
+        )
+        if recs or res.rows_read:
+            src.demands = recs
+            src.results.append(res)
 
     lane_path = source_dir / LANES_FILE
     if lane_path.exists():

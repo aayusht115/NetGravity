@@ -23,6 +23,7 @@ import sys
 from pathlib import Path
 
 from netgravity.ingestion.config import STUB_MODE_BANNER, load_config
+from netgravity.ingestion.ai.client import LLMCallError
 from netgravity.ingestion.pipeline import run_ingestion
 from netgravity.ingestion.validation.report import RULE, render
 
@@ -50,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-signals", action="store_true", help="skip external signals")
     p.add_argument("--no-distributors", action="store_true",
                    help="skip distributor file standardization")
+    p.add_argument("--list-mappings", action="store_true",
+                   help="list cached distributor column mappings and their status")
+    p.add_argument("--confirm-mapping", metavar="DISTRIBUTOR_ID",
+                   help="approve a distributor's cached column mapping; "
+                        "later files from that distributor then skip the AI call")
     return p
 
 
@@ -57,22 +63,43 @@ def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
     cfg = load_config(strict=args.strict)
 
+    # Mapping administration — these short-circuit before any ingestion runs.
+    if args.list_mappings:
+        return _list_mappings(cfg)
+    if args.confirm_mapping:
+        return _confirm_mapping(cfg, args.confirm_mapping)
+
     print()
     print("NetGravity — Data Ingestion")
     print(RULE)
     print(cfg.describe())
     if cfg.stub_mode:
         print(f"  note            : {STUB_MODE_BANNER}")
+    if cfg.key_warning:
+        print(f"  WARNING         : {cfg.key_warning}")
 
-    result = run_ingestion(
-        Path(args.source),
-        config=cfg,
-        save=not args.dry_run,
-        include_contracts=not args.no_contracts,
-        include_signals=not args.no_signals,
-        include_distributors=not args.no_distributors,
-        label=args.label,
-    )
+    try:
+        result = run_ingestion(
+            Path(args.source),
+            config=cfg,
+            save=not args.dry_run,
+            include_contracts=not args.no_contracts,
+            include_signals=not args.no_signals,
+            include_distributors=not args.no_distributors,
+            label=args.label,
+        )
+    except LLMCallError as exc:
+        # Strict mode chose to stop rather than quietly use canned data.
+        # That is the intended outcome, so report it as a clean failure
+        # rather than an unhandled crash.
+        print()
+        print("  INGESTION STOPPED — live AI extraction failed")
+        print(f"  {exc}")
+        print()
+        print("  Fix the API key / connectivity, or unset NETGRAVITY_LLM_STRICT")
+        print("  to allow the run to continue on clearly-labelled stub data.")
+        print()
+        return 1
 
     print(render(result.report, verbose=args.verbose))
 
@@ -90,6 +117,80 @@ def main(argv=None) -> int:
     if args.strict and result.report.warnings:
         print("  STRICT MODE: warnings present — failing.\n")
         return 1
+    return 0
+
+
+def _list_mappings(cfg) -> int:
+    """Show every cached distributor mapping and whether a human has approved it."""
+    from netgravity.ingestion.adapters import distributor
+    from netgravity.ingestion.storage import get_storage
+
+    storage = get_storage(cfg)
+    keys = storage.list("standardized", prefix="distributor_mappings/")
+
+    print()
+    print("Cached distributor column mappings")
+    print(RULE)
+    if not keys:
+        print("  (none yet — run an ingestion over a distributors/ folder first)")
+        print()
+        return 0
+
+    for key in keys:
+        did = key.split("/")[-1].removesuffix(".json")
+        m = distributor.load_cached_mapping(did, storage)
+        if m is None:
+            continue
+        state = "CONFIRMED" if m.confirmed_by_human else "pending confirmation"
+        print(f"\n  {did}   [{state}]   mean confidence {m.mean_confidence:.0%}")
+        for cm in m.mappings:
+            flag = "  <-- needs review" if cm.needs_review else ""
+            print(f"      \"{cm.source_column}\" -> {cm.target_field:<14} "
+                  f"{cm.confidence:.0%}{flag}")
+            if cm.needs_review and cm.reasoning:
+                print(f"          why: {cm.reasoning}")
+        if m.unmapped_columns:
+            print(f"      unmapped: {', '.join(m.unmapped_columns)}")
+
+    print()
+    print("  To approve one:  python -m netgravity.ingestion "
+          "--confirm-mapping <id>")
+    print()
+    return 0
+
+
+def _confirm_mapping(cfg, distributor_id: str) -> int:
+    """
+    Record human approval of a mapping.
+
+    This is the human-in-the-loop step for ingestion: the model proposes, a
+    person approves, and only then is the mapping trusted without review.
+    """
+    from netgravity.ingestion.adapters import distributor
+    from netgravity.ingestion.storage import get_storage
+
+    storage = get_storage(cfg)
+    mapping = distributor.load_cached_mapping(distributor_id, storage)
+
+    if mapping is None:
+        print(f"\n  No cached mapping found for '{distributor_id}'.")
+        print("  Run --list-mappings to see what is available.\n")
+        return 1
+
+    print()
+    print(f"Confirming mapping for '{distributor_id}'")
+    print(RULE)
+    for cm in mapping.mappings:
+        conv = (f"   [x{cm.conversion_factor:g} {cm.source_unit}->{cm.target_unit}]"
+                if cm.conversion_factor != 1.0 else "")
+        print(f"  \"{cm.source_column}\" -> {cm.target_field:<14} "
+              f"{cm.confidence:.0%}{conv}")
+
+    distributor.confirm_mapping(distributor_id, storage)
+    print()
+    print(f"  Confirmed. Future files from '{distributor_id}' will reuse this "
+          f"mapping with no AI call.")
+    print()
     return 0
 
 
