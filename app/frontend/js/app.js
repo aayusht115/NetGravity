@@ -12,7 +12,7 @@ import { PLANTS, DCS, MARKETS, LANES, DATA_QUALITY, SCHEMA_MAPPING,
          formatCurrency, formatNumber, getUtilColor, getUtilLabel,
          getFacilityById, getInsightsForFacility, getKpisForFacility } from './data.js';
 import { initMap, setNetworkState } from './map.js';
-import { renderForecastChart, renderScenarioCostChart, renderScenarioRadar,
+import { renderForecastChart,
          renderFacilityThroughputChart, renderFacilityCostBreakdownChart, renderFacilityLaneFlowsChart } from './charts.js';
 import { initScenarios } from './scenarios.js';
 import { initAgent } from './agent.js';
@@ -77,10 +77,9 @@ function initTabs() {
           state.chartsInitialised['forecast'] = true;
         }, 50);
       }
-      if (tab === 'scenarios' && !state.chartsInitialised['scenarios']) {
+      if (tab === 'scenarios') {
         setTimeout(() => {
-          renderScenarioCostChart('chart-scenario-cost');
-          renderScenarioRadar('chart-scenario-radar');
+          initScenarios();
           state.chartsInitialised['scenarios'] = true;
         }, 50);
       }

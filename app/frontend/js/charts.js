@@ -127,37 +127,36 @@ export function renderForecastChart(canvasId) {
 }
 
 // ─── Scenario Cost Comparison ───────────────────────────────
-export function renderScenarioCostChart(canvasId) {
+// ─── Scenario Cost Impact (vs Baseline) ──────────────────────
+export function renderScenarioCostImpactChart(canvasId, scenarioList) {
   if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
 
   const ctx = document.getElementById(canvasId);
   if (!ctx) return;
 
-  // Only scenarios (not actual baseline)
-  const scenarios = SCENARIOS.filter(s => s.id !== 'SCN_ACTUAL');
+  const list = scenarioList || SCENARIOS;
+  const labels = list.map(s => s.shortName || s.name);
+  const dataLakhs = list.map(s => +(s.totalCost / 100000).toFixed(2));
+
+  // Color mapping: Baseline=Gray, Opt Base=Purple, Rec=Green, Others=Purple Accent
+  const backgroundColors = list.map(s => {
+    if (s.id === 'SCN_ACTUAL') return '#94a3b8';
+    if (s.id === 'SCN_REBALANCE') return '#16a34a';
+    if (s.id === 'SCN_OPTIMISED_BASE') return '#6B2FA0';
+    return '#a855f7';
+  });
 
   chartInstances[canvasId] = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: scenarios.map(s => s.name),
+      labels: labels,
       datasets: [
         {
-          label: 'Transport Cost',
-          data: scenarios.map(s => s.transportCost),
-          backgroundColor: '#6B2FA0',
-          borderRadius: 4,
-        },
-        {
-          label: 'Fixed Cost',
-          data: scenarios.map(s => s.fixedCost),
-          backgroundColor: '#b893d6',
-          borderRadius: 4,
-        },
-        {
-          label: 'Inventory Cost',
-          data: scenarios.map(s => s.inventoryCost),
-          backgroundColor: '#e8ddf2',
-          borderRadius: 4,
+          label: 'Total Cost (₹ in Lakhs)',
+          data: dataLakhs,
+          backgroundColor: backgroundColors,
+          borderRadius: 6,
+          barThickness: 24,
         },
       ],
     },
@@ -165,35 +164,232 @@ export function renderScenarioCostChart(canvasId) {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: {
-          position: 'top',
-          labels: { usePointStyle: true, font: { family: 'Inter', size: 11 } },
-        },
+        legend: { display: false },
         tooltip: {
-          backgroundColor: '#1a1a2e',
           callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`,
+            label: (ctx) => ` Total Cost: ₹${ctx.raw}L (${list[ctx.dataIndex].costChange ? list[ctx.dataIndex].costChange + '%' : 'Baseline'})`,
           },
         },
       },
       scales: {
-        x: {
-          stacked: true,
-          grid: { display: false },
-          ticks: { font: { family: 'Inter', size: 11 } },
-        },
         y: {
-          stacked: true,
+          min: 10.0,
+          max: 14.5,
           grid: { color: '#f0f0f5' },
-          ticks: {
-            font: { family: 'Inter', size: 11 },
-            callback: v => formatCurrency(v),
-          },
+          ticks: { font: { family: 'Inter', size: 10 }, stepSize: 1.0 },
+        },
+        x: {
+          grid: { display: false },
+          ticks: { font: { family: 'Inter', size: 10, weight: '500' } },
         },
       },
     },
   });
 }
+
+// ─── Scenario Capacity Risk (December) ──────────────────────
+export function renderScenarioCapacityRiskChart(canvasId, scenarioList) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+
+  const list = scenarioList || SCENARIOS;
+  const labels = list.map(s => s.shortName || s.name);
+
+  // Map risk level: High=4, Medium=3, Low=2, Very Low=1
+  const riskValues = list.map(s => {
+    if (s.capacityRisk === 'High') return 4;
+    if (s.capacityRisk === 'Medium') return 3;
+    if (s.capacityRisk === 'Low') return 2;
+    return 1; // Very Low
+  });
+
+  const colors = list.map(s => {
+    if (s.capacityRisk === 'High') return '#dc2626';
+    if (s.capacityRisk === 'Medium') return '#f59e0b';
+    if (s.capacityRisk === 'Low') return '#22c55e';
+    return '#16a34a'; // Very Low
+  });
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'Capacity Risk Level',
+          data: riskValues,
+          backgroundColor: colors,
+          borderRadius: 6,
+          barThickness: 24,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` Capacity Risk: ${list[ctx.dataIndex].capacityRisk} (Delhi NCR: ${list[ctx.dataIndex].delhiUtil || list[ctx.dataIndex].maxUtil}%)`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          min: 0,
+          max: 4.5,
+          grid: { color: '#f0f0f5' },
+          ticks: {
+            stepSize: 1,
+            callback: (val) => {
+              if (val === 4) return 'High';
+              if (val === 3) return 'Medium';
+              if (val === 2) return 'Low';
+              if (val === 1) return 'Very Low';
+              return '';
+            },
+            font: { family: 'Inter', size: 10 },
+          },
+        },
+        x: {
+          grid: { display: false },
+          ticks: { font: { family: 'Inter', size: 10, weight: '500' } },
+        },
+      },
+    },
+  });
+}
+
+// ─── Scenario SLA Comparison (On-time Service) ──────────────
+export function renderScenarioSlaChart(canvasId, scenarioList) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+
+  const list = scenarioList || SCENARIOS;
+  const labels = list.map(s => s.shortName || s.name);
+  const slaValues = list.map(s => s.sla);
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: 'On-time SLA (%)',
+          data: slaValues,
+          borderColor: '#6B2FA0',
+          backgroundColor: '#6B2FA0',
+          borderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          pointBackgroundColor: '#6B2FA0',
+          tension: 0.2,
+          fill: false,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => ` SLA (On-time): ${ctx.raw}%`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          min: 90,
+          max: 100,
+          grid: { color: '#f0f0f5' },
+          ticks: {
+            stepSize: 2,
+            callback: (v) => v + '%',
+            font: { family: 'Inter', size: 10 },
+          },
+        },
+        x: {
+          grid: { display: false },
+          ticks: { font: { family: 'Inter', size: 10, weight: '500' } },
+        },
+      },
+    },
+  });
+}
+
+// ─── Scenario Flow Map Diagram ──────────────────────────────
+export function renderScenarioFlowMap(containerId, activeScenarioId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="flow-map-container" style="position:relative;width:100%;height:100%;min-height:180px;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 50%, #fbf9fd 0%, #f4f2f8 100%);border-radius:var(--r-md);overflow:hidden">
+      <svg viewBox="0 0 400 240" style="width:100%;height:100%;max-height:210px">
+        <defs>
+          <linearGradient id="flowGreen" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#16a34a" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#22c55e" stop-opacity="0.8"/>
+          </linearGradient>
+          <linearGradient id="flowRed" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#dc2626" stop-opacity="0.8"/>
+            <stop offset="100%" stop-color="#ef4444" stop-opacity="0.8"/>
+          </linearGradient>
+        </defs>
+
+        <!-- Background map outline / grid hint -->
+        <path d="M 80,40 Q 200,20 320,50 Q 360,140 280,200 Q 200,230 140,200 Q 60,140 80,40 Z" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="4,4"/>
+
+        <!-- Flow Arcs -->
+        <!-- Baddi to Delhi NCR (Decrease: Red) -->
+        <path d="M 190,45 Q 185,60 180,80" fill="none" stroke="#ef4444" stroke-width="3.5" stroke-dasharray="4,2"/>
+        <!-- Baddi to Kolkata (Increase: Green) -->
+        <path d="M 190,45 Q 260,70 300,120" fill="none" stroke="#16a34a" stroke-width="3.5"/>
+        <!-- Baddi to Mumbai (No Change: Grey) -->
+        <path d="M 190,45 Q 140,100 130,145" fill="none" stroke="#94a3b8" stroke-width="2"/>
+        <!-- Mumbai to Chennai (No Change: Grey) -->
+        <path d="M 130,145 Q 180,180 220,195" fill="none" stroke="#94a3b8" stroke-width="2"/>
+        <!-- Kolkata to Chennai (No Change: Grey) -->
+        <path d="M 300,120 Q 270,165 220,195" fill="none" stroke="#94a3b8" stroke-width="2"/>
+
+        <!-- Nodes -->
+        <!-- Baddi Plant -->
+        <circle cx="190" cy="45" r="7" fill="#6B2FA0" stroke="#ffffff" stroke-width="2"/>
+        <text x="190" y="32" font-size="10" font-family="Inter" font-weight="700" fill="#1e293b" text-anchor="middle">Baddi</text>
+
+        <!-- Delhi NCR DC -->
+        <circle cx="180" cy="80" r="7" fill="#f59e0b" stroke="#ffffff" stroke-width="2"/>
+        <text x="180" y="97" font-size="10" font-family="Inter" font-weight="700" fill="#1e293b" text-anchor="middle">Delhi NCR</text>
+
+        <!-- Mumbai DC -->
+        <circle cx="130" cy="145" r="6" fill="#6B2FA0" stroke="#ffffff" stroke-width="2"/>
+        <text x="95" y="150" font-size="10" font-family="Inter" font-weight="600" fill="#475569" text-anchor="middle">Mumbai</text>
+
+        <!-- Kolkata DC -->
+        <circle cx="300" cy="120" r="6" fill="#16a34a" stroke="#ffffff" stroke-width="2"/>
+        <text x="335" y="125" font-size="10" font-family="Inter" font-weight="600" fill="#475569" text-anchor="middle">Kolkata</text>
+
+        <!-- Chennai DC -->
+        <circle cx="220" cy="195" r="6" fill="#6B2FA0" stroke="#ffffff" stroke-width="2"/>
+        <text x="220" y="212" font-size="10" font-family="Inter" font-weight="600" fill="#475569" text-anchor="middle">Chennai</text>
+      </svg>
+
+      <!-- Legend -->
+      <div style="position:absolute;bottom:8px;right:12px;display:flex;flex-direction:column;gap:3px;background:rgba(255,255,255,0.92);padding:4px 8px;border-radius:6px;font-size:9.5px;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
+        <div style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:3px;background:#16a34a;border-radius:2px;display:inline-block"></span> <span style="color:#1e293b">Increase Flow</span></div>
+        <div style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:3px;background:#ef4444;border-radius:2px;display:inline-block"></span> <span style="color:#1e293b">Decrease Flow</span></div>
+        <div style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:2px;background:#94a3b8;border-radius:2px;display:inline-block"></span> <span style="color:#64748b">No Change</span></div>
+      </div>
+    </div>
+  `;
+}
+
 
 // ─── Performance Radar ──────────────────────────────────────
 export function renderScenarioRadar(canvasId) {
