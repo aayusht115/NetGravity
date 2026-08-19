@@ -2774,32 +2774,27 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
         <!-- ─────────────────── TAB: SCENARIOS ─────────────────── -->
         <section class="tab-panel" id="tab-scenarios">
           <!-- Top Context Bar (Facility & Period Selectors) -->
-          <div class="home-controls" style="margin-bottom:14px">
-            <div class="controls-left">
-              <div class="control-group">
-                <span class="control-icon" style="font-size:13px">📍</span>
-                <select class="control-select facility-select" id="scn-global-facility">
-                  <option value="DC_DELHI" selected>Delhi NCR DC</option>
-                  <option value="DC_MUMBAI">Mumbai DC</option>
-                  <option value="DC_BENGALURU">Bengaluru DC</option>
-                  <option value="DC_KOLKATA">Kolkata DC</option>
-                  <option value="DC_GUWAHATI">Guwahati DC</option>
-                  <option value="ALL">All DCs (Network Overview)</option>
-                </select>
-                <span class="facility-dot" style="background:var(--amber)"></span>
-              </div>
+          <div class="home-controls" style="margin-bottom:16px;justify-content:flex-start;gap:12px">
+            <div class="control-group">
+              <span class="control-icon" style="font-size:13px">📍</span>
+              <select class="control-select facility-select" id="scn-global-facility" style="padding-left:26px">
+                <option value="DC_DELHI" selected>Delhi NCR DC</option>
+                <option value="DC_MUMBAI">Mumbai DC</option>
+                <option value="DC_BENGALURU">Bengaluru DC</option>
+                <option value="DC_KOLKATA">Kolkata DC</option>
+                <option value="DC_GUWAHATI">Guwahati DC</option>
+                <option value="ALL">All DCs (Network Overview)</option>
+              </select>
             </div>
-            <div class="controls-right">
-              <div class="control-group">
-                <span class="control-label" style="font-size:12px">Period:</span>
-                <select class="control-select period-select" id="scn-global-period">
-                  <option value="M_2026_08" selected>1 Aug – 31 Aug 2026</option>
-                  <option value="M_2026_09">1 Sep – 30 Sep 2026</option>
-                  <option value="M_2026_10">1 Oct – 31 Oct 2026</option>
-                  <option value="M_2026_11">1 Nov – 30 Nov 2026</option>
-                  <option value="M_2026_12">1 Dec – 31 Dec 2026</option>
-                </select>
-              </div>
+            <div class="control-group">
+              <span class="control-label" style="font-size:12px">Period:</span>
+              <select class="control-select period-select" id="scn-global-period">
+                <option value="M_2026_08" selected>1 Aug – 31 Aug 2026</option>
+                <option value="M_2026_09">1 Sep – 30 Sep 2026</option>
+                <option value="M_2026_10">1 Oct – 31 Oct 2026</option>
+                <option value="M_2026_11">1 Nov – 30 Nov 2026</option>
+                <option value="M_2026_12">1 Dec – 31 Dec 2026</option>
+              </select>
             </div>
           </div>
 
