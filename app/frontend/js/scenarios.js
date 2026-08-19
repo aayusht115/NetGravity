@@ -673,21 +673,6 @@ function setupScenarioScrollSpy() {
   sections.forEach((s) => observer.observe(s));
 }
 
-function openCreateToolbox() {
-  const modal = document.getElementById('modal-create-toolbox');
-  const formBody = document.getElementById('toolbox-form-body');
-  const agentView = document.getElementById('agent-execution-view');
-  if (modal) {
-    if (formBody) formBody.classList.remove('hidden');
-    if (agentView) agentView.classList.add('hidden');
-    modal.classList.add('visible');
-  }
-}
-
-function closeCreateToolbox() {
-  document.getElementById('modal-create-toolbox')?.classList.remove('visible');
-}
-
 // ─── Handle Scenario Execution (Agentic Calibration & Solver) ─
 let currentToolboxType = 'CHANGE_CAPACITY';
 

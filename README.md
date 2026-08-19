@@ -172,13 +172,16 @@ pytest
 
 ### Running the Web Application
 ```bash
-# Launch Flask backend server
+# Launch web application from repository root (recommended)
+python run.py
+
+# Alternatively, launch directly from backend directory
 python app/backend/app.py
 ```
 Open [http://localhost:5050](http://localhost:5050) in your web browser.
 
-### Instant Client Demo (Zero-Dependency)
-Open `app/standalone/netgravity_standalone.html` directly in any web browser without needing any Python server or node environment.
+### Instant Client Demo (Zero-Dependency Offline HTML)
+Open `app/standalone/netgravity_standalone.html` (or `netgravity_standalone.html`) directly in any web browser without needing any Python server or node environment.
 
 ---
 
