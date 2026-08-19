@@ -241,16 +241,21 @@ function setupMapBase() {
   terrainGroup.add(borderLines);
 
   // Load basemap texture asynchronously and attach once ready
-  const loader = new THREE.TextureLoader();
-  loader.load(INDIA_BASEMAP_DATA_URI, (texture) => {
-    texture.anisotropy = 16;
-    texture.generateMipmaps = true;
-    baseMat.color.setHex(0xffffff);
-    baseMat.map = texture;
-    baseMat.needsUpdate = true;
-  }, undefined, (err) => {
-    console.warn('[NetGravity 3D] Using fallback terrain styling:', err);
-  });
+  const basemapUri = (typeof INDIA_BASEMAP_DATA_URI !== 'undefined') ? INDIA_BASEMAP_DATA_URI :
+                     (typeof window !== 'undefined' && window.INDIA_BASEMAP_DATA_URI) ? window.INDIA_BASEMAP_DATA_URI : null;
+
+  if (basemapUri) {
+    const loader = new THREE.TextureLoader();
+    loader.load(basemapUri, (texture) => {
+      texture.anisotropy = 16;
+      texture.generateMipmaps = true;
+      baseMat.color.setHex(0xffffff);
+      baseMat.map = texture;
+      baseMat.needsUpdate = true;
+    }, undefined, (err) => {
+      console.warn('[NetGravity 3D] Using fallback terrain styling:', err);
+    });
+  }
 
   // Soft ground shadow plane underneath, so the map reads as slightly raised
   const shadowGeo = new THREE.PlaneGeometry(MAP_WIDTH * 1.06, MAP_HEIGHT * 1.06);
