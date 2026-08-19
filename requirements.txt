@@ -14,3 +14,16 @@ pytest>=8.0.0
 # Web Application & Agent API Server
 flask>=3.0.0
 flask-cors>=4.0.0
+
+# Data Ingestion Pipeline (netgravity/ingestion)
+pandas>=2.0.0            # tabular validation
+openpyxl>=3.1.0          # distributor Excel files
+pypdf>=4.0.0             # contract / rate-card PDFs
+pyyaml>=6.0              # external-signal guardrail policy
+python-dotenv>=1.0.0     # local .env loading
+
+# LLM provider — OPTIONAL.
+# The ingestion pipeline runs in STUB MODE without an API key, so this is not
+# required for development, tests, or a demo. Install and set
+# NETGRAVITY_LLM_API_KEY to enable live extraction.
+anthropic>=0.40.0

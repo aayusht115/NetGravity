@@ -1,0 +1,65 @@
+================================================================
+TRANSCORP LOGISTICS PRIVATE LIMITED
+MASTER FREIGHT SERVICES AGREEMENT
+Contract Reference: TC-2026-0472
+================================================================
+
+Effective Date:  01 April 2026
+Expiry Date:     31 March 2027
+
+1. SCOPE OF SERVICES
+TransCorp Logistics Private Limited ("the Carrier") shall provide surface
+transportation services for consumer durable goods across the Client's
+distribution network within the territory of India.
+
+2. RATE SCHEDULE
+
+2.1 Base Freight Rate
+The base freight rate shall be Rs. 10.00 per kg for all consignments
+tendered under this Agreement, subject to the adjustments in Clause 3.
+
+2.2 Minimum Consignment
+A minimum consignment weight of 500 kg per shipment shall apply. Consignments
+below this weight shall be charged at the 500 kg minimum.
+
+3. SURCHARGES AND ADJUSTMENTS
+
+3.1 Fuel Surcharge
+A fuel surcharge of Rs. 2.00 per kg shall apply to all consignments
+irrespective of destination. This surcharge shall be reviewed quarterly with
+reference to the PPAC retail selling price index.
+
+3.2 Non-Serviceable Location Handling Charge
+Deliveries to Non-Serviceable Locations (Annexure C, 12 pin codes in the
+North East region) attract an additional handling charge of Rs. 5.00 per kg.
+Non-Serviceable Locations are those beyond the Carrier's owned network, where
+delivery is effected through an appointed sub-contractor.
+
+4. SERVICE LEVELS AND PENALTIES
+
+4.1 Late Pickup
+A penalty of Rs. 500 per incident shall be payable by the Carrier where
+pickup is not effected within the agreed window.
+
+5. PAYMENT TERMS
+Invoices shall be raised fortnightly and are payable within 45 days.
+
+================================================================
+ANNEXURE C — NON-SERVICEABLE LOCATIONS
+================================================================
+The following pin codes are classified as Non-Serviceable Locations for the
+purposes of Clause 3.2:
+
+  781001, 781005, 781006  (Guwahati and surrounds)
+  783301                  (Bongaigaon)
+  784001                  (Tezpur)
+  785001                  (Jorhat)
+  786001                  (Dibrugarh)
+  787001                  (North Lakhimpur)
+  788001                  (Silchar)
+  790001                  (Bomdila)
+  791001                  (Itanagar)
+  792001                  (Tezu)
+
+Consignments to the above locations shall be tendered with a minimum of
+72 hours notice.

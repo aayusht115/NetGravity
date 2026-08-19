@@ -139,3 +139,15 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# NetGravity data zones
+# Raw client files and generated snapshots must never be committed.
+# .gitkeep files preserve the folder structure; contents are ignored.
+data/raw/*
+!data/raw/.gitkeep
+data/standardized/*
+!data/standardized/.gitkeep
+data/curated/*
+!data/curated/.gitkeep
+
+# data/mock/ IS committed — it is the shared India demo dataset.

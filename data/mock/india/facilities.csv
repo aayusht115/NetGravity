@@ -1,0 +1,11 @@
+facility_id,facility_name,role,status,latitude,longitude,city,state,region,capacity_units_per_period,observed_throughput,fixed_cost_per_year,handling_cost_per_unit,is_mandatory,is_closable,replenishment_lead_time_days
+PLT_BADDI,Baddi Plant,PLANT,EXISTING,30.96,76.79,Baddi,Himachal Pradesh,North,12000,11200,0,0,TRUE,FALSE,0
+PLT_PUNE,Pune Plant,PLANT,EXISTING,18.52,73.86,Pune,Maharashtra,West,10000,7800,0,0,TRUE,FALSE,0
+PLT_HYDERABAD,Hyderabad Plant,PLANT,EXISTING,17.38,78.49,Hyderabad,Telangana,South,8000,6100,0,0,TRUE,FALSE,0
+PLT_KOLKATA,Kolkata Plant,PLANT,EXISTING,22.57,88.36,Kolkata,West Bengal,East,6000,4200,0,0,TRUE,FALSE,0
+DC_DELHI,Delhi NCR DC,DC,EXISTING,28.61,77.21,Delhi NCR,Delhi,North,10000,9400,1440000,4.2,FALSE,TRUE,3
+DC_MUMBAI,Mumbai DC,DC,EXISTING,19.08,72.88,Mumbai,Maharashtra,West,9000,6800,1680000,4.8,FALSE,TRUE,3
+DC_BENGALURU,Bengaluru DC,DC,EXISTING,12.97,77.59,Bengaluru,Karnataka,South,7500,5600,1320000,4.0,FALSE,TRUE,3
+DC_KOLKATA,Kolkata DC,DC,EXISTING,22.57,88.36,Kolkata,West Bengal,East,6000,3200,1020000,3.5,FALSE,TRUE,3
+DC_GUWAHATI,Guwahati DC,DC,EXISTING,26.14,91.74,Guwahati,Assam,Northeast,4000,2100,780000,3.8,FALSE,TRUE,4
+DC_NAGPUR,Nagpur DC (candidate),DC,CANDIDATE,21.15,79.09,Nagpur,Maharashtra,Central,8000,0,1140000,3.6,FALSE,TRUE,3

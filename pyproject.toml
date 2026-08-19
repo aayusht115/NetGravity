@@ -27,7 +27,17 @@ dependencies = [
     "highspy>=1.5.0",
     "flask>=3.0.0",
     "flask-cors>=4.0.0",
+    # Data ingestion pipeline
+    "pandas>=2.0.0",
+    "openpyxl>=3.1.0",
+    "pypdf>=4.0.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
 ]
+
+[project.optional-dependencies.llm]
+# Live LLM extraction. Not required — ingestion falls back to stub mode.
+anthropic = ["anthropic>=0.40.0"]
 
 [project.optional-dependencies]
 dev = [
@@ -36,5 +46,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["netgravity/tests"]
+testpaths = ["netgravity/tests", "netgravity/ingestion/tests"]
 python_files = "test_*.py"
+markers = [
+    "slow: end-to-end tests that invoke the MILP solver",
+]

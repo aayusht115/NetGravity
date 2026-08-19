@@ -1,0 +1,109 @@
+# NetGravity — External Signal Guardrail Policy
+# ==============================================
+# Decides which external signals may influence the forecast and the optimizer.
+#
+# STATUS: PROPOSED DEFAULTS — NOT YET CONFIRMED BY THE TEAM.
+# The team member who owns the guardrail definition should replace these
+# numbers. Everything here is policy, not code: editing this file changes
+# behaviour without touching a single Python file.
+#
+# From the team review:
+#   "Competitor news is low value. Information about carriers, logistics
+#    providers and suppliers is what actually moves cost and service."
+#
+# HOW SCORING WORKS
+#   score = base_relevance
+#         + entity_match_bonus   (signal names a facility/lane/market we operate)
+#         + confidence_bonus     (source reliability)
+#   A signal passes when score >= threshold for its bucket.
+#   Failing signals are STORED with passed=False, never silently dropped.
+
+version: "0.1-proposed"
+owner: "TBC — pending team assignment"
+
+scoring:
+  entity_match_bonus: 0.25      # signal explicitly names one of our nodes
+  # A network-wide signal (fuel, duty, policy) cannot name individual nodes,
+  # so it can never earn entity_match_bonus. Without this, a material pan-India
+  # fuel move scores lower than a minor site-specific one — clearly wrong.
+  # Clearing the materiality bar is itself evidence of relevance.
+  materiality_bonus: 0.20
+  confidence_bonus:
+    HIGH: 0.15
+    MEDIUM: 0.05
+    LOW: -0.10
+
+buckets:
+
+  CARRIER:
+    base_relevance: 0.70
+    threshold: 0.60
+    scenario_use: FORECAST_ENRICHMENT
+    rationale: >
+      Carrier capacity cuts and rate changes move lane cost and service
+      directly. Highest-value external category per the team review.
+    triggers: [carrier, freight, trucking, fleet, logistics provider,
+               3PL, transporter, shipping line, rail freight]
+
+  SUPPLIER:
+    base_relevance: 0.70
+    threshold: 0.60
+    scenario_use: FORECAST_ENRICHMENT
+    rationale: >
+      Supplier outages and lead-time changes propagate into inbound flow
+      and safety stock.
+    triggers: [supplier, vendor, plant shutdown, production halt,
+               raw material, lead time, strike, factory]
+
+  CUSTOMER:
+    base_relevance: 0.70
+    threshold: 0.60
+    scenario_use: FORECAST_ENRICHMENT
+    rationale: >
+      Customer expansion or contraction changes demand at specific zones —
+      this is the December DC-overflow case.
+    triggers: [expansion, new stores, store closure, customer, retailer,
+               distribution agreement, volume commitment]
+
+  MACRO:
+    base_relevance: 0.45
+    threshold: 0.60                 # deliberately above base: needs corroboration
+    scenario_use: SEPARATE_WHATIF
+    rationale: >
+      Fuel, commodity, duty and policy moves matter, but only above a
+      materiality threshold. Small moves are logged, not surfaced, so the
+      feed does not fill with noise.
+    materiality_pct: 5.0            # ignore moves smaller than this
+    triggers: [fuel price, diesel, crude, inflation, GDP, export duty,
+               import duty, GST, tariff, interest rate, policy, expressway,
+               infrastructure, highway]
+
+  WEATHER:
+    base_relevance: 0.65
+    threshold: 0.60
+    scenario_use: SEPARATE_WHATIF
+    expiry_days: 30                 # auto-expire so stale disruptions do not linger
+    rationale: >
+      Genuine short-term disruption, but time-boxed. An old cyclone must not
+      remain an active assumption months later.
+    triggers: [cyclone, flood, monsoon, earthquake, landslide, heatwave,
+               force majeure, disruption]
+
+  COMPETITOR:
+    base_relevance: 0.10
+    threshold: 0.95                 # effectively excluded by default
+    scenario_use: LOGGED_ONLY
+    excluded_by_default: true
+    rationale: >
+      Team judged this low signal-to-noise for the decisions this system
+      makes. Retained and visible for audit, but does not reach the optimizer.
+    triggers: [competitor, rival, market share, competing network]
+
+  UNKNOWN:
+    base_relevance: 0.20
+    threshold: 0.80
+    scenario_use: LOGGED_ONLY
+    rationale: >
+      Anything that cannot be classified is held back rather than assumed
+      relevant.
+    triggers: []

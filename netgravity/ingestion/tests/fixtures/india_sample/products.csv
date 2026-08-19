@@ -1,0 +1,2 @@
+product_id,product_name,unit,weight_kg,volume_m3,unit_value,holding_rate
+P001,Test Product,units,2.5,0.003,6500,0.25

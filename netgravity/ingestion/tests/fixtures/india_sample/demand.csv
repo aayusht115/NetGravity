@@ -1,0 +1,3 @@
+market_id,product_id,period,quantity,std_dev,sla_days,service_level,priority
+MKT_A,P001,1,800,80,2,0.95,1
+MKT_B,P001,1,600,60,3,0.95,2
