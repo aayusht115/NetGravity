@@ -1,18 +1,9 @@
-"""
-NetGravity — Standalone Single-File Bundle Builder
-==================================================
-Bundles frontend HTML, CSS, datasets, and scripts into a self-contained portable HTML file.
-"""
-
 import os
 import re
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-FRONTEND_DIR = os.path.join(REPO_ROOT, "app", "frontend")
-
-html_path = os.path.join(FRONTEND_DIR, "index.html")
-css_path = os.path.join(FRONTEND_DIR, "css", "style.css")
+frontend_dir = r"d:\Case Comp\Kearney\app\frontend"
+html_path = os.path.join(frontend_dir, "index.html")
+css_path = os.path.join(frontend_dir, "css", "style.css")
 js_files = ["data.js", "map.js", "charts.js", "scenarios.js", "agent.js", "app.js"]
 
 with open(html_path, "r", encoding="utf-8") as f:
@@ -23,7 +14,7 @@ with open(css_path, "r", encoding="utf-8") as f:
 
 js_combined = []
 for jf in js_files:
-    p = os.path.join(FRONTEND_DIR, "js", jf)
+    p = os.path.join(frontend_dir, "js", jf)
     if os.path.exists(p):
         with open(p, "r", encoding="utf-8") as f:
             code = f.read()
@@ -49,13 +40,13 @@ js_script_tag = '<script type="module" src="js/app.js"></script>'
 bundled_js = "\n\n".join(js_combined)
 html = html.replace(js_script_tag, f"<script>\n{bundled_js}\n</script>")
 
-out_standalone = os.path.join(REPO_ROOT, "app", "standalone", "netgravity_standalone.html")
-out_root_standalone = os.path.join(REPO_ROOT, "netgravity_standalone.html")
+out_root = r"d:\Case Comp\Kearney\netgravity_standalone.html"
+out_frontend = os.path.join(frontend_dir, "netgravity_standalone.html")
 
-with open(out_standalone, "w", encoding="utf-8") as f:
+with open(out_root, "w", encoding="utf-8") as f:
     f.write(html)
 
-with open(out_root_standalone, "w", encoding="utf-8") as f:
+with open(out_frontend, "w", encoding="utf-8") as f:
     f.write(html)
 
-print(f"Successfully generated standalone HTML files at:\n  - {out_standalone}\n  - {out_root_standalone}")
+print("Successfully regenerated standalone HTML files.")
