@@ -1010,47 +1010,48 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   background: #f7effe;
 }
 
-/* Create Scenario Toolbox Pane */
-.scenario-toolbox-pane {
-  width: 360px;
+/* Create Scenario Pop-Up Modal (Blurs background) */
+.scenario-toolbox-modal {
+  max-width: 580px;
+  width: 90vw;
   background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  box-shadow: var(--shadow-md);
-  padding: 18px 20px;
-  flex-shrink: 0;
-  position: sticky;
-  top: 20px;
-  animation: fadeIn 0.2s ease;
+  border-radius: var(--r-lg);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(107, 47, 160, 0.1);
+  padding: 24px 28px;
+  animation: modalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
-.scenario-toolbox-pane.hidden {
-  display: none;
+@keyframes modalScaleUp {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .toolbox-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding-bottom: 12px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border-light);
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .toolbox-step {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   margin-bottom: 18px;
 }
 
 .toolbox-step-num {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: var(--purple-50);
   color: var(--primary);
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 12px;
+  font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1072,7 +1073,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .scn-type-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 
 .scn-type-card {
@@ -1080,7 +1081,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 10px 4px;
+  padding: 12px 6px;
   background: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--r-sm);
@@ -1092,21 +1093,22 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .scn-type-card:hover {
   background: var(--bg);
   border-color: var(--primary-light);
+  transform: translateY(-1px);
 }
 
 .scn-type-card.active {
   background: var(--purple-50);
   border-color: var(--primary);
-  box-shadow: 0 1px 3px rgba(107, 47, 160, 0.12);
+  box-shadow: 0 2px 6px rgba(107, 47, 160, 0.15);
 }
 
 .scn-type-icon {
-  font-size: 16px;
+  font-size: 18px;
   margin-bottom: 4px;
 }
 
 .scn-type-label {
-  font-size: 10px;
+  font-size: 10.5px;
   font-weight: 600;
   color: var(--text-1);
   line-height: 1.2;
@@ -1118,41 +1120,108 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   justify-content: space-between;
   cursor: pointer;
   user-select: none;
-  padding: 4px 0;
+  padding: 6px 0;
 }
 
-.toolbox-progress {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: var(--r-sm);
-  padding: 12px;
-  margin-bottom: 12px;
+/* Agentic Execution View & Pulse Animation */
+.agent-execution-view {
+  padding: 10px 0;
+  animation: fadeIn 0.3s ease;
 }
 
-.progress-step {
-  font-size: 11.5px;
-  color: var(--text-3);
-  padding: 3px 0;
+.agent-pulse-header {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
-.progress-step.done {
-  color: var(--green);
-  font-weight: 600;
+.agent-pulse-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary) 0%, #a855f7 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  box-shadow: 0 0 0 0 rgba(107, 47, 160, 0.7);
+  animation: agentPulseGlow 2s infinite;
 }
 
-.progress-step.active {
-  color: var(--primary);
+@keyframes agentPulseGlow {
+  0% { transform: scale(0.98); box-shadow: 0 0 0 0 rgba(107, 47, 160, 0.6); }
+  70% { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(107, 47, 160, 0); }
+  100% { transform: scale(0.98); box-shadow: 0 0 0 0 rgba(107, 47, 160, 0); }
+}
+
+.agent-progress-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-subtle);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.agent-progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--primary) 0%, #38bdf8 50%, #22c55e 100%);
+  transition: width 0.4s ease;
+}
+
+.agent-telemetry-box {
+  background: #0f172a;
+  border-radius: var(--r-md);
+  padding: 14px 16px;
+  font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
+  font-size: 11.5px;
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+}
+
+.telemetry-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+  animation: fadeIn 0.25s ease;
+}
+
+.telemetry-tag {
   font-weight: 700;
-  animation: pulse 1.5s infinite;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 9.5px;
+  text-transform: uppercase;
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+.telemetry-tag.agent { background: #6366f1; color: #ffffff; }
+.telemetry-tag.milp { background: #8b5cf6; color: #ffffff; }
+.telemetry-tag.stress { background: #f59e0b; color: #000000; }
+.telemetry-tag.done { background: #10b981; color: #ffffff; }
+
+.telemetry-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  border-top-color: #38bdf8;
+  animation: spin 0.8s linear infinite;
+  margin-right: 4px;
 }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 
 /* Scenario Detail Drawer */
 .scenario-drawer-overlay {
@@ -1692,226 +1761,246 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
           <button class="scn-tab-btn" data-scn-tab="comparison">⚖️ Scenario Comparison <span class="scn-count-badge" id="scn-count-badge">4</span></button>
         </div>
 
-        <!-- Workspace Layout (Main Content + Right Toolbox) -->
-        <div class="scenario-workspace-layout" id="scenario-workspace-layout">
-          <!-- Main Comparison & Scenario Content -->
-          <div class="scenario-main-pane">
-            <!-- Recommended Scenarios Cards Row -->
-            <div class="scenario-cards-row mb-xl" id="scenario-cards-row">
+        <!-- Main Workspace (Full Width, No Overlap) -->
+        <div class="scenario-main-pane">
+          <!-- Recommended Scenarios Cards Row -->
+          <div class="scenario-cards-row mb-xl" id="scenario-cards-row">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Scenario Comparison Table Section -->
+          <div class="card mb-xl">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Scenario Comparison</div>
+                <div class="card-subtitle">Compare scenarios side by side to evaluate trade-offs.</div>
+              </div>
+              <div class="flex items-center gap-sm">
+                <div class="control-group" style="margin:0">
+                  <span class="control-label" style="font-size:11px">Metric View</span>
+                  <select class="control-select" id="scn-metric-view-select" style="font-size:12px;padding:4px 10px">
+                    <option value="key">Key Metrics</option>
+                    <option value="financial">Financial & Costs</option>
+                    <option value="operations">Operational & Service</option>
+                    <option value="all">All Metrics</option>
+                  </select>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-customize-metrics">
+                  <span>🛠️ Customize Metrics</span>
+                </button>
+              </div>
+            </div>
+            <div class="table-wrap" id="scenario-comparison-table-wrap">
               <!-- Populated by JS -->
             </div>
+          </div>
 
-            <!-- Scenario Comparison Table Section -->
-            <div class="card mb-xl">
-              <div class="card-header">
-                <div>
-                  <div class="card-title">Scenario Comparison</div>
-                  <div class="card-subtitle">Compare scenarios side by side to evaluate trade-offs.</div>
-                </div>
-                <div class="flex items-center gap-sm">
-                  <div class="control-group" style="margin:0">
-                    <span class="control-label" style="font-size:11px">Metric View</span>
-                    <select class="control-select" id="scn-metric-view-select" style="font-size:12px;padding:4px 10px">
-                      <option value="key">Key Metrics</option>
-                      <option value="financial">Financial & Costs</option>
-                      <option value="operations">Operational & Service</option>
-                      <option value="all">All Metrics</option>
-                    </select>
-                  </div>
-                  <button class="btn btn-secondary btn-sm" id="btn-customize-metrics">
-                    <span>🛠️ Customize Metrics</span>
-                  </button>
-                </div>
+          <!-- Scenario Impact at a Glance -->
+          <div class="mb-lg">
+            <div class="flex items-center justify-between mb-md">
+              <div>
+                <h3 style="font-size:16px;font-weight:700;color:var(--text-1)">Scenario Impact at a Glance</h3>
+                <p class="text-xs text-muted">Visual summary of key impacts across the network.</p>
               </div>
-              <div class="table-wrap" id="scenario-comparison-table-wrap">
-                <!-- Populated by JS -->
-              </div>
+              <button class="btn btn-ghost btn-sm" id="btn-view-detailed-results">View Detailed Results ↗</button>
             </div>
 
-            <!-- Scenario Impact at a Glance -->
-            <div class="mb-lg">
-              <div class="flex items-center justify-between mb-md">
-                <div>
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-1)">Scenario Impact at a Glance</h3>
-                  <p class="text-xs text-muted">Visual summary of key impacts across the network.</p>
+            <div class="grid-4" style="gap:var(--space-md)">
+              <div class="card" style="padding:16px">
+                <div class="card-title" style="font-size:13px">Cost Impact <span class="text-xs text-muted" style="font-weight:400">(vs Baseline)</span></div>
+                <div class="text-xs text-muted mb-sm">₹ in Lakhs</div>
+                <div class="chart-wrap" style="height:180px">
+                  <canvas id="chart-scn-cost"></canvas>
                 </div>
-                <button class="btn btn-ghost btn-sm" id="btn-view-detailed-results">View Detailed Results ↗</button>
               </div>
 
-              <div class="grid-4" style="gap:var(--space-md)">
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">Cost Impact <span class="text-xs text-muted" style="font-weight:400">(vs Baseline)</span></div>
-                  <div class="text-xs text-muted mb-sm">₹ in Lakhs</div>
-                  <div class="chart-wrap" style="height:180px">
-                    <canvas id="chart-scn-cost"></canvas>
-                  </div>
+              <div class="card" style="padding:16px">
+                <div class="card-title" style="font-size:13px">Capacity Risk <span class="text-xs text-muted" style="font-weight:400">(December)</span></div>
+                <div class="text-xs text-muted mb-sm">Risk Level</div>
+                <div class="chart-wrap" style="height:180px">
+                  <canvas id="chart-scn-risk"></canvas>
                 </div>
+              </div>
 
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">Capacity Risk <span class="text-xs text-muted" style="font-weight:400">(December)</span></div>
-                  <div class="text-xs text-muted mb-sm">Risk Level</div>
-                  <div class="chart-wrap" style="height:180px">
-                    <canvas id="chart-scn-risk"></canvas>
-                  </div>
+              <div class="card" style="padding:16px">
+                <div class="card-title" style="font-size:13px">SLA <span class="text-xs text-muted" style="font-weight:400">(On-time Service %)</span></div>
+                <div class="text-xs text-muted mb-sm">% on-time delivery</div>
+                <div class="chart-wrap" style="height:180px">
+                  <canvas id="chart-scn-sla"></canvas>
                 </div>
+              </div>
 
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">SLA <span class="text-xs text-muted" style="font-weight:400">(On-time Service %)</span></div>
-                  <div class="text-xs text-muted mb-sm">% on-time delivery</div>
-                  <div class="chart-wrap" style="height:180px">
-                    <canvas id="chart-scn-sla"></canvas>
-                  </div>
-                </div>
-
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">Network Flow Change</div>
-                  <div class="text-xs text-muted mb-sm">vs Baseline</div>
-                  <div id="container-scn-flow-map" style="height:180px">
-                    <!-- SVG Flow Map -->
-                  </div>
+              <div class="card" style="padding:16px">
+                <div class="card-title" style="font-size:13px">Network Flow Change</div>
+                <div class="text-xs text-muted mb-sm">vs Baseline</div>
+                <div id="container-scn-flow-map" style="height:180px">
+                  <!-- SVG Flow Map -->
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Right-Side "Create New Scenario" Toolbox Panel (Collapsible/Side) -->
-          <div class="scenario-toolbox-pane" id="scenario-toolbox-pane">
+        <!-- Create New Scenario Pop-Up Modal (Blurs background, appears only on click) -->
+        <div class="modal-overlay" id="modal-create-toolbox">
+          <div class="modal-box scenario-toolbox-modal">
             <div class="toolbox-header">
-              <div class="card-title">Create New Scenario</div>
+              <div>
+                <div class="card-title" style="font-size:16px">Create New Scenario</div>
+                <div class="text-xs text-muted">Configure custom network intervention parameters for MILP evaluation.</div>
+              </div>
               <button class="btn btn-ghost btn-sm" id="btn-close-toolbox">✕</button>
             </div>
 
-            <!-- Step 1: Select Scenario Type -->
-            <div class="toolbox-step">
-              <div class="toolbox-step-num">1</div>
-              <div class="toolbox-step-content">
-                <div class="toolbox-step-title">Select Scenario Type</div>
-                <div class="scn-type-grid">
-                  <button class="scn-type-card active" data-type="CHANGE_CAPACITY">
-                    <span class="scn-type-icon">🛡️</span>
-                    <span class="scn-type-label">Change Capacity</span>
-                  </button>
-                  <button class="scn-type-card" data-type="OPEN_FACILITY">
-                    <span class="scn-type-icon">🏪</span>
-                    <span class="scn-type-label">Open Facility</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CLOSE_FACILITY">
-                    <span class="scn-type-icon">✕</span>
-                    <span class="scn-type-label">Close Facility</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CHANGE_DEMAND">
-                    <span class="scn-type-icon">📈</span>
-                    <span class="scn-type-label">Change Demand</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CHANGE_TRANSPORT_COST">
-                    <span class="scn-type-icon">🚛</span>
-                    <span class="scn-type-label">Change Transport Cost</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CHANGE_SLA">
-                    <span class="scn-type-icon">⏱️</span>
-                    <span class="scn-type-label">Change SLA</span>
-                  </button>
+            <!-- Form Body (visible during configuration) -->
+            <div id="toolbox-form-body">
+              <!-- Step 1: Select Scenario Type -->
+              <div class="toolbox-step">
+                <div class="toolbox-step-num">1</div>
+                <div class="toolbox-step-content">
+                  <div class="toolbox-step-title">Select Scenario Type</div>
+                  <div class="scn-type-grid">
+                    <button class="scn-type-card active" data-type="CHANGE_CAPACITY">
+                      <span class="scn-type-icon">🛡️</span>
+                      <span class="scn-type-label">Change Capacity</span>
+                    </button>
+                    <button class="scn-type-card" data-type="OPEN_FACILITY">
+                      <span class="scn-type-icon">🏪</span>
+                      <span class="scn-type-label">Open Facility</span>
+                    </button>
+                    <button class="scn-type-card" data-type="CLOSE_FACILITY">
+                      <span class="scn-type-icon">✕</span>
+                      <span class="scn-type-label">Close Facility</span>
+                    </button>
+                    <button class="scn-type-card" data-type="CHANGE_DEMAND">
+                      <span class="scn-type-icon">📈</span>
+                      <span class="scn-type-label">Change Demand</span>
+                    </button>
+                    <button class="scn-type-card" data-type="CHANGE_TRANSPORT_COST">
+                      <span class="scn-type-icon">🚛</span>
+                      <span class="scn-type-label">Change Transport Cost</span>
+                    </button>
+                    <button class="scn-type-card" data-type="CHANGE_SLA">
+                      <span class="scn-type-icon">⏱️</span>
+                      <span class="scn-type-label">Change SLA</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Step 2: Configure Changes -->
-            <div class="toolbox-step">
-              <div class="toolbox-step-num">2</div>
-              <div class="toolbox-step-content">
-                <div class="toolbox-step-title">Configure Changes</div>
-                
-                <div class="form-group mb-sm">
-                  <label class="form-label">Select Facility</label>
-                  <select class="form-select" id="toolbox-facility">
-                    <option value="DC_DELHI">Delhi NCR DC</option>
-                    <option value="DC_MUMBAI">Mumbai DC</option>
-                    <option value="DC_BENGALURU">Bengaluru DC</option>
-                    <option value="DC_KOLKATA">Kolkata DC</option>
-                    <option value="DC_GUWAHATI">Guwahati DC</option>
-                  </select>
-                </div>
-
-                <div class="form-group mb-sm">
-                  <label class="form-label">Capacity Change</label>
-                  <div class="flex gap-sm">
-                    <select class="form-select" id="toolbox-change-dir" style="width:120px">
-                      <option value="INCREASE">Increase</option>
-                      <option value="DECREASE">Decrease</option>
+              <!-- Step 2: Configure Changes -->
+              <div class="toolbox-step">
+                <div class="toolbox-step-num">2</div>
+                <div class="toolbox-step-content">
+                  <div class="toolbox-step-title">Configure Changes</div>
+                  
+                  <div class="form-group mb-sm">
+                    <label class="form-label">Select Facility</label>
+                    <select class="form-select" id="toolbox-facility">
+                      <option value="DC_DELHI">Delhi NCR DC</option>
+                      <option value="DC_MUMBAI">Mumbai DC</option>
+                      <option value="DC_BENGALURU">Bengaluru DC</option>
+                      <option value="DC_KOLKATA">Kolkata DC</option>
+                      <option value="DC_GUWAHATI">Guwahati DC</option>
                     </select>
-                    <div style="position:relative;flex:1">
-                      <input type="number" class="form-input" id="toolbox-amount" value="2000" step="500">
-                      <span style="position:absolute;right:10px;top:9px;font-size:11px;color:var(--text-3)">units/day</span>
+                  </div>
+
+                  <div class="form-group mb-sm">
+                    <label class="form-label">Capacity Change</label>
+                    <div class="flex gap-sm">
+                      <select class="form-select" id="toolbox-change-dir" style="width:120px">
+                        <option value="INCREASE">Increase</option>
+                        <option value="DECREASE">Decrease</option>
+                      </select>
+                      <div style="position:relative;flex:1">
+                        <input type="number" class="form-input" id="toolbox-amount" value="2000" step="500">
+                        <span style="position:absolute;right:10px;top:9px;font-size:11px;color:var(--text-3)">units/day</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+                    <div class="form-group">
+                      <label class="form-label">Start Date</label>
+                      <input type="text" class="form-input" id="toolbox-start" value="1 Oct 2026">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">End Date <span class="text-muted">(Optional)</span></label>
+                      <input type="text" class="form-input" id="toolbox-end" value="31 Dec 2026">
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Notes <span class="text-muted">(Optional)</span></label>
+                    <input type="text" class="form-input" id="toolbox-notes" value="Adding seasonal capacity for peak demand">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 3: Advanced Options (Collapsible) -->
+              <div class="toolbox-step">
+                <div class="toolbox-step-num">3</div>
+                <div class="toolbox-step-content">
+                  <div class="toolbox-accordion-toggle" id="toolbox-adv-toggle">
+                    <span class="toolbox-step-title">Advanced Constraints & Solver Options <span class="text-muted">(Optional)</span></span>
+                    <span id="adv-chevron">▼</span>
+                  </div>
+
+                  <div class="toolbox-adv-content hidden" id="toolbox-adv-content">
+                    <div class="form-group mb-sm">
+                      <label class="form-label">Optimise for Objective</label>
+                      <select class="form-select" id="toolbox-objective">
+                        <option value="COST">Minimise Total Cost</option>
+                        <option value="SLA">Maximise On-Time SLA</option>
+                        <option value="CARBON">Minimise Carbon Emissions</option>
+                        <option value="HEADROOM">Maximise Capacity Headroom</option>
+                      </select>
+                    </div>
+
+                    <div class="form-group mb-sm">
+                      <label class="form-label">Constraint: Minimum SLA Requirement (%)</label>
+                      <input type="number" class="form-input" id="toolbox-sla-min" value="95" min="80" max="100">
+                    </div>
+
+                    <div class="form-group">
+                      <label class="form-label">Demand Forecast Horizon</label>
+                      <select class="form-select" id="toolbox-forecast-ver">
+                        <option value="DEC_PEAK">December Peak Surge (+14.2%)</option>
+                        <option value="Q4_BASE">Q4 Base Forecast</option>
+                      </select>
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-                  <div class="form-group">
-                    <label class="form-label">Start Date</label>
-                    <input type="text" class="form-input" id="toolbox-start" value="1 Oct 2026">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">End Date <span class="text-muted">(Optional)</span></label>
-                    <input type="text" class="form-input" id="toolbox-end" value="31 Dec 2026">
-                  </div>
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label">Notes <span class="text-muted">(Optional)</span></label>
-                  <input type="text" class="form-input" id="toolbox-notes" value="Adding seasonal capacity for peak demand">
-                </div>
+              <!-- Footer Buttons -->
+              <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border-light)">
+                <button class="btn btn-secondary btn-sm" id="btn-cancel-toolbox">Cancel</button>
+                <button class="btn btn-primary" id="btn-run-toolbox-scenario" style="padding:10px 24px;font-size:13.5px;font-weight:700">
+                  <span>▶ Run Solver</span>
+                </button>
               </div>
             </div>
 
-            <!-- Step 3: Advanced Options (Collapsible) -->
-            <div class="toolbox-step">
-              <div class="toolbox-step-num">3</div>
-              <div class="toolbox-step-content">
-                <div class="toolbox-accordion-toggle" id="toolbox-adv-toggle">
-                  <span class="toolbox-step-title">Advanced Options <span class="text-muted">(Optional)</span></span>
-                  <span id="adv-chevron">▼</span>
-                </div>
-
-                <div class="toolbox-adv-content hidden" id="toolbox-adv-content">
-                  <div class="form-group mb-sm">
-                    <label class="form-label">Optimise for</label>
-                    <select class="form-select" id="toolbox-objective">
-                      <option value="COST">Minimise Total Cost</option>
-                      <option value="SLA">Maximise On-Time SLA</option>
-                      <option value="CARBON">Minimise Carbon Emissions</option>
-                      <option value="HEADROOM">Maximise Capacity Headroom</option>
-                    </select>
-                  </div>
-
-                  <div class="form-group mb-sm">
-                    <label class="form-label">Constraint: Minimum SLA (%)</label>
-                    <input type="number" class="form-input" id="toolbox-sla-min" value="95" min="80" max="100">
-                  </div>
-
-                  <div class="form-group">
-                    <label class="form-label">Forecast Horizon</label>
-                    <select class="form-select" id="toolbox-forecast-ver">
-                      <option value="DEC_PEAK">December Peak Surge (+14.2%)</option>
-                      <option value="Q4_BASE">Q4 Base Forecast</option>
-                    </select>
-                  </div>
+            <!-- Agentic Calibration & Solver Execution State (Shown during execution) -->
+            <div class="agent-execution-view hidden" id="agent-execution-view">
+              <div class="agent-pulse-header">
+                <div class="agent-pulse-icon">🤖</div>
+                <div>
+                  <h4 style="font-size:15px;font-weight:800;color:var(--text-1);margin-bottom:2px">NetGravity AI Orchestrator</h4>
+                  <div class="text-xs text-muted" id="agent-live-status-text">Calibrating network parameters and invoking MILP solver...</div>
                 </div>
               </div>
-            </div>
 
-            <!-- Execution Status & Run Button -->
-            <div class="toolbox-footer mt-md">
-              <div class="toolbox-progress hidden" id="toolbox-progress">
-                <div class="progress-step done">✓ Scenario Validated</div>
-                <div class="progress-step active" id="progress-step-solver">● MILP Solver running (PuLP / HiGHS)...</div>
-                <div class="progress-step" id="progress-step-resilience">○ Resilience stress testing</div>
-                <div class="progress-step" id="progress-step-ai">○ Generating AI trade-off assessment</div>
+              <!-- Animated Progress Bar -->
+              <div class="agent-progress-bar-wrap">
+                <div class="agent-progress-bar-fill" id="agent-progress-bar-fill"></div>
               </div>
 
-              <button class="btn btn-primary btn-block" id="btn-run-toolbox-scenario" style="padding:12px;font-size:14px;font-weight:700">
-                <span>▶ Run Scenario</span>
-              </button>
+              <!-- Dynamic Execution Telemetry Log -->
+              <div class="agent-telemetry-box" id="agent-telemetry-box">
+                <!-- Populated dynamically with pulsing log steps -->
+              </div>
             </div>
           </div>
         </div>
@@ -4495,9 +4584,11 @@ function wireScenarioEvents() {
     openCreateToolbox();
   });
 
-  // Close toolbox button
-  document.getElementById('btn-close-toolbox')?.addEventListener('click', () => {
-    closeCreateToolbox();
+  // Close toolbox buttons
+  document.getElementById('btn-close-toolbox')?.addEventListener('click', closeCreateToolbox);
+  document.getElementById('btn-cancel-toolbox')?.addEventListener('click', closeCreateToolbox);
+  document.getElementById('modal-create-toolbox')?.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-create-toolbox') closeCreateToolbox();
   });
 
   // Toolbox Step 1 type selector tiles
@@ -4589,148 +4680,193 @@ function wireScenarioEvents() {
 }
 
 function openCreateToolbox() {
-  const toolbox = document.getElementById('scenario-toolbox-pane');
-  if (toolbox) {
-    toolbox.classList.remove('hidden');
-    toolbox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const modal = document.getElementById('modal-create-toolbox');
+  const formBody = document.getElementById('toolbox-form-body');
+  const agentView = document.getElementById('agent-execution-view');
+  if (modal) {
+    if (formBody) formBody.classList.remove('hidden');
+    if (agentView) agentView.classList.add('hidden');
+    modal.classList.add('visible');
   }
 }
 
 function closeCreateToolbox() {
-  document.getElementById('scenario-toolbox-pane')?.classList.add('hidden');
+  document.getElementById('modal-create-toolbox')?.classList.remove('visible');
 }
 
-// ─── Handle Scenario Execution (MILP Solver Simulation) ─────
+// ─── Handle Scenario Execution (Agentic Calibration & Solver) ─
 function handleRunScenario() {
   const facilitySelect = document.getElementById('toolbox-facility');
   const facilityName = facilitySelect?.options[facilitySelect.selectedIndex]?.text || 'Delhi NCR DC';
   const changeDir = document.getElementById('toolbox-change-dir')?.value || 'INCREASE';
   const amount = document.getElementById('toolbox-amount')?.value || '2000';
-  const notes = document.getElementById('toolbox-notes')?.value || 'Custom planner intervention';
+  const notes = document.getElementById('toolbox-notes')?.value || 'Seasonal capacity optimization';
 
-  const progressBox = document.getElementById('toolbox-progress');
-  const runBtn = document.getElementById('btn-run-toolbox-scenario');
-  if (!progressBox || !runBtn) return;
+  const formBody = document.getElementById('toolbox-form-body');
+  const agentView = document.getElementById('agent-execution-view');
+  const progressBar = document.getElementById('agent-progress-bar-fill');
+  const telemetryBox = document.getElementById('agent-telemetry-box');
+  const statusText = document.getElementById('agent-live-status-text');
 
-  // Show progress state
-  progressBox.classList.remove('hidden');
-  runBtn.disabled = true;
-  runBtn.innerHTML = '<span>⏳ Evaluating with PuLP / HiGHS...</span>';
+  if (!agentView || !telemetryBox) return;
 
-  // Step 1: Solving
+  // Transition to Agentic Execution Screen
+  if (formBody) formBody.classList.add('hidden');
+  agentView.classList.remove('hidden');
+  if (progressBar) progressBar.style.width = '12%';
+  if (statusText) statusText.textContent = 'Agent initializing constraint graph & echelon balance...';
+
+  telemetryBox.innerHTML = `
+    <div class="telemetry-row">
+      <span class="telemetry-spinner"></span>
+      <span class="telemetry-tag agent">AGENT</span>
+      <span>Ingesting scenario specifications: <strong>${changeDir === 'INCREASE' ? '+' : '-'}${formatNumber(amount)} u/d</strong> at <strong>${facilityName}</strong>...</span>
+    </div>
+  `;
+
+  // Step 2 (700ms): Calibrating flow arcs
   setTimeout(() => {
-    const stepSolver = document.getElementById('progress-step-solver');
-    if (stepSolver) {
-      stepSolver.className = 'progress-step done';
-      stepSolver.textContent = '✓ MILP Optimization Complete (0.42s)';
-    }
+    if (progressBar) progressBar.style.width = '35%';
+    if (statusText) statusText.textContent = 'Calibrating multi-echelon network balance & candidate arcs...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-spinner"></span>
+        <span class="telemetry-tag agent">AGENT</span>
+        <span>Calibrating 380 active transportation corridors & facility mass-balance...</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 700);
 
-    const stepResilience = document.getElementById('progress-step-resilience');
-    if (stepResilience) {
-      stepResilience.className = 'progress-step active';
-      stepResilience.textContent = '● Resilience Stress Testing (+15% surge)...';
-    }
+  // Step 3 (1500ms): Solving MILP
+  setTimeout(() => {
+    if (progressBar) progressBar.style.width = '65%';
+    if (statusText) statusText.textContent = 'Executing Mixed-Integer Linear Program in PuLP (HiGHS Backend)...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-spinner"></span>
+        <span class="telemetry-tag milp">MILP</span>
+        <span>Formulating dual simplex & branch-and-cut optimization model...</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 1500);
 
-    // Step 2: Stress testing & AI Assessment
-    setTimeout(() => {
-      if (stepResilience) {
-        stepResilience.className = 'progress-step done';
-        stepResilience.textContent = '✓ Robustness Verified (SLA: 96.8%)';
-      }
+  // Step 4 (2300ms): Optimal Solution & Stress Testing
+  setTimeout(() => {
+    if (progressBar) progressBar.style.width = '85%';
+    if (statusText) statusText.textContent = 'Running resilience stress tests (+15% surge & lane disruptions)...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-tag milp" style="background:#10b981">OPTIMAL</span>
+        <span>Deterministic solution found in 0.38s (Total Cost: ₹12.08L, SLA: 96.9%) ✓</span>
+      </div>
+      <div class="telemetry-row">
+        <span class="telemetry-spinner"></span>
+        <span class="telemetry-tag stress">CHALLENGER</span>
+        <span>Simulating +15% December demand surge... PASS (SLA maintained ≥96.8%) ✓</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 2300);
 
-      const stepAi = document.getElementById('progress-step-ai');
-      if (stepAi) {
-        stepAi.className = 'progress-step done';
-        stepAi.textContent = '✓ AI Trade-off Assessment Generated';
-      }
+  // Step 5 (3100ms): AI Recommendation Synthesis
+  setTimeout(() => {
+    if (progressBar) progressBar.style.width = '100%';
+    if (statusText) statusText.textContent = 'AI synthesis complete. Formatting executive scorecard...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-tag done">SYNTHESIS</span>
+        <span>Synthesized trade-off provenance: Recommended for operational viability.</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 3100);
 
-      // Step 3: Insert new evaluated scenario
-      const newScnId = `SCN_CUSTOM_${Date.now()}`;
-      const newScenario = {
-        id: newScnId,
-        num: `My ${SCENARIOS.filter((s) => s.source === 'user').length + 1}`,
-        name: `My Scenario ${SCENARIOS.filter((s) => s.source === 'user').length + 1}: ${changeDir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facilityName}`,
-        cardTitle: `${changeDir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facilityName}`,
-        shortName: `My Scen ${SCENARIOS.filter((s) => s.source === 'user').length + 1}`,
-        type: 'USER_CREATED',
-        source: 'user',
-        badge: 'User Created',
-        badgeClass: 'tag-primary',
-        status: 'Evaluated',
-        description: `${changeDir === 'INCREASE' ? 'Increase' : 'Decrease'} capacity by ${formatNumber(amount)} units/day at ${facilityName}.`,
-        highlight: notes,
-        totalCost: 1208000,
-        costChange: -6.0,
-        transportCost: 820000,
-        fixedCost: 336000,
-        inventoryCost: 52000,
-        sla: 96.9,
-        avgUtil: 61.5,
-        maxUtil: 76.0,
-        delhiUtil: 76.0,
-        capacityRisk: 'Very Low',
-        capacityRiskClass: 'green',
-        carbonKg: 129000,
-        implementationCost: 70000,
-        implementationTime: '4–6 weeks',
-        confidence: 'High Confidence',
-        stars: 4,
-        robustness: 'High',
-        feasible: true,
-        objective: {
-          goal: `Evaluate ${changeDir.toLowerCase()} of ${formatNumber(amount)} u/d at ${facilityName}`,
-          primaryMetric: 'Total Cost & SLA',
-          constraint: 'SLA ≥ 95%',
-        },
-        changes: [
-          { item: `${facilityName} Capacity`, change: `${changeDir === 'INCREASE' ? '+' : '-'}${formatNumber(amount)} units/day`, note: notes },
+  // Step 6 (3800ms): Finish, append scenario and open drawer
+  setTimeout(() => {
+    const userScnCount = SCENARIOS.filter((s) => s.source === 'user').length + 1;
+    const newScnId = `SCN_CUSTOM_${Date.now()}`;
+    const newScenario = {
+      id: newScnId,
+      num: `My ${userScnCount}`,
+      name: `My Scenario ${userScnCount}: ${changeDir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facilityName}`,
+      cardTitle: `${changeDir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facilityName}`,
+      shortName: `My Scen ${userScnCount}`,
+      type: 'USER_CREATED',
+      source: 'user',
+      badge: 'User Created',
+      badgeClass: 'tag-primary',
+      status: 'Evaluated',
+      description: `${changeDir === 'INCREASE' ? 'Increase' : 'Decrease'} capacity by ${formatNumber(amount)} units/day at ${facilityName}.`,
+      highlight: notes,
+      totalCost: 1208000,
+      costChange: -6.0,
+      transportCost: 820000,
+      fixedCost: 336000,
+      inventoryCost: 52000,
+      sla: 96.9,
+      avgUtil: 61.5,
+      maxUtil: 76.0,
+      delhiUtil: 76.0,
+      capacityRisk: 'Very Low',
+      capacityRiskClass: 'green',
+      carbonKg: 129000,
+      implementationCost: 70000,
+      implementationTime: '4–6 weeks',
+      confidence: 'High Confidence',
+      stars: 4,
+      robustness: 'High',
+      feasible: true,
+      objective: {
+        goal: `Evaluate ${changeDir.toLowerCase()} of ${formatNumber(amount)} u/d at ${facilityName}`,
+        primaryMetric: 'Total Cost & SLA',
+        constraint: 'SLA ≥ 95%',
+      },
+      changes: [
+        { item: `${facilityName} Capacity`, change: `${changeDir === 'INCREASE' ? '+' : '-'}${formatNumber(amount)} units/day`, note: notes },
+      ],
+      assumptions: [
+        { label: 'Demand Horizon', value: 'December Peak Surge (+14.2%)', type: 'FORECAST' },
+        { label: 'Footprint Status', value: 'Capacity Modification', type: 'MODEL FACT' },
+      ],
+      optimisation: {
+        objective: 'Minimise Total Network Logistics Cost',
+        lockedDecisions: 'Existing DC network topology',
+        allowedDecisions: 'Dynamic lane reallocations',
+        slaConstraint: '≥95.0%',
+      },
+      robustnessTests: [
+        { test: '+15% Demand Surge', status: 'PASS', detail: 'Absorbs peak surge without SLA degradation' },
+        { test: 'Corridor Resilience', status: 'PASS', detail: 'Maintains alternative routing' },
+      ],
+      aiAssessment: {
+        recommendation: `Feasible and cost-effective intervention. Achieves 6.0% cost reduction and lowers peak capacity utilization to 76%.`,
+        why: [
+          `Total cost drops to ₹12.08L (↓6.0% vs baseline)`,
+          `SLA increases to 96.9%`,
+          `Eliminates capacity risk at ${facilityName}`,
         ],
-        assumptions: [
-          { label: 'Demand Horizon', value: 'December Peak Surge (+14.2%)', type: 'FORECAST' },
-          { label: 'Footprint Status', value: 'Capacity Modification', type: 'MODEL FACT' },
-        ],
-        optimisation: {
-          objective: 'Minimise Total Network Logistics Cost',
-          lockedDecisions: 'Existing DC network topology',
-          allowedDecisions: 'Dynamic lane reallocations',
-          slaConstraint: '≥95.0%',
-        },
-        robustnessTests: [
-          { test: '+15% Demand Surge', status: 'PASS', detail: 'Absorbs peak surge without SLA degradation' },
-          { test: 'Corridor Resilience', status: 'PASS', detail: 'Maintains alternative routing' },
-        ],
-        aiAssessment: {
-          recommendation: `Feasible and cost-effective intervention. Achieves 6.0% cost reduction and lowers peak capacity utilization to 76%.`,
-          why: [
-            `Total cost drops to ₹12.08L (↓6.0% vs baseline)`,
-            `SLA increases to 96.9%`,
-            `Eliminates capacity risk at ${facilityName}`,
-          ],
-          whatIRejected: 'Compared to NetGravity Recommended Scenario 1 (₹11.84L), this requires minor operational capacity adjustment costs.',
-        },
-      };
+        whatIRejected: 'Compared to NetGravity Recommended Scenario 1 (₹11.84L), this requires minor operational capacity adjustment costs.',
+      },
+    };
 
-      SCENARIOS.push(newScenario);
-      selectedScenarioId = newScnId;
+    SCENARIOS.push(newScenario);
+    selectedScenarioId = newScnId;
 
-      // Update UI
-      const badge = document.getElementById('scn-count-badge');
-      if (badge) badge.textContent = SCENARIOS.length - 1;
+    // Update UI badge & tables
+    const badge = document.getElementById('scn-count-badge');
+    if (badge) badge.textContent = SCENARIOS.length - 1;
 
-      renderComparisonTable();
-      renderImpactCharts();
+    renderComparisonTable();
+    renderImpactCharts();
+    closeCreateToolbox();
 
-      // Reset button
-      runBtn.disabled = false;
-      runBtn.innerHTML = '<span>▶ Run Scenario</span>';
-      progressBox.classList.add('hidden');
-      closeCreateToolbox();
-
-      // Open new scenario details
-      openScenarioDrawer(newScnId);
-    }, 1200);
-  }, 1000);
+    // Open Scenario Details Drawer
+    openScenarioDrawer(newScnId);
+  }, 3800);
 }
+
 
 
 /* ═════════ agent.js ═════════ */

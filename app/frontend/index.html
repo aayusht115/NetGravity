@@ -397,226 +397,246 @@
           <button class="scn-tab-btn" data-scn-tab="comparison">⚖️ Scenario Comparison <span class="scn-count-badge" id="scn-count-badge">4</span></button>
         </div>
 
-        <!-- Workspace Layout (Main Content + Right Toolbox) -->
-        <div class="scenario-workspace-layout" id="scenario-workspace-layout">
-          <!-- Main Comparison & Scenario Content -->
-          <div class="scenario-main-pane">
-            <!-- Recommended Scenarios Cards Row -->
-            <div class="scenario-cards-row mb-xl" id="scenario-cards-row">
+        <!-- Main Workspace (Full Width, No Overlap) -->
+        <div class="scenario-main-pane">
+          <!-- Recommended Scenarios Cards Row -->
+          <div class="scenario-cards-row mb-xl" id="scenario-cards-row">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Scenario Comparison Table Section -->
+          <div class="card mb-xl">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Scenario Comparison</div>
+                <div class="card-subtitle">Compare scenarios side by side to evaluate trade-offs.</div>
+              </div>
+              <div class="flex items-center gap-sm">
+                <div class="control-group" style="margin:0">
+                  <span class="control-label" style="font-size:11px">Metric View</span>
+                  <select class="control-select" id="scn-metric-view-select" style="font-size:12px;padding:4px 10px">
+                    <option value="key">Key Metrics</option>
+                    <option value="financial">Financial & Costs</option>
+                    <option value="operations">Operational & Service</option>
+                    <option value="all">All Metrics</option>
+                  </select>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-customize-metrics">
+                  <span>🛠️ Customize Metrics</span>
+                </button>
+              </div>
+            </div>
+            <div class="table-wrap" id="scenario-comparison-table-wrap">
               <!-- Populated by JS -->
             </div>
+          </div>
 
-            <!-- Scenario Comparison Table Section -->
-            <div class="card mb-xl">
-              <div class="card-header">
-                <div>
-                  <div class="card-title">Scenario Comparison</div>
-                  <div class="card-subtitle">Compare scenarios side by side to evaluate trade-offs.</div>
-                </div>
-                <div class="flex items-center gap-sm">
-                  <div class="control-group" style="margin:0">
-                    <span class="control-label" style="font-size:11px">Metric View</span>
-                    <select class="control-select" id="scn-metric-view-select" style="font-size:12px;padding:4px 10px">
-                      <option value="key">Key Metrics</option>
-                      <option value="financial">Financial & Costs</option>
-                      <option value="operations">Operational & Service</option>
-                      <option value="all">All Metrics</option>
-                    </select>
-                  </div>
-                  <button class="btn btn-secondary btn-sm" id="btn-customize-metrics">
-                    <span>🛠️ Customize Metrics</span>
-                  </button>
-                </div>
+          <!-- Scenario Impact at a Glance -->
+          <div class="mb-lg">
+            <div class="flex items-center justify-between mb-md">
+              <div>
+                <h3 style="font-size:16px;font-weight:700;color:var(--text-1)">Scenario Impact at a Glance</h3>
+                <p class="text-xs text-muted">Visual summary of key impacts across the network.</p>
               </div>
-              <div class="table-wrap" id="scenario-comparison-table-wrap">
-                <!-- Populated by JS -->
-              </div>
+              <button class="btn btn-ghost btn-sm" id="btn-view-detailed-results">View Detailed Results ↗</button>
             </div>
 
-            <!-- Scenario Impact at a Glance -->
-            <div class="mb-lg">
-              <div class="flex items-center justify-between mb-md">
-                <div>
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-1)">Scenario Impact at a Glance</h3>
-                  <p class="text-xs text-muted">Visual summary of key impacts across the network.</p>
+            <div class="grid-4" style="gap:var(--space-md)">
+              <div class="card" style="padding:16px">
+                <div class="card-title" style="font-size:13px">Cost Impact <span class="text-xs text-muted" style="font-weight:400">(vs Baseline)</span></div>
+                <div class="text-xs text-muted mb-sm">₹ in Lakhs</div>
+                <div class="chart-wrap" style="height:180px">
+                  <canvas id="chart-scn-cost"></canvas>
                 </div>
-                <button class="btn btn-ghost btn-sm" id="btn-view-detailed-results">View Detailed Results ↗</button>
               </div>
 
-              <div class="grid-4" style="gap:var(--space-md)">
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">Cost Impact <span class="text-xs text-muted" style="font-weight:400">(vs Baseline)</span></div>
-                  <div class="text-xs text-muted mb-sm">₹ in Lakhs</div>
-                  <div class="chart-wrap" style="height:180px">
-                    <canvas id="chart-scn-cost"></canvas>
-                  </div>
+              <div class="card" style="padding:16px">
+                <div class="card-title" style="font-size:13px">Capacity Risk <span class="text-xs text-muted" style="font-weight:400">(December)</span></div>
+                <div class="text-xs text-muted mb-sm">Risk Level</div>
+                <div class="chart-wrap" style="height:180px">
+                  <canvas id="chart-scn-risk"></canvas>
                 </div>
+              </div>
 
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">Capacity Risk <span class="text-xs text-muted" style="font-weight:400">(December)</span></div>
-                  <div class="text-xs text-muted mb-sm">Risk Level</div>
-                  <div class="chart-wrap" style="height:180px">
-                    <canvas id="chart-scn-risk"></canvas>
-                  </div>
+              <div class="card" style="padding:16px">
+                <div class="card-title" style="font-size:13px">SLA <span class="text-xs text-muted" style="font-weight:400">(On-time Service %)</span></div>
+                <div class="text-xs text-muted mb-sm">% on-time delivery</div>
+                <div class="chart-wrap" style="height:180px">
+                  <canvas id="chart-scn-sla"></canvas>
                 </div>
+              </div>
 
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">SLA <span class="text-xs text-muted" style="font-weight:400">(On-time Service %)</span></div>
-                  <div class="text-xs text-muted mb-sm">% on-time delivery</div>
-                  <div class="chart-wrap" style="height:180px">
-                    <canvas id="chart-scn-sla"></canvas>
-                  </div>
-                </div>
-
-                <div class="card" style="padding:16px">
-                  <div class="card-title" style="font-size:13px">Network Flow Change</div>
-                  <div class="text-xs text-muted mb-sm">vs Baseline</div>
-                  <div id="container-scn-flow-map" style="height:180px">
-                    <!-- SVG Flow Map -->
-                  </div>
+              <div class="card" style="padding:16px">
+                <div class="card-title" style="font-size:13px">Network Flow Change</div>
+                <div class="text-xs text-muted mb-sm">vs Baseline</div>
+                <div id="container-scn-flow-map" style="height:180px">
+                  <!-- SVG Flow Map -->
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          <!-- Right-Side "Create New Scenario" Toolbox Panel (Collapsible/Side) -->
-          <div class="scenario-toolbox-pane" id="scenario-toolbox-pane">
+        <!-- Create New Scenario Pop-Up Modal (Blurs background, appears only on click) -->
+        <div class="modal-overlay" id="modal-create-toolbox">
+          <div class="modal-box scenario-toolbox-modal">
             <div class="toolbox-header">
-              <div class="card-title">Create New Scenario</div>
+              <div>
+                <div class="card-title" style="font-size:16px">Create New Scenario</div>
+                <div class="text-xs text-muted">Configure custom network intervention parameters for MILP evaluation.</div>
+              </div>
               <button class="btn btn-ghost btn-sm" id="btn-close-toolbox">✕</button>
             </div>
 
-            <!-- Step 1: Select Scenario Type -->
-            <div class="toolbox-step">
-              <div class="toolbox-step-num">1</div>
-              <div class="toolbox-step-content">
-                <div class="toolbox-step-title">Select Scenario Type</div>
-                <div class="scn-type-grid">
-                  <button class="scn-type-card active" data-type="CHANGE_CAPACITY">
-                    <span class="scn-type-icon">🛡️</span>
-                    <span class="scn-type-label">Change Capacity</span>
-                  </button>
-                  <button class="scn-type-card" data-type="OPEN_FACILITY">
-                    <span class="scn-type-icon">🏪</span>
-                    <span class="scn-type-label">Open Facility</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CLOSE_FACILITY">
-                    <span class="scn-type-icon">✕</span>
-                    <span class="scn-type-label">Close Facility</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CHANGE_DEMAND">
-                    <span class="scn-type-icon">📈</span>
-                    <span class="scn-type-label">Change Demand</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CHANGE_TRANSPORT_COST">
-                    <span class="scn-type-icon">🚛</span>
-                    <span class="scn-type-label">Change Transport Cost</span>
-                  </button>
-                  <button class="scn-type-card" data-type="CHANGE_SLA">
-                    <span class="scn-type-icon">⏱️</span>
-                    <span class="scn-type-label">Change SLA</span>
-                  </button>
+            <!-- Form Body (visible during configuration) -->
+            <div id="toolbox-form-body">
+              <!-- Step 1: Select Scenario Type -->
+              <div class="toolbox-step">
+                <div class="toolbox-step-num">1</div>
+                <div class="toolbox-step-content">
+                  <div class="toolbox-step-title">Select Scenario Type</div>
+                  <div class="scn-type-grid">
+                    <button class="scn-type-card active" data-type="CHANGE_CAPACITY">
+                      <span class="scn-type-icon">🛡️</span>
+                      <span class="scn-type-label">Change Capacity</span>
+                    </button>
+                    <button class="scn-type-card" data-type="OPEN_FACILITY">
+                      <span class="scn-type-icon">🏪</span>
+                      <span class="scn-type-label">Open Facility</span>
+                    </button>
+                    <button class="scn-type-card" data-type="CLOSE_FACILITY">
+                      <span class="scn-type-icon">✕</span>
+                      <span class="scn-type-label">Close Facility</span>
+                    </button>
+                    <button class="scn-type-card" data-type="CHANGE_DEMAND">
+                      <span class="scn-type-icon">📈</span>
+                      <span class="scn-type-label">Change Demand</span>
+                    </button>
+                    <button class="scn-type-card" data-type="CHANGE_TRANSPORT_COST">
+                      <span class="scn-type-icon">🚛</span>
+                      <span class="scn-type-label">Change Transport Cost</span>
+                    </button>
+                    <button class="scn-type-card" data-type="CHANGE_SLA">
+                      <span class="scn-type-icon">⏱️</span>
+                      <span class="scn-type-label">Change SLA</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <!-- Step 2: Configure Changes -->
-            <div class="toolbox-step">
-              <div class="toolbox-step-num">2</div>
-              <div class="toolbox-step-content">
-                <div class="toolbox-step-title">Configure Changes</div>
-                
-                <div class="form-group mb-sm">
-                  <label class="form-label">Select Facility</label>
-                  <select class="form-select" id="toolbox-facility">
-                    <option value="DC_DELHI">Delhi NCR DC</option>
-                    <option value="DC_MUMBAI">Mumbai DC</option>
-                    <option value="DC_BENGALURU">Bengaluru DC</option>
-                    <option value="DC_KOLKATA">Kolkata DC</option>
-                    <option value="DC_GUWAHATI">Guwahati DC</option>
-                  </select>
-                </div>
-
-                <div class="form-group mb-sm">
-                  <label class="form-label">Capacity Change</label>
-                  <div class="flex gap-sm">
-                    <select class="form-select" id="toolbox-change-dir" style="width:120px">
-                      <option value="INCREASE">Increase</option>
-                      <option value="DECREASE">Decrease</option>
+              <!-- Step 2: Configure Changes -->
+              <div class="toolbox-step">
+                <div class="toolbox-step-num">2</div>
+                <div class="toolbox-step-content">
+                  <div class="toolbox-step-title">Configure Changes</div>
+                  
+                  <div class="form-group mb-sm">
+                    <label class="form-label">Select Facility</label>
+                    <select class="form-select" id="toolbox-facility">
+                      <option value="DC_DELHI">Delhi NCR DC</option>
+                      <option value="DC_MUMBAI">Mumbai DC</option>
+                      <option value="DC_BENGALURU">Bengaluru DC</option>
+                      <option value="DC_KOLKATA">Kolkata DC</option>
+                      <option value="DC_GUWAHATI">Guwahati DC</option>
                     </select>
-                    <div style="position:relative;flex:1">
-                      <input type="number" class="form-input" id="toolbox-amount" value="2000" step="500">
-                      <span style="position:absolute;right:10px;top:9px;font-size:11px;color:var(--text-3)">units/day</span>
+                  </div>
+
+                  <div class="form-group mb-sm">
+                    <label class="form-label">Capacity Change</label>
+                    <div class="flex gap-sm">
+                      <select class="form-select" id="toolbox-change-dir" style="width:120px">
+                        <option value="INCREASE">Increase</option>
+                        <option value="DECREASE">Decrease</option>
+                      </select>
+                      <div style="position:relative;flex:1">
+                        <input type="number" class="form-input" id="toolbox-amount" value="2000" step="500">
+                        <span style="position:absolute;right:10px;top:9px;font-size:11px;color:var(--text-3)">units/day</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+                    <div class="form-group">
+                      <label class="form-label">Start Date</label>
+                      <input type="text" class="form-input" id="toolbox-start" value="1 Oct 2026">
+                    </div>
+                    <div class="form-group">
+                      <label class="form-label">End Date <span class="text-muted">(Optional)</span></label>
+                      <input type="text" class="form-input" id="toolbox-end" value="31 Dec 2026">
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Notes <span class="text-muted">(Optional)</span></label>
+                    <input type="text" class="form-input" id="toolbox-notes" value="Adding seasonal capacity for peak demand">
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 3: Advanced Options (Collapsible) -->
+              <div class="toolbox-step">
+                <div class="toolbox-step-num">3</div>
+                <div class="toolbox-step-content">
+                  <div class="toolbox-accordion-toggle" id="toolbox-adv-toggle">
+                    <span class="toolbox-step-title">Advanced Constraints & Solver Options <span class="text-muted">(Optional)</span></span>
+                    <span id="adv-chevron">▼</span>
+                  </div>
+
+                  <div class="toolbox-adv-content hidden" id="toolbox-adv-content">
+                    <div class="form-group mb-sm">
+                      <label class="form-label">Optimise for Objective</label>
+                      <select class="form-select" id="toolbox-objective">
+                        <option value="COST">Minimise Total Cost</option>
+                        <option value="SLA">Maximise On-Time SLA</option>
+                        <option value="CARBON">Minimise Carbon Emissions</option>
+                        <option value="HEADROOM">Maximise Capacity Headroom</option>
+                      </select>
+                    </div>
+
+                    <div class="form-group mb-sm">
+                      <label class="form-label">Constraint: Minimum SLA Requirement (%)</label>
+                      <input type="number" class="form-input" id="toolbox-sla-min" value="95" min="80" max="100">
+                    </div>
+
+                    <div class="form-group">
+                      <label class="form-label">Demand Forecast Horizon</label>
+                      <select class="form-select" id="toolbox-forecast-ver">
+                        <option value="DEC_PEAK">December Peak Surge (+14.2%)</option>
+                        <option value="Q4_BASE">Q4 Base Forecast</option>
+                      </select>
                     </div>
                   </div>
                 </div>
+              </div>
 
-                <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-                  <div class="form-group">
-                    <label class="form-label">Start Date</label>
-                    <input type="text" class="form-input" id="toolbox-start" value="1 Oct 2026">
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">End Date <span class="text-muted">(Optional)</span></label>
-                    <input type="text" class="form-input" id="toolbox-end" value="31 Dec 2026">
-                  </div>
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label">Notes <span class="text-muted">(Optional)</span></label>
-                  <input type="text" class="form-input" id="toolbox-notes" value="Adding seasonal capacity for peak demand">
-                </div>
+              <!-- Footer Buttons -->
+              <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border-light)">
+                <button class="btn btn-secondary btn-sm" id="btn-cancel-toolbox">Cancel</button>
+                <button class="btn btn-primary" id="btn-run-toolbox-scenario" style="padding:10px 24px;font-size:13.5px;font-weight:700">
+                  <span>▶ Run Solver</span>
+                </button>
               </div>
             </div>
 
-            <!-- Step 3: Advanced Options (Collapsible) -->
-            <div class="toolbox-step">
-              <div class="toolbox-step-num">3</div>
-              <div class="toolbox-step-content">
-                <div class="toolbox-accordion-toggle" id="toolbox-adv-toggle">
-                  <span class="toolbox-step-title">Advanced Options <span class="text-muted">(Optional)</span></span>
-                  <span id="adv-chevron">▼</span>
-                </div>
-
-                <div class="toolbox-adv-content hidden" id="toolbox-adv-content">
-                  <div class="form-group mb-sm">
-                    <label class="form-label">Optimise for</label>
-                    <select class="form-select" id="toolbox-objective">
-                      <option value="COST">Minimise Total Cost</option>
-                      <option value="SLA">Maximise On-Time SLA</option>
-                      <option value="CARBON">Minimise Carbon Emissions</option>
-                      <option value="HEADROOM">Maximise Capacity Headroom</option>
-                    </select>
-                  </div>
-
-                  <div class="form-group mb-sm">
-                    <label class="form-label">Constraint: Minimum SLA (%)</label>
-                    <input type="number" class="form-input" id="toolbox-sla-min" value="95" min="80" max="100">
-                  </div>
-
-                  <div class="form-group">
-                    <label class="form-label">Forecast Horizon</label>
-                    <select class="form-select" id="toolbox-forecast-ver">
-                      <option value="DEC_PEAK">December Peak Surge (+14.2%)</option>
-                      <option value="Q4_BASE">Q4 Base Forecast</option>
-                    </select>
-                  </div>
+            <!-- Agentic Calibration & Solver Execution State (Shown during execution) -->
+            <div class="agent-execution-view hidden" id="agent-execution-view">
+              <div class="agent-pulse-header">
+                <div class="agent-pulse-icon">🤖</div>
+                <div>
+                  <h4 style="font-size:15px;font-weight:800;color:var(--text-1);margin-bottom:2px">NetGravity AI Orchestrator</h4>
+                  <div class="text-xs text-muted" id="agent-live-status-text">Calibrating network parameters and invoking MILP solver...</div>
                 </div>
               </div>
-            </div>
 
-            <!-- Execution Status & Run Button -->
-            <div class="toolbox-footer mt-md">
-              <div class="toolbox-progress hidden" id="toolbox-progress">
-                <div class="progress-step done">✓ Scenario Validated</div>
-                <div class="progress-step active" id="progress-step-solver">● MILP Solver running (PuLP / HiGHS)...</div>
-                <div class="progress-step" id="progress-step-resilience">○ Resilience stress testing</div>
-                <div class="progress-step" id="progress-step-ai">○ Generating AI trade-off assessment</div>
+              <!-- Animated Progress Bar -->
+              <div class="agent-progress-bar-wrap">
+                <div class="agent-progress-bar-fill" id="agent-progress-bar-fill"></div>
               </div>
 
-              <button class="btn btn-primary btn-block" id="btn-run-toolbox-scenario" style="padding:12px;font-size:14px;font-weight:700">
-                <span>▶ Run Scenario</span>
-              </button>
+              <!-- Dynamic Execution Telemetry Log -->
+              <div class="agent-telemetry-box" id="agent-telemetry-box">
+                <!-- Populated dynamically with pulsing log steps -->
+              </div>
             </div>
           </div>
         </div>

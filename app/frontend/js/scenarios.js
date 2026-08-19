@@ -501,9 +501,11 @@ function wireScenarioEvents() {
     openCreateToolbox();
   });
 
-  // Close toolbox button
-  document.getElementById('btn-close-toolbox')?.addEventListener('click', () => {
-    closeCreateToolbox();
+  // Close toolbox buttons
+  document.getElementById('btn-close-toolbox')?.addEventListener('click', closeCreateToolbox);
+  document.getElementById('btn-cancel-toolbox')?.addEventListener('click', closeCreateToolbox);
+  document.getElementById('modal-create-toolbox')?.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-create-toolbox') closeCreateToolbox();
   });
 
   // Toolbox Step 1 type selector tiles
@@ -595,145 +597,190 @@ function wireScenarioEvents() {
 }
 
 function openCreateToolbox() {
-  const toolbox = document.getElementById('scenario-toolbox-pane');
-  if (toolbox) {
-    toolbox.classList.remove('hidden');
-    toolbox.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const modal = document.getElementById('modal-create-toolbox');
+  const formBody = document.getElementById('toolbox-form-body');
+  const agentView = document.getElementById('agent-execution-view');
+  if (modal) {
+    if (formBody) formBody.classList.remove('hidden');
+    if (agentView) agentView.classList.add('hidden');
+    modal.classList.add('visible');
   }
 }
 
 function closeCreateToolbox() {
-  document.getElementById('scenario-toolbox-pane')?.classList.add('hidden');
+  document.getElementById('modal-create-toolbox')?.classList.remove('visible');
 }
 
-// ─── Handle Scenario Execution (MILP Solver Simulation) ─────
+// ─── Handle Scenario Execution (Agentic Calibration & Solver) ─
 function handleRunScenario() {
   const facilitySelect = document.getElementById('toolbox-facility');
   const facilityName = facilitySelect?.options[facilitySelect.selectedIndex]?.text || 'Delhi NCR DC';
   const changeDir = document.getElementById('toolbox-change-dir')?.value || 'INCREASE';
   const amount = document.getElementById('toolbox-amount')?.value || '2000';
-  const notes = document.getElementById('toolbox-notes')?.value || 'Custom planner intervention';
+  const notes = document.getElementById('toolbox-notes')?.value || 'Seasonal capacity optimization';
 
-  const progressBox = document.getElementById('toolbox-progress');
-  const runBtn = document.getElementById('btn-run-toolbox-scenario');
-  if (!progressBox || !runBtn) return;
+  const formBody = document.getElementById('toolbox-form-body');
+  const agentView = document.getElementById('agent-execution-view');
+  const progressBar = document.getElementById('agent-progress-bar-fill');
+  const telemetryBox = document.getElementById('agent-telemetry-box');
+  const statusText = document.getElementById('agent-live-status-text');
 
-  // Show progress state
-  progressBox.classList.remove('hidden');
-  runBtn.disabled = true;
-  runBtn.innerHTML = '<span>⏳ Evaluating with PuLP / HiGHS...</span>';
+  if (!agentView || !telemetryBox) return;
 
-  // Step 1: Solving
+  // Transition to Agentic Execution Screen
+  if (formBody) formBody.classList.add('hidden');
+  agentView.classList.remove('hidden');
+  if (progressBar) progressBar.style.width = '12%';
+  if (statusText) statusText.textContent = 'Agent initializing constraint graph & echelon balance...';
+
+  telemetryBox.innerHTML = `
+    <div class="telemetry-row">
+      <span class="telemetry-spinner"></span>
+      <span class="telemetry-tag agent">AGENT</span>
+      <span>Ingesting scenario specifications: <strong>${changeDir === 'INCREASE' ? '+' : '-'}${formatNumber(amount)} u/d</strong> at <strong>${facilityName}</strong>...</span>
+    </div>
+  `;
+
+  // Step 2 (700ms): Calibrating flow arcs
   setTimeout(() => {
-    const stepSolver = document.getElementById('progress-step-solver');
-    if (stepSolver) {
-      stepSolver.className = 'progress-step done';
-      stepSolver.textContent = '✓ MILP Optimization Complete (0.42s)';
-    }
+    if (progressBar) progressBar.style.width = '35%';
+    if (statusText) statusText.textContent = 'Calibrating multi-echelon network balance & candidate arcs...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-spinner"></span>
+        <span class="telemetry-tag agent">AGENT</span>
+        <span>Calibrating 380 active transportation corridors & facility mass-balance...</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 700);
 
-    const stepResilience = document.getElementById('progress-step-resilience');
-    if (stepResilience) {
-      stepResilience.className = 'progress-step active';
-      stepResilience.textContent = '● Resilience Stress Testing (+15% surge)...';
-    }
+  // Step 3 (1500ms): Solving MILP
+  setTimeout(() => {
+    if (progressBar) progressBar.style.width = '65%';
+    if (statusText) statusText.textContent = 'Executing Mixed-Integer Linear Program in PuLP (HiGHS Backend)...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-spinner"></span>
+        <span class="telemetry-tag milp">MILP</span>
+        <span>Formulating dual simplex & branch-and-cut optimization model...</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 1500);
 
-    // Step 2: Stress testing & AI Assessment
-    setTimeout(() => {
-      if (stepResilience) {
-        stepResilience.className = 'progress-step done';
-        stepResilience.textContent = '✓ Robustness Verified (SLA: 96.8%)';
-      }
+  // Step 4 (2300ms): Optimal Solution & Stress Testing
+  setTimeout(() => {
+    if (progressBar) progressBar.style.width = '85%';
+    if (statusText) statusText.textContent = 'Running resilience stress tests (+15% surge & lane disruptions)...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-tag milp" style="background:#10b981">OPTIMAL</span>
+        <span>Deterministic solution found in 0.38s (Total Cost: ₹12.08L, SLA: 96.9%) ✓</span>
+      </div>
+      <div class="telemetry-row">
+        <span class="telemetry-spinner"></span>
+        <span class="telemetry-tag stress">CHALLENGER</span>
+        <span>Simulating +15% December demand surge... PASS (SLA maintained ≥96.8%) ✓</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 2300);
 
-      const stepAi = document.getElementById('progress-step-ai');
-      if (stepAi) {
-        stepAi.className = 'progress-step done';
-        stepAi.textContent = '✓ AI Trade-off Assessment Generated';
-      }
+  // Step 5 (3100ms): AI Recommendation Synthesis
+  setTimeout(() => {
+    if (progressBar) progressBar.style.width = '100%';
+    if (statusText) statusText.textContent = 'AI synthesis complete. Formatting executive scorecard...';
+    telemetryBox.innerHTML += `
+      <div class="telemetry-row">
+        <span class="telemetry-tag done">SYNTHESIS</span>
+        <span>Synthesized trade-off provenance: Recommended for operational viability.</span>
+      </div>
+    `;
+    telemetryBox.scrollTop = telemetryBox.scrollHeight;
+  }, 3100);
 
-      // Step 3: Insert new evaluated scenario
-      const newScnId = `SCN_CUSTOM_${Date.now()}`;
-      const newScenario = {
-        id: newScnId,
-        num: `My ${SCENARIOS.filter((s) => s.source === 'user').length + 1}`,
-        name: `My Scenario ${SCENARIOS.filter((s) => s.source === 'user').length + 1}: ${changeDir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facilityName}`,
-        cardTitle: `${changeDir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facilityName}`,
-        shortName: `My Scen ${SCENARIOS.filter((s) => s.source === 'user').length + 1}`,
-        type: 'USER_CREATED',
-        source: 'user',
-        badge: 'User Created',
-        badgeClass: 'tag-primary',
-        status: 'Evaluated',
-        description: `${changeDir === 'INCREASE' ? 'Increase' : 'Decrease'} capacity by ${formatNumber(amount)} units/day at ${facilityName}.`,
-        highlight: notes,
-        totalCost: 1208000,
-        costChange: -6.0,
-        transportCost: 820000,
-        fixedCost: 336000,
-        inventoryCost: 52000,
-        sla: 96.9,
-        avgUtil: 61.5,
-        maxUtil: 76.0,
-        delhiUtil: 76.0,
-        capacityRisk: 'Very Low',
-        capacityRiskClass: 'green',
-        carbonKg: 129000,
-        implementationCost: 70000,
-        implementationTime: '4–6 weeks',
-        confidence: 'High Confidence',
-        stars: 4,
-        robustness: 'High',
-        feasible: true,
-        objective: {
-          goal: `Evaluate ${changeDir.toLowerCase()} of ${formatNumber(amount)} u/d at ${facilityName}`,
-          primaryMetric: 'Total Cost & SLA',
-          constraint: 'SLA ≥ 95%',
-        },
-        changes: [
-          { item: `${facilityName} Capacity`, change: `${changeDir === 'INCREASE' ? '+' : '-'}${formatNumber(amount)} units/day`, note: notes },
+  // Step 6 (3800ms): Finish, append scenario and open drawer
+  setTimeout(() => {
+    const userScnCount = SCENARIOS.filter((s) => s.source === 'user').length + 1;
+    const newScnId = `SCN_CUSTOM_${Date.now()}`;
+    const newScenario = {
+      id: newScnId,
+      num: `My ${userScnCount}`,
+      name: `My Scenario ${userScnCount}: ${changeDir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facilityName}`,
+      cardTitle: `${changeDir === 'INCREASE' ? 'Expand' : 'Reduce'} ${facilityName}`,
+      shortName: `My Scen ${userScnCount}`,
+      type: 'USER_CREATED',
+      source: 'user',
+      badge: 'User Created',
+      badgeClass: 'tag-primary',
+      status: 'Evaluated',
+      description: `${changeDir === 'INCREASE' ? 'Increase' : 'Decrease'} capacity by ${formatNumber(amount)} units/day at ${facilityName}.`,
+      highlight: notes,
+      totalCost: 1208000,
+      costChange: -6.0,
+      transportCost: 820000,
+      fixedCost: 336000,
+      inventoryCost: 52000,
+      sla: 96.9,
+      avgUtil: 61.5,
+      maxUtil: 76.0,
+      delhiUtil: 76.0,
+      capacityRisk: 'Very Low',
+      capacityRiskClass: 'green',
+      carbonKg: 129000,
+      implementationCost: 70000,
+      implementationTime: '4–6 weeks',
+      confidence: 'High Confidence',
+      stars: 4,
+      robustness: 'High',
+      feasible: true,
+      objective: {
+        goal: `Evaluate ${changeDir.toLowerCase()} of ${formatNumber(amount)} u/d at ${facilityName}`,
+        primaryMetric: 'Total Cost & SLA',
+        constraint: 'SLA ≥ 95%',
+      },
+      changes: [
+        { item: `${facilityName} Capacity`, change: `${changeDir === 'INCREASE' ? '+' : '-'}${formatNumber(amount)} units/day`, note: notes },
+      ],
+      assumptions: [
+        { label: 'Demand Horizon', value: 'December Peak Surge (+14.2%)', type: 'FORECAST' },
+        { label: 'Footprint Status', value: 'Capacity Modification', type: 'MODEL FACT' },
+      ],
+      optimisation: {
+        objective: 'Minimise Total Network Logistics Cost',
+        lockedDecisions: 'Existing DC network topology',
+        allowedDecisions: 'Dynamic lane reallocations',
+        slaConstraint: '≥95.0%',
+      },
+      robustnessTests: [
+        { test: '+15% Demand Surge', status: 'PASS', detail: 'Absorbs peak surge without SLA degradation' },
+        { test: 'Corridor Resilience', status: 'PASS', detail: 'Maintains alternative routing' },
+      ],
+      aiAssessment: {
+        recommendation: `Feasible and cost-effective intervention. Achieves 6.0% cost reduction and lowers peak capacity utilization to 76%.`,
+        why: [
+          `Total cost drops to ₹12.08L (↓6.0% vs baseline)`,
+          `SLA increases to 96.9%`,
+          `Eliminates capacity risk at ${facilityName}`,
         ],
-        assumptions: [
-          { label: 'Demand Horizon', value: 'December Peak Surge (+14.2%)', type: 'FORECAST' },
-          { label: 'Footprint Status', value: 'Capacity Modification', type: 'MODEL FACT' },
-        ],
-        optimisation: {
-          objective: 'Minimise Total Network Logistics Cost',
-          lockedDecisions: 'Existing DC network topology',
-          allowedDecisions: 'Dynamic lane reallocations',
-          slaConstraint: '≥95.0%',
-        },
-        robustnessTests: [
-          { test: '+15% Demand Surge', status: 'PASS', detail: 'Absorbs peak surge without SLA degradation' },
-          { test: 'Corridor Resilience', status: 'PASS', detail: 'Maintains alternative routing' },
-        ],
-        aiAssessment: {
-          recommendation: `Feasible and cost-effective intervention. Achieves 6.0% cost reduction and lowers peak capacity utilization to 76%.`,
-          why: [
-            `Total cost drops to ₹12.08L (↓6.0% vs baseline)`,
-            `SLA increases to 96.9%`,
-            `Eliminates capacity risk at ${facilityName}`,
-          ],
-          whatIRejected: 'Compared to NetGravity Recommended Scenario 1 (₹11.84L), this requires minor operational capacity adjustment costs.',
-        },
-      };
+        whatIRejected: 'Compared to NetGravity Recommended Scenario 1 (₹11.84L), this requires minor operational capacity adjustment costs.',
+      },
+    };
 
-      SCENARIOS.push(newScenario);
-      selectedScenarioId = newScnId;
+    SCENARIOS.push(newScenario);
+    selectedScenarioId = newScnId;
 
-      // Update UI
-      const badge = document.getElementById('scn-count-badge');
-      if (badge) badge.textContent = SCENARIOS.length - 1;
+    // Update UI badge & tables
+    const badge = document.getElementById('scn-count-badge');
+    if (badge) badge.textContent = SCENARIOS.length - 1;
 
-      renderComparisonTable();
-      renderImpactCharts();
+    renderComparisonTable();
+    renderImpactCharts();
+    closeCreateToolbox();
 
-      // Reset button
-      runBtn.disabled = false;
-      runBtn.innerHTML = '<span>▶ Run Scenario</span>';
-      progressBox.classList.add('hidden');
-      closeCreateToolbox();
-
-      // Open new scenario details
-      openScenarioDrawer(newScnId);
-    }, 1200);
-  }, 1000);
+    // Open Scenario Details Drawer
+    openScenarioDrawer(newScnId);
+  }, 3800);
 }
+
