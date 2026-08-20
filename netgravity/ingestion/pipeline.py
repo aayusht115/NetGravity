@@ -44,12 +44,27 @@ class IngestionResult:
                  network: Optional[CanonicalNetwork] = None,
                  contracts: Optional[List[ContractRule]] = None,
                  signals: Optional[List[ExternalSignal]] = None,
-                 distributor_mappings: Optional[List[DistributorMapping]] = None):
+                 distributor_mappings: Optional[List[DistributorMapping]] = None,
+                 tabular=None):
         self.report = report
         self.network = network
         self.contracts = contracts or []
         self.signals = signals or []
         self.distributor_mappings = distributor_mappings or []
+        #: TabularResult from the unified path, or None. Carries the mappings
+        #: and whatever is awaiting human confirmation — this is what a
+        #: review screen or HTTP endpoint reads.
+        self.tabular = tabular
+
+    @property
+    def review_request(self):
+        """Everything awaiting a human, ready to serialise. Empty if none."""
+        from netgravity.ingestion.review import ReviewRequest
+        if self.tabular is None:
+            return ReviewRequest(run_id=self.report.run_id)
+        request = self.tabular.review_request
+        request.run_id = self.report.run_id
+        return request
 
     @property
     def ok(self) -> bool:
@@ -65,8 +80,22 @@ def run_ingestion(
     include_signals: bool = True,
     include_distributors: bool = True,
     label: str = "",
+    unified: bool = False,
+    auto_confirm: bool = False,
 ) -> IngestionResult:
-    """Execute a full ingestion run against a source directory."""
+    """
+    Execute a full ingestion run against a source directory.
+
+    `unified` selects the rebuilt tabular path (tabular.py): any CSV/Excel,
+    any filename, every sheet, classified from its content and routed by what
+    it turns out to be rather than which folder it sat in.
+
+    It is OPT-IN rather than the default. The two paths have been verified to
+    produce a byte-identical network on the sample data — same data_version
+    hash — but the unified path holds optimiser-bound mappings until they are
+    confirmed, which changes the shape of a first run. `auto_confirm` settles
+    those without a human for unattended runs, recorded as machine-confirmed.
+    """
     cfg = config or load_config()
     source = Path(source)
     storage = get_storage(cfg)
@@ -81,11 +110,38 @@ def run_ingestion(
         report.extras["error"] = f"source directory not found: {source}"
         return IngestionResult(report)
 
-    # --- 1. Structured path (no AI) --------------------------------------
+    # --- 1. Tabular path ---------------------------------------------------
     from netgravity.ingestion.adapters import structured
 
-    src = structured.ingest_directory(source)
-    report.files.extend(src.results)
+    tabular_outcome = None
+    if unified:
+        from netgravity.ingestion import tabular
+
+        tabular_outcome = tabular.ingest_tabular(
+            source, cfg, storage, auto_confirm=auto_confirm)
+        report.files.extend(tabular_outcome.results)
+
+        parsed = tabular.parse_into_records(tabular_outcome)
+        report.files.extend(parsed["results"])
+
+        src = structured.StructuredSource()
+        src.facilities = parsed["facilities"]
+        src.products = parsed["products"]
+        src.demands = parsed["demands"]
+        src.lanes = parsed["lanes"]
+
+        if save and tabular_outcome.staging_rows:
+            tabular.save_staging(tabular_outcome, storage, source.name)
+
+        pending = tabular_outcome.review_request
+        if not pending.is_empty:
+            report.extras["Awaiting review"] = pending.summary
+        if tabular_outcome.held:
+            report.extras["Held (unidentified)"] = ", ".join(
+                m.origin_label for m in tabular_outcome.held)
+    else:
+        src = structured.ingest_directory(source)
+        report.files.extend(src.results)
 
     # --- 2. Contracts (AI or stub) ---------------------------------------
     distributor_mappings: List[DistributorMapping] = []
@@ -105,7 +161,10 @@ def run_ingestion(
     # straight into the network: distributor data is transactional shipment
     # history, not network structure. It becomes forecasting input (Layer 3),
     # so ingesting it must never silently alter the Digital Twin.
-    if include_distributors:
+    # The unified path already read every tabular file, distributor folder
+    # included, and classified them by content. Running the legacy
+    # distributor adapter as well would ingest the same rows twice.
+    if include_distributors and not unified:
         distributor_dir = source / "distributors"
         if distributor_dir.exists():
             from netgravity.ingestion.adapters import distributor as dist_adapter
@@ -151,7 +210,8 @@ def run_ingestion(
             f"({len(src.facilities)} facilities, {len(src.products)} products)"
         )
         return IngestionResult(report, contracts=contracts, signals=signals,
-                               distributor_mappings=distributor_mappings)
+                               distributor_mappings=distributor_mappings,
+                               tabular=tabular_outcome)
 
     try:
         network, build_issues = build_network(
@@ -166,7 +226,8 @@ def run_ingestion(
     except Exception as exc:
         report.extras["error"] = f"network assembly failed: {exc}"
         return IngestionResult(report, contracts=contracts, signals=signals,
-                               distributor_mappings=distributor_mappings)
+                               distributor_mappings=distributor_mappings,
+                               tabular=tabular_outcome)
 
     if build_issues and report.files:
         report.files[0].issues.extend(build_issues)
@@ -197,4 +258,5 @@ def run_ingestion(
 
     return IngestionResult(report, network=network, contracts=contracts,
                            signals=signals,
-                           distributor_mappings=distributor_mappings)
+                           distributor_mappings=distributor_mappings,
+                           tabular=tabular_outcome)

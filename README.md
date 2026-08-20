@@ -2,7 +2,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![MILP Core](https://img.shields.io/badge/Solver-PuLP%20%7C%20HiGHS%20%7C%20CBC-purple.svg)](https://github.com/coin-or/pulp)
-[![Tests](https://img.shields.io/badge/Automated%20Tests-348%20Passing-brightgreen.svg)](netgravity/tests/)
+[![Tests](https://img.shields.io/badge/Automated%20Tests-535%20Passing-brightgreen.svg)](netgravity/tests/)
 [![Ingestion](https://img.shields.io/badge/Ingestion-Structured%20%7C%20Excel%20%7C%20PDF%20%7C%20Signals-teal.svg)](#4-data-ingestion-pipeline-layer-1)
 [![Architecture](https://img.shields.io/badge/Architecture-Deterministic%20MILP%20%2B%20AI%20Orchestrator-orange.svg)](#system-architecture)
 
@@ -153,14 +153,47 @@ Turns messy real-world inputs into one validated `CanonicalNetwork` — the sing
 data contract the MILP engine consumes. Nothing reaches the solver without
 passing through here.
 
-### Four Source Paths
+### Source Paths
 
 | Path | Input | AI? | What it produces |
 |---|---|---|---|
-| **Structured** | ERP / WMS / TMS exports in a known format | No — pure deterministic parsing | Facility, market, product, demand, lane records |
-| **Distributor** | Excel files, a different layout from every distributor | Yes — column mapping | The same records, re-mapped onto canonical fields |
-| **Contracts** | Freight contracts & rate-card PDFs | Yes — clause extraction | Base rates + hidden surcharge rules |
-| **Signals** | Dated external news / macro / weather records | Guardrail scoring | Bucketed, scored signals for forecast & scenario use |
+| **Tabular** (`--unified`) | Any CSV/Excel, any filename, every sheet — uploaded, exported, or from a future ERP/WMS connector | Yes — classification + column mapping, cross-checked against a static alias table | Facility, market, product, demand, lane records, or staged transaction history |
+| **Contracts** | Freight contracts & rate-card PDFs | Yes — clause extraction, with document escalation when text cannot be trusted | Base rates + hidden surcharge rules |
+| **Signals** | Dated external news / macro / weather records | Guardrail scoring (no model call today) | Bucketed, scored signals for forecast & scenario use |
+
+The tabular path replaces two earlier readers that were selected by which
+folder a file sat in — an assumption that broke on real data, since a
+distributor can send a facility list and a client can send shipment history.
+It now runs **discover → classify → map → review → route**, deciding what a
+file is from its ROW DATA and routing on that, not on its path.
+
+Both paths have been verified to produce a byte-identical network on the
+sample data (same content-addressed `data_version`), so `--unified` is opt-in
+rather than default while it settles. See §10–§12 of
+[`docs/ingestion_business_rules.md`](docs/ingestion_business_rules.md).
+
+**ERP / WMS is a documented stub, not a build.** `ingestion/sources/erp.py`
+implements the same `DataSource` contract every other source does and raises
+with a specific checklist of what a real connector needs. Everything
+downstream is written against `RecordSet`, so adding one later is additive.
+
+### Nothing Unconfirmed Reaches the Optimizer
+
+Mappings for optimizer-bound data (facility, market, product, demand, lane)
+are held until a human confirms them once — a wrong mapping there produces an
+authoritative-looking wrong recommendation. Staging-bound data (shipment logs,
+historical volume) uses a confidence bar instead.
+
+Confirmations become **memory**, scoped by evidence rather than by a
+hardcoded rule: exact for the sender who confirmed it, generalised once two
+independent senders agree, and surfaced as an explicit conflict when senders
+disagree — which becomes a specific question ("this has meant X for vendor_a
+and Y for vendor_d") instead of a bare low-confidence flag.
+
+`ingestion/review.py` exposes this as plain dicts in and out
+(`build_request()` / `apply()`), ready for an ingestion console to call over
+HTTP. No UI is built; the CLI (`--review`) uses the identical pair, so the two
+cannot drift.
 
 **Core principle — logic calculates, AI narrates.** The AI proposes mappings and
 extracts clauses; every number that reaches the optimizer is computed by
@@ -171,7 +204,7 @@ arithmetic, never model output.
 
 Both run; they answer different questions and neither replaces the other.
 
-- **Row-level** (`ingestion/validation/`, codes `R-001`–`R-020`) — *is this row
+- **Row-level** (`ingestion/validation/`, codes `R-001`–`R-026`) — *is this row
   even parseable?* Runs before assembly. Unambiguous unit errors are **repaired
   loudly** rather than rejected: dropping a row silently deletes real demand and
   the solver then returns a confident answer to the wrong problem.
@@ -333,7 +366,7 @@ credentials required to evaluate the system.
 # Run 1-command verification (< 0.5 seconds)
 python smoke_test.py
 
-# Run complete automated test suite (348 tests: engine + ingestion)
+# Run complete automated test suite (535 tests: engine + ingestion)
 pytest
 
 # Engine only / ingestion only

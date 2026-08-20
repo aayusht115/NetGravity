@@ -56,6 +56,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--confirm-mapping", metavar="DISTRIBUTOR_ID",
                    help="approve a distributor's cached column mapping; "
                         "later files from that distributor then skip the AI call")
+    p.add_argument("--unified", action="store_true",
+                   help="use the rebuilt tabular path: any CSV/Excel, any "
+                        "filename, every sheet, classified from content and "
+                        "routed by what it is rather than which folder it is in")
+    p.add_argument("--auto-confirm", action="store_true",
+                   help="with --unified, settle pending mappings without a "
+                        "human (unattended runs). Recorded as machine-confirmed, "
+                        "never as human-confirmed")
+    p.add_argument("--review", action="store_true",
+                   help="with --unified, print what is awaiting confirmation "
+                        "and the question being asked for each")
     return p
 
 
@@ -87,6 +98,8 @@ def main(argv=None) -> int:
             include_signals=not args.no_signals,
             include_distributors=not args.no_distributors,
             label=args.label,
+            unified=args.unified,
+            auto_confirm=args.auto_confirm,
         )
     except LLMCallError as exc:
         # Strict mode chose to stop rather than quietly use canned data.
@@ -102,6 +115,9 @@ def main(argv=None) -> int:
         return 1
 
     print(render(result.report, verbose=args.verbose))
+
+    if args.review:
+        _print_review(result)
 
     if args.explain:
         _print_explain(result)
@@ -192,6 +208,43 @@ def _confirm_mapping(cfg, distributor_id: str) -> int:
           f"mapping with no AI call.")
     print()
     return 0
+
+
+def _print_review(result) -> None:
+    """
+    Show what is awaiting confirmation, and the question being asked.
+
+    Identical data to what a review screen would render — build_request() is
+    the single source for both, so the CLI and a future UI cannot drift.
+    """
+    request = result.review_request
+    print("Awaiting confirmation")
+    print(RULE)
+    if request.is_empty:
+        print("  Nothing needs review.")
+        print()
+        return
+
+    print(f"  {request.summary}")
+    for item in request.items:
+        print()
+        print(f"  [{item.item_id}]")
+        print(f"    {item.question}")
+        for reason in item.reasons:
+            print(f"      why: {reason}")
+        if item.context.get("sample_values"):
+            print(f"      values seen: "
+                  f"{', '.join(item.context['sample_values'][:5])}")
+        for option in item.options:
+            mark = " <- suggested" if option.recommended else ""
+            support = f"  ({option.support} sender(s))" if option.support else ""
+            print(f"      - {option.value}{support}{mark}")
+            if option.rationale:
+                print(f"          {option.rationale}")
+    print()
+    print("  Confirm with the review API (review.apply), or re-run with "
+          "--auto-confirm for an unattended run.")
+    print()
 
 
 def _print_explain(result) -> None:

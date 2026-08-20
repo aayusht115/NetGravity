@@ -60,6 +60,10 @@ So the rule is: **reject only what cannot be interpreted at all; repair anything
 | R-021 | Demand exceeds capacity by roughly 30× / 12× / 7× | ERROR | Almost certainly a period mismatch, not a real shortfall — solving would report a **false INFEASIBLE** |
 | R-021 | Demand exceeds capacity by some other ratio | WARNING | May be a genuine shortfall; worth confirming the periods match |
 | R-022 | `Capacity_Per_Trip` without `Transit_Frequency` | WARNING | Lane left uncapacitated — a wrong cap invents a constraint, no cap merely loses one |
+| R-023 | PDF text could not be trusted, so the document was sent to the model to read | INFO | The hybrid escalation fired — see §10 |
+| R-024 | A file or sheet could not be read at all | WARNING | Reported and skipped; the rest of the run continues |
+| R-025 | A column mapping is awaiting human confirmation | INFO | The column is NOT applied until confirmed — see §11 |
+| R-026 | A record set could not be classified | WARNING | Held for a human to label rather than routed on a guess |
 
 ### Time periods — everything lands on MONTH
 
@@ -302,12 +306,150 @@ When the workbook changes, update `field_aliases.py` — not the parsers.
 | Mapping confidence rules | `netgravity/ingestion/schemas/mapping.py` |
 | Versioning | `netgravity/ingestion/snapshot.py` |
 | Client field-name aliases | `netgravity/ingestion/field_aliases.py` |
+| PDF text-quality thresholds | `netgravity/ingestion/pdf_quality.py` |
+| Content type → destination routing | `netgravity/ingestion/schemas/content.py` |
+| Classification confidence bars | `netgravity/ingestion/ai/classifier.py` |
+| Mapping confidence + confirmation bars | `netgravity/ingestion/ai/field_mapper.py` |
+| Memory generalisation threshold | `netgravity/ingestion/memory/field_memory.py` |
+| Document shape similarity threshold | `netgravity/ingestion/memory/document_memory.py` |
 
 Every rule above is covered by a test in `netgravity/ingestion/tests/`. Test names read as specifications — `pytest netgravity/ingestion/tests --collect-only -q` lists them.
 
 ---
 
-## 10. Open items
+## 10. PDF reading — when text is trusted, and when it is not
+
+`pypdf` runs first because it is free and instant. But it fails in two ways,
+and only one is obvious.
+
+**Loud failure** — a scan has no text layer, extraction returns nothing. Easy
+to detect.
+
+**Quiet failure** — extraction returns text, and the text is wrong. A broken
+font encoding produces symbol soup; some generators emit table cells out of
+reading order. Nothing downstream can tell this from a real contract, so the
+model is handed garbage and dutifully "extracts" rates that were never in the
+document. This is the dangerous one, because the output is confident and
+wrong rather than an error.
+
+Three checks decide whether extracted text is trustworthy. If ANY trips, the
+document itself is sent to the model instead (R-023).
+
+| Check | Threshold | Signature it catches |
+|---|---|---|
+| Characters per page | `MIN_CHARS_PER_PAGE = 100` | A text layer that exists but is hollow — typical of a scan carrying only a stamped header |
+| Real-word ratio | `MIN_WORD_RATIO = 0.60`, only applied above `MIN_TOKENS_FOR_RATIO = 20` tokens | Mojibake and broken encodings. Numbers count as real content — a pin-code annexure is almost entirely digits |
+| Repeated character run | `MAX_SINGLE_CHAR_RUN = 30`, **alphanumerics only** | A corrupt text layer emitting filler |
+
+The alphanumeric restriction on the third check is not cosmetic. An earlier
+version matched any repeated character and flagged both shipped sample
+contracts as corrupt, because each opens with a 64-character `=` rule.
+Punctuation runs and space padding are ordinary document decoration.
+
+**Tie-break rule:** every threshold is set so an ambiguous case ESCALATES.
+Escalating a clean PDF costs a fraction of a cent. Accepting a garbled one
+puts invented figures into a cost model. Those are not symmetric risks.
+
+All four constants live in `netgravity/ingestion/pdf_quality.py` and are the
+entire policy — changing strictness never requires touching adapter logic.
+
+**Caveat, recorded honestly:** native PDF input is not implemented
+identically across providers, and several OpenAI-compatible ones (free-tier
+OpenRouter, Groq, Cerebras) do not support it for all models. A provider
+refusing the document is handled as an ordinary labelled failure, and the
+file is rejected rather than filled with stub figures. **This escalation path
+has not yet been exercised against a live provider.**
+
+---
+
+## 11. What a column means — three opinions, and what memory keeps
+
+Column mapping combines three independent opinions rather than trusting one.
+
+| Opinion | Sees context? | Cost | Repeatable? |
+|---|---|---|---|
+| **Memory** — what a human already confirmed | n/a | free | yes |
+| **Model** — reads columns AND sample rows | yes | a model call | approximately |
+| **Dictionary** — the static alias table | no | free | exactly |
+
+The dictionary is not there for its answers. It is there for its
+**disagreements**. The dangerous failure is not the ambiguous column, which
+gets flagged either way — it is the column that maps confidently and wrongly
+because the header looked obvious. A model's own confidence cannot catch
+that; a model can be 95% sure and wrong. A second method with different blind
+spots can, because divergence between two independent approaches is evidence
+in itself.
+
+### When a mapping applies without asking
+
+| Situation | Applied? |
+|---|---|
+| Memory has an exact or generalised confirmation | yes |
+| Model and dictionary independently agree, staging-bound data | yes |
+| Model and dictionary disagree | no — asked, naming both readings |
+| First sighting, no dictionary entry | no — asked once, then remembered |
+| **Any** optimiser-bound column, however confident | no — confirmed once, then remembered |
+
+Optimiser-bound content (facility, market, product, demand, lane) gets the
+stricter bar because a wrong mapping there produces an authoritative-looking
+wrong recommendation. Staging-bound content (shipment logs, historical
+volume) costs a bad forecast. Different risk, different bar.
+
+### How far a confirmation travels
+
+Nothing is hardcoded as "always sender-specific" or "always universal".
+Scope is resolved from evidence:
+
+| Scope | Condition | Asked again? |
+|---|---|---|
+| `exact` | this sender confirmed this column, in this content type | no |
+| `generalised` | ≥ `GENERALISE_AFTER_SOURCES` (2) other senders independently agreed | no |
+| `suggested` | exactly one other sender confirmed it — not yet a pattern | yes |
+| `conflict` | senders confirmed DIFFERENT meanings | yes, naming who said what |
+| `none` | never seen | yes |
+
+**Content type is always part of the key.** A confirmation on a shipment log
+says nothing about the same column on a product sheet — that is the guard
+against `Qty` meaning units-shipped in one file and units-returned in another.
+
+A `conflict` is the most valuable output: rather than picking the majority
+answer, the disagreement and its evidence are handed to the review layer,
+which turns it into a specific question — *"Qty has meant quantity (confirmed
+by vendor_a, vendor_b) and returns_volume (confirmed by vendor_d) before.
+Which does it mean in this file?"* — instead of a bare low-confidence flag.
+
+### Documents (PDFs) remember shape, not columns
+
+A contract has no columns and no short repeating token like `Qty` to key on —
+one vendor writes "a fuel surcharge of Rs. 2.00 per kg", another phrases the
+identical concept completely differently. So document memory matches on
+**wording shape**, dropping digits so a renewal with new rates still
+recognises its template (`SIMILARITY_THRESHOLD = 0.75`). It is deliberately
+NOT keyed on vendor: several vendors may share a broker's template, and one
+vendor may use different templates per service line.
+
+---
+
+## 12. Routing — decided by content, never by folder
+
+Ingestion used to infer meaning from the path: anything under `distributors/`
+was shipment data, anything else was network master data. A distributor can
+send a facility list and a client can send shipment history, so the folder was
+never reliable evidence.
+
+| Content type | Destination | Why |
+|---|---|---|
+| FACILITY, MARKET, PRODUCT, DEMAND, LANE | `network` | Becomes the CanonicalNetwork the MILP solves against |
+| SHIPMENT_LOG, HISTORICAL_VOLUME | `staging` | Forecasting input. Loading it into the network would silently alter the Digital Twin |
+| UNKNOWN | `hold` | Held for a human to label rather than guessed at |
+
+Classification reads the ROW DATA, not just the headers, because the
+distinguishing pattern only exists in the rows: a master list has one row per
+distinct entity, a transaction log repeats the same entities over time.
+
+---
+
+## 13. Open items
 
 | Item | Owner | Blocking? |
 |---|---|---|
