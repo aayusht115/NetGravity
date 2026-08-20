@@ -33,14 +33,22 @@ class _Choice:
         self.finish_reason = finish_reason
 
 
+class _Usage:
+    def __init__(self, prompt_tokens, completion_tokens, total_tokens):
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+        self.total_tokens = total_tokens
+
+
 class _Resp:
-    def __init__(self, content, finish_reason="stop"):
+    def __init__(self, content, finish_reason="stop", usage=None):
         self.choices = [_Choice(content, finish_reason)]
+        self.usage = usage
 
 
 class _FakeCompletions:
     def __init__(self, content='{"ok": true}', finish_reason="stop",
-                 fail_with=None, record=None):
+                 fail_with=None, record=None, usage=None):
         self._content = content
         self._finish = finish_reason
         # A single exception is consumed once (existing tests rely on this).
@@ -49,12 +57,13 @@ class _FakeCompletions:
         self._fail_queue = list(fail_with) if isinstance(fail_with, list) \
             else ([fail_with] if fail_with is not None else [])
         self.record = record if record is not None else []
+        self._usage = usage
 
     def create(self, **kwargs):
         self.record.append(kwargs)
         if self._fail_queue:
             raise self._fail_queue.pop(0)
-        return _Resp(self._content, self._finish)
+        return _Resp(self._content, self._finish, usage=self._usage)
 
 
 class _FakeOpenAI:
@@ -140,6 +149,41 @@ def test_openai_call_requests_json_mode():
     sent = completions.record[0]
     assert sent["response_format"] == {"type": "json_object"}
     assert sent["model"] == "gpt-4o-mini"
+
+
+def test_token_usage_is_captured_and_surfaced_in_the_report():
+    """
+    The provider's own usage figures (not an estimate) end up on
+    LLMResponse.tokens AND get folded into .notes, which every adapter
+    already prints in the ingestion report — so cost is visible without a
+    separate step or a trip to the provider's dashboard.
+    """
+    completions = _FakeCompletions(
+        '{"ok": true}', usage=_Usage(prompt_tokens=1450, completion_tokens=73,
+                                     total_tokens=1523),
+    )
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(completions)
+    response = client.extract_json(task="probe", prompt="p", stub_key="contract")
+
+    assert response.tokens == {
+        "prompt_tokens": 1450, "completion_tokens": 73, "total_tokens": 1523,
+    }
+    assert "1523 tokens" in response.notes
+    assert "1450 in" in response.notes
+    assert "73 out" in response.notes
+
+
+def test_no_usage_on_response_means_tokens_is_none_not_a_crash():
+    """Some OpenAI-compatible providers may omit usage entirely — must
+    degrade gracefully, not KeyError/AttributeError."""
+    completions = _FakeCompletions('{"ok": true}', usage=None)
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(completions)
+    response = client.extract_json(task="probe", prompt="p", stub_key="contract")
+
+    assert response.tokens is None
+    assert "tokens" not in response.notes
 
 
 def test_falls_back_to_max_tokens_when_model_rejects_the_new_name():

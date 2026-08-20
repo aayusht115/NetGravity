@@ -68,6 +68,11 @@ class LLMResponse:
     # "deliberately running without a key" from "tried to call the API and
     # could not" — the second is a problem, the first is not.
     failed: bool = False
+    # Token usage the provider reported for this call: prompt_tokens,
+    # completion_tokens, total_tokens. None for stub responses, or if the
+    # provider's response didn't include usage. This is what makes cost
+    # visible per call instead of only on the provider's own dashboard.
+    tokens: Optional[Dict[str, int]] = None
 
     @property
     def provenance(self) -> str:
@@ -80,6 +85,12 @@ class LLMClient:
     def __init__(self, config: IngestionConfig):
         self.config = config
         self._sdk = None
+        # Set by _call_openai/_call_anthropic as a side effect of the most
+        # recent live call. Read by extract_json() right after _call_live()
+        # returns. Not part of the public API — a transient handoff, since
+        # _call_live() itself only returns text (changing that return shape
+        # would touch every test that calls it directly).
+        self._last_usage: Optional[Dict[str, int]] = None
 
     @property
     def stub_mode(self) -> bool:
@@ -106,12 +117,22 @@ class LLMClient:
             )
 
         try:
+            self._last_usage = None
             raw = self._call_live(prompt, max_tokens=max_tokens)
+            usage = self._last_usage
+            tokens_note = ""
+            if usage:
+                tokens_note = (
+                    f" [{usage.get('total_tokens', '?')} tokens: "
+                    f"{usage.get('prompt_tokens', '?')} in + "
+                    f"{usage.get('completion_tokens', '?')} out]"
+                )
             return LLMResponse(
                 data=_parse_json(raw),
                 stubbed=False,
                 model=f"{self.config.llm_provider}:{self.config.resolved_model}",
-                notes=f"{task}: live extraction",
+                notes=f"{task}: live extraction{tokens_note}",
+                tokens=usage,
             )
         except Exception as exc:
             detail = f"{type(exc).__name__}: {exc}"
@@ -226,6 +247,13 @@ class LLMClient:
             )
 
         resp = self._create_chat_completion(prompt, max_tokens)
+        usage = getattr(resp, "usage", None)
+        if usage is not None:
+            self._last_usage = {
+                "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                "completion_tokens": getattr(usage, "completion_tokens", None),
+                "total_tokens": getattr(usage, "total_tokens", None),
+            }
         choice = resp.choices[0]
         # A truncated response is invalid JSON and would fail parsing with a
         # confusing error. Name the real cause instead.
@@ -258,6 +286,16 @@ class LLMClient:
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": prompt}],
         )
+        usage = getattr(message, "usage", None)
+        if usage is not None:
+            input_tokens = getattr(usage, "input_tokens", None)
+            output_tokens = getattr(usage, "output_tokens", None)
+            self._last_usage = {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
+                "total_tokens": (input_tokens + output_tokens)
+                if input_tokens is not None and output_tokens is not None else None,
+            }
         if getattr(message, "stop_reason", None) == "max_tokens":
             raise ValueError(
                 f"response hit the {max_tokens}-token limit and was truncated; "
