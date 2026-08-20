@@ -11,7 +11,7 @@ import { PLANTS, DCS, MARKETS, LANES, DATA_QUALITY, SCHEMA_MAPPING,
          PERIODS, FACILITY_KPIS, HOME_INSIGHTS, HOME_ACTION_ITEMS,
          formatCurrency, formatNumber, getUtilColor, getUtilLabel,
          getFacilityById, getInsightsForFacility, getKpisForFacility } from './data.js';
-import { initMap, setNetworkState } from './map.js';
+import { initMap, setNetworkState, invalidateMapSize } from './map.js';
 import { initTwin3D, setTwin3DState, resizeTwin3D, resumeTwin3D } from './twin3d.js';
 import { renderForecastChart,
          renderFacilityThroughputChart, renderFacilityCostBreakdownChart, renderFacilityLaneFlowsChart } from './charts.js';
@@ -128,6 +128,7 @@ export function navigateToTab(tab) {
     setTimeout(() => {
       initScenarios();
       state.chartsInitialised['scenarios'] = true;
+      invalidateMapSize('scenario-leaflet-map');
     }, 50);
   }
   if (tab === 'recommend') {

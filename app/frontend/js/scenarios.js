@@ -11,20 +11,18 @@
 
 import {
   SCENARIOS,
-  FACILITIES,
   formatCurrency,
   formatNumber,
   SCENARIO_COMPARISON_INSIGHTS,
   SCENARIO_COMPARISON_ACTIONS,
 } from './data.js';
+import { initMap, renderScenarioDigitalTwin, invalidateMapSize } from './map.js';
 
 // ─── State ──────────────────────────────────────────────────
 let activeView = 'my-scenarios'; // 'my-scenarios' | 'comparison'
 let selectedScenarioId = 'SCN_REBALANCE';
-let mapMode = 'baseline'; // 'baseline' | 'scenario'
+let mapMode = 'scenario'; // 'baseline' | 'scenario'
 let activeMetricView = 'key';
-let leafletScenarioMap = null;
-let leafletLayerGroup = null;
 
 // Metric definitions with formatters, provenance, and drilldown data
 const ALL_METRIC_DEFS = {
@@ -143,10 +141,18 @@ export function initScenarios() {
   renderMultiScenarioActions();
   wireScenarioEvents();
 
-  // Initialize visual context map
+  // Initialize visual context 2D digital twin map
   setTimeout(() => {
-    initScenarioLeafletMap();
-  }, 100);
+    initMap('scenario-leaflet-map', {
+      zoom: 4.2,
+      center: [22.5, 79.5],
+      isCompact: true,
+      initialScenario: selectedScenarioId,
+      mode: mapMode,
+    });
+    renderScenarioDigitalTwin('scenario-leaflet-map', selectedScenarioId, mapMode);
+    invalidateMapSize('scenario-leaflet-map');
+  }, 60);
 }
 
 // ─── Switch Sub-Nav View ────────────────────────────────────
@@ -163,9 +169,8 @@ export function switchScenarioView(viewName) {
     if (btnComp) btnComp.classList.remove('active');
     if (paneMy) paneMy.classList.remove('hidden');
     if (paneComp) paneComp.classList.add('hidden');
-    if (leafletScenarioMap) {
-      setTimeout(() => leafletScenarioMap.invalidateSize(), 50);
-    }
+    invalidateMapSize('scenario-leaflet-map');
+    renderScenarioDigitalTwin('scenario-leaflet-map', selectedScenarioId, mapMode);
   } else {
     if (btnMy) btnMy.classList.remove('active');
     if (btnComp) btnComp.classList.add('active');
@@ -258,7 +263,7 @@ export function selectScenario(scenarioId) {
   // Re-render single scenario table
   renderSingleScenarioTable();
 
-  // Update map button text & layer
+  // Update map button text & visual context 2D digital twin
   const btnScenario = document.getElementById('btn-map-scenario');
   const scnObj = SCENARIOS.find((s) => s.id === scenarioId);
   if (btnScenario && scnObj) {
@@ -437,102 +442,10 @@ function renderSingleScenarioActions() {
   });
 }
 
-// ─── Leaflet Visual Context Map ─────────────────────────────
-function initScenarioLeafletMap() {
-  const mapEl = document.getElementById('scenario-leaflet-map');
-  if (!mapEl || leafletScenarioMap) return;
-
-  leafletScenarioMap = L.map('scenario-leaflet-map', {
-    center: [22.5, 79.5],
-    zoom: 4.2,
-    zoomControl: true,
-    attributionControl: false,
-    scrollWheelZoom: false,
-  });
-
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd',
-    maxZoom: 18,
-  }).addTo(leafletScenarioMap);
-
-  leafletLayerGroup = L.layerGroup().addTo(leafletScenarioMap);
-  updateScenarioMapLayers();
-}
-
+// ─── Leaflet Visual Context (2D Digital Twin) ───────────────
 function updateScenarioMapLayers() {
-  if (!leafletLayerGroup || !leafletScenarioMap) return;
-  leafletLayerGroup.clearLayers();
-
-  const isScenario = mapMode === 'scenario';
-
-  // Draw facilities as circle markers
-  FACILITIES.forEach((fac) => {
-    const isDelhi = fac.id === 'DC_DELHI';
-
-    let color = '#a855f7'; // Purple Plant
-    if (fac.type === 'DC') {
-      if (isScenario) {
-        color = '#22c55e'; // Green under scenario
-      } else {
-        color = isDelhi ? '#ef4444' : '#f59e0b'; // Red Delhi in baseline
-      }
-    }
-
-    const radius = fac.type === 'Plant' ? 7 : 8;
-    const marker = L.circleMarker([fac.lat, fac.lng], {
-      radius: radius,
-      color: '#ffffff',
-      weight: 2,
-      fillColor: color,
-      fillOpacity: 0.95,
-    }).addTo(leafletLayerGroup);
-
-    marker.bindPopup(`<strong>${fac.name}</strong><br>Type: ${fac.type}<br>Capacity: ${fac.capacity} u/d`);
-  });
-
-  // Draw Flow Lines
-  const flows = [
-    { from: [31.2, 76.8], to: [28.6, 77.2], vol: isScenario ? '2,800' : '4,000', label: 'Baddi → Delhi NCR', changed: isScenario },
-    { from: [31.2, 76.8], to: [22.5, 88.3], vol: isScenario ? '2,200' : '1,400', label: 'Baddi → Kolkata', changed: isScenario },
-    { from: [18.5, 73.8], to: [19.0, 72.8], vol: '3,200', label: 'Pune → Mumbai', changed: false },
-    { from: [13.0, 80.2], to: [12.9, 77.5], vol: '2,500', label: 'Chennai → Bengaluru', changed: false },
-  ];
-
-  flows.forEach((flow) => {
-    const polyline = L.polyline([flow.from, flow.to], {
-      color: flow.changed ? '#6B2FA0' : '#94a3b8',
-      weight: flow.changed ? 3.5 : 2,
-      dashArray: flow.changed ? '6, 4' : null,
-      opacity: 0.85,
-    }).addTo(leafletLayerGroup);
-
-    polyline.bindPopup(`<strong>${flow.label}</strong><br>Flow: ${flow.vol} units/day ${flow.changed ? '(Rebalanced)' : ''}`);
-  });
-
-  // Legend Control in bottom right
-  const legendHtml = `
-    <div style="background:rgba(255,255,255,0.92);padding:6px 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:10.5px;line-height:1.4">
-      <div style="font-weight:700;margin-bottom:2px">Network Legend</div>
-      <div style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#a855f7;display:inline-block"></span> Plant</div>
-      <div style="display:flex;align-items:center;gap:5px"><span style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block"></span> Distribution Centre</div>
-      <div style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:2px;background:#6B2FA0;display:inline-block"></span> ${isScenario ? 'Optimised Corridor Flow' : 'Observed Base Flow'}</div>
-    </div>
-  `;
-
-  if (!leafletScenarioMap._legendControl) {
-    const legendControl = L.control({ position: 'bottomright' });
-    legendControl.onAdd = function () {
-      const div = L.DomUtil.create('div', 'info legend');
-      div.id = 'scn-map-legend-box';
-      div.innerHTML = legendHtml;
-      return div;
-    };
-    legendControl.addTo(leafletScenarioMap);
-    leafletScenarioMap._legendControl = legendControl;
-  } else {
-    const box = document.getElementById('scn-map-legend-box');
-    if (box) box.innerHTML = legendHtml;
-  }
+  renderScenarioDigitalTwin('scenario-leaflet-map', selectedScenarioId, mapMode);
+  invalidateMapSize('scenario-leaflet-map');
 }
 
 // ─── Render Multi-Scenario Trade-off Analysis Table ─────────

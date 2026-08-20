@@ -1,45 +1,69 @@
 /**
- * NetGravity — Leaflet India Map (Digital Twin)
- * ===============================================
- * Interactive map with three network states:
- *   Actual | Optimised Base | Recommended
- * Clicking a facility opens the detail panel.
+ * NetGravity — Leaflet India Map (Digital Twin Engine)
+ * =====================================================
+ * Central interactive 2D Digital Twin renderer supporting:
+ *   - Digital Twin Page (Actual | Optimised Base | Recommended)
+ *   - Scenario Planning Visual Context (Visualizing Digital Twin per Scenario)
+ * Clicking a facility opens the facility details.
  */
 
 /* global L */
 
-import { PLANTS, DCS, MARKETS, LANES, SCENARIOS,
-         getUtilColor, formatNumber } from './data.js';
+import {
+  PLANTS,
+  DCS,
+  MARKETS,
+  LANES,
+  SCENARIOS,
+  getUtilColor,
+  formatNumber,
+} from './data.js';
 
 // ─── State ──────────────────────────────────────────────────
-const maps = {};           // containerId → L.Map
-const layerGroups = {};    // containerId → { nodes, flows }
+const maps = {}; // containerId → L.Map
+const layerGroups = {}; // containerId → { nodes, flows }
 let currentState = 'actual';
 
-// ─── Styles ─────────────────────────────────────────────────
+// ─── Styles & Color Tokens ──────────────────────────────────
 const COLORS = {
-  plant:  '#6B2FA0',
-  dc:     '#f59e0b',
+  plant: '#6B2FA0',
+  dc: '#f59e0b',
   market: '#22c55e',
-  flow:   { actual: '#94a3b8', optimised: '#6B2FA0', recommended: '#16a34a' },
+  flow: {
+    actual: '#94a3b8',
+    optimised: '#6B2FA0',
+    recommended: '#16a34a',
+    scenario: '#6B2FA0',
+    changed: '#16a34a',
+  },
 };
 
-// ─── Public API ─────────────────────────────────────────────
-export function initMap(containerId) {
+// ─── Public API: Init Map ───────────────────────────────────
+export function initMap(containerId, options = {}) {
+  const container = document.getElementById(containerId);
+  if (!container) return null;
+
   if (maps[containerId]) {
-    maps[containerId].invalidateSize();
-    return;
+    setTimeout(() => {
+      maps[containerId].invalidateSize();
+    }, 50);
+    return maps[containerId];
   }
 
+  const zoom = options.zoom || (options.isCompact ? 4.2 : 5);
+  const center = options.center || [22.5, 79.5];
+  const scrollWheelZoom = options.scrollWheelZoom !== undefined ? options.scrollWheelZoom : !options.isCompact;
+
   const map = L.map(containerId, {
-    center: [22.5, 80.0],
-    zoom: 5,
+    center: center,
+    zoom: zoom,
     zoomControl: true,
-    scrollWheelZoom: true,
+    attributionControl: false,
+    scrollWheelZoom: scrollWheelZoom,
   });
 
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://carto.com/">CARTO</a>',
+    subdomains: 'abcd',
     maxZoom: 18,
   }).addTo(map);
 
@@ -49,18 +73,263 @@ export function initMap(containerId) {
     flows: L.layerGroup().addTo(map),
   };
 
-  renderNetwork(containerId, 'actual');
+  if (options.initialScenario) {
+    renderScenarioDigitalTwin(containerId, options.initialScenario, options.mode || 'scenario');
+  } else {
+    renderNetwork(containerId, 'actual');
+  }
 
   // Add legend
-  addLegend(map);
+  addLegend(map, options.isCompact);
+
+  return map;
 }
 
+// ─── Invalidate Map Size ────────────────────────────────────
+export function invalidateMapSize(containerId) {
+  if (containerId && maps[containerId]) {
+    setTimeout(() => {
+      try {
+        maps[containerId].invalidateSize();
+      } catch (e) {
+        console.warn('Map resize error:', e);
+      }
+    }, 60);
+  } else {
+    Object.keys(maps).forEach((id) => {
+      setTimeout(() => {
+        try {
+          maps[id].invalidateSize();
+        } catch (e) {
+          console.warn('Map resize error:', e);
+        }
+      }, 60);
+    });
+  }
+}
+
+// ─── Public API: Set Network State (Digital Twin Tab) ───────
 export function setNetworkState(state) {
   currentState = state;
-  Object.keys(maps).forEach(id => renderNetwork(id, state));
+  Object.keys(maps).forEach((id) => {
+    if (id !== 'scenario-leaflet-map') {
+      renderNetwork(id, state);
+    }
+  });
 }
 
-// ─── Render Network ─────────────────────────────────────────
+// ─── Public API: Render Scenario Digital Twin ───────────────
+export function renderScenarioDigitalTwin(containerId, scenarioId, mode = 'scenario') {
+  if (!maps[containerId]) {
+    initMap(containerId, { isCompact: containerId === 'scenario-leaflet-map' });
+  }
+
+  const lg = layerGroups[containerId];
+  if (!lg) return;
+
+  lg.nodes.clearLayers();
+  lg.flows.clearLayers();
+
+  const isBaseline = mode === 'baseline' || scenarioId === 'SCN_ACTUAL';
+  const scn = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[1];
+  const scnData = getScenarioNetworkData(isBaseline ? 'SCN_ACTUAL' : scn.id);
+
+  // 1. Draw Flow Polylines
+  scnData.flows.forEach((flow) => {
+    const from = getCoords(flow.from);
+    const to = getCoords(flow.to);
+    if (!from || !to) return;
+
+    const thickness = Math.max(1.5, Math.min(8, flow.flow / 1400));
+    let color = flow.changed ? '#6B2FA0' : '#94a3b8';
+    let opacity = flow.changed ? 0.9 : 0.4;
+    let dashArray = flow.changed ? '6 4' : null;
+
+    if (isBaseline) {
+      color = '#94a3b8';
+      opacity = 0.45;
+      dashArray = null;
+    }
+
+    const line = L.polyline([from, to], {
+      color: color,
+      weight: thickness,
+      opacity: opacity,
+      dashArray: dashArray,
+    });
+
+    const deltaText = flow.deltaText ? `<br><strong style="color:var(--primary)">${flow.deltaText}</strong>` : '';
+
+    line.bindTooltip(
+      `
+      <div style="font-size:12px;line-height:1.4">
+        <strong>${flow.fromName || flow.from} → ${flow.toName || flow.to}</strong><br>
+        Flow: <strong>${formatNumber(flow.flow)}</strong> units/day<br>
+        Cost: ₹${flow.cost}/unit · ${flow.distance} km
+        ${deltaText}
+      </div>
+    `,
+      { sticky: true }
+    );
+
+    lg.flows.addLayer(line);
+  });
+
+  // 2. Draw Nodes (Plants, DCs, Markets)
+  PLANTS.forEach((p) => {
+    const marker = createNodeMarker(p, 'plant', containerId, scnData.facilityStats[p.id]);
+    lg.nodes.addLayer(marker);
+  });
+
+  DCS.forEach((d) => {
+    const override = scnData.facilityStats[d.id];
+    const marker = createNodeMarker(d, 'dc', containerId, override);
+    lg.nodes.addLayer(marker);
+  });
+
+  MARKETS.forEach((m) => {
+    const marker = createNodeMarker(m, 'market', containerId, null);
+    lg.nodes.addLayer(marker);
+  });
+}
+
+// ─── Scenario Network Data Resolver ─────────────────────────
+function getScenarioNetworkData(scenarioId) {
+  const facilityStats = {};
+  let flows = [];
+
+  if (scenarioId === 'SCN_ACTUAL' || scenarioId === 'actual') {
+    // Current Baseline / Actual State
+    facilityStats['DC_DELHI'] = { utilPct: 94.0, throughput: 9400, note: 'Critical Capacity Risk (Dec Peak 108%)' };
+    facilityStats['DC_MUMBAI'] = { utilPct: 75.6, throughput: 6800 };
+    facilityStats['DC_BENGALURU'] = { utilPct: 74.7, throughput: 5600 };
+    facilityStats['DC_KOLKATA'] = { utilPct: 53.3, throughput: 3200 };
+    facilityStats['DC_GUWAHATI'] = { utilPct: 52.5, throughput: 2100 };
+
+    flows = LANES.map((l) => ({
+      ...l,
+      fromName: getFacilityName(l.from),
+      toName: getFacilityName(l.to),
+      changed: false,
+    }));
+  } else if (scenarioId === 'SCN_REBALANCE' || scenarioId === 'recommended') {
+    // Scenario 1: Rebalance Baddi to Delhi NCR & Kolkata (Recommended)
+    facilityStats['DC_DELHI'] = { utilPct: 91.0, throughput: 8200, note: 'Bottleneck Relieved (-12% volume)' };
+    facilityStats['DC_MUMBAI'] = { utilPct: 74.2, throughput: 6680 };
+    facilityStats['DC_BENGALURU'] = { utilPct: 74.7, throughput: 5600 };
+    facilityStats['DC_KOLKATA'] = { utilPct: 64.0, throughput: 3840, note: 'Spare Capacity Absorbed (+12% volume)' };
+    facilityStats['DC_GUWAHATI'] = { utilPct: 52.5, throughput: 2100 };
+
+    flows = LANES.map((l) => {
+      const modified = { ...l, fromName: getFacilityName(l.from), toName: getFacilityName(l.to), changed: false };
+      if (l.from === 'PLT_BADDI' && l.to === 'DC_DELHI') {
+        modified.flow = 7000;
+        modified.changed = true;
+        modified.deltaText = '↓ 1,200 u/d (Rebalanced to Relieve Bottleneck)';
+      }
+      if (l.from === 'PLT_BADDI' && l.to === 'DC_KOLKATA') {
+        modified.flow = 2000;
+        modified.changed = true;
+        modified.deltaText = '↑ 800 u/d (Absorbing Spare East Capacity)';
+      }
+      if (l.from === 'PLT_PUNE' && l.to === 'DC_MUMBAI') {
+        modified.flow = 5400;
+        modified.changed = true;
+        modified.deltaText = '↑ 400 u/d (Direct Regional Routing)';
+      }
+      return modified;
+    });
+  } else if (scenarioId === 'SCN_USER_1') {
+    // Scenario 2: User Created 1 (Western Corridor Expansion)
+    facilityStats['DC_DELHI'] = { utilPct: 94.0, throughput: 9400, note: 'Delhi remains near capacity' };
+    facilityStats['DC_MUMBAI'] = { utilPct: 82.0, throughput: 7380, note: 'Western Corridor expansion' };
+    facilityStats['DC_BENGALURU'] = { utilPct: 75.0, throughput: 5625 };
+    facilityStats['DC_KOLKATA'] = { utilPct: 53.3, throughput: 3200 };
+    facilityStats['DC_GUWAHATI'] = { utilPct: 52.5, throughput: 2100 };
+
+    flows = LANES.map((l) => {
+      const modified = { ...l, fromName: getFacilityName(l.from), toName: getFacilityName(l.to), changed: false };
+      if (l.from === 'PLT_PUNE' && l.to === 'DC_MUMBAI') {
+        modified.flow = 5800;
+        modified.changed = true;
+        modified.deltaText = '↑ 800 u/d (Western Lane Optimization)';
+      }
+      if (l.from === 'PLT_BADDI' && l.to === 'DC_MUMBAI') {
+        modified.flow = 2300;
+        modified.changed = true;
+        modified.deltaText = '↑ 500 u/d (Freight Route Shift)';
+      }
+      return modified;
+    });
+  } else if (scenarioId === 'SCN_USER_2') {
+    // Scenario 3: User Created 2 (Eastern Expansion + Automated Dispatch)
+    facilityStats['DC_DELHI'] = { utilPct: 92.0, throughput: 9200 };
+    facilityStats['DC_MUMBAI'] = { utilPct: 75.6, throughput: 6800 };
+    facilityStats['DC_BENGALURU'] = { utilPct: 74.7, throughput: 5600 };
+    facilityStats['DC_KOLKATA'] = { utilPct: 68.0, throughput: 4080, note: 'Kolkata DC Cross-dock Active' };
+    facilityStats['DC_GUWAHATI'] = { utilPct: 58.0, throughput: 2320, note: 'Northeast replenishment enhanced' };
+
+    flows = LANES.map((l) => {
+      const modified = { ...l, fromName: getFacilityName(l.from), toName: getFacilityName(l.to), changed: false };
+      if (l.from === 'PLT_BADDI' && l.to === 'DC_KOLKATA') {
+        modified.flow = 2200;
+        modified.changed = true;
+        modified.deltaText = '↑ 1,000 u/d (Eastern Cross-Docking)';
+      }
+      if (l.from === 'PLT_KOLKATA' && l.to === 'DC_GUWAHATI') {
+        modified.flow = 2100;
+        modified.changed = true;
+        modified.deltaText = '↑ 600 u/d (Automated 10-min Dispatch)';
+      }
+      return modified;
+    });
+  } else if (scenarioId === 'SCN_AI_REC_4') {
+    // Scenario 4: AI Recommended 4 (Intermodal Rail Corridors)
+    facilityStats['DC_DELHI'] = { utilPct: 89.0, throughput: 8900, note: 'Rail Corridor relieves road traffic' };
+    facilityStats['DC_MUMBAI'] = { utilPct: 71.0, throughput: 6390 };
+    facilityStats['DC_BENGALURU'] = { utilPct: 74.0, throughput: 5550 };
+    facilityStats['DC_KOLKATA'] = { utilPct: 60.0, throughput: 3600 };
+    facilityStats['DC_GUWAHATI'] = { utilPct: 52.5, throughput: 2100 };
+
+    flows = LANES.map((l) => {
+      const modified = { ...l, fromName: getFacilityName(l.from), toName: getFacilityName(l.to), changed: false };
+      if (l.from === 'PLT_BADDI' && l.to === 'DC_DELHI') {
+        modified.flow = 6800;
+        modified.changed = true;
+        modified.deltaText = 'Intermodal Rail Transit (↓1,400 u/d)';
+      }
+      if (l.from === 'PLT_HYDERABAD' && l.to === 'DC_KOLKATA') {
+        modified.flow = 1800;
+        modified.changed = true;
+        modified.deltaText = 'Rail Freight Corridor (↑500 u/d)';
+      }
+      return modified;
+    });
+  } else {
+    // Custom Generated Scenario
+    const scn = SCENARIOS.find((s) => s.id === scenarioId) || {};
+    const dUtil = scn.delhiUtil || 88.0;
+    facilityStats['DC_DELHI'] = { utilPct: dUtil, throughput: Math.round(10000 * (dUtil / 100)), note: 'Custom Solver Allocation' };
+    facilityStats['DC_MUMBAI'] = { utilPct: 75.0, throughput: 6750 };
+    facilityStats['DC_BENGALURU'] = { utilPct: 74.0, throughput: 5550 };
+    facilityStats['DC_KOLKATA'] = { utilPct: 62.0, throughput: 3720 };
+    facilityStats['DC_GUWAHATI'] = { utilPct: 52.5, throughput: 2100 };
+
+    flows = LANES.map((l) => {
+      const modified = { ...l, fromName: getFacilityName(l.from), toName: getFacilityName(l.to), changed: false };
+      if (l.from === 'PLT_BADDI' && l.to === 'DC_DELHI') {
+        modified.flow = Math.round(l.flow * (dUtil / 94.0));
+        modified.changed = true;
+        modified.deltaText = 'Custom Parameterized Rebalancing';
+      }
+      return modified;
+    });
+  }
+
+  return { facilityStats, flows };
+}
+
+// ─── Render Network Standard (Digital Twin Tab) ─────────────
 function renderNetwork(containerId, state) {
   const lg = layerGroups[containerId];
   if (!lg) return;
@@ -68,18 +337,17 @@ function renderNetwork(containerId, state) {
   lg.nodes.clearLayers();
   lg.flows.clearLayers();
 
-  // Get flow data for this state
   const flowData = getFlowsForState(state);
 
-  // Draw flows first (below nodes)
-  flowData.forEach(flow => {
+  // Draw flows
+  flowData.forEach((flow) => {
     const from = getCoords(flow.from);
     const to = getCoords(flow.to);
     if (!from || !to) return;
 
     const thickness = Math.max(1, Math.min(8, flow.flow / 1500));
     const color = COLORS.flow[state] || COLORS.flow.actual;
-    const opacity = state === 'actual' ? 0.3 : 0.5;
+    const opacity = state === 'actual' ? 0.35 : 0.6;
 
     const line = L.polyline([from, to], {
       color: color,
@@ -88,41 +356,51 @@ function renderNetwork(containerId, state) {
       dashArray: state === 'recommended' ? '8 4' : null,
     });
 
-    line.bindTooltip(`
-      <strong>${flow.from} → ${flow.to}</strong><br>
-      Flow: ${formatNumber(flow.flow)} units/day<br>
-      Cost: ₹${flow.cost}/unit · ${flow.distance} km
-    `, { sticky: true });
+    line.bindTooltip(
+      `
+      <div style="font-size:12px">
+        <strong>${getFacilityName(flow.from)} → ${getFacilityName(flow.to)}</strong><br>
+        Flow: ${formatNumber(flow.flow)} units/day<br>
+        Cost: ₹${flow.cost}/unit · ${flow.distance} km
+      </div>
+    `,
+      { sticky: true }
+    );
 
     lg.flows.addLayer(line);
   });
 
   // Draw nodes
-  PLANTS.forEach(p => {
+  PLANTS.forEach((p) => {
     const marker = createNodeMarker(p, 'plant', containerId);
     lg.nodes.addLayer(marker);
   });
 
-  DCS.forEach(d => {
-    const marker = createNodeMarker(d, 'dc', containerId);
+  DCS.forEach((d) => {
+    let override = null;
+    if (state === 'recommended' && d.id === 'DC_DELHI') {
+      override = { utilPct: 91.0, throughput: 8200 };
+    }
+    if (state === 'recommended' && d.id === 'DC_KOLKATA') {
+      override = { utilPct: 64.0, throughput: 3840 };
+    }
+    const marker = createNodeMarker(d, 'dc', containerId, override);
     lg.nodes.addLayer(marker);
   });
 
-  MARKETS.forEach(m => {
+  MARKETS.forEach((m) => {
     const marker = createNodeMarker(m, 'market', containerId);
     lg.nodes.addLayer(marker);
   });
 }
 
-// ─── Flow Data per State ────────────────────────────────────
+// ─── Flow Data per State (Digital Twin Tab) ─────────────────
 function getFlowsForState(state) {
   if (state === 'actual') return LANES;
 
-  // Optimised base: same topology, adjusted flows
   if (state === 'optimised') {
-    return LANES.map(l => {
+    return LANES.map((l) => {
       const modified = { ...l };
-      // Simulate optimised rebalancing
       if (l.from === 'PLT_BADDI' && l.to === 'DC_DELHI') modified.flow = Math.round(l.flow * 0.88);
       if (l.from === 'PLT_BADDI' && l.to === 'DC_KOLKATA') modified.flow = Math.round(l.flow * 1.25);
       if (l.from === 'PLT_KOLKATA' && l.to === 'DC_KOLKATA') modified.flow = Math.round(l.flow * 1.15);
@@ -130,14 +408,13 @@ function getFlowsForState(state) {
     });
   }
 
-  // Recommended: flow rebalancing scenario
   if (state === 'recommended') {
-    return LANES.map(l => {
+    return LANES.map((l) => {
       const modified = { ...l };
       if (l.from === 'PLT_BADDI' && l.to === 'DC_DELHI') modified.flow = Math.round(l.flow * 0.82);
       if (l.from === 'PLT_BADDI' && l.to === 'DC_KOLKATA') modified.flow = Math.round(l.flow * 1.45);
-      if (l.from === 'PLT_KOLKATA' && l.to === 'DC_KOLKATA') modified.flow = Math.round(l.flow * 1.30);
-      if (l.from === 'DC_KOLKATA' && l.to === 'MKT_KOLKATA') modified.flow = Math.round(l.flow * 1.20);
+      if (l.from === 'PLT_KOLKATA' && l.to === 'DC_KOLKATA') modified.flow = Math.round(l.flow * 1.3);
+      if (l.from === 'DC_KOLKATA' && l.to === 'MKT_KOLKATA') modified.flow = Math.round(l.flow * 1.2);
       return modified;
     });
   }
@@ -146,19 +423,28 @@ function getFlowsForState(state) {
 }
 
 // ─── Create Node Marker ─────────────────────────────────────
-function createNodeMarker(node, type, containerId) {
+function createNodeMarker(node, type, containerId, overrideStats = null) {
   const iconMap = { plant: '🏭', dc: '🏪', market: '📦' };
   const colorMap = { plant: COLORS.plant, dc: COLORS.dc, market: COLORS.market };
-  const sizeMap = { plant: 18, dc: 15, market: 10 };
+  const sizeMap = { plant: 16, dc: 14, market: 9 };
   const color = colorMap[type];
   const size = sizeMap[type];
 
-  // For DCs, adjust size by utilisation
+  let utilPct = node.utilPct;
+  let throughput = node.throughput;
+  let note = '';
+
+  if (overrideStats) {
+    if (overrideStats.utilPct !== undefined) utilPct = overrideStats.utilPct;
+    if (overrideStats.throughput !== undefined) throughput = overrideStats.throughput;
+    if (overrideStats.note) note = overrideStats.note;
+  }
+
   let adjustedSize = size;
   let borderColor = color;
   if (type === 'dc') {
-    adjustedSize = Math.max(12, Math.min(22, 10 + (node.utilPct / 100) * 14));
-    borderColor = getUtilColor(node.utilPct);
+    adjustedSize = Math.max(12, Math.min(22, 10 + (utilPct / 100) * 14));
+    borderColor = getUtilColor(utilPct);
   }
 
   const icon = L.divIcon({
@@ -169,8 +455,9 @@ function createNodeMarker(node, type, containerId) {
       background:${color}22;
       border:3px solid ${borderColor};
       display:flex;align-items:center;justify-content:center;
-      font-size:${Math.max(12, adjustedSize - 2)}px;
+      font-size:${Math.max(11, adjustedSize - 3)}px;
       cursor:pointer;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
       transition: transform .2s;
     " onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">${iconMap[type]}</div>`,
     iconSize: [adjustedSize * 2, adjustedSize * 2],
@@ -179,19 +466,21 @@ function createNodeMarker(node, type, containerId) {
 
   const marker = L.marker([node.lat, node.lng], { icon });
 
-  // Tooltip
-  let tooltipContent = `<strong>${node.name}</strong><br>`;
+  let tooltipContent = `<div style="font-size:12px;line-height:1.4"><strong>${node.name}</strong><br>`;
   if (type === 'plant') {
-    tooltipContent += `Capacity: ${formatNumber(node.capacity)} u/d<br>Throughput: ${formatNumber(node.throughput)} u/d`;
+    tooltipContent += `Capacity: ${formatNumber(node.capacity)} u/d<br>Throughput: ${formatNumber(throughput)} u/d`;
   } else if (type === 'dc') {
-    tooltipContent += `Utilisation: <strong style="color:${getUtilColor(node.utilPct)}">${node.utilPct}%</strong><br>`;
-    tooltipContent += `Capacity: ${formatNumber(node.capacity)} u/d<br>Throughput: ${formatNumber(node.throughput)} u/d`;
+    tooltipContent += `Utilisation: <strong style="color:${getUtilColor(utilPct)}">${utilPct}%</strong><br>`;
+    tooltipContent += `Capacity: ${formatNumber(node.capacity)} u/d<br>Throughput: ${formatNumber(throughput)} u/d`;
+    if (note) {
+      tooltipContent += `<div style="margin-top:3px;font-size:11px;color:var(--primary);font-weight:600">• ${note}</div>`;
+    }
   } else {
     tooltipContent += `Demand: ${formatNumber(node.demand)} u/d<br>SLA: ${node.slaDays}d · ${node.priority}`;
   }
-  marker.bindTooltip(tooltipContent);
+  tooltipContent += `</div>`;
+  marker.bindTooltip(tooltipContent, { sticky: true });
 
-  // Click to open facility panel
   if (type !== 'market') {
     marker.on('click', () => {
       if (typeof window.openFacilityPanel === 'function') {
@@ -206,27 +495,45 @@ function createNodeMarker(node, type, containerId) {
 // ─── Get Coordinates ────────────────────────────────────────
 function getCoords(id) {
   const all = [...PLANTS, ...DCS, ...MARKETS];
-  const node = all.find(n => n.id === id);
+  const node = all.find((n) => n.id === id);
   return node ? [node.lat, node.lng] : null;
 }
 
+function getFacilityName(id) {
+  const all = [...PLANTS, ...DCS, ...MARKETS];
+  const node = all.find((n) => n.id === id);
+  return node ? node.name : id;
+}
+
 // ─── Legend ──────────────────────────────────────────────────
-function addLegend(map) {
+function addLegend(map, isCompact = false) {
   const legend = L.control({ position: 'bottomright' });
-  legend.onAdd = function() {
+  legend.onAdd = function () {
     const div = L.DomUtil.create('div');
-    div.style.cssText = 'background:white;padding:10px 14px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:11px;line-height:1.8;font-family:Inter,sans-serif';
-    div.innerHTML = `
-      <div style="font-weight:700;margin-bottom:4px">Network Legend</div>
-      <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.plant};vertical-align:middle;margin-right:6px"></span>Plant</div>
-      <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.dc};vertical-align:middle;margin-right:6px"></span>Distribution Centre</div>
-      <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.market};vertical-align:middle;margin-right:6px"></span>Demand Market</div>
-      <div style="margin-top:4px;border-top:1px solid #eee;padding-top:4px">
-        <div><span style="display:inline-block;width:20px;height:2px;background:#dc2626;vertical-align:middle;margin-right:6px"></span>Critical (&gt;90%)</div>
-        <div><span style="display:inline-block;width:20px;height:2px;background:#f59e0b;vertical-align:middle;margin-right:6px"></span>Moderate (75-90%)</div>
-        <div><span style="display:inline-block;width:20px;height:2px;background:#22c55e;vertical-align:middle;margin-right:6px"></span>Healthy (&lt;75%)</div>
-      </div>
-    `;
+    if (isCompact) {
+      div.style.cssText =
+        'background:rgba(255,255,255,0.94);padding:6px 10px;border-radius:6px;box-shadow:0 1px 6px rgba(0,0,0,.1);font-size:10.5px;line-height:1.45;font-family:Inter,sans-serif;border:1px solid #cbd5e1';
+      div.innerHTML = `
+        <div style="font-weight:700;margin-bottom:2px">Digital Twin Network</div>
+        <div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${COLORS.plant}"></span>Plant</div>
+        <div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${COLORS.dc}"></span>DC (Ring: Utilisation)</div>
+        <div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:12px;height:2.5px;background:#6B2FA0"></span>Corridor Flow</div>
+      `;
+    } else {
+      div.style.cssText =
+        'background:white;padding:10px 14px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:11px;line-height:1.8;font-family:Inter,sans-serif';
+      div.innerHTML = `
+        <div style="font-weight:700;margin-bottom:4px">Network Legend</div>
+        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.plant};vertical-align:middle;margin-right:6px"></span>Plant</div>
+        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.dc};vertical-align:middle;margin-right:6px"></span>Distribution Centre</div>
+        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.market};vertical-align:middle;margin-right:6px"></span>Demand Market</div>
+        <div style="margin-top:4px;border-top:1px solid #eee;padding-top:4px">
+          <div><span style="display:inline-block;width:20px;height:2px;background:#dc2626;vertical-align:middle;margin-right:6px"></span>Critical (&gt;90%)</div>
+          <div><span style="display:inline-block;width:20px;height:2px;background:#f59e0b;vertical-align:middle;margin-right:6px"></span>Moderate (75-90%)</div>
+          <div><span style="display:inline-block;width:20px;height:2px;background:#22c55e;vertical-align:middle;margin-right:6px"></span>Healthy (&lt;75%)</div>
+        </div>
+      `;
+    }
     return div;
   };
   legend.addTo(map);

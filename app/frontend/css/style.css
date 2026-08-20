@@ -1341,11 +1341,12 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 .scn-map-wrap {
-  height: 320px;
+  height: 360px;
   border-radius: var(--r-md);
   overflow: hidden;
   position: relative;
   margin-top: 10px;
+  border: 1px solid var(--border-light);
 }
 
 /* Right Rail Cards */
