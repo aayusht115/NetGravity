@@ -93,11 +93,120 @@ class SourcingPolicy(str, Enum):
 
 
 class ServiceMetric(str, Enum):
-    """Which service metric is used for constraints."""
-    TRANSIT_TIME  = "TRANSIT_TIME"   # hard SLA on lead time
-    CSL           = "CSL"            # cycle service level (% of cycles without stockout)
-    FILL_RATE     = "FILL_RATE"      # fraction of demand fulfilled
-    PENALTY       = "PENALTY"        # no hard constraint; add shortage penalty
+    """
+    Which service metric is used for constraints.
+
+    V1 IMPLEMENTATION STATUS — read this before relying on a value.
+    ───────────────────────────────────────────────────────────────
+    Only TRANSIT_TIME is implemented as an actual optimization constraint.
+    The remaining members are declared for forward compatibility and are NOT
+    enforced by the MILP. Selecting one does not change the optimization; the
+    solver falls back to transit-time SLA feasibility and records an explicit
+    warning in `SolverMetadata.warnings` and `OptimizationResult.service_report`
+    so the result never implies unsupported service optimization.
+
+    See `V1_SUPPORTED_SERVICE_METRICS` and docs/v1_4_hardening.md (section 3).
+    """
+    TRANSIT_TIME  = "TRANSIT_TIME"   # IMPLEMENTED: hard SLA on lane/path lead time
+    CSL           = "CSL"            # NOT IMPLEMENTED IN V1 (declared only)
+    FILL_RATE     = "FILL_RATE"      # NOT IMPLEMENTED IN V1 (declared only)
+    PENALTY       = "PENALTY"        # NOT IMPLEMENTED IN V1 (declared only)
+
+
+# Service metrics actually enforced by the V1 MILP as optimization constraints.
+# Anything outside this set is declared-but-inert and must be reported as such.
+V1_SUPPORTED_SERVICE_METRICS: Set[str] = {ServiceMetric.TRANSIT_TIME.value}
+
+# Objective modes actually enforced by the V1 MILP.
+# COST_MIN            — implemented (default)
+# WEIGHTED_COST_CARBON— implemented (adds carbon_weight × CO2 to the objective)
+# COST_CARBON         — implemented via `carbon_cap_kg`, which applies in ANY mode
+# COST_SERVICE        — NOT implemented: no service-fraction constraint exists in
+#                       the V1 formulation. Selecting it does not add a constraint.
+V1_SUPPORTED_OBJECTIVE_MODES: Set[str] = {
+    "COST_MIN",
+    "WEIGHTED_COST_CARBON",
+    "COST_CARBON",
+}
+
+
+class ContractStatus(str, Enum):
+    """
+    Contractual state of a facility for the modelled planning period.
+
+    Deliberately minimal: this is the smallest state set needed for realistic
+    brownfield closure decisions, not a contract-management system. No contract
+    rule is ever inferred — every state comes from input data or an explicit
+    scenario override.
+
+    NONE     No contractual commitment recorded. Default. The facility is
+             subject to normal optimization constraints.
+    ACTIVE   A contractual commitment is in force for the modelled planning
+             period. Combined with `contract_allows_early_closure` this yields
+             the two active states:
+               - allows_early_closure = False → facility MUST remain open
+                 (MILP constraint C5c pins y_i = 1)
+               - allows_early_closure = True  → facility MAY close, and the
+                 configured `closure_cost` is charged as the early-termination
+                 penalty
+    EXPIRED  A contract existed but has expired for the modelled planning
+             period. Treated exactly like NONE for optimization purposes; the
+             distinct value is retained so the input data stays self-describing.
+    """
+    NONE    = "NONE"
+    ACTIVE  = "ACTIVE"
+    EXPIRED = "EXPIRED"
+
+
+class OptimizationMode(str, Enum):
+    """
+    What decision the optimizer is being asked to make.
+
+    All five modes use the SAME MILP formulation. A mode never changes the
+    mathematics; it only fixes decision variables and selects which economic
+    terms apply, centralised in `optimization/modes.py`.
+
+    ACTUAL_AS_IS_EVALUATION
+        Evaluate the observed network without redesigning it. Existing
+        facilities are pinned open, candidates are excluded, and only lanes
+        flagged `is_active_baseline` are available. This is the comparison
+        anchor for business performance and resilience.
+
+        LIMITATION: NetGravity V1 has no observed-flow input field, so this
+        mode evaluates the observed FOOTPRINT and LANE SET with a cost-minimal
+        feasible allocation. It does not replay recorded shipment volumes.
+
+    CURRENT_FOOTPRINT_OPTIMIZATION
+        Optimize routing and allocation while the facility footprint stays
+        fixed. Existing facilities remain open, candidates are excluded, and
+        open/close decisions are locked — but every lane is available, so flow
+        may re-route. No closure decision is possible, so no closure cost.
+
+    GREENFIELD_OPTIMIZATION
+        Optimize the footprint from candidate locations, releasing the existing
+        footprint. Closure cost does NOT apply: a facility being absent from a
+        greenfield design is not a decision to close it. This remains
+        CANDIDATE-LOCATION optimization — NetGravity does not perform arbitrary
+        continuous geographic siting.
+
+    BROWNFIELD_SCENARIO_OPTIMIZATION  (default)
+        Optimize a modified existing network. Facility flags are honoured
+        exactly as supplied, so explicit scenario overrides drive the result.
+        Closure economics and contractual constraints both apply. This is the
+        default because it reproduces NetGravity's pre-existing behaviour
+        exactly — selecting it transforms nothing.
+
+    DISRUPTION_RESILIENCE_OPTIMIZATION
+        Re-optimize after an explicit disruption override. Behaves like
+        BROWNFIELD except that facilities marked `is_disruption_target` are
+        exempt from closure cost and from contractual must-remain-open
+        constraints: an involuntary outage is not a voluntary closure decision.
+    """
+    ACTUAL_AS_IS_EVALUATION            = "ACTUAL_AS_IS_EVALUATION"
+    CURRENT_FOOTPRINT_OPTIMIZATION     = "CURRENT_FOOTPRINT_OPTIMIZATION"
+    GREENFIELD_OPTIMIZATION            = "GREENFIELD_OPTIMIZATION"
+    BROWNFIELD_SCENARIO_OPTIMIZATION   = "BROWNFIELD_SCENARIO_OPTIMIZATION"
+    DISRUPTION_RESILIENCE_OPTIMIZATION = "DISRUPTION_RESILIENCE_OPTIMIZATION"
 
 
 class SLAMode(str, Enum):
@@ -203,6 +312,37 @@ class FacilityRecord(BaseModel):
     is_mandatory:   bool = False   # must remain open regardless (y_i = 1 forced)
     is_forced_closed: bool = False # force closed (y_i = 0 forced); used by scenario engine
 
+    # --- Observed-baseline provenance (V1.4) ---
+    # The facility's status in the OBSERVED baseline network, preserved when a
+    # scenario override mutates `status`.
+    #
+    # Why this exists: ScenarioEngine's CLOSE action overwrites `status` with
+    # CLOSED. Without this field the information that the facility was EXISTING
+    # before the scenario is destroyed, and closure cost — which must be charged
+    # exactly when an EXISTING facility transitions open → closed — could never
+    # fire for the scenario-driven closures it is meant to price.
+    #
+    # None means "no override has occurred"; `effective_baseline_status` then
+    # falls back to `status`. Set automatically by the scenario engine; callers
+    # normally leave it alone.
+    baseline_status: Optional[FacilityStatus] = None
+
+    # --- Contractual state (V1.4) ---
+    # Minimal contractual modelling for brownfield closure decisions.
+    # Nothing here is ever inferred — see ContractStatus.
+    contract_status: ContractStatus = ContractStatus.NONE
+    # When the contract is ACTIVE: may the facility be closed early at all?
+    #   False → MILP constraint (C5c) pins y_i = 1 (closure prohibited)
+    #   True  → closure permitted; `closure_cost` is the early-termination penalty
+    # Ignored when contract_status is NONE or EXPIRED.
+    contract_allows_early_closure: bool = True
+
+    # Marks a facility made unavailable by an involuntary DISRUPTION rather than
+    # a business decision to close. Such a facility is exempt from closure cost
+    # and from contractual must-remain-open constraints: an outage is not a
+    # voluntary closure. Set by the resilience engine; not client input.
+    is_disruption_target: bool = False
+
     # Replenishment lead time for inventory module
     # Unit: days
     replenishment_lead_time_days: float = 1.0
@@ -264,6 +404,59 @@ class FacilityRecord(BaseModel):
         elif period_str == "QUARTER":
             return self.fixed_cost_per_year / 4.0
         return self.fixed_cost_per_year / 12.0
+
+    @property
+    def effective_baseline_status(self) -> FacilityStatus:
+        """
+        The facility's status in the OBSERVED baseline network.
+
+        Falls back to `status` when no scenario override has recorded a
+        baseline. This is the field closure economics must key on — `status`
+        alone is unreliable because scenario overrides mutate it.
+        """
+        return self.baseline_status if self.baseline_status is not None else self.status
+
+    @property
+    def was_operating_in_baseline(self) -> bool:
+        """True if this facility was an operating (EXISTING) facility in the observed baseline."""
+        return self.effective_baseline_status == FacilityStatus.EXISTING
+
+    @property
+    def contract_prohibits_closure(self) -> bool:
+        """
+        True when an active contract forbids closing this facility outright.
+
+        A disruption target is exempt: involuntary unavailability is not a
+        contractual breach of a voluntary-closure clause.
+        """
+        return (
+            self.contract_status == ContractStatus.ACTIVE
+            and not self.contract_allows_early_closure
+            and not self.is_disruption_target
+        )
+
+    def closure_cost_applies(self, is_open: bool) -> bool:
+        """
+        Whether the one-time closure cost should be charged for this facility.
+
+        Charged only when ALL of the following hold:
+          - the facility was operating (EXISTING) in the observed baseline;
+          - it is closed in this solution (y_i = 0);
+          - it is not an involuntary disruption target;
+          - a non-zero closure_cost is configured.
+
+        Deliberately NOT charged for: facilities that stay open, facilities
+        already CLOSED in the baseline, and unselected CANDIDATE facilities.
+
+        Note this is the FACILITY-level test only. Whether closure economics
+        apply at all is a MODE-level decision — see optimization/modes.py.
+        """
+        return (
+            not is_open
+            and self.was_operating_in_baseline
+            and not self.is_disruption_target
+            and self.closure_cost > 0.0
+        )
 
     @property
     def effective_supply_capacity(self) -> float:
@@ -466,6 +659,17 @@ class OptimizationConfig(BaseModel):
         inventory_max_iterations:   Max iterations for iterative inventory solve.
         inventory_convergence_tolerance: Stop iterating when objective change < this fraction.
     """
+    # --- Optimization mode (V1.4) ---
+    # What decision the optimizer is being asked to make. All modes share one
+    # MILP formulation; the mode only fixes variables and selects which economic
+    # terms apply (see optimization/modes.py).
+    #
+    # Defaults to BROWNFIELD_SCENARIO_OPTIMIZATION because that mode honours
+    # facility flags exactly as supplied and therefore reproduces NetGravity's
+    # pre-V1.4 behaviour with no transformation — existing configurations keep
+    # working unchanged.
+    optimization_mode:    OptimizationMode = OptimizationMode.BROWNFIELD_SCENARIO_OPTIMIZATION
+
     # --- Objective ---
     objective_mode:       ObjectiveMode   = ObjectiveMode.COST_MIN
     carbon_price:         float           = 0.0    # currency / kg CO₂ (Mode D / C)
@@ -485,6 +689,20 @@ class OptimizationConfig(BaseModel):
     # --- Facility constraints ---
     max_facilities:       Optional[int]   = None
     budget_capex:         Optional[float] = None
+
+    # --- Closure economics (V1.4) ---
+    # Charge FacilityRecord.closure_cost when an EXISTING facility transitions
+    # open → closed. Only active in modes where closing is an actual decision
+    # (brownfield / disruption) — see optimization/modes.py. Set False to
+    # suppress closure economics entirely.
+    # Safe by default: closure_cost defaults to 0.0, so enabling this changes
+    # nothing unless closure costs are actually supplied.
+    enable_closure_cost:  bool            = True
+
+    # Enforce contractual must-remain-open commitments (constraint C5c).
+    # Inert unless a facility carries contract_status=ACTIVE with
+    # contract_allows_early_closure=False.
+    enforce_contracts:    bool            = True
 
     # --- Minimum throughput ---
     # Set False to disable C3 globally (e.g. when client data lacks min-throughput)

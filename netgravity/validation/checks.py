@@ -305,4 +305,24 @@ def validate_network(network: CanonicalNetwork) -> ValidationReport:
                     f"DC facility '{dc_id}' has no path connecting it to any supply origin/plant.",
                 )
 
+    # -----------------------------------------------------------------------
+    # V-015: Contractual commitment vs forced closure (V1.4)
+    # -----------------------------------------------------------------------
+    # A facility under an ACTIVE contract that prohibits early closure is pinned
+    # open by constraint (C5c). If a scenario ALSO forces it closed (C5b), the
+    # two constraints conflict and the model is infeasible. Naming the conflict
+    # here turns a bare INFEASIBLE into a readable diagnostic.
+    for f in network.facilities:
+        if f.contract_prohibits_closure and f.is_forced_closed:
+            report.add_error(
+                "V-015",
+                f"Facility '{f.id}' is under an ACTIVE contract that prohibits early "
+                f"closure (contract_allows_early_closure=False) but is also forced "
+                f"closed by an override. These constraints conflict and the model will "
+                f"be infeasible. To close it, the scenario must explicitly relax the "
+                f"contract: set contract_status=EXPIRED or "
+                f"contract_allows_early_closure=True (in which case closure_cost "
+                f"{f.closure_cost:,.2f} is charged as the early-termination penalty).",
+            )
+
     return report

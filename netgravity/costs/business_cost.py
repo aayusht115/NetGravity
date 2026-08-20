@@ -62,6 +62,7 @@ logger = logging.getLogger(__name__)
 BUSINESS_COST_COMPONENTS = (
     "facility_cost",
     "opening_cost",
+    "closure_cost",
     "transport_cost",
     "handling_cost",
     "inventory_cost",
@@ -164,6 +165,7 @@ def compute_business_network_cost(
     include_flags = {
         "facility_cost":  cost_basis.include_facility_cost,
         "opening_cost":   cost_basis.include_opening_cost,
+        "closure_cost":   cost_basis.include_closure_cost,
         "transport_cost": cost_basis.include_transport_cost,
         "handling_cost":  cost_basis.include_handling_cost,
         "inventory_cost": cost_basis.include_inventory_cost,

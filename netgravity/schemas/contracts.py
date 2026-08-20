@@ -1,0 +1,267 @@
+"""
+NetGravity — Frozen Deterministic Result Contracts
+===================================================
+Version: 1.4.0
+
+The stable interface between the deterministic MILP core and everything built
+on top of it (the Orchestrator Agent and Risk Factor calculator in the next
+phase).
+
+Why these exist
+───────────────
+`OptimizationResult` is the engine's native output and carries solver internals.
+Downstream consumers must be able to reason about a run WITHOUT reading MILP
+internals, and must not break when the formulation is refactored. These
+contracts are that boundary: a flat, self-describing, JSON-serialisable summary
+of one deterministic run.
+
+Contract guarantees
+───────────────────
+1. Every result identifies the network/data snapshot it was produced from
+   (`network_id` + `data_version`), so downstream reasoning can be tied to
+   exact inputs.
+2. Every result states its optimization mode and whether it is HYPOTHETICAL.
+   An optimized or scenario state can never be mistaken for observed state.
+3. Business cost is reported separately from the raw solver objective, with the
+   shortage penalty broken out and excluded. Consumers never have to reverse a
+   penalty out of an objective.
+4. Scenario results carry their overrides explicitly and never overwrite
+   observed baseline state.
+
+Deliberately NOT in these contracts
+───────────────────────────────────
+Risk Factor (RF), disruption likelihood, and any probabilistic or
+news-derived judgement. RF is computed later inside the Orchestrator Agent.
+What IS provided is the deterministic evidence RF will need — cost impact,
+service impact, feasibility, and full cost basis — so the Orchestrator can
+calculate RF without reaching back into the MILP.
+
+ForecastResult is intentionally absent: NetGravity has no forecasting module,
+and inventing one was out of scope.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from netgravity.schemas.results import (
+    ServiceReport,
+    SolverStatus,
+)
+
+
+# ---------------------------------------------------------------------------
+# Shared building blocks
+# ---------------------------------------------------------------------------
+
+class CostBreakdown(BaseModel):
+    """
+    Full cost decomposition for one run.
+
+    Every economic category is kept distinct — the separation between operating
+    cost, opening cost, closure cost, CapEx, shortage penalty and carbon is a
+    deliberate contract guarantee, not an implementation detail.
+    """
+    facility_cost:   float = 0.0   # per-period operating/fixed cost of open facilities
+    opening_cost:    float = 0.0   # one-time cost of opening CANDIDATE facilities
+    closure_cost:    float = 0.0   # one-time cost of closing EXISTING facilities
+    transport_cost:  float = 0.0
+    handling_cost:   float = 0.0
+    inventory_cost:  float = 0.0   # cycle + safety stock holding
+    carbon_cost:     float = 0.0   # only when carbon is genuinely priced
+
+    # Business network cost = sum of the components above that the configured
+    # cost basis includes. This is the figure REI and all economic comparison
+    # must use.
+    business_network_cost: float = 0.0
+
+    # --- Kept OUTSIDE business cost ---
+    # Artificial penalty on unmet demand. Reported so it is visible and
+    # auditable, never folded into business_network_cost.
+    shortage_penalty_cost: float = 0.0
+
+    # The raw mathematical objective, retained so the separation between what
+    # the MILP minimises and what the business pays stays explicit.
+    solver_objective: float = 0.0
+
+    # Which components the configured cost basis actually included.
+    included_components: List[str] = Field(default_factory=list)
+    excluded_components: List[str] = Field(default_factory=list)
+
+    # Independent reconciliation health for this run.
+    reconciliation_gap:        float = 0.0
+    reconciliation_is_closed:  bool  = True
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FacilitySummary(BaseModel):
+    """Per-facility outcome, flat enough for an agent or dashboard to consume directly."""
+    facility_id:      str
+    facility_name:    str
+    role:             str
+    is_open:          bool
+    throughput_units: float = 0.0
+    capacity_units:   float = 0.0
+    utilization_pct:  float = 0.0
+    # Observed-baseline provenance, so open→closed transitions are visible.
+    baseline_status:  Optional[str] = None
+    # Contractual state that constrained (or did not constrain) this facility.
+    contract_status:  str  = "NONE"
+    closure_cost_charged: float = 0.0
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class FlowSummary(BaseModel):
+    """One origin → destination allocation, aggregated across modes and products."""
+    origin_id:      str
+    destination_id: str
+    flow_units:     float
+    transport_cost: float = 0.0
+    distance_km:    float = 0.0
+    carbon_kg:      float = 0.0
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DemandSummary(BaseModel):
+    """Demand coverage for one run."""
+    total_demand:     float = 0.0
+    served_demand:    float = 0.0
+    unserved_demand:  float = 0.0
+    demand_fill_rate: float = 0.0
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ModelMetadata(BaseModel):
+    """
+    Provenance of one deterministic run.
+
+    Enough for the Orchestrator to reproduce, cache, or invalidate a result.
+    """
+    run_id:            str
+    model_version:     str = "1.4.0"
+    solver_name:       str = ""
+    solver_status:     SolverStatus
+    optimality_label:  str = ""
+    mip_gap:           Optional[float] = None
+    runtime_seconds:   Optional[float] = None
+    n_variables:       Optional[int]   = None
+    n_constraints:     Optional[int]   = None
+    generated_at:      Optional[str]   = None
+    warnings:          List[str]       = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+# ---------------------------------------------------------------------------
+# A. Network State Result
+# ---------------------------------------------------------------------------
+
+class NetworkStateResult(BaseModel):
+    """
+    The deterministic state of ONE network configuration.
+
+    Produced for observed evaluations (ACTUAL_AS_IS_EVALUATION) and for
+    optimization runs alike. `is_hypothetical` distinguishes them — it is False
+    only for an as-is evaluation of the observed network.
+    """
+    # --- Snapshot identity (required for every result) ---
+    network_id:   str
+    data_version: Optional[str] = None
+
+    # --- What decision this run represents ---
+    optimization_mode: str
+    mode_description:  str = ""
+    # False ONLY for ACTUAL_AS_IS_EVALUATION of the observed network.
+    is_hypothetical:   bool = True
+    result_type:       str  = "OPTIMIZED"
+
+    # --- Feasibility ---
+    solver_status: SolverStatus
+    is_feasible:   bool
+
+    # --- Economics ---
+    costs: CostBreakdown
+
+    # --- Demand & service ---
+    demand:  DemandSummary
+    service: Optional[ServiceReport] = None
+
+    # --- Network configuration ---
+    open_facilities:   List[str] = Field(default_factory=list)
+    closed_facilities: List[str] = Field(default_factory=list)
+    facilities:        List[FacilitySummary] = Field(default_factory=list)
+    flows:             List[FlowSummary] = Field(default_factory=list)
+
+    # --- Utilisation indicators ---
+    avg_utilization_pct: float = 0.0
+    max_utilization_pct: float = 0.0
+    overutilized_facilities:  List[str] = Field(default_factory=list)
+    underutilized_facilities: List[str] = Field(default_factory=list)
+
+    # --- Carbon ---
+    total_carbon_kg: float = 0.0
+
+    metadata: ModelMetadata
+
+    model_config = ConfigDict(extra="forbid")
+
+    @property
+    def business_cost(self) -> float:
+        """Convenience accessor for the figure all economic comparison uses."""
+        return self.costs.business_network_cost
+
+
+# ---------------------------------------------------------------------------
+# B. Scenario Result
+# ---------------------------------------------------------------------------
+
+class ScenarioResult(BaseModel):
+    """
+    The deterministic outcome of ONE hypothetical scenario.
+
+    A scenario result is ALWAYS hypothetical. It records the overrides that
+    produced it and, when a baseline is supplied, the deltas against it. It
+    never overwrites observed baseline state — `baseline` is a separate,
+    read-only snapshot.
+    """
+    scenario_id:   str
+    scenario_name: str = ""
+    scenario_type: str = "CUSTOM"
+
+    # Always True. Present explicitly so a consumer cannot treat a scenario as
+    # observed reality by omission.
+    is_hypothetical: bool = True
+
+    # The hypothetical network state produced by this scenario.
+    state: NetworkStateResult
+
+    # Read-only snapshot identity of the baseline this scenario was derived
+    # from. Carrying the identity rather than the full baseline keeps observed
+    # state single-sourced.
+    baseline_network_id:   Optional[str] = None
+    baseline_data_version: Optional[str] = None
+    baseline_business_cost: Optional[float] = None
+
+    # --- Deltas vs baseline (None when no baseline was supplied) ---
+    business_cost_delta:     Optional[float] = None
+    business_cost_delta_pct: Optional[float] = None
+    served_demand_delta:     Optional[float] = None
+    carbon_delta_kg:         Optional[float] = None
+
+    # --- What was changed ---
+    # Explicit, human-readable summary of the overrides applied.
+    scenario_overrides: List[str] = Field(default_factory=list)
+    # Structured audit manifest from the scenario engine, when available.
+    change_manifest: Dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @property
+    def business_cost(self) -> float:
+        return self.state.costs.business_network_cost

@@ -312,10 +312,48 @@ class TestAbsoluteDollarVerification:
         assert res.kpis.total_cost == pytest.approx(5400.0, abs=0.01)
 
     def test_case16_network_exact_absolute_dollar_cost(self):
+        """
+        Original hand-verified absolute-dollar anchor, preserved exactly.
+
+        Closure economics are switched off so this remains a like-for-like check
+        against the pre-V1.4 hand calculation. The default-config figure is
+        pinned separately below.
+        """
         from netgravity.tests.fixtures.case16_synthetic import build_case16_network
         net = build_case16_network()
+        net.config.enable_closure_cost = False
         res = solve(net)
         assert res.is_solved
         assert res.solver.objective_value == pytest.approx(115638.14, abs=0.05)
         assert res.kpis.total_cost == pytest.approx(115638.14, abs=0.05)
+
+    def test_case16_absolute_dollar_cost_with_closure_economics(self):
+        """
+        Absolute-dollar anchor under the DEFAULT config (V1.4 closure economics).
+
+        The Case-16 fixture assigns closure costs to its three existing DCs
+        (DC_CENTRAL 50,000 / DC_EAST 40,000 / DC_WEST 35,000). Once closing is
+        priced, closing DC_CENTRAL costs a one-time 50,000 against a 40,000/month
+        fixed-cost saving, so the optimum keeps it open:
+
+            closure-disabled optimum (DC_CENTRAL closed) : 115,638.14
+            + one-time closure charge for DC_CENTRAL     :  50,000.00
+            = cost of closing under V1.4                 : 165,638.14
+            optimum that keeps DC_CENTRAL open           : 150,627.70  ← chosen
+
+        NOTE the period-mixing caveat: a one-time closure cost is being compared
+        against a MONTHLY fixed-cost saving (cost_period = MONTH). See
+        docs/v1_4_hardening.md (section 1).
+        """
+        from netgravity.tests.fixtures.case16_synthetic import build_case16_network
+        net = build_case16_network()
+        assert net.config.enable_closure_cost is True, "closure economics on by default"
+        res = solve(net)
+        assert res.is_solved
+        assert res.solver.objective_value == pytest.approx(150627.70, abs=0.05)
+        assert res.kpis.total_cost == pytest.approx(150627.70, abs=0.05)
+        # All three existing DCs stay open, so nothing is actually charged.
+        assert res.objective_components["closure_cost"] == pytest.approx(0.0, abs=1e-6)
+        open_ids = {fd.facility_id for fd in res.facility_decisions if fd.is_open}
+        assert {"DC_CENTRAL", "DC_EAST", "DC_WEST"} <= open_ids
 

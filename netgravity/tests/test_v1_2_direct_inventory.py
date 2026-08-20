@@ -196,9 +196,17 @@ class TestDirectMILPStressVariants:
 
     def test_zero_variability_zero_inventory_cost(self):
         """
-        When std_dev = 0 for all demands, safety stock = 0 and inventory cost = 0.
+        When std_dev = 0 for all demands, safety stock = 0 and inventory cost is
+        cycle stock only.
+
+        Closure economics are switched off so this exercises the inventory
+        formulation in isolation and preserves the original hand-verified
+        716.67 anchor. V1.4 closure cost changes which DCs the Case-16 optimum
+        opens, and therefore the routing that cycle stock is computed over; the
+        default-config value is pinned separately below.
         """
         net = build_case16_network()
+        net.config.enable_closure_cost = False
         for d in net.demands:
             d.std_dev = 0.0
 
@@ -206,6 +214,28 @@ class TestDirectMILPStressVariants:
         assert res.is_solved
         assert res.objective_components["inventory_cost"] == pytest.approx(716.67, abs=0.1)
         assert res.objective_reconciliation_gap == 0.0
+
+    def test_zero_variability_inventory_cost_with_closure_economics(self):
+        """
+        Same zero-variability case under the DEFAULT config (V1.4 closure
+        economics active).
+
+        Closing an existing DC now carries its one-time closure cost, so the
+        optimum keeps all three existing DCs open. Routing — and therefore cycle
+        stock — differs from the closure-disabled case above. Safety stock is
+        still zero and reconciliation must still close exactly.
+        """
+        net = build_case16_network()
+        assert net.config.enable_closure_cost is True, "closure economics on by default"
+        for d in net.demands:
+            d.std_dev = 0.0
+
+        res = solve(net)
+        assert res.is_solved
+        assert res.objective_components["inventory_cost"] == pytest.approx(752.78, abs=0.1)
+        assert res.objective_reconciliation_gap == 0.0
+        # No existing DC is closed, so no closure cost is actually charged.
+        assert res.objective_components["closure_cost"] == pytest.approx(0.0, abs=1e-6)
 
     def test_zero_lead_time_zero_inventory_cost(self):
         """

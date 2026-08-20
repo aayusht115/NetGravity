@@ -90,7 +90,14 @@ class TestPatch3AdditiveCarbonFormulation:
 class TestPatch4CapExBudgetConstraint:
 
     def test_capex_budget_constraint_enforced(self):
+        # This test isolates the CapEx budget constraint, so V1.4 closure
+        # economics are switched off. With closure cost active the Case-16
+        # optimum keeps all three existing DCs open and the unconstrained
+        # premise below (DC_NORTH_NEW opening) no longer arises — that is
+        # correct closure behaviour, covered by TestClosureCostEconomics, but it
+        # would leave the CapEx constraint itself untested here.
         net = build_case16_network()
+        net.config.enable_closure_cost = False
         engine = ScenarioEngine()
         scen_close_east = Scenario(
             scenario_id="CLOSE_EAST",
@@ -105,6 +112,7 @@ class TestPatch4CapExBudgetConstraint:
 
         # Constrained budget = $150,000 (below $200k CapEx)
         net_budget = build_case16_network()
+        net_budget.config.enable_closure_cost = False
         net_budget.config.budget_capex = 150000.0
         res_budget = engine.run(net_budget, scen_close_east)
         open_budget = [f.facility_id for f in res_budget.facility_decisions if f.is_open]

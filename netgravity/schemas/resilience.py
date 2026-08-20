@@ -107,6 +107,13 @@ class ResilienceCostBasis(BaseModel):
     include_handling_cost:  bool = True
     include_inventory_cost: bool = True
 
+    # One-time cost of transitioning an EXISTING facility open → closed.
+    # A genuine business cost, distinct from operating cost, opening cost and
+    # CapEx. Note the facility DISRUPTED in a resilience run is exempt from it
+    # (an outage is not a voluntary closure), so this covers only closures the
+    # re-optimization itself chooses.
+    include_closure_cost:   bool = True
+
     # Honoured only when OptimizationConfig.enable_carbon_cost is True.
     include_carbon_cost:    bool = True
 

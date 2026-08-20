@@ -232,6 +232,73 @@ class NetworkKPIs(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Service Methodology Report (V1.4)
+# ---------------------------------------------------------------------------
+
+class ServiceViolationRecord(BaseModel):
+    """A single lane that breaches its destination market's transit-time SLA."""
+    origin_id:       str
+    destination_id:  str
+    mode:            str
+    product_id:      Optional[str] = None
+    lead_time_days:  float
+    sla_days:        float
+    excess_days:     float
+    flow_units:      float = 0.0
+    # True when the arc was removed pre-solve rather than carrying flow.
+    excluded_pre_solve: bool = True
+
+
+class ServiceReport(BaseModel):
+    """
+    Explicit statement of HOW service was enforced in this run.
+
+    Exists so a result can never imply service optimization that the V1 MILP
+    does not perform. The V1 methodology is:
+
+        PRIMARY SERVICE CONSTRAINT = transit-time SLA feasibility.
+
+    A lane whose lead time exceeds the destination market's `sla_days` is
+    removed from the arc set before the solve, making it infeasible to use.
+    Nothing else about service is optimized.
+
+    NOT implemented in V1 as optimization constraints or objective terms:
+    cycle service level (CSL), fill rate, probabilistic service levels, OTIF,
+    and service penalties. `unsupported_features` names any such setting that
+    was requested, so the caller sees it was declared but not enforced.
+    """
+    # What was actually enforced
+    methodology:        str  = "TRANSIT_TIME_SLA_FEASIBILITY"
+    sla_enforced:       bool = True          # config.enforce_sla
+    sla_mode:           str  = "LAST_MILE"   # LAST_MILE | END_TO_END
+    service_metric:     str  = "TRANSIT_TIME"
+    # True only when the requested service_metric is actually implemented.
+    service_metric_supported: bool = True
+
+    # Declared-but-inert settings detected on this run. Empty means the run used
+    # only implemented capabilities.
+    unsupported_features: List[str] = Field(default_factory=list)
+
+    # Outcome
+    total_demand:       float = 0.0
+    served_demand:      float = 0.0
+    unserved_demand:    float = 0.0
+    demand_within_sla:  float = 0.0
+    pct_demand_in_sla:  float = 0.0
+
+    # Arc-level SLA feasibility
+    n_lanes_evaluated:  int = 0
+    n_lanes_sla_excluded: int = 0
+    # Populated only when diagnostics are requested.
+    violations:         List[ServiceViolationRecord] = Field(default_factory=list)
+
+    @property
+    def claims_only_supported_capabilities(self) -> bool:
+        """True when nothing unsupported was silently treated as active."""
+        return len(self.unsupported_features) == 0
+
+
+# ---------------------------------------------------------------------------
 # Flow Analytics
 # ---------------------------------------------------------------------------
 
@@ -456,6 +523,11 @@ class FacilityResilienceResult(BaseModel):
     facility_name:      str
     facility_role:      str
 
+    # Snapshot identity — every deterministic result must name the network and
+    # data version it was produced from (V1.4 result contract requirement).
+    network_id:         Optional[str] = None
+    data_version:       Optional[str] = None
+
     # Assumptions this result was produced under (fair-comparison audit trail)
     disruption_type:    str
     disruption_period:  str
@@ -629,9 +701,20 @@ class OptimizationResult(BaseModel):
     flow_decisions:       List[FlowDecision]       = Field(default_factory=list)
     assignment_decisions: List[AssignmentDecision] = Field(default_factory=list)
 
+    # --- Optimization mode & observed/hypothetical separation (V1.4) ---
+    # Which decision the optimizer was asked to make. Recorded so an optimized
+    # state can never be conflated with observed state downstream.
+    optimization_mode: str = "BROWNFIELD_SCENARIO_OPTIMIZATION"
+    # True when this result describes a HYPOTHETICAL network (an optimization or
+    # a scenario override) rather than the observed one. Only
+    # ACTUAL_AS_IS_EVALUATION yields False.
+    is_hypothetical:   bool = True
+
     # KPIs and analytics
     kpis:            Optional[NetworkKPIs]      = None
     flow_analytics:  Optional[FlowAnalytics]    = None
+    # Explicit statement of how service was enforced (V1.4).
+    service_report:  Optional[ServiceReport]    = None
 
     # Raw objective components (for auditability)
     objective_components: Dict[str, float]      = Field(default_factory=dict)

@@ -77,6 +77,7 @@ from netgravity.schemas.network import (
     FacilityStatus,
     NodeRole,
     OptimizationConfig,
+    OptimizationMode,
 )
 from netgravity.schemas.resilience import DisruptionConfig, DisruptionType
 from netgravity.schemas.results import (
@@ -167,12 +168,28 @@ def _effective_config(
     Build the one configuration used for BOTH the baseline and every disrupted
     solve.
 
-    Only `allow_shortage` is overridden, and it is overridden symmetrically. The
-    existing ResilienceEngine solves the baseline with the caller's config but
-    the disrupted network with shortage enabled; that asymmetry compares two
-    different models. REI requires one model.
+    Two settings are overridden, both SYMMETRICALLY so the baseline and every
+    disrupted run share exactly one model:
+
+      allow_shortage      per the disruption config. The existing
+                          ResilienceEngine solves the baseline with the caller's
+                          config but the disrupted network with shortage
+                          enabled; that asymmetry compares two different models.
+                          REI requires one model.
+
+      optimization_mode   forced to DISRUPTION_RESILIENCE_OPTIMIZATION. A
+                          footprint-locking mode (ACTUAL_AS_IS or
+                          CURRENT_FOOTPRINT) pins existing facilities open,
+                          which directly contradicts disrupting one — every
+                          disruption would return infeasible for the wrong
+                          reason. Disruption mode honours facility flags as
+                          supplied and applies the disruption-target exemptions
+                          from closure cost and contractual pins.
     """
-    return config.model_copy(update={"allow_shortage": disruption_config.allow_shortage})
+    return config.model_copy(update={
+        "allow_shortage":    disruption_config.allow_shortage,
+        "optimization_mode": OptimizationMode.DISRUPTION_RESILIENCE_OPTIMIZATION,
+    })
 
 
 def _served_and_carbon(
@@ -361,6 +378,11 @@ def apply_facility_disruption(
             "is_forced_closed":                     True,
             "is_mandatory":                         False,
             "is_closable":                          True,
+            # Marks this as an INVOLUNTARY outage rather than a business
+            # decision to close. Exempts the facility from closure cost and from
+            # contractual must-remain-open constraints (which would otherwise
+            # render every disruption of a contracted facility infeasible).
+            "is_disruption_target":                 True,
         }) if f.id == facility_id else f
         for f in network.facilities
     ]
@@ -620,6 +642,8 @@ def assess_facility_resilience(
         facility_id               = facility_id,
         facility_name             = target.name,
         facility_role             = target.role.value,
+        network_id                = network.network_id,
+        data_version              = network.data_version,
         disruption_type           = disruption_config.disruption_type.value,
         disruption_period         = disruption_config.disruption_period.value,
         baseline_business_cost    = baseline.cost,
@@ -885,6 +909,8 @@ def assess_network_resilience(
                 facility_id            = fac.id,
                 facility_name          = fac.name,
                 facility_role          = fac.role.value,
+                network_id             = network.network_id,
+                data_version           = network.data_version,
                 disruption_type        = disruption_config.disruption_type.value,
                 disruption_period      = disruption_config.disruption_period.value,
                 baseline_business_cost = baseline.cost,

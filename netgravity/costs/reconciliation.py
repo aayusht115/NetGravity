@@ -74,10 +74,20 @@ def reconcile_costs(
     }
     market_roles = {NodeRole.MARKET, NodeRole.CUSTOMER}
 
-    # 1. Independent Facility Fixed, Opening, Handling Costs
+    # 1. Independent Facility Fixed, Opening, Closure, Handling Costs
     ind_facility_cost = 0.0
     ind_opening_cost  = 0.0
+    ind_closure_cost  = 0.0
     ind_handling_cost = 0.0
+
+    # Closure economics apply only in modes where closing is an actual decision.
+    # Resolved from the mode policy so this mirrors the objective term exactly.
+    from netgravity.optimization.modes import get_mode_policy
+    try:
+        _mode_policy = get_mode_policy(config.optimization_mode)
+        closure_cost_active = bool(config.enable_closure_cost and _mode_policy.apply_closure_cost)
+    except (ValueError, AttributeError):
+        closure_cost_active = bool(getattr(config, "enable_closure_cost", False))
 
     # Calculate facility throughput from flow_decisions
     facility_throughput: Dict[str, float] = {}
@@ -85,15 +95,21 @@ def reconcile_costs(
         facility_throughput[fl.origin_id] = facility_throughput.get(fl.origin_id, 0.0) + fl.flow_units
 
     for fd in result.facility_decisions:
+        fac = fac_map.get(fd.facility_id)
+        if fac is None:
+            continue
         if fd.is_open:
-            fac = fac_map.get(fd.facility_id)
-            if fac:
-                ind_facility_cost += fac.get_fixed_cost_for_period(cost_period)
-                if fac.is_candidate and fac.opening_cost > 0:
-                    ind_opening_cost += fac.opening_cost
-                throughput = facility_throughput.get(fd.facility_id, 0.0)
-                if fac.handling_cost_per_unit > 0:
-                    ind_handling_cost += fac.handling_cost_per_unit * throughput
+            ind_facility_cost += fac.get_fixed_cost_for_period(cost_period)
+            if fac.is_candidate and fac.opening_cost > 0:
+                ind_opening_cost += fac.opening_cost
+            throughput = facility_throughput.get(fd.facility_id, 0.0)
+            if fac.handling_cost_per_unit > 0:
+                ind_handling_cost += fac.handling_cost_per_unit * throughput
+        elif closure_cost_active and fac.closure_cost_applies(is_open=False):
+            # One-time closure cost: an EXISTING facility transitioned
+            # open → closed. Charged exactly once, never for facilities that
+            # stay open, were already closed, or are unselected candidates.
+            ind_closure_cost += fac.closure_cost
 
     # 2. Independent Transportation & Carbon Costs
     ind_transport_cost = 0.0
@@ -145,6 +161,7 @@ def reconcile_costs(
     independent_component_costs = {
         "facility_cost":  round(ind_facility_cost, 4),
         "opening_cost":   round(ind_opening_cost, 4),
+        "closure_cost":   round(ind_closure_cost, 4),
         "transport_cost": round(ind_transport_cost, 4),
         "handling_cost":  round(ind_handling_cost, 4),
         "inventory_cost": round(ind_inventory_cost, 4),
@@ -154,7 +171,7 @@ def reconcile_costs(
     }
 
     independently_calculated_total = round(
-        ind_facility_cost + ind_opening_cost + ind_transport_cost +
+        ind_facility_cost + ind_opening_cost + ind_closure_cost + ind_transport_cost +
         ind_handling_cost + ind_inventory_cost + ind_shortage_cost + ind_carbon_cost, 4
     )
 

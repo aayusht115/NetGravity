@@ -281,6 +281,13 @@ class ScenarioEngine:
             self._recalculate_facility_lanes(fac, orig_lat, orig_lon, fac_map, lanes)
 
         elif fc.action == "CLOSE":
+            # Preserve the OBSERVED baseline status before overwriting `status`.
+            # Closure cost must be charged exactly when an EXISTING facility
+            # transitions open → closed; overwriting `status` with CLOSED would
+            # otherwise destroy the evidence that it was EXISTING and the cost
+            # could never fire for scenario-driven closures.
+            if fac.baseline_status is None:
+                fac.baseline_status = fac.status
             fac.is_forced_closed = True
             fac.is_mandatory     = False
             fac.is_closable      = True

@@ -107,8 +107,15 @@ def milp_solve(
     if config is None:
         config = network.config
 
+    # V1.4: Centralised mode preparation. Fixes decision variables and lane
+    # availability for the selected mode BEFORE the formulation is built, so the
+    # MILP itself stays single-sourced. The default mode is a strict no-op.
+    from netgravity.optimization.modes import get_mode_policy, prepare_network_for_mode
+    mode_policy = get_mode_policy(config.optimization_mode)
+    mode_network = prepare_network_for_mode(network, mode_policy.mode)
+
     # F-05: Ensure single resolved configuration attached to effective_network
-    effective_network = network.model_copy(update={"config": config})
+    effective_network = mode_network.model_copy(update={"config": config})
 
     # Fast-fail network topology validation check
     from netgravity.validation.checks import validate_network
@@ -159,6 +166,12 @@ def _solve_milp(
     """Construct and solve the single-pass direct MILP optimization model."""
     run_id = str(uuid.uuid4())[:8]
 
+    # Resolve the mode policy locally so this builder is self-contained. The
+    # network reaching here has already been prepared by milp_solve(); the policy
+    # is needed again to decide which ECONOMIC terms apply (closure, contracts).
+    from netgravity.optimization.modes import get_mode_policy
+    mode_policy = get_mode_policy(config.optimization_mode)
+
     # Precompute deterministic inventory coefficients IC[i,j] for direct objective integration
     inv_coeffs = InventoryCoefficientEngine.compute_coefficients(network, config)
 
@@ -178,6 +191,11 @@ def _solve_milp(
     from netgravity.carbon.module import CarbonModule
     carbon_mod = CarbonModule(config.emission_factor_table, config.emission_methodology)
 
+    # Track SLA-driven arc exclusions so the service report can state exactly
+    # what transit-time feasibility removed (V1.4).
+    sla_excluded_lanes: List[Dict[str, object]] = []
+    n_lanes_evaluated = 0
+
     seen_keys: Set[ArcKey] = set()
     for lane in network.lanes:
         orig = facility_map.get(lane.origin_id)
@@ -193,6 +211,9 @@ def _solve_milp(
 
         if config.enforce_sla and orig.role not in market_roles and dest.role in market_roles:
             sla_feasible = True
+            n_lanes_evaluated += 1
+            binding_sla: Optional[float] = None
+            binding_lt: float = lane.lead_time_days
 
             for d in network.demands:
                 if d.market_id == dest.id and d.sla_days is not None and d.sla_days > 0:
@@ -211,19 +232,38 @@ def _solve_milp(
                             ]
                             if not feasible_paths:
                                 sla_feasible = False
+                                binding_sla = d.sla_days
+                                binding_lt = min(
+                                    ln.lead_time_days + dc_lt + lane.lead_time_days
+                                    for ln in inbound_lanes
+                                )
                                 break
                         else:
                             total_lt = dc_lt + lane.lead_time_days
                             if total_lt > d.sla_days:
                                 sla_feasible = False
+                                binding_sla = d.sla_days
+                                binding_lt = total_lt
                                 break
                     else:
                         # LAST_MILE (default)
                         if lane.lead_time_days > d.sla_days:
                             sla_feasible = False
+                            binding_sla = d.sla_days
+                            binding_lt = lane.lead_time_days
                             break
 
             if not sla_feasible:
+                # Record the exclusion so the service report can state exactly
+                # which arcs transit-time feasibility removed, and why.
+                sla_excluded_lanes.append({
+                    "origin_id":      lane.origin_id,
+                    "destination_id": lane.destination_id,
+                    "mode":           lane.mode.value if hasattr(lane.mode, "value") else str(lane.mode),
+                    "lead_time_days": round(binding_lt, 4),
+                    "sla_days":       round(binding_sla or 0.0, 4),
+                    "excess_days":    round(binding_lt - (binding_sla or 0.0), 4),
+                })
                 continue
 
         mode_str = lane.mode.value if hasattr(lane.mode, "value") else str(lane.mode)
@@ -306,6 +346,29 @@ def _solve_milp(
         if fac.is_candidate and fac.opening_cost > 0
     )
 
+    # Closure cost (V1.4): one-time cost charged when an EXISTING facility
+    # transitions open → closed.
+    #
+    #     Σ_{i ∈ closure-eligible} closure_cost_i · (1 − y_i)
+    #
+    # Linear in y, so the formulation stays a MILP. Eligibility is decided by
+    # FacilityRecord.closure_cost_applies(), which keys on the OBSERVED baseline
+    # status (not the possibly scenario-mutated `status`) and excludes disruption
+    # targets. Whether closure economics apply at all is a mode decision.
+    closure_eligible_facs = (
+        [
+            fac for fac in non_market_facs
+            # closure_cost_applies() is evaluated for the closed case (y_i = 0)
+            if fac.closure_cost_applies(is_open=False)
+        ]
+        if (config.enable_closure_cost and mode_policy.apply_closure_cost)
+        else []
+    )
+
+    closure_cost_term = pulp.lpSum(
+        fac.closure_cost * (1 - y[fac.id]) for fac in closure_eligible_facs
+    ) if closure_eligible_facs else 0
+
     transport_cost_term = pulp.lpSum(
         arc_unit_cost[key] * x[key]
         for key in arc_set
@@ -370,6 +433,7 @@ def _solve_milp(
     prob += (
         facility_cost_term
         + opening_cost_term
+        + closure_cost_term
         + transport_cost_term
         + handling_cost_term
         + inventory_cost_term
@@ -479,6 +543,25 @@ def _solve_milp(
         elif fac.is_mandatory:
             prob += y[fac.id] == 1, f"mandatory_open_{fac.id}"
 
+    # (C5c) Contractual Open (V1.4): a facility under an ACTIVE contract that
+    # does not permit early closure must remain open.
+    #
+    #     y_i = 1   ∀ i with contract_status = ACTIVE ∧ ¬contract_allows_early_closure
+    #
+    # Disruption targets are exempt (see FacilityRecord.contract_prohibits_closure):
+    # an involuntary outage does not breach a voluntary-closure clause.
+    #
+    # If a scenario ALSO forces the facility closed (C5b), the two constraints
+    # conflict and the model is INFEASIBLE — the correct, honest signal that the
+    # scenario violates a contractual commitment. Validation check V-015 names
+    # the conflict explicitly so the diagnostic is readable. To close such a
+    # facility legitimately, the scenario must explicitly relax the contract
+    # (contract_status → EXPIRED, or contract_allows_early_closure → True).
+    if config.enforce_contracts and mode_policy.enforce_contracts:
+        for fac in non_market_facs:
+            if fac.contract_prohibits_closure:
+                prob += y[fac.id] == 1, f"contract_open_{fac.id}"
+
     # (C6-C8) Assignment and Sourcing Constraints (ONLY when SINGLE or DUAL sourcing)
     if config.sourcing_policy in (SourcingPolicy.SINGLE, SourcingPolicy.DUAL):
         # (C6) Assignment Open Link: a_{ij} ≤ y_i
@@ -558,6 +641,8 @@ def _solve_milp(
     total_fc = 0.0
     total_oc = 0.0
     total_hc = 0.0
+    total_cc = 0.0   # closure cost (V1.4)
+    closure_eligible_ids = {fac.id for fac in closure_eligible_facs}
 
     def lane_unit_cost(ln, prod, cfg):
         return ln.rate_per_unit
@@ -576,9 +661,18 @@ def _solve_milp(
             )
             hand_c = fac.handling_cost_per_unit * outbound_flow if is_open else 0.0
 
+            # Mirror the closure term added to the objective exactly: charged
+            # once, only for eligible facilities that ended up closed.
+            close_c = (
+                fac.closure_cost
+                if (not is_open and fac.id in closure_eligible_ids)
+                else 0.0
+            )
+
             total_fc += fixed_c
             total_oc += open_c
             total_hc += hand_c
+            total_cc += close_c
 
             cap_val = fac.capacity_units_per_period
             util_pct = (outbound_flow / cap_val * 100.0) if (is_open and cap_val and cap_val > 0) else 0.0
@@ -686,6 +780,7 @@ def _solve_milp(
         obj_components = {
             "facility_cost":  round(total_fc, 4),
             "opening_cost":   round(total_oc, 4),
+            "closure_cost":   round(total_cc, 4),
             "transport_cost": round(total_tc, 4),
             "handling_cost":  round(total_hc, 4),
             "inventory_cost": round(total_ic, 4),
@@ -695,7 +790,7 @@ def _solve_milp(
         }
 
         raw_obj_val = solver_meta.objective_value if solver_meta and solver_meta.objective_value is not None else (
-            total_fc + total_oc + total_tc + total_hc + total_ic + total_shortage_cost + carbon_cost
+            total_fc + total_oc + total_cc + total_tc + total_hc + total_ic + total_shortage_cost + carbon_cost
         )
         evaluated_total = round(raw_obj_val, 4)
 
@@ -711,6 +806,8 @@ def _solve_milp(
         objective_components          = obj_components,
         evaluated_total_cost          = evaluated_total,
         result_type                   = "OPTIMIZED" if scenario_id != "BASELINE" else "BASELINE",
+        optimization_mode             = mode_policy.mode.value,
+        is_hypothetical               = mode_policy.is_hypothetical,
         inventory_method              = "DIRECT_MILP",
         inventory_optimization_status = "INTEGRATED",
         inventory_iterations          = 1,
@@ -719,7 +816,103 @@ def _solve_milp(
     from netgravity.metrics.kpis import compute_kpis, compute_flow_analytics
     res.kpis = compute_kpis(res, network)
     res.flow_analytics = compute_flow_analytics(res, network)
+    res.service_report = _build_service_report(
+        res, network, config, sla_excluded_lanes, n_lanes_evaluated,
+    )
+    # Surface declared-but-inert settings on the solver metadata too, so a
+    # caller inspecting only the solver block still sees them.
+    for feature in res.service_report.unsupported_features:
+        if feature not in solver_meta.warnings:
+            solver_meta.warnings.append(feature)
     return res
+
+
+# ---------------------------------------------------------------------------
+# Service methodology reporting (V1.4)
+# ---------------------------------------------------------------------------
+
+def _build_service_report(
+    result:            OptimizationResult,
+    network:           CanonicalNetwork,
+    config:            OptimizationConfig,
+    sla_excluded:      List[Dict[str, object]],
+    n_lanes_evaluated: int,
+) -> "ServiceReport":
+    """
+    State explicitly how service was enforced, and name anything that was
+    declared but NOT enforced.
+
+    The V1 methodology is transit-time SLA feasibility and nothing else. This
+    function exists so a result can never imply CSL / fill-rate / OTIF /
+    service-penalty optimization that the MILP does not perform.
+    """
+    from netgravity.schemas.network import (
+        V1_SUPPORTED_OBJECTIVE_MODES,
+        V1_SUPPORTED_SERVICE_METRICS,
+    )
+    from netgravity.schemas.results import ServiceReport, ServiceViolationRecord
+
+    metric_val = config.service_metric
+    metric_str = metric_val.value if hasattr(metric_val, "value") else str(metric_val)
+    obj_val = config.objective_mode
+    obj_str = obj_val.value if hasattr(obj_val, "value") else str(obj_val)
+    sla_mode_val = getattr(config, "sla_mode", "LAST_MILE")
+    sla_mode_str = sla_mode_val.value if hasattr(sla_mode_val, "value") else str(sla_mode_val)
+
+    unsupported: List[str] = []
+    metric_supported = metric_str in V1_SUPPORTED_SERVICE_METRICS
+    if not metric_supported:
+        unsupported.append(
+            f"service_metric={metric_str} is declared but NOT implemented as an "
+            f"optimization constraint in V1. Service feasibility was enforced via "
+            f"transit-time SLA only; no {metric_str} constraint or objective term "
+            f"was added."
+        )
+    if obj_str not in V1_SUPPORTED_OBJECTIVE_MODES:
+        unsupported.append(
+            f"objective_mode={obj_str} is declared but NOT implemented in V1. No "
+            f"corresponding constraint or objective term was added; the solve "
+            f"behaved as COST_MIN plus any explicitly configured carbon terms."
+        )
+
+    kpis = result.kpis
+    total_demand = kpis.total_demand if kpis else sum(d.quantity for d in network.demands)
+    served = kpis.total_served if kpis else 0.0
+    unserved = kpis.unmet_demand if kpis else 0.0
+    pct_sla = kpis.pct_demand_in_sla if kpis else 0.0
+
+    violations: List[ServiceViolationRecord] = []
+    if config.verbose:
+        # Diagnostics-only: the excluded arcs never carried flow (they were
+        # removed pre-solve), so flow_units stays 0.
+        for rec in sla_excluded:
+            violations.append(ServiceViolationRecord(
+                origin_id          = str(rec["origin_id"]),
+                destination_id     = str(rec["destination_id"]),
+                mode               = str(rec["mode"]),
+                lead_time_days     = float(rec["lead_time_days"]),
+                sla_days           = float(rec["sla_days"]),
+                excess_days        = float(rec["excess_days"]),
+                flow_units         = 0.0,
+                excluded_pre_solve = True,
+            ))
+
+    return ServiceReport(
+        methodology              = "TRANSIT_TIME_SLA_FEASIBILITY",
+        sla_enforced             = bool(config.enforce_sla),
+        sla_mode                 = sla_mode_str,
+        service_metric           = metric_str,
+        service_metric_supported = metric_supported,
+        unsupported_features     = unsupported,
+        total_demand             = round(total_demand, 4),
+        served_demand            = round(served, 4),
+        unserved_demand          = round(unserved, 4),
+        demand_within_sla        = round(total_demand * pct_sla / 100.0, 4),
+        pct_demand_in_sla        = round(pct_sla, 4),
+        n_lanes_evaluated        = n_lanes_evaluated,
+        n_lanes_sla_excluded     = len(sla_excluded),
+        violations               = violations,
+    )
 
 
 # ---------------------------------------------------------------------------
