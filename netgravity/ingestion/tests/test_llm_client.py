@@ -344,6 +344,32 @@ def test_truncated_response_names_the_real_cause():
         client._call_live("p", max_tokens=10)
 
 
+def test_truncation_error_includes_the_usage_breakdown_when_available():
+    """
+    This is what turns 'it truncated, no idea why' into an instant
+    diagnosis: a completion count near zero against a real total proves the
+    budget went to invisible reasoning tokens, not a dropped call.
+    """
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(_FakeCompletions(
+        '', finish_reason="length",
+        usage=_Usage(prompt_tokens=15, completion_tokens=5, total_tokens=20),
+    ))
+    with pytest.raises(ValueError) as exc:
+        client._call_live("p", max_tokens=20)
+    text = str(exc.value)
+    assert "15 prompt" in text
+    assert "5 completion" in text
+    assert "20 total" in text
+
+
+def test_truncation_error_degrades_gracefully_with_no_usage_data():
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(_FakeCompletions('', finish_reason="length", usage=None))
+    with pytest.raises(ValueError, match="truncated"):
+        client._call_live("p", max_tokens=20)
+
+
 # --- failure handling -------------------------------------------------------
 
 def test_failure_degrades_to_stub_but_is_marked_as_a_failure():

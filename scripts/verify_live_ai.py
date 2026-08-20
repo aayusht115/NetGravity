@@ -99,7 +99,14 @@ def step_2_handshake(cfg: IngestionConfig) -> bool:
     try:
         raw = client._call_live(
             'Reply with exactly this JSON and nothing else: {"ok": true}',
-            max_tokens=20,
+            # Generous even though the wanted answer is 5 tokens: a
+            # reasoning model (Gemini) spends part of this budget on
+            # invisible "thinking" before writing the visible answer, even
+            # with reasoning_effort=none reducing but not always zeroing
+            # that spend. 20 was too tight and produced a truncated,
+            # content-free response that looked identical to "never reached
+            # the provider" (it wasn't -- see the usage breakdown below).
+            max_tokens=200,
         )
         elapsed = time.time() - started
         return check(True, f"provider accepted the key ({elapsed:.1f}s)",

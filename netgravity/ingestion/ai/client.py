@@ -44,6 +44,29 @@ _OPENAI_PROVIDERS = {"openai", "codex"}
 LLM_FAILURE_MARKER = "LLM CALL FAILED"
 
 
+def _truncation_message(max_tokens: int, usage: Optional[Dict[str, int]]) -> str:
+    """
+    Build the "response was truncated" error, including the provider's own
+    usage breakdown when we have it.
+
+    That breakdown is the difference between a two-second guess and an
+    instant diagnosis: on a reasoning model, prompt+completion can be far
+    below max_tokens while total_tokens still hits it — proof the budget
+    went to invisible "thinking", not to the network call failing to land.
+    """
+    detail = ""
+    if usage:
+        detail = (
+            f" (usage: {usage.get('prompt_tokens', '?')} prompt + "
+            f"{usage.get('completion_tokens', '?')} completion = "
+            f"{usage.get('total_tokens', '?')} total — a completion count "
+            f"near zero points at a reasoning/thinking budget, not a "
+            f"dropped call)"
+        )
+    return (f"response hit the {max_tokens}-token limit and was truncated"
+            f"{detail}; raise max_tokens for this call site")
+
+
 def _is_unsupported_param(exc: Exception, param: str) -> bool:
     """True when an API error is specifically 'this model rejects <param>'."""
     text = str(exc).lower()
@@ -279,10 +302,7 @@ class LLMClient:
         # A truncated response is invalid JSON and would fail parsing with a
         # confusing error. Name the real cause instead.
         if getattr(choice, "finish_reason", None) == "length":
-            raise ValueError(
-                f"response hit the {max_tokens}-token limit and was truncated; "
-                f"raise max_tokens for this call site"
-            )
+            raise ValueError(_truncation_message(max_tokens, self._last_usage))
         return choice.message.content or ""
 
     # -- Anthropic ---------------------------------------------------------
@@ -318,10 +338,7 @@ class LLMClient:
                 if input_tokens is not None and output_tokens is not None else None,
             }
         if getattr(message, "stop_reason", None) == "max_tokens":
-            raise ValueError(
-                f"response hit the {max_tokens}-token limit and was truncated; "
-                f"raise max_tokens for this call site"
-            )
+            raise ValueError(_truncation_message(max_tokens, self._last_usage))
         return "".join(
             block.text for block in message.content
             if getattr(block, "type", None) == "text"
