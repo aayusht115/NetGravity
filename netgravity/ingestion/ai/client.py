@@ -184,6 +184,12 @@ class LLMClient:
 
     # -- OpenAI ------------------------------------------------------------
 
+    def _looks_like_gemini(self) -> bool:
+        base_url = self.config.llm_base_url or ""
+        model = self.config.resolved_model or ""
+        return "generativelanguage.googleapis.com" in base_url \
+            or model.startswith("gemini")
+
     def _create_chat_completion(self, prompt: str, max_tokens: int):
         """
         Call chat.completions.create(), degrading two independent optional
@@ -206,6 +212,21 @@ class LLMClient:
             "model": self.config.resolved_model,
             "messages": [{"role": "user", "content": prompt}],
         }
+
+        # Gemini (via Google's OpenAI-compatible endpoint) is a reasoning
+        # model: by default it spends part of max_tokens on invisible
+        # "thinking" before writing the visible answer. A small max_tokens
+        # (our own handshake call asks for only 20) can be entirely consumed
+        # by thinking, so the call comes back truncated with NO visible
+        # content — indistinguishable at a glance from the call never
+        # reaching the provider at all. reasoning_effort="none" turns
+        # thinking off. Scoped to Gemini specifically (by base_url or model
+        # name) since not every provider recognises this parameter the same
+        # way, and it is meaningless for a non-reasoning model like
+        # gpt-4o-mini.
+        if self._looks_like_gemini():
+            base["reasoning_effort"] = "none"
+
         use_json_mode = True
         token_param = "max_completion_tokens"
 

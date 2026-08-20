@@ -151,6 +151,45 @@ def test_openai_call_requests_json_mode():
     assert sent["model"] == "gpt-4o-mini"
 
 
+def test_gemini_via_base_url_gets_reasoning_effort_disabled():
+    """
+    Gemini's OpenAI-compatible endpoint spends part of max_tokens on hidden
+    'thinking' by default, so a small max_tokens (like our own 20-token
+    handshake probe) can be fully consumed before any visible answer is
+    written - the call succeeds but comes back looking truncated/empty,
+    which is easy to mistake for 'never reached the provider'.
+    reasoning_effort='none' must be sent whenever the endpoint is Gemini's.
+    """
+    completions = _FakeCompletions('{"ok": true}')
+    client = LLMClient(_live_config(
+        llm_base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        llm_model="gemini-2.5-flash",
+    ))
+    client._sdk = _FakeOpenAI(completions)
+    client._call_live("return json", max_tokens=20)
+    assert completions.record[0]["reasoning_effort"] == "none"
+
+
+def test_gemini_detected_by_model_name_even_without_matching_base_url():
+    """Belt-and-suspenders: catch it by model name too, in case some other
+    base_url ever proxies to a Gemini model."""
+    completions = _FakeCompletions('{"ok": true}')
+    client = LLMClient(_live_config(llm_model="gemini-2.5-flash"))
+    client._sdk = _FakeOpenAI(completions)
+    client._call_live("return json", max_tokens=20)
+    assert completions.record[0]["reasoning_effort"] == "none"
+
+
+def test_non_gemini_providers_never_get_reasoning_effort():
+    """reasoning_effort is meaningless (and possibly rejected) by a
+    non-reasoning model like gpt-4o-mini — must not be sent by default."""
+    completions = _FakeCompletions('{"ok": true}')
+    client = LLMClient(_live_config())  # default: openai / gpt-4o-mini, no base_url
+    client._sdk = _FakeOpenAI(completions)
+    client._call_live("return json", max_tokens=20)
+    assert "reasoning_effort" not in completions.record[0]
+
+
 def test_token_usage_is_captured_and_surfaced_in_the_report():
     """
     The provider's own usage figures (not an estimate) end up on
