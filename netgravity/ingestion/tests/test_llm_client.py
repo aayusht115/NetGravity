@@ -7,6 +7,8 @@ offline and in CI exactly as they do locally.
 
 from __future__ import annotations
 
+import os
+
 import pytest
 
 from netgravity.ingestion.ai.client import (
@@ -318,3 +320,71 @@ def test_no_key_produces_no_warning(monkeypatch):
                 "NETGRAVITY_ANTHROPIC_API_KEY"):
         monkeypatch.delenv(var, raising=False)
     assert IngestionConfig().key_warning is None
+
+
+# --- .env loading -----------------------------------------------------------
+
+@pytest.fixture
+def isolated_env():
+    """
+    Snapshot and restore os.environ around a test.
+
+    _load_dotenv_once() writes into os.environ directly, and monkeypatch does
+    not know about keys it did not set itself. Without this, a leaked test key
+    puts LATER tests into live mode and they try to reach the network.
+    """
+    saved = os.environ.copy()
+    try:
+        yield
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
+
+
+def test_dotenv_is_actually_read(tmp_path, monkeypatch, isolated_env):
+    """
+    A key pasted into .env must reach the config. Before this was wired up,
+    config only read os.environ — so .env was a file nobody read, and the
+    pipeline stayed silently in stub mode while looking configured.
+    """
+    from netgravity.ingestion import config as config_mod
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "# comment line\n"
+        "NETGRAVITY_OPENAI_API_KEY=sk-from-file\n"
+        "\n"
+        'NETGRAVITY_LLM_MODEL="gpt-quoted"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(config_mod, "REPO_ROOT", tmp_path)
+    for var in ("NETGRAVITY_OPENAI_API_KEY", "NETGRAVITY_LLM_MODEL",
+                "NETGRAVITY_LLM_API_KEY"):
+        monkeypatch.delenv(var, raising=False)
+
+    assert config_mod._load_dotenv_once() == str(env_file)
+    assert os.environ["NETGRAVITY_OPENAI_API_KEY"] == "sk-from-file"
+    assert os.environ["NETGRAVITY_LLM_MODEL"] == "gpt-quoted"   # quotes stripped
+
+
+def test_real_environment_wins_over_the_dotenv_file(tmp_path, monkeypatch,
+                                                   isolated_env):
+    """
+    CI and Azure inject real env vars. A stale committed .env must never
+    quietly override them.
+    """
+    from netgravity.ingestion import config as config_mod
+
+    (tmp_path / ".env").write_text("NETGRAVITY_LLM_MODEL=from-file\n",
+                                   encoding="utf-8")
+    monkeypatch.setattr(config_mod, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("NETGRAVITY_LLM_MODEL", "from-shell")
+
+    config_mod._load_dotenv_once()
+    assert os.environ["NETGRAVITY_LLM_MODEL"] == "from-shell"
+
+
+def test_missing_dotenv_is_not_an_error(tmp_path, monkeypatch, isolated_env):
+    from netgravity.ingestion import config as config_mod
+    monkeypatch.setattr(config_mod, "REPO_ROOT", tmp_path)
+    assert config_mod._load_dotenv_once() is None

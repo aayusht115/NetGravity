@@ -77,6 +77,49 @@ DEFAULT_MODELS = {
 }
 
 
+def _load_dotenv_once() -> Optional[str]:
+    """
+    Read <repo>/.env into the environment, if present.
+
+    Without this, `.env` is a file nobody reads: config only ever looked at
+    os.environ, so a key pasted into .env would silently leave the pipeline in
+    stub mode — the most confusing possible failure, because everything still
+    "works".
+
+    Real environment variables WIN over the file. That ordering matters: CI
+    and Azure inject config as real env vars, and a stale committed .env must
+    never quietly override them.
+
+    python-dotenv is optional; without it we parse the handful of KEY=VALUE
+    lines ourselves rather than making it a hard dependency.
+    """
+    path = REPO_ROOT / ".env"
+    if not path.exists():
+        return None
+    try:
+        from dotenv import load_dotenv          # type: ignore
+        load_dotenv(path, override=False)
+        return str(path)
+    except ImportError:
+        pass
+
+    try:
+        for raw in path.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+        return str(path)
+    except OSError:
+        return None
+
+
+DOTENV_PATH = _load_dotenv_once()
+
+
 def _env(name: str, default: Optional[str] = None) -> Optional[str]:
     value = os.environ.get(name)
     if value is None or value.strip() == "":
