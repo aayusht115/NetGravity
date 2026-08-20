@@ -145,6 +145,13 @@ def _normalise(name: str) -> str:
     return "".join(ch for ch in str(name).lower() if ch.isalnum())
 
 
+#: Public alias. The memory layer keys confirmed mappings on normalised
+#: column names, and MUST use the identical rule the alias table uses — two
+#: different normalisations would let the same column resolve one way against
+#: the dictionary and another against memory.
+normalise_name = _normalise
+
+
 # ---------------------------------------------------------------------------
 # Declared time period for ambiguous quantity columns
 # ---------------------------------------------------------------------------
