@@ -186,12 +186,25 @@ function renderScenarioStrip() {
   if (!container) return;
 
   const visibleScenarios = SCENARIOS.filter((s) => s.id !== 'SCN_ACTUAL');
+  const stripScenarios = visibleScenarios.slice(0, 4);
 
-  const cardsHtml = visibleScenarios
+  const cardsHtml = stripScenarios
     .map((s) => {
       const isSelected = s.id === selectedScenarioId;
       const isRec = s.type === 'RECOMMENDED' || s.id === 'SCN_REBALANCE';
       const cardTitle = s.cardTitle || s.name;
+
+      // Extract specification / what changed snippet
+      let specSnippet = s.highlight || '';
+      if (!specSnippet && s.changes && s.changes.length > 0) {
+        specSnippet = `${s.changes[0].item}: ${s.changes[0].change}`;
+      }
+      if (!specSnippet) {
+        specSnippet = s.description || 'Optimized network parameters.';
+      }
+
+      const costText = s.costChange !== undefined ? `${s.costChange < 0 ? '↓ ' : '↑ '}${Math.abs(s.costChange)}%` : '—';
+      const riskClass = s.capacityRisk === 'Low' || s.capacityRisk === 'Very Low' ? 'risk-low' : 'risk-high';
 
       return `
         <div class="scn-strip-card ${isSelected ? 'selected' : ''}" data-scn-id="${s.id}">
@@ -202,9 +215,18 @@ function renderScenarioStrip() {
               </div>
               <div class="scn-strip-name">${cardTitle}</div>
             </div>
-            ${!isRec ? `<span class="scn-strip-close" data-del-id="${s.id}" title="Remove scenario">✕</span>` : '<span style="width:12px"></span>'}
+            ${!isRec ? `<span class="scn-strip-close" data-del-id="${s.id}" title="Remove scenario">✕</span>` : '<span class="tag tag-success" style="font-size:9.5px;padding:1px 6px">Rec.</span>'}
           </div>
-          <div>
+
+          <div class="scn-strip-spec">${specSnippet}</div>
+
+          <div class="scn-strip-metrics-row">
+            <span class="scn-strip-metric-pill cost">${costText} Cost</span>
+            <span class="scn-strip-metric-pill sla">${s.sla}% SLA</span>
+            <span class="scn-strip-metric-pill ${riskClass}">${s.capacityRisk}</span>
+          </div>
+
+          <div class="flex items-center justify-between" style="border-top:1px solid var(--border-light);padding-top:6px">
             <a href="javascript:void(0)" class="scn-strip-inspect-link" data-inspect-id="${s.id}">Click to Inspect →</a>
           </div>
         </div>
@@ -214,14 +236,14 @@ function renderScenarioStrip() {
 
   container.innerHTML = `
     ${cardsHtml}
-    <span class="scn-strip-helper-text">select one scenario<br>for deep dive</span>
-    <button class="scn-strip-add-btn" id="btn-strip-add-scenario">
-      <span style="font-size:14px;font-weight:700">+</span>
-      <span>Add new Scenario</span>
-    </button>
+    <div class="scn-strip-all-card" id="btn-view-all-scenarios" title="Open All Scenarios Workspace">
+      <div style="font-size:20px;font-weight:800;color:var(--primary);line-height:1">➔</div>
+      <div style="font-weight:700;font-size:12.5px;color:var(--text-1);margin-top:2px">All Scenarios</div>
+      <div class="text-xs text-muted">View all (${visibleScenarios.length})</div>
+    </div>
   `;
 
-  // Wire card events
+  // Wire card events (entire card is clickable to select and open details)
   container.querySelectorAll('.scn-strip-card').forEach((card) => {
     card.addEventListener('click', (e) => {
       if (e.target.classList.contains('scn-strip-close')) {
@@ -230,22 +252,100 @@ function renderScenarioStrip() {
         removeScenario(delId);
         return;
       }
-      if (e.target.classList.contains('scn-strip-inspect-link')) {
-        e.stopPropagation();
-        const scnId = e.target.dataset.inspectId;
-        selectScenario(scnId);
-        openScenarioDrawer(scnId);
-        return;
-      }
       const scnId = card.dataset.scnId;
       selectScenario(scnId);
+      openScenarioDrawer(scnId);
     });
   });
 
-  const btnStripAdd = document.getElementById('btn-strip-add-scenario');
-  if (btnStripAdd) {
-    btnStripAdd.addEventListener('click', () => openCreateToolbox());
-  }
+  document.getElementById('btn-view-all-scenarios')?.addEventListener('click', () => {
+    openAllScenariosDrawer();
+  });
+}
+
+// ─── Open All Scenarios Drawer (Right Slide-over Window) ─────
+export function openAllScenariosDrawer() {
+  const overlay = document.getElementById('all-scenarios-drawer-overlay');
+  const listEl = document.getElementById('all-scenarios-drawer-list');
+  const countBadge = document.getElementById('all-scenarios-count-badge');
+  if (!overlay || !listEl) return;
+
+  const visibleScenarios = SCENARIOS.filter((s) => s.id !== 'SCN_ACTUAL');
+  if (countBadge) countBadge.textContent = `${visibleScenarios.length} Active`;
+
+  listEl.innerHTML = visibleScenarios
+    .map((s) => {
+      const isSelected = s.id === selectedScenarioId;
+      const isRec = s.type === 'RECOMMENDED' || s.id === 'SCN_REBALANCE';
+      const badgeCls = isRec ? 'tag-success' : 'tag-primary';
+      const badgeText = isRec ? 'Recommended' : (s.type === 'AI_RECOMMENDED' ? 'AI Recommended' : 'User Created');
+
+      let specSnippet = s.highlight || '';
+      if (!specSnippet && s.changes && s.changes.length > 0) {
+        specSnippet = `${s.changes[0].item}: ${s.changes[0].change}`;
+      }
+      if (!specSnippet) specSnippet = s.description || '';
+
+      const costText = s.costChange !== undefined ? `${s.costChange < 0 ? '↓ ' : '↑ '}${Math.abs(s.costChange)}%` : '—';
+      const riskColor = s.capacityRisk === 'Low' || s.capacityRisk === 'Very Low' ? 'var(--green)' : 'var(--red)';
+
+      return `
+        <div class="scn-section-box" style="padding:14px;border-left:3px solid ${isSelected ? 'var(--primary)' : 'var(--border)'};background:${isSelected ? '#fcf9ff' : 'var(--bg-card)'}">
+          <div class="flex items-center justify-between mb-xs">
+            <div class="flex items-center gap-xs">
+              <span class="tag ${badgeCls}" style="font-size:10px;padding:2px 7px">${badgeText}</span>
+              <strong style="font-size:14px;color:var(--text-1)">${s.cardTitle || s.name}</strong>
+            </div>
+            ${!isRec ? `<button class="btn btn-ghost btn-sm text-danger" data-drawer-del="${s.id}" title="Delete scenario" style="padding:2px 6px;font-size:12px">🗑️</button>` : ''}
+          </div>
+
+          <p style="font-size:12px;color:var(--text-2);line-height:1.45;margin-bottom:10px">${specSnippet}</p>
+
+          <div class="grid-3 mb-sm" style="gap:6px;background:var(--bg-subtle);padding:8px 10px;border-radius:var(--r-sm);font-size:11.5px">
+            <div><span class="text-muted">Total Cost:</span> <strong>₹${(s.totalCost / 100000).toFixed(2)}L</strong> <span style="color:var(--green)">(${costText})</span></div>
+            <div><span class="text-muted">SLA:</span> <strong style="color:${s.sla >= 95 ? 'var(--green)' : 'var(--red)'}">${s.sla}%</strong></div>
+            <div><span class="text-muted">Risk:</span> <strong style="color:${riskColor}">${s.capacityRisk}</strong></div>
+          </div>
+
+          <div class="flex items-center justify-between">
+            <button class="btn btn-secondary btn-sm" data-drawer-select="${s.id}">
+              ${isSelected ? '✓ Currently Selected' : 'Select Scenario'}
+            </button>
+            <a href="javascript:void(0)" class="scn-strip-inspect-link" data-drawer-inspect="${s.id}">Inspect Details →</a>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  // Wire drawer item actions
+  listEl.querySelectorAll('[data-drawer-select]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const scnId = btn.dataset.drawerSelect;
+      selectScenario(scnId);
+      openAllScenariosDrawer();
+    });
+  });
+
+  listEl.querySelectorAll('[data-drawer-inspect]').forEach((link) => {
+    link.addEventListener('click', () => {
+      const scnId = link.dataset.drawerInspect;
+      overlay.classList.remove('visible');
+      selectScenario(scnId);
+      openScenarioDrawer(scnId);
+    });
+  });
+
+  listEl.querySelectorAll('[data-drawer-del]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const scnId = btn.dataset.drawerDel;
+      removeScenario(scnId);
+      openAllScenariosDrawer();
+    });
+  });
+
+  overlay.classList.add('visible');
 }
 
 // ─── Select Scenario ────────────────────────────────────────
@@ -1200,4 +1300,87 @@ function wireScenarioEvents() {
   document.getElementById('btn-run-toolbox-scenario')?.addEventListener('click', () => {
     runScenarioCreation();
   });
+
+  // Create Scenario Button
+  document.getElementById('btn-create-scenario-main')?.addEventListener('click', () => {
+    openCreateToolbox();
+  });
+
+  // All Scenarios Drawer Close & Clear Actions
+  document.getElementById('all-scenarios-drawer-close')?.addEventListener('click', () => {
+    document.getElementById('all-scenarios-drawer-overlay')?.classList.remove('visible');
+  });
+  document.getElementById('btn-close-all-scenarios')?.addEventListener('click', () => {
+    document.getElementById('all-scenarios-drawer-overlay')?.classList.remove('visible');
+  });
+
+  document.getElementById('btn-clear-user-scenarios')?.addEventListener('click', () => {
+    // Keep baseline, recommended and canonical scenarios, clear user-created custom scenarios
+    const canonicalIds = ['SCN_ACTUAL', 'SCN_REBALANCE', 'SCN_AI_REC_4'];
+    const removedCount = SCENARIOS.length - SCENARIOS.filter(s => canonicalIds.includes(s.id)).length;
+    
+    // Filter in-place
+    for (let i = SCENARIOS.length - 1; i >= 0; i--) {
+      if (!canonicalIds.includes(SCENARIOS[i].id)) {
+        SCENARIOS.splice(i, 1);
+      }
+    }
+
+    selectedScenarioId = 'SCN_REBALANCE';
+    renderScenarioStrip();
+    renderSingleScenarioTable();
+    renderSingleScenarioInsights();
+    renderSingleScenarioActions();
+    renderMultiScenarioTable();
+    renderComparisonInsights();
+    renderMultiScenarioActions();
+    openAllScenariosDrawer();
+  });
+
+  // Scenario Chatbot Events
+  document.getElementById('scn-chat-send')?.addEventListener('click', handleScenarioChat);
+  document.getElementById('scn-chat-input')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') handleScenarioChat();
+  });
+}
+
+// ─── Scenario Planning Contextual Chatbot ──────────────────
+function handleScenarioChat() {
+  const input = document.getElementById('scn-chat-input');
+  const messages = document.getElementById('scn-chat-messages');
+  if (!input || !input.value.trim()) return;
+
+  const query = input.value.trim();
+  input.value = '';
+
+  if (messages) {
+    messages.style.display = 'block';
+    messages.innerHTML += `<div class="home-chat-msg user">You: ${query}</div>`;
+
+    const scn = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[1];
+    const scnName = scn.cardTitle || scn.name;
+    const costText = scn.costChange < 0 ? `saves ${Math.abs(scn.costChange)}% (₹${((1285000 - scn.totalCost) / 100000).toFixed(1)}L/mo)` : `increases cost by ${scn.costChange}%`;
+
+    let responseText = '';
+    const qLower = query.toLowerCase();
+
+    if (qLower.includes('cost') || qLower.includes('save') || qLower.includes('budget') || qLower.includes('roi')) {
+      responseText = `<strong>${scnName}</strong> ${costText} with total operating cost at ₹${(scn.totalCost / 100000).toFixed(2)}L/month. Transport cost is ₹${(scn.transportCost / 100000).toFixed(2)}L.`;
+    } else if (qLower.includes('delhi') || qLower.includes('bottleneck') || qLower.includes('capacity') || qLower.includes('util')) {
+      responseText = `Under <strong>${scnName}</strong>, network average utilisation is <strong>${scn.avgUtil}%</strong> and Delhi NCR DC capacity risk is mitigated to <strong>${scn.capacityRisk}</strong> (relieving the 108% December peak forecast).`;
+    } else if (qLower.includes('sla') || qLower.includes('service') || qLower.includes('delivery') || qLower.includes('time')) {
+      responseText = `On-time delivery SLA under <strong>${scnName}</strong> reaches <strong>${scn.sla}%</strong> with an average lead time of 2.1 days, meeting enterprise SLA targets (>95%).`;
+    } else if (qLower.includes('kolkata') || qLower.includes('rebalance') || qLower.includes('lane') || qLower.includes('flow')) {
+      responseText = `Key network reallocation: Baddi → Delhi volume is reduced by 1,200 units/day, while Baddi → Kolkata DC absorbs +800 units/day and Pune → Mumbai direct handling absorbs +400 units/day.`;
+    } else if (qLower.includes('action') || qLower.includes('implement') || qLower.includes('execute') || qLower.includes('next')) {
+      responseText = `Recommended next steps: [1] Execute line-haul freight rebalancing on Baddi–Delhi lane; [2] Confirm cross-dock capacity reservations with regional 3PL partners.`;
+    } else {
+      responseText = `<strong>${scnName}</strong> delivers ${costText}, maintains ${scn.sla}% SLA, and ${scn.highlight || scn.description}. Would you like to inspect parameter assumptions or run stress tests?`;
+    }
+
+    setTimeout(() => {
+      messages.innerHTML += `<div class="home-chat-msg bot">🤖 NetGravity: ${responseText}</div>`;
+      messages.scrollTop = messages.scrollHeight;
+    }, 200);
+  }
 }
