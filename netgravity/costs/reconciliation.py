@@ -107,15 +107,32 @@ def reconcile_costs(
     ind_inventory_cost = round(result.objective_components.get("inventory_cost", 0.0), 4)
 
     # 4. Independent Shortage Cost
+    #
+    # The MILP objective penalises shortage per (market, product) with a
+    # demand-priority multiplier: penalty × (1 + (priority − 1) × 0.5) × u.
+    # Reconciliation must mirror that term exactly, so unmet demand is evaluated
+    # per demand record rather than in aggregate. (Aggregating and applying a
+    # flat penalty understates the objective whenever a priority > 1 market goes
+    # short — for the Case-16 fixture that was a 300,000,000 gap.)
+    #
+    # NOTE: this penalty is a mathematical device that forces demand coverage.
+    # It reconciles the solver objective; it is NOT business network cost.
+    # See costs/business_cost.py for the business-cost basis.
     ind_shortage_cost = 0.0
     if config.allow_shortage:
-        total_demand = sum(d.quantity for d in network.demands)
-        total_served = sum(
-            fl.flow_units for fl in result.flow_decisions
-            if fac_map.get(fl.destination_id) and fac_map[fl.destination_id].role in market_roles
-        )
-        unmet_demand = max(0.0, total_demand - total_served)
-        ind_shortage_cost = unmet_demand * config.shortage_penalty
+        served_by_demand: Dict[tuple, float] = {}
+        for fl in result.flow_decisions:
+            dest = fac_map.get(fl.destination_id)
+            if dest and dest.role in market_roles:
+                key_d = (fl.destination_id, fl.product_id)
+                served_by_demand[key_d] = served_by_demand.get(key_d, 0.0) + fl.flow_units
+
+        for d in network.demands:
+            key_d = (d.market_id, d.product_id)
+            unmet = max(0.0, d.quantity - served_by_demand.get(key_d, 0.0))
+            if unmet > 0.0:
+                priority_mult = 1.0 + ((getattr(d, "priority", 1) or 1) - 1) * 0.5
+                ind_shortage_cost += unmet * config.shortage_penalty * priority_mult
 
     # Additive, matching the actual solver objective terms (see optimization/milp.py)
     ind_carbon_cost = 0.0

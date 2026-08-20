@@ -17,6 +17,7 @@ export function renderForecastChart(canvasId) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return;
 
+  const isCompact = canvasId === 'chart-forecast-home';
   const histLabels = DEMAND_HISTORY.months;
   const foreLabels = FORECAST.months;
   const allLabels = [...histLabels, ...foreLabels];
@@ -42,9 +43,9 @@ export function renderForecastChart(canvasId) {
           data: histData,
           borderColor: '#6B2FA0',
           backgroundColor: 'rgba(107,47,160,.08)',
-          borderWidth: 2.5,
-          pointRadius: 2,
-          pointHoverRadius: 5,
+          borderWidth: isCompact ? 2 : 2.5,
+          pointRadius: isCompact ? 1.5 : 2,
+          pointHoverRadius: 4,
           fill: false,
           tension: 0.3,
         },
@@ -52,10 +53,10 @@ export function renderForecastChart(canvasId) {
           label: 'Forecast',
           data: foreData,
           borderColor: '#6B2FA0',
-          borderWidth: 2.5,
-          borderDash: [6, 4],
-          pointRadius: 3,
-          pointHoverRadius: 6,
+          borderWidth: isCompact ? 2 : 2.5,
+          borderDash: [5, 3],
+          pointRadius: isCompact ? 2 : 3,
+          pointHoverRadius: 5,
           fill: false,
           tension: 0.3,
         },
@@ -82,8 +83,8 @@ export function renderForecastChart(canvasId) {
           label: 'Delhi NCR DC Capacity',
           data: capData,
           borderColor: '#dc2626',
-          borderWidth: 2,
-          borderDash: [10, 5],
+          borderWidth: 1.8,
+          borderDash: [8, 4],
           pointRadius: 0,
           fill: false,
         },
@@ -96,30 +97,43 @@ export function renderForecastChart(canvasId) {
       plugins: {
         legend: {
           position: 'top',
-          labels: { usePointStyle: true, font: { family: 'Inter', size: 11 }, padding: 16 },
+          labels: {
+            usePointStyle: true,
+            boxWidth: 6,
+            font: { family: 'Inter', size: isCompact ? 9.5 : 11 },
+            padding: isCompact ? 8 : 16,
+          },
         },
         tooltip: {
           backgroundColor: '#1a1a2e',
           titleFont: { family: 'Inter', size: 12 },
           bodyFont: { family: 'Inter', size: 11 },
-          padding: 12,
+          padding: 10,
           cornerRadius: 8,
         },
       },
       scales: {
         x: {
           grid: { display: false },
-          ticks: { font: { family: 'Inter', size: 10 }, maxRotation: 45 },
+          ticks: {
+            font: { family: 'Inter', size: isCompact ? 8.5 : 10 },
+            maxRotation: 45,
+            maxTicksLimit: isCompact ? 8 : 16,
+          },
         },
         y: {
           beginAtZero: false,
           min: 6000,
           grid: { color: '#f0f0f5' },
           ticks: {
-            font: { family: 'Inter', size: 11 },
+            font: { family: 'Inter', size: isCompact ? 9 : 11 },
             callback: v => (v / 1000).toFixed(0) + 'K',
           },
-          title: { display: true, text: 'Demand (units/day)', font: { family: 'Inter', size: 11, weight: '600' } },
+          title: {
+            display: !isCompact,
+            text: 'Demand (units/day)',
+            font: { family: 'Inter', size: 11, weight: '600' },
+          },
         },
       },
     },

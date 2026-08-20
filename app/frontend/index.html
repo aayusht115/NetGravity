@@ -15,6 +15,10 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
+  <!-- Three.js (3D Digital Twin Engine) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
   <!-- Design System -->
   <link rel="stylesheet" href="css/style.css">
 </head>
@@ -37,11 +41,15 @@
         </div>
 
         <div class="sidebar-nav">
-          <div class="nav-item active" data-tab="home">
+          <div class="nav-item active" data-tab="home" id="nav-item-home">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M3 10L10 3l7 7M5 8.5V16a1 1 0 001 1h3v-4h2v4h3a1 1 0 001-1V8.5" />
             </svg>
-            Home
+            <span>Home</span>
+          </div>
+          <!-- Sub-menu for KPI Dashboard (expands when active) -->
+          <div class="nav-sub-item" id="nav-sub-kpi" data-tab="facility-dashboard" style="display:none">
+            <span class="sub-nav-indicator">└─</span> KPI Dashboard
           </div>
           <div class="nav-item" data-tab="twin">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -51,20 +59,20 @@
               <circle cx="14" cy="14" r="2" />
               <path d="M9 7h3M7 9v3M14 9v3M9 14h3" />
             </svg>
-            Digital Twin
+            <span>Digital Twin</span>
           </div>
           <div class="nav-item" data-tab="scenarios">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 13l2 2 4-4" />
             </svg>
-            Scenario Planning
+            <span>Scenario Planning</span>
           </div>
           <div class="nav-item" data-tab="forecast">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
               <polyline points="3,15 7,9 11,12 17,4" />
               <polyline points="14,4 17,4 17,7" />
             </svg>
-            Forecasting
+            <span>Forecasting</span>
           </div>
         </div>
 
@@ -92,81 +100,149 @@
       <!-- ═══════════════════════════════════ MAIN CONTENT -->
       <main class="main-content">
 
-        <!-- ─────────────────── TAB: HOME (Decision Cockpit) -->
-        <section class="tab-panel active" id="tab-home">
-
-          <!-- Control Bar -->
-          <div class="home-controls">
-            <div class="controls-left">
-              <div class="control-group">
-                <span class="control-label">View by</span>
-                <select class="control-select" id="sel-type">
-                  <option value="DC">🏪 DC</option>
-                  <option value="Plant">🏭 Plant</option>
-                </select>
-              </div>
-              <div class="control-group">
-                <select class="control-select facility-select" id="sel-facility">
-                  <option value="DC_DELHI">Delhi NCR DC</option>
-                  <option value="DC_MUMBAI">Mumbai DC</option>
-                  <option value="DC_BENGALURU">Bengaluru DC</option>
-                  <option value="DC_KOLKATA">Kolkata DC</option>
-                  <option value="DC_GUWAHATI">Guwahati DC</option>
-                </select>
-                <span class="facility-dot" id="facility-dot"></span>
-              </div>
+        <!-- Global Top Bar (Facility & Period Selectors in Parallel) -->
+        <header class="app-topbar">
+          <div class="topbar-controls">
+            <div class="topbar-control-group">
+              <span class="control-label">Facility</span>
+              <select class="control-select topbar-facility-select" id="sel-facility">
+                <option value="DC_DELHI" selected>Delhi NCR DC</option>
+                <option value="DC_MUMBAI">Mumbai DC</option>
+                <option value="DC_BENGALURU">Bengaluru DC</option>
+                <option value="DC_KOLKATA">Kolkata DC</option>
+                <option value="DC_GUWAHATI">Guwahati DC</option>
+                <option value="ALL">All DCs (Network Overview)</option>
+              </select>
             </div>
-            <div class="controls-right">
+            <div class="topbar-control-group">
               <span class="control-label">Period</span>
-              <select class="control-select" id="sel-period">
-                <!-- Populated by JS -->
+              <select class="control-select topbar-period-select" id="sel-period">
+                <!-- Populated by JS: 1 Aug – 31 Aug 2026 -->
               </select>
             </div>
           </div>
+        </header>
 
-          <!-- Header -->
-          <div class="home-header">
-            <h1 class="home-greeting">Good morning, Priya 👋</h1>
-            <p class="home-subtitle">Here's the performance snapshot for <strong id="home-facility-name">Delhi NCR
-                DC</strong></p>
-          </div>
+        <!-- ─────────────────── TAB: HOME (Decision Cockpit 2/3 + 1/3 Command Centre) -->
+        <section class="tab-panel active" id="tab-home">
+          <div class="home-2col-layout">
+            
+            <!-- 2/3 LEFT COLUMN -->
+            <div class="home-left-col">
+              
+              <!-- ROW 1: KPI Section (Left) & Forecast Section (Right) -->
+              <div class="home-top-row">
+                
+                <!-- KPI SECTION CARD -->
+                <div class="home-card kpi-card-section" id="home-kpi-block" style="cursor:pointer">
+                  <div class="home-card-header">
+                    <h2 class="home-card-title">KPI Section</h2>
+                    <div class="home-view-by-wrap" onclick="event.stopPropagation()">
+                      <span class="view-by-label">View by</span>
+                      <select class="control-select-sm" id="home-kpi-type-select">
+                        <option value="DC">🇮🇳 DC</option>
+                        <option value="Plant">🏭 Plant</option>
+                      </select>
+                      <select class="control-select-sm" id="home-facility-picker" style="display:none"></select>
+                    </div>
+                  </div>
 
-          <!-- KPI Cards -->
-          <div class="kpi-grid" id="kpi-grid">
-            <!-- Populated by JS -->
-          </div>
+                  <!-- 4 KPI Items Grid (2x2) -->
+                  <div class="home-kpi-2x2-grid" id="home-kpi-grid">
+                    <!-- Populated by JS -->
+                  </div>
 
-          <!-- View More KPIs (Right-aligned) -->
-          <div class="view-more-kpis-container">
-            <button class="view-more-kpis-btn" id="btn-view-more-kpis">View more KPIs →</button>
-          </div>
+                  <div class="home-card-footer">
+                    <button class="link-btn" id="btn-view-more-kpis">View more KPIs →</button>
+                  </div>
+                </div>
 
-          <!-- Insights Section -->
-          <div class="home-insights-header">
-            <div>
-              <h2 class="insights-title">Here's what I found...</h2>
-              <p class="insights-subtitle">Key insights and recommendations based on your network performance and
-                forecasts.</p>
-            </div>
-          </div>
+                <!-- FORECAST SECTION CARD -->
+                <div class="home-card forecast-card-section" id="home-forecast-block" style="cursor:pointer">
+                  <div class="home-card-header">
+                    <h2 class="home-card-title">Forecast Section</h2>
+                    <div class="home-view-by-wrap" onclick="event.stopPropagation()">
+                      <span class="view-by-label">View by</span>
+                      <select class="control-select-sm" id="home-forecast-type-select">
+                        <option value="DC">🇮🇳 DC</option>
+                        <option value="Plant">🏭 Plant</option>
+                      </select>
+                    </div>
+                  </div>
 
-          <div class="insight-list" id="home-insight-list">
-            <!-- Populated by JS -->
-          </div>
+                  <!-- Sub-banner message -->
+                  <div class="home-forecast-insight-banner" id="home-forecast-banner">
+                    I forecast North India demand to increase 14% over the next 3 months.
+                  </div>
 
-          <!-- AI Status Banner -->
-          <div class="ai-banner">
-            <div class="ai-banner-left">
-              <span class="ai-banner-icon">🤖</span>
-              <div>
-                <div class="ai-banner-text">I continuously monitor your network, forecast demand, run scenarios, and
-                  recommend the best actions.</div>
-                <div class="ai-banner-sub">Let me know if you'd like me to investigate anything specific.</div>
+                  <!-- Compact Chart Canvas -->
+                  <div class="home-forecast-chart-container">
+                    <canvas id="chart-forecast-home"></canvas>
+                  </div>
+
+                  <div class="home-card-footer">
+                    <button class="link-btn" id="btn-view-forecast-details">View more details (open Forecasting) →</button>
+                  </div>
+                </div>
+
               </div>
-            </div>
-            <button class="btn btn-primary" id="btn-ask-ng">🤖 Ask NetGravity</button>
-          </div>
 
+              <!-- ROW 2: DIGITAL TWIN MAP CARD -->
+              <div class="home-card digital-twin-preview-card" id="home-twin-block" style="cursor:pointer">
+                <div class="home-card-header">
+                  <h2 class="home-card-title">Digital Twin — India Logistics Network</h2>
+                </div>
+                
+                <div class="home-map-wrap" id="home-map-twin">
+                  <!-- Leaflet Baseline Network Map populated by JS -->
+                </div>
+              </div>
+
+            </div>
+
+            <!-- 1/3 RIGHT COLUMN -->
+            <div class="home-right-col">
+              
+              <!-- BLOCK 1: INSIGHTS -->
+              <div class="home-card insights-card-section">
+                <div class="home-card-header">
+                  <h2 class="home-right-title">INSIGHTS</h2>
+                </div>
+
+                <div class="home-numbered-insights" id="home-insights-list">
+                  <!-- Populated by JS: 5 numbered items -->
+                </div>
+              </div>
+
+              <!-- BLOCK 2: ACTION ITEMS -->
+              <div class="home-card actions-card-section">
+                <div class="home-card-header">
+                  <h2 class="home-right-title">ACTION ITEMS</h2>
+                </div>
+
+                <div class="home-actions-list" id="home-actions-list">
+                  <!-- Populated by JS: 3 action items -->
+                </div>
+              </div>
+
+              <!-- BLOCK 3: CHATBOT -->
+              <div class="home-card chatbot-card-section">
+                <div class="home-card-header">
+                  <h2 class="home-right-title">Chatbot <span style="font-size:12px;opacity:0.7">✨</span></h2>
+                </div>
+
+                <div class="home-chat-body">
+                  <div class="home-chat-messages" id="home-chat-messages" style="display:none"></div>
+                  <div class="home-chat-input-row">
+                    <input type="text" class="home-chat-input" id="home-chat-input" placeholder="Ask NetGravity" />
+                    <button class="btn btn-primary btn-sm home-chat-send" id="home-chat-send">Send</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
         </section>
 
         <!-- ─────────────────── TAB: FACILITY DASHBOARD / ANALYTICS ─────────────────── -->
@@ -291,15 +367,48 @@
                 Click any facility to inspect capacity, utilisation, and forecast. Toggle between network states.
               </div>
             </div>
-            <div class="toggle-group" id="map-toggle-twin">
-              <button class="toggle-btn active" data-state="actual">Actual</button>
-              <button class="toggle-btn" data-state="optimised">Optimised Base</button>
-              <button class="toggle-btn" data-state="recommended">Recommended</button>
+            <div class="flex items-center gap-sm">
+              <!-- 2D / 3D View Toggle -->
+              <div class="toggle-group" id="twin-view-toggle">
+                <button class="toggle-btn" data-view="2d">2D Map</button>
+                <button class="toggle-btn active" data-view="3d">3D Twin</button>
+              </div>
+              <!-- Network State Toggle -->
+              <div class="toggle-group" id="map-toggle-twin">
+                <button class="toggle-btn active" data-state="actual">Actual</button>
+                <button class="toggle-btn" data-state="optimised">Optimised Base</button>
+                <button class="toggle-btn" data-state="recommended">Recommended</button>
+              </div>
             </div>
           </div>
 
-          <div class="card" style="padding:0;overflow:hidden">
+          <!-- 2D Leaflet Map (hidden by default) -->
+          <div class="card twin-view-panel" id="twin-2d-panel" style="padding:0;overflow:hidden;display:none">
             <div class="map-container tall" id="map-twin"></div>
+          </div>
+
+          <!-- 3D Three.js Canvas -->
+          <div class="card twin-view-panel twin3d-card" id="twin-3d-panel" style="padding:0;overflow:hidden;position:relative">
+            <div class="twin3d-container" id="twin3d-canvas"></div>
+            <!-- Floating Stats Overlay -->
+            <div class="twin3d-stats-overlay" id="twin3d-stats">
+              <div class="twin3d-stat">
+                <span class="twin3d-stat-value">19</span>
+                <span class="twin3d-stat-label">Network Nodes</span>
+              </div>
+              <div class="twin3d-stat">
+                <span class="twin3d-stat-value" id="twin3d-flow-count">20</span>
+                <span class="twin3d-stat-label">Active Corridors</span>
+              </div>
+              <div class="twin3d-stat">
+                <span class="twin3d-stat-value" id="twin3d-state-label">Actual</span>
+                <span class="twin3d-stat-label">Network State</span>
+              </div>
+            </div>
+            <!-- Camera Controls Hint -->
+            <div class="twin3d-hint">
+              <span>🖱️ Drag to rotate · Scroll to zoom · Click node to inspect</span>
+            </div>
           </div>
 
           <div class="grid-3 mt-lg">
@@ -404,171 +513,163 @@
 
         <!-- ─────────────────── TAB: SCENARIOS ─────────────────── -->
         <section class="tab-panel" id="tab-scenarios">
-          <!-- Control Bar (Period Selector Removed as Requested) -->
-          <div class="home-controls">
-            <div class="controls-left">
-              <div class="control-group">
-                <span class="control-label">View by</span>
-                <select class="control-select" id="scn-sel-type">
-                  <option value="DC">🏪 DC</option>
-                  <option value="Plant">🏭 Plant</option>
-                </select>
-              </div>
-              <div class="control-group">
-                <select class="control-select facility-select" id="scn-sel-facility">
-                  <option value="ALL">All DCs</option>
-                  <option value="DC_DELHI" selected>Delhi NCR DC</option>
-                  <option value="DC_MUMBAI">Mumbai DC</option>
-                  <option value="DC_BENGALURU">Bengaluru DC</option>
-                  <option value="DC_KOLKATA">Kolkata DC</option>
-                  <option value="DC_GUWAHATI">Guwahati DC</option>
-                </select>
-                <span class="facility-dot" style="background:var(--amber)"></span>
-              </div>
-            </div>
-            <div class="controls-right">
-              <div class="text-xs text-muted" style="display:flex;align-items:center;gap:6px">
-                <span class="info-circle"
-                  title="All scenarios evaluated against December Peak Demand (+14.2%).">ⓘ</span>
-                <span>Horizon: <strong>December Peak Forecast</strong></span>
-              </div>
-            </div>
+          <!-- Secondary Scenario Navigation Tabs -->
+          <div class="scn-subnav-bar">
+            <button class="scn-subnav-tab active" id="tab-btn-my-scenarios" data-view="my-scenarios">My Scenarios</button>
+            <button class="scn-subnav-tab" id="tab-btn-comparison" data-view="comparison">Scenario Comparison</button>
           </div>
 
-          <!-- Page Header -->
-          <div class="home-header" style="margin-bottom:var(--space-md)">
-            <div>
-              <h1 class="home-greeting">Scenario Planning</h1>
-              <p class="home-subtitle">Explore what-if scenarios, evaluate impacts, and choose the best path forward.</p>
-            </div>
-          </div>
-
-          <!-- Floating Sticky Navigation & Action Bar (Placed slightly lower, bigger in size) -->
-          <div class="scenario-floating-nav-wrap">
-            <div class="scenario-floating-nav">
-              <button class="scn-floating-btn active" data-target="scn-section-recommended">
-                <span>✨ Recommended</span>
-              </button>
-              <button class="scn-floating-btn" data-target="scn-section-opt-base">
-                <span>⏱ Optimised Base</span>
-              </button>
-              <button class="scn-floating-btn" data-target="scn-section-my-scenarios">
-                <span>👤 My Scenarios</span>
-              </button>
-              <button class="scn-floating-btn" data-target="scn-section-comparison">
-                <span>⚖️ Scenario Comparison</span>
-                <span class="scn-count-badge" id="scn-count-badge">4</span>
+          <!-- VIEW 1: My Scenarios / Single Scenario Deep-Dive -->
+          <div class="scn-view-pane" id="view-my-scenarios">
+            <!-- Header Row with Top-Right Create Scenario Action Button -->
+            <div class="scn-header-row">
+              <div>
+                <h1 class="scn-header-title">Single Scenario Deep-Dive</h1>
+                <div class="scn-header-subtitle">Evaluate network trade-offs, DC utilisations, and lane reallocations.</div>
+              </div>
+              <button class="btn btn-primary" id="btn-create-scenario-main" style="padding:10px 22px;font-size:13.5px;font-weight:700;border-radius:var(--r-full);box-shadow:0 4px 14px rgba(107,47,160,0.25)">
+                <span style="font-size:16px;font-weight:800;line-height:1;margin-right:3px">+</span>
+                <span>Create a new Scenario</span>
               </button>
             </div>
 
-            <!-- Floating + Create New Scenario Button (Slightly bigger, floating alongside menu) -->
-            <button class="btn btn-primary btn-floating-create" id="btn-toggle-create-scenario">
-              <span style="font-size:15px;margin-right:2px">➕</span>
-              <span>Create New Scenario</span>
-            </button>
-          </div>
+            <!-- Scenario Selection Strip -->
+            <div class="scn-strip-wrap" id="scn-strip-container">
+              <!-- Populated dynamically by JS -->
+            </div>
 
-          <!-- Main Workspace: Stacked Sections -->
-          <div class="scenario-main-pane">
-
-            <!-- Section 1: Recommended by NetGravity -->
-            <div class="scenario-stacked-section mb-xl" id="scn-section-recommended">
-              <div class="section-heading-row mb-md">
-                <div class="flex items-center gap-xs">
-                  <h3 style="font-size:16px;font-weight:700;color:var(--text-1)">Recommended by NetGravity</h3>
-                  <span class="tag tag-success" style="font-size:10px;padding:2px 8px">AI Proactive
-                    Identification</span>
+            <!-- 2-Column Deep-Dive Layout (75% / 25%) -->
+            <div class="scn-single-2col">
+              <!-- Left 75% Column -->
+              <div class="scn-single-left">
+                <!-- Comparison Table -->
+                <div class="scn-table-card">
+                  <div class="scn-table-header-row">
+                    <div class="scn-table-title">Scenario Comparison Table</div>
+                    <div class="scn-table-controls">
+                      <div class="control-group" style="margin:0">
+                        <span class="control-label" style="font-size:11.5px">Metric View</span>
+                        <select class="control-select" id="scn-metric-view-select" style="font-size:12px;padding:4px 10px">
+                          <option value="key" selected>Key Metrics</option>
+                          <option value="financial">Financial & Costs</option>
+                          <option value="operations">Operational & Service</option>
+                          <option value="all">All Metrics</option>
+                        </select>
+                      </div>
+                      <button class="btn btn-secondary btn-sm" id="btn-customize-metrics" style="padding:5px 10px;font-size:12px">
+                        <span>🛠️ Customize Metrics</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div class="table-wrap" id="single-scenario-table-wrap">
+                    <!-- Populated by JS -->
+                  </div>
                 </div>
-                <p class="text-xs text-muted">Proactively structured to solve the Delhi NCR DC December capacity
-                  bottleneck.</p>
+
+                <!-- Visual Context Card -->
+                <div class="scn-visual-context-card">
+                  <div class="scn-table-header-row" style="margin-bottom:8px">
+                    <div class="scn-table-title">Visual Context</div>
+                    <div class="flex items-center gap-xs">
+                      <span class="text-xs text-muted" style="margin-right:6px">Map View</span>
+                      <div class="toggle-group" id="scn-map-toggle-group">
+                        <button class="toggle-btn" id="btn-map-baseline" data-mode="baseline">Baseline</button>
+                        <button class="toggle-btn active" id="btn-map-scenario" data-mode="scenario">Scenario 1 (Rec.)</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="scn-map-wrap" id="scenario-map-wrap">
+                    <div id="scenario-leaflet-map" style="width:100%;height:100%"></div>
+                  </div>
+                </div>
               </div>
 
-              <!-- Recommended Scenarios Cards Row -->
-              <div class="scenario-cards-row" id="scenario-cards-row">
+              <!-- Right 25% Column -->
+              <div class="scn-single-right">
+                <!-- Insights Card -->
+                <div class="scn-rail-card">
+                  <div class="scn-rail-title">INSIGHTS</div>
+                  <div class="scn-rail-bullet-list" id="scn-single-insights-list">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+
+                <!-- Action Items Card -->
+                <div class="scn-rail-card">
+                  <div class="scn-rail-title">ACTION ITEMS</div>
+                  <div class="scn-rail-actions-list" id="scn-single-actions-list">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+
+                <!-- Chatbot Interaction Card -->
+                <div class="scn-rail-card scn-chat-card">
+                  <div class="scn-rail-title" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                    <span style="font-size:12.5px;font-weight:800;color:var(--text-1)">ASK NETGRAVITY ✨</span>
+                    <span class="tag tag-primary" style="font-size:9.5px;padding:2px 7px">AI ASSISTANT</span>
+                  </div>
+                  <div class="scn-chat-body">
+                    <div class="scn-chat-messages" id="scn-chat-messages" style="display:none"></div>
+                    <div class="scn-chat-input-row">
+                      <input type="text" class="scn-chat-input" id="scn-chat-input" placeholder="Ask about this scenario..." />
+                      <button class="btn btn-primary btn-sm scn-chat-send" id="scn-chat-send">Send</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- VIEW 2: Scenario Comparison / Multi-Scenario Trade-off Analysis -->
+          <div class="scn-view-pane hidden" id="view-comparison">
+            <!-- Header Row -->
+            <div class="scn-header-row">
+              <div>
+                <h1 class="scn-header-title">Multi-Scenario Trade-off Analysis</h1>
+              </div>
+              <div class="scn-table-controls">
+                <div class="control-group" style="margin:0">
+                  <span class="control-label" style="font-size:11.5px">Metric View</span>
+                  <select class="control-select" id="scn-multi-metric-view-select" style="font-size:12px;padding:4px 10px">
+                    <option value="key" selected>Key Metrics</option>
+                    <option value="financial">Financial & Costs</option>
+                    <option value="operations">Operational & Service</option>
+                    <option value="all">All Metrics</option>
+                  </select>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="btn-multi-customize-metrics" style="padding:5px 10px;font-size:12px">
+                  <span>🛠️ Customize Metrics</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Multi-Scenario Trade-off Matrix Table -->
+            <div class="scn-table-card">
+              <div class="scn-multi-table-wrap" id="multi-scenario-table-wrap">
                 <!-- Populated by JS -->
               </div>
             </div>
 
-            <!-- Section 2: Optimised Base Case -->
-            <div class="scenario-stacked-section mb-lg" id="scn-section-opt-base">
-              <div class="section-heading-row mb-sm">
-                <div class="flex items-center gap-xs">
-                  <h3 style="font-size:15px;font-weight:700;color:var(--text-1)">Optimised Base Case</h3>
-                  <span class="tag tag-warning" style="font-size:10px;padding:2px 8px">Footprint Locked</span>
-                </div>
-                <p class="text-xs text-muted">Pure mathematical flow optimization within existing 5 DC footprint (zero CapEx).</p>
-              </div>
-
-              <div class="card opt-base-card" id="card-opt-base" data-scn-id="SCN_OPTIMISED_BASE" style="padding:14px 18px;background:#fcfaff;border:1px solid var(--purple-100);cursor:pointer" title="Click to inspect scenario details">
-                <div class="flex items-center justify-between">
-                  <div style="flex:1">
-                    <div class="flex items-center gap-sm mb-xs">
-                      <h4 style="font-size:14px;font-weight:700;color:var(--text-1)">Optimised Base Case (Current 5 DC Network)</h4>
-                      <span class="tag tag-warning" style="font-size:10px">Not Recommended as #1</span>
-                      <span class="provenance-badge model-fact">MODEL FACT</span>
-                    </div>
-                    <p style="font-size:12px;color:var(--text-2);max-width:760px;line-height:1.45;margin-bottom:6px">
-                      Reallocates Baddi corridor flows to achieve lowest headline logistics cost of <strong>₹11.42L (↓11.1%)</strong> with 96.5% normal SLA.
-                      However, the AI Challenger rejects this plan because it pushes Delhi NCR utilisation to 97% and <strong>fails under +15% demand surge (SLA collapses to 91.8%)</strong>.
-                    </p>
-                    <div class="flex items-center gap-lg text-xs">
-                      <div><strong>Total Cost:</strong> ₹11.42L (↓11.1%)</div>
-                      <div><strong>Normal SLA:</strong> 96.5%</div>
-                      <div><strong>Surge Test (+15% Demand):</strong> <span style="color:var(--red);font-weight:700">FAIL (SLA: 91.8%)</span></div>
-                    </div>
-                  </div>
-                  <div style="margin-left:16px;text-align:right">
-                    <span class="text-xs" style="color:var(--primary);font-weight:700">Click to Inspect Details →</span>
-                  </div>
+            <!-- Bottom 2-Column Section (Comparison Insights & Multi-Scenario Action Items) -->
+            <div class="scn-multi-bottom-grid">
+              <!-- Comparison Insights Box -->
+              <div class="scn-comparison-insights-box">
+                <div class="scn-table-title" style="font-size:13px;text-transform:uppercase;letter-spacing:0.04em">COMPARISON INSIGHTS</div>
+                <div class="scn-insight-numbered-list" id="multi-comparison-insights-list">
+                  <!-- Populated by JS -->
                 </div>
               </div>
-            </div>
 
-            <!-- Section 3: My Scenarios -->
-            <div class="scenario-stacked-section mb-lg" id="scn-section-my-scenarios">
-              <div class="section-heading-row mb-sm">
-                <div class="flex items-center gap-xs">
-                  <h3 style="font-size:15px;font-weight:700;color:var(--text-1)">My Scenarios</h3>
-                  <span class="tag tag-primary" style="font-size:10px;padding:2px 8px">User Created What-Ifs</span>
-                </div>
-                <p class="text-xs text-muted">Custom scenarios created by network planners and evaluated through the MILP solver.</p>
-              </div>
-
-              <div class="my-scenarios-grid" id="my-scenarios-grid">
-                <!-- Populated dynamically (no overflow buttons) -->
-              </div>
-            </div>
-
-            <!-- Section 4: Scenario Comparison Table -->
-            <div class="scenario-stacked-section mb-lg" id="scn-section-comparison">
-              <div class="card">
-                <div class="card-header" style="margin-bottom:12px">
-                  <div>
-                    <div class="card-title">Scenario Comparison Table</div>
-                    <div class="card-subtitle">Side-by-side trade-off matrix. Click any column or cell to inspect full mathematical formulation.</div>
-                  </div>
-                  <div class="flex items-center gap-sm">
-                    <div class="control-group" style="margin:0">
-                      <span class="control-label" style="font-size:11px">Metric View</span>
-                      <select class="control-select" id="scn-metric-view-select" style="font-size:12px;padding:4px 10px">
-                        <option value="key">Key Metrics</option>
-                        <option value="financial">Financial & Costs</option>
-                        <option value="operations">Operational & Service</option>
-                        <option value="all">All Metrics</option>
-                      </select>
-                    </div>
-                    <button class="btn btn-secondary btn-sm" id="btn-customize-metrics">
-                      <span>🛠️ Customize Metrics</span>
-                    </button>
-                  </div>
-                </div>
-                <div class="table-wrap" id="scenario-comparison-table-wrap">
+              <!-- Multi-Scenario Action Items Box -->
+              <div class="scn-multi-actions-box">
+                <div class="scn-table-title" style="font-size:13px;text-transform:uppercase;letter-spacing:0.04em">MULTI-SCENARIO ACTION ITEMS</div>
+                <div class="text-xs text-muted" style="margin-top:4px">Prioritized items include:</div>
+                <div class="scn-action-checkbox-list" id="multi-comparison-actions-list">
                   <!-- Populated by JS -->
                 </div>
               </div>
             </div>
           </div>
-
 
           <!-- Create New Scenario Pop-Up Modal (Blurs background, appears only on click) -->
           <div class="modal-overlay" id="modal-create-toolbox">
@@ -576,8 +677,7 @@
               <div class="toolbox-header">
                 <div>
                   <div class="card-title" style="font-size:16px">Create New Scenario</div>
-                  <div class="text-xs text-muted">Configure custom network intervention parameters for MILP evaluation.
-                  </div>
+                  <div class="text-xs text-muted">Configure custom network intervention parameters for MILP evaluation.</div>
                 </div>
                 <button class="btn btn-ghost btn-sm" id="btn-close-toolbox">✕</button>
               </div>
@@ -588,7 +688,7 @@
                 <div class="toolbox-step">
                   <div class="toolbox-step-num">1</div>
                   <div class="toolbox-step-content">
-                    <div class="toolbox-step-title">Select Scenario Type</div>
+                    <div class="toolbox-step-title">What do you want to change?</div>
                     <div class="scn-type-grid">
                       <button class="scn-type-card active" data-type="CHANGE_CAPACITY">
                         <span class="scn-type-icon">🛡️</span>
@@ -635,92 +735,89 @@
                   </div>
                 </div>
 
-                <!-- Step 3: Advanced Options (Collapsible) -->
+                <!-- Step 3: Optimization Objective & Constraints -->
                 <div class="toolbox-step">
                   <div class="toolbox-step-num">3</div>
                   <div class="toolbox-step-content">
-                    <div class="toolbox-accordion-toggle" id="toolbox-adv-toggle">
-                      <span class="toolbox-step-title">Advanced Solver Constraints & Multi-Objective <span class="text-muted">(Optional)</span></span>
-                      <span id="adv-chevron">▼</span>
+                    <div class="toolbox-step-title">Objective & Constraints</div>
+
+                    <div class="form-group mb-sm">
+                      <label class="form-label">Optimise for</label>
+                      <select class="form-select" id="toolbox-objective">
+                        <option value="COST" selected>Total Cost</option>
+                        <option value="SLA">SLA</option>
+                        <option value="TRANSPORT">Transport Cost</option>
+                        <option value="CARBON">Carbon Emissions</option>
+                        <option value="CAPACITY">Capacity Risk</option>
+                        <option value="HEADROOM">Capacity Headroom</option>
+                      </select>
                     </div>
 
-                    <div class="toolbox-adv-content hidden" id="toolbox-adv-content">
-                      <div class="form-group mb-sm">
-                        <label class="form-label">Primary Solver Objective</label>
-                        <select class="form-select" id="toolbox-objective">
-                          <option value="COST">Minimise Total Network Logistics Cost</option>
-                          <option value="SLA">Maximise Network-Wide On-Time SLA</option>
-                          <option value="CARBON">Minimise Scope 3 Carbon Emissions</option>
-                          <option value="HEADROOM">Maximise Capacity Headroom & Safety Buffer</option>
+                    <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+                      <div class="form-group">
+                        <label class="form-label">Subject to Constraint</label>
+                        <select class="form-select" id="toolbox-constraint-type">
+                          <option value="SLA_95" selected>SLA ≥ 95%</option>
+                          <option value="UTIL_90">Capacity Utilisation ≤ 90%</option>
+                          <option value="BUDGET_20L">CapEx Budget ≤ ₹20L</option>
                         </select>
                       </div>
-
-                      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-                        <div class="form-group">
-                          <label class="form-label">Minimum SLA Constraint (%)</label>
-                          <input type="number" class="form-input" id="toolbox-sla-min" value="95" min="80" max="100" step="0.5">
-                        </div>
-                        <div class="form-group">
-                          <label class="form-label">Solver Engine Backend</label>
-                          <select class="form-select" id="toolbox-solver-backend">
-                            <option value="HIGHS">PuLP / HiGHS Branch-and-Cut (Exact)</option>
-                            <option value="CBC">COIN-OR CBC Dual Simplex</option>
-                          </select>
-                        </div>
-                      </div>
-
                       <div class="form-group">
-                        <label class="form-label">Resilience Stress Testing Suite</label>
-                        <div class="flex flex-col gap-xs text-xs" style="background:var(--bg-subtle);padding:8px 10px;border-radius:var(--r-sm);border:1px solid var(--border-light)">
-                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                            <input type="checkbox" id="stress-check-demand" checked>
-                            <span>Simulate +15% December Demand Surge</span>
-                          </label>
-                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                            <input type="checkbox" id="stress-check-lane" checked>
-                            <span>Simulate Primary Corridor Disruption</span>
-                          </label>
-                          <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-                            <input type="checkbox" id="stress-check-rate" checked>
-                            <span>Evaluate ±10% Fuel & Rate Elasticity</span>
-                          </label>
-                        </div>
+                        <label class="form-label">Solver Backend</label>
+                        <select class="form-select" id="toolbox-solver-backend">
+                          <option value="HIGHS">PuLP / HiGHS Branch-and-Cut (Exact)</option>
+                          <option value="CBC">COIN-OR CBC Dual Simplex</option>
+                        </select>
                       </div>
                     </div>
                   </div>
                 </div>
 
                 <!-- Footer Buttons -->
-                <div class="flex items-center justify-between mt-lg pt-md"
-                  style="border-top:1px solid var(--border-light)">
+                <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border-light)">
                   <button class="btn btn-secondary btn-sm" id="btn-cancel-toolbox">Cancel</button>
-                  <button class="btn btn-primary" id="btn-run-toolbox-scenario"
-                    style="padding:10px 24px;font-size:13.5px;font-weight:700">
-                    <span>▶ Run Solver</span>
+                  <button class="btn btn-primary" id="btn-run-toolbox-scenario" style="padding:10px 24px;font-size:13.5px;font-weight:700">
+                    <span>▶ Run Scenario</span>
                   </button>
                 </div>
               </div>
 
-              <!-- Agentic Calibration & Solver Execution State (Shown during execution) -->
+              <!-- Solver Execution State (Phased Execution) -->
               <div class="agent-execution-view hidden" id="agent-execution-view">
                 <div class="agent-pulse-header">
-                  <div class="agent-pulse-icon">🤖</div>
+                  <div class="agent-pulse-icon">⚡</div>
                   <div>
-                    <h4 style="font-size:15px;font-weight:800;color:var(--text-1);margin-bottom:2px">NetGravity AI
-                      Orchestrator</h4>
-                    <div class="text-xs text-muted" id="agent-live-status-text">Calibrating network parameters and
-                      invoking MILP solver...</div>
+                    <h4 style="font-size:15px;font-weight:800;color:var(--text-1);margin-bottom:2px">NetGravity Mathematical Engine</h4>
+                    <div class="text-xs text-muted" id="agent-live-status-text">Formulating constraints and invoking MILP solver...</div>
                   </div>
                 </div>
 
-                <!-- Animated Progress Bar -->
-                <div class="agent-progress-bar-wrap">
-                  <div class="agent-progress-bar-fill" id="agent-progress-bar-fill"></div>
-                </div>
-
-                <!-- Dynamic Execution Telemetry Log -->
-                <div class="agent-telemetry-box" id="agent-telemetry-box">
-                  <!-- Populated dynamically with pulsing log steps -->
+                <!-- Execution Step List -->
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px;background:var(--bg-subtle);padding:14px;border-radius:var(--r-md);border:1px solid var(--border-light)" id="solver-phase-steps">
+                  <div class="flex items-center justify-between text-xs" id="step-phase-1">
+                    <span>Scenario validated</span>
+                    <span style="color:var(--green);font-weight:700">✓</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs" id="step-phase-2">
+                    <span>Preparing optimisation</span>
+                    <span style="color:var(--green);font-weight:700">✓</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs" id="step-phase-3">
+                    <span>Running network optimisation</span>
+                    <span class="telemetry-spinner"></span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs text-muted" id="step-phase-4">
+                    <span>Evaluating scenario impact</span>
+                    <span>○</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs text-muted" id="step-phase-5">
+                    <span>Stress testing</span>
+                    <span>○</span>
+                  </div>
+                  <div class="flex items-center justify-between text-xs text-muted" id="step-phase-6">
+                    <span>Generating assessment</span>
+                    <span>○</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -751,6 +848,14 @@
     <div class="insight-drawer" id="insight-drawer">
       <button class="facility-panel-close" id="insight-drawer-close">✕</button>
       <div id="insight-drawer-content"></div>
+    </div>
+  </div>
+
+  <!-- Action Detail Drawer -->
+  <div class="insight-drawer-overlay" id="action-drawer-overlay">
+    <div class="insight-drawer" id="action-drawer">
+      <button class="facility-panel-close" id="action-drawer-close">✕</button>
+      <div id="action-drawer-content"></div>
     </div>
   </div>
 
@@ -821,6 +926,58 @@
         <div class="flex gap-sm">
           <button class="btn btn-secondary btn-sm" id="btn-cancel-metrics">Cancel</button>
           <button class="btn btn-primary btn-sm" id="btn-save-metrics">Apply Metrics</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metric Drilldown Modal (Clickable Table Metric Deep-Dive) -->
+  <div class="modal-overlay" id="modal-metric-drilldown">
+    <div class="modal-box" style="max-width:600px">
+      <div class="flex items-center justify-between mb-md">
+        <div>
+          <div class="card-title" id="drilldown-title">Metric Drill-Down</div>
+          <div class="text-xs text-muted" id="drilldown-subtitle">Mathematical decomposition and network impact evidence.</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" id="modal-close-drilldown">✕</button>
+      </div>
+
+      <div id="drilldown-body-content">
+        <!-- Populated dynamically by JS -->
+      </div>
+
+      <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border-light)">
+        <div class="text-xs text-muted" id="drilldown-provenance-tag">PROVENANCE: MODEL FACT</div>
+        <button class="btn btn-secondary btn-sm" id="btn-close-drilldown-bottom">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- All Scenarios Drawer (Right Slide-over Window) -->
+  <div class="drawer-overlay" id="all-scenarios-drawer-overlay">
+    <div class="drawer" id="all-scenarios-drawer" style="max-width:540px;width:100%">
+      <div class="drawer-header">
+        <div>
+          <div class="flex items-center gap-xs">
+            <span class="tag tag-primary" style="font-size:10px;padding:2px 8px">All Scenarios</span>
+            <span class="text-xs text-muted" id="all-scenarios-count-badge">4 Active</span>
+          </div>
+          <div class="drawer-title" style="margin-top:4px;font-size:18px">All Network Scenarios</div>
+          <div class="text-xs text-muted">Inspect, compare, or delete active scenarios.</div>
+        </div>
+        <button class="drawer-close" id="all-scenarios-drawer-close">✕</button>
+      </div>
+
+      <div class="drawer-body" id="all-scenarios-drawer-list" style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+        <!-- Populated dynamically by JS -->
+      </div>
+
+      <div class="drawer-footer" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg-subtle)">
+        <button class="btn btn-danger btn-sm" id="btn-clear-user-scenarios" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;font-weight:600">
+          🗑️ Clear User Scenarios
+        </button>
+        <div class="flex gap-xs">
+          <button class="btn btn-secondary btn-sm" id="btn-close-all-scenarios">Close</button>
         </div>
       </div>
     </div>

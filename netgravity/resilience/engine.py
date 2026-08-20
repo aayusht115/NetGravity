@@ -34,6 +34,41 @@ from netgravity.metrics.kpis import compute_kpis
 
 
 # ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+def compute_rerouted_volume(
+    pre_result:  OptimizationResult,
+    post_result: OptimizationResult,
+) -> float:
+    """
+    Volume whose routing changed between two solutions.
+
+    Sums the absolute per-arc flow change and halves it: a unit that moves from
+    one arc to another shows up as a decrease on one arc and an increase on
+    another, so the raw sum double-counts it.
+
+        rerouted = ½ · Σ_a |x_a^post − x_a^pre|
+
+    Shared by ResilienceEngine and the REI assessment so both report the same
+    quantity from one definition.
+    """
+    pre_flows = {
+        (f.origin_id, f.destination_id, f.product_id): f.flow_units
+        for f in pre_result.flow_decisions
+    }
+    post_flows = {
+        (f.origin_id, f.destination_id, f.product_id): f.flow_units
+        for f in post_result.flow_decisions
+    }
+    all_keys = set(pre_flows.keys()) | set(post_flows.keys())
+    return sum(
+        abs(post_flows.get(k, 0.0) - pre_flows.get(k, 0.0))
+        for k in all_keys
+    ) / 2.0
+
+
+# ---------------------------------------------------------------------------
 # Resilience engine
 # ---------------------------------------------------------------------------
 
@@ -283,15 +318,7 @@ class ResilienceEngine:
         service_delta = (post_served - pre_served) / pre_served if pre_served > 0 else 0.0
 
         # Rerouted volume: flows that changed origin or destination
-        pre_flows  = {(f.origin_id, f.destination_id, f.product_id): f.flow_units
-                      for f in pre_result.flow_decisions}
-        post_flows = {(f.origin_id, f.destination_id, f.product_id): f.flow_units
-                      for f in post_result.flow_decisions}
-        all_keys = set(pre_flows.keys()) | set(post_flows.keys())
-        rerouted = sum(
-            abs(post_flows.get(k, 0.0) - pre_flows.get(k, 0.0))
-            for k in all_keys
-        ) / 2.0   # divide by 2: each unit that moves shows up on 2 arcs
+        rerouted = compute_rerouted_volume(pre_result, post_result)
 
         return ResilienceResult(
             scenario_id     = post_result.scenario_id or disruption_type,

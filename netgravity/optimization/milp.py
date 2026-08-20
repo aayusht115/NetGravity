@@ -652,9 +652,13 @@ def _solve_milp(
 
         total_shortage_cost = 0.0
         if config.allow_shortage:
+            # Must mirror shortage_cost_term above, including the demand-priority
+            # multiplier. Without it, objective_components would not sum to the
+            # solver objective whenever a priority > 1 market goes short.
             for key_u, var in u.items():
                 uval = pulp.value(var) or 0.0
-                total_shortage_cost += config.shortage_penalty * uval
+                priority_mult = 1.0 + (demand_priority_map.get(key_u, 1) - 1) * 0.5
+                total_shortage_cost += config.shortage_penalty * priority_mult * uval
 
         total_ic = 0.0
         if config.enable_inventory:

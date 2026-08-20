@@ -411,6 +411,175 @@ class ResilienceResult(BaseModel):
     affected_ids:       List[str] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# Facility Resilience Assessment / Risk Exposure Index (REI)
+# ---------------------------------------------------------------------------
+
+class REIStatus(str, Enum):
+    """Status of the REI normalisation for a registry (and each of its rows)."""
+    COMPUTED                  = "COMPUTED"                    # max PI > 0, REI meaningful
+    NO_RELATIVE_COST_EXPOSURE = "NO_RELATIVE_COST_EXPOSURE"   # max PI <= 0, all REI = 0
+    NOT_COMPUTED              = "NOT_COMPUTED"                # PI unavailable (e.g. infeasible)
+
+
+class RiskClassification(str, Enum):
+    """
+    Deterministic risk classification.
+
+    Derived ONLY from explicit configured rules (see RiskClassificationRules).
+    NOT_CLASSIFIED is the honest default: REI is a relative ranking metric and
+    has no documented business basis for absolute bands.
+    """
+    CRITICAL       = "CRITICAL"          # disruption infeasible, or configured critical rule met
+    HIGH           = "HIGH"              # configured high rule met
+    MODERATE       = "MODERATE"          # configured moderate rule met
+    NOT_CLASSIFIED = "NOT_CLASSIFIED"    # feasible, no configured threshold met
+    UNKNOWN        = "UNKNOWN"           # assessment could not be completed (solver error)
+
+
+class FacilityResilienceResult(BaseModel):
+    """
+    Deterministic resilience assessment of a SINGLE facility.
+
+    Answers: if this facility becomes unavailable, how much additional business
+    network cost does the network incur after it optimally reconfigures itself?
+
+        PI_i  = C_business_i − C_business_base
+        REI_i = PI_i / max_j(PI_j)          (assigned by the registry)
+
+    Every field is either computed from MILP decisions or explicitly None.
+    Nothing is fabricated: fields the model cannot legitimately produce for this
+    facility (e.g. PI under an infeasible disruption) are None.
+    """
+    # Identity
+    facility_id:        str
+    facility_name:      str
+    facility_role:      str
+
+    # Assumptions this result was produced under (fair-comparison audit trail)
+    disruption_type:    str
+    disruption_period:  str
+
+    # ---- Cost basis: business network cost, NOT the solver objective ----
+    baseline_business_cost:  Optional[float] = None
+    disrupted_business_cost: Optional[float] = None
+
+    # PI_i = disrupted_business_cost − baseline_business_cost
+    performance_impact:      Optional[float] = None
+    # CI_i = PI_i / baseline_business_cost × 100
+    cost_impact_pct:         Optional[float] = None
+
+    # ---- Relative exposure (assigned by the registry after all PIs known) ----
+    rei:         Optional[float]  = None
+    rei_status:  REIStatus        = REIStatus.NOT_COMPUTED
+    rank:        Optional[int]    = None     # 1 = highest performance impact
+
+    # ---- Operational diagnostics (retained, never folded into cost REI) ----
+    baseline_served:      Optional[float] = None
+    disrupted_served:     Optional[float] = None
+    # Positive when service degrades: (baseline_served − disrupted_served) / baseline_served
+    service_loss:         Optional[float] = None
+
+    unserved_demand:      Optional[float] = None
+    unserved_demand_rate: Optional[float] = None   # fraction of total demand
+
+    rerouted_volume:      Optional[float] = None
+
+    baseline_carbon:      Optional[float] = None
+    disrupted_carbon:     Optional[float] = None
+    carbon_delta:         Optional[float] = None
+
+    # ---- Solver / feasibility ----
+    solver_status: SolverStatus
+    is_feasible:   bool
+
+    # Raw solver objectives, retained so the separation between the mathematical
+    # objective and business cost stays visible and auditable.
+    baseline_solver_objective:  Optional[float] = None
+    disrupted_solver_objective: Optional[float] = None
+    # The artificial penalty that was EXCLUDED from disrupted_business_cost.
+    excluded_shortage_penalty:  Optional[float] = None
+
+    # ---- Classification & audit ----
+    risk_classification: RiskClassification = RiskClassification.NOT_CLASSIFIED
+    diagnostics:         List[str]          = Field(default_factory=list)
+    solve_seconds:       Optional[float]    = None
+
+    # True when the primary (like-for-like) solve was infeasible and the service
+    # figures above came from a shortage-enabled DIAGNOSTIC re-solve. Cost fields
+    # remain None in that case — the diagnostic never feeds PI, CI or REI.
+    service_diagnostic_applied: bool = False
+
+
+class FacilityResilienceRegistry(BaseModel):
+    """
+    Facility Resilience Registry — the deterministic output consumed by the
+    (future) resilience agent and by the dashboard.
+
+    Produced by ONE batch run under ONE DisruptionConfig, so every row is
+    comparable. Do not merge rows across registries produced under different
+    disruption assumptions into a single REI ranking.
+
+    The agent interprets this registry. It must never compute REI itself,
+    invent costs, invent disruption probabilities, or override MILP results.
+    """
+    network_id:   str
+    data_version: Optional[str] = None
+
+    # Assumptions shared by every row
+    disruption_type:      str
+    disruption_period:    str
+    disruption_summary:   str = ""
+    cost_basis_components: List[str] = Field(default_factory=list)
+    excluded_components:   List[str] = Field(default_factory=list)
+
+    # Baseline (solved exactly once)
+    baseline_business_cost:   Optional[float] = None
+    baseline_solver_objective: Optional[float] = None
+    baseline_served:          Optional[float] = None
+    baseline_carbon:          Optional[float] = None
+    baseline_solver_status:   SolverStatus
+
+    # REI normalisation
+    max_performance_impact: Optional[float] = None
+    rei_status:             REIStatus       = REIStatus.NOT_COMPUTED
+
+    # Ranked rows (descending performance impact; unrankable rows last)
+    results: List[FacilityResilienceResult] = Field(default_factory=list)
+
+    n_facilities_assessed: int = 0
+    n_infeasible:          int = 0
+
+    # Performance telemetry.
+    # Total MILP solves = 1 (baseline) + N (facilities) + n_diagnostic_solves.
+    n_diagnostic_solves:      int = 0
+    baseline_solve_seconds:   Optional[float] = None
+    total_assessment_seconds: Optional[float] = None
+
+    @property
+    def total_milp_solves(self) -> int:
+        """1 baseline + N facility re-optimisations + any diagnostic re-solves."""
+        return 1 + self.n_facilities_assessed + self.n_diagnostic_solves
+
+    warnings:     List[str]     = Field(default_factory=list)
+    generated_at: Optional[str] = None
+
+    def get(self, facility_id: str) -> Optional[FacilityResilienceResult]:
+        """Return the row for a facility, or None."""
+        for r in self.results:
+            if r.facility_id == facility_id:
+                return r
+        return None
+
+    def top_n(self, n: int = 5) -> List[FacilityResilienceResult]:
+        """Return the n highest-exposure facilities (already ranked)."""
+        return self.results[:n]
+
+    def infeasible_facilities(self) -> List[FacilityResilienceResult]:
+        """Facilities whose disruption the network cannot absorb."""
+        return [r for r in self.results if not r.is_feasible]
+
+
 class AssignmentDecision(BaseModel):
     """
     Facility-to-Market assignment decision output (a_ij).
