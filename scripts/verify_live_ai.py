@@ -28,6 +28,7 @@ WHAT IT CHECKS
 from __future__ import annotations
 
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -48,6 +49,21 @@ PASS, FAIL, WARN = "  ✓", "  ✗", "  !"
 
 SAMPLE = REPO_ROOT / "data" / "mock" / "india"
 _failures: list[str] = []
+_token_totals: list[int] = []
+
+
+def _track_tokens(note: str) -> None:
+    """
+    Pull the total-token figure out of a live-extraction note (see
+    ai/client.py's extract_json — the note text looks like
+    "...live extraction [1523 tokens: 1450 in + 73 out]") and add it to the
+    running total for this whole verification run. Parsed from the note
+    string rather than a structured field so this stays a script-local
+    concern, not a change to what every adapter returns.
+    """
+    match = re.search(r"\[(\d+) tokens:", note)
+    if match:
+        _token_totals.append(int(match.group(1)))
 
 
 def check(ok: bool, label: str, detail: str = "") -> bool:
@@ -190,6 +206,12 @@ def step_3_contracts(cfg: IngestionConfig) -> bool:
             scope = (", ".join(s.applies_to_location_ids)
                      or f"{len(s.applies_to_pin_codes)} pin codes" or "all lanes")
             detail.append(f"  - {s.surcharge_type.value} {s.rate:g} -> {scope}")
+        # ai_notes carries the live-extraction note, which includes the real
+        # token count reported by the provider for this exact call.
+        for note in result.ai_notes:
+            if "tokens" in note:
+                detail.append(f"  {note}")
+                _track_tokens(note)
         ok = check(True, f"{path.name}: extracted live", "\n".join(detail)) and ok
 
         # The business finding must survive a real extraction, not just a stub.
@@ -240,6 +262,11 @@ def step_5_distributor(cfg: IngestionConfig) -> bool:
                       f'({m.confidence:.0%}){flag}')
     if mapping.unmapped_columns:
         detail.append(f"  unmapped: {', '.join(mapping.unmapped_columns)}")
+    # `note` carries the live-extraction note, which includes the real
+    # token count reported by the provider for this exact call.
+    if "tokens" in note:
+        detail.append(f"  {note}")
+        _track_tokens(note)
 
     ok = check(bool(mapping.mappings), "live mapping proposed", "\n".join(detail))
     check(bool(mapping.needs_review) or True,
@@ -299,6 +326,9 @@ def main() -> int:
         return 1
     print(f"{PASS} All live checks passed. Every AI flow works against "
           f"{cfg.llm_provider}:{cfg.resolved_model}.")
+    if _token_totals:
+        print(f"  Tokens used this run: {sum(_token_totals)} "
+              f"across {len(_token_totals)} live call(s)")
     print()
     print("  Next: run the full pipeline with live extraction —")
     print("      python -m netgravity.ingestion --source data/mock/india --explain")
