@@ -106,17 +106,49 @@ def step_2_handshake(cfg: IngestionConfig) -> bool:
                      f"response: {raw.strip()[:70]}")
     except Exception as exc:
         elapsed = time.time() - started
-        hint = ""
-        text = str(exc).lower()
-        if "401" in text or "invalid_api_key" in text or "incorrect api key" in text:
-            hint = "The key was rejected. Check for a typo or a revoked key."
-        elif "model" in text and ("not" in text or "does not exist" in text):
-            hint = (f"Model '{cfg.resolved_model}' was rejected. Set "
-                    f"NETGRAVITY_LLM_MODEL to one your account can use.")
-        elif "quota" in text or "billing" in text or "429" in text:
-            hint = "Key is valid but the account has no quota/credit."
+        hint = diagnose_handshake_error(str(exc), cfg.resolved_model)
         return check(False, f"provider call failed after {elapsed:.1f}s",
                      f"{type(exc).__name__}: {exc}\n{hint}".strip())
+
+
+def diagnose_handshake_error(error_text: str, model: str) -> str:
+    """
+    Turn a raw provider error into a plain-language next step.
+
+    Order matters: a shared free-tier model being temporarily oversubscribed
+    ("rate-limited") and an account genuinely having no billing credit
+    ("insufficient_quota") are BOTH surfaced as HTTP 429 by most providers,
+    including OpenRouter -- so the rate-limit check must run before the
+    generic "429 => billing" one, or a transient, retry-in-5-seconds
+    situation gets misdiagnosed as a dead account.
+    """
+    text = error_text.lower()
+    if "401" in text or "invalid_api_key" in text or "incorrect api key" in text:
+        return "The key was rejected. Check for a typo or a revoked key."
+    if "model" in text and ("not" in text or "does not exist" in text):
+        return (f"Model '{model}' was rejected. Set NETGRAVITY_LLM_MODEL to "
+                f"one your account can use.")
+
+    # These two both surface as HTTP 429 from most providers (OpenRouter
+    # included), but mean opposite things: a shared model being momentarily
+    # busy (retry in seconds) vs. an account genuinely out of money (retry
+    # never helps without adding funds). The exception class name itself is
+    # literally "RateLimitError" in BOTH cases, so matching on "rate" +
+    # "limit" alone would wrongly call every 429 a shared-pool hiccup —
+    # check the specific, unambiguous phrase instead.
+    if "insufficient_quota" in text or "check your plan and billing" in text:
+        return "Key is valid but the account has no quota/credit."
+    if "temporarily rate-limited" in text or "upstream_429" in text \
+            or "shared_pool" in text or "retry shortly" in text:
+        return ("This specific model is temporarily oversubscribed (a "
+                "shared free-tier rate limit), NOT a billing problem. Wait "
+                "a few seconds and retry, or set NETGRAVITY_LLM_MODEL to a "
+                "different free model.")
+    if "429" in text:
+        return ("Rate limited (429). Could be a shared free-tier limit "
+                "(retry shortly / try a different free model) or the "
+                "account's own quota — see the raw error above for which.")
+    return ""
 
 
 def step_3_contracts(cfg: IngestionConfig) -> bool:
