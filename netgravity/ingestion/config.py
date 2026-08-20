@@ -40,6 +40,17 @@ ENVIRONMENT VARIABLES
                                   is then labelled "[AI: FAILED -> STUB DATA]"
                                   in the report. Set true for any run whose
                                   numbers someone might act on.
+    NETGRAVITY_LLM_BASE_URL       Optional. Points the OpenAI SDK at a
+                                  different server instead of api.openai.com.
+                                  Several providers speak the identical API
+                                  ("OpenAI-compatible") — OpenRouter, Groq,
+                                  Cerebras, GitHub Models — so this is the one
+                                  setting that lets us use a free/alternate
+                                  provider with ZERO other code changes. Put
+                                  that provider's key in
+                                  NETGRAVITY_OPENAI_API_KEY and its model name
+                                  in NETGRAVITY_LLM_MODEL. Blank => real
+                                  OpenAI, unchanged.
 """
 
 from __future__ import annotations
@@ -204,6 +215,14 @@ class IngestionConfig:
         in {"1", "true", "yes", "y"}
     )
 
+    # Points the OpenAI SDK at a different server. Blank => real OpenAI.
+    # This is what makes OpenAI-compatible free/alternate providers
+    # (OpenRouter, Groq, Cerebras, GitHub Models) work with no other code
+    # change: same SDK, same request shape, different address.
+    llm_base_url: Optional[str] = field(
+        default_factory=lambda: _env("NETGRAVITY_LLM_BASE_URL")
+    )
+
     # --- Behaviour ---
     # Rows failing a WARNING-level check are kept but flagged; ERROR-level rows
     # are always dropped from the assembled network.
@@ -296,6 +315,8 @@ class IngestionConfig:
             f"  storage backend : {self.storage_backend}",
             f"  LLM provider    : {self.llm_provider} ({self.resolved_model})"
             + ("" if self.stub_mode else f"   key from {self.key_source}"),
+        ] + ([f"  API endpoint    : {self.llm_base_url}  (not api.openai.com)"]
+             if self.llm_base_url else []) + [
             f"  LLM mode        : {'STUB (no key set)' if self.stub_mode else 'LIVE'}"
             + ("" if self.stub_mode else
                f", timeout {self.llm_timeout_seconds:g}s, "

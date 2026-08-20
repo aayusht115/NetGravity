@@ -163,6 +163,49 @@ class LLMClient:
 
     # -- OpenAI ------------------------------------------------------------
 
+    def _create_chat_completion(self, prompt: str, max_tokens: int):
+        """
+        Call chat.completions.create(), degrading two independent optional
+        features one at a time on the specific error that says a provider
+        doesn't support them — rather than assuming every OpenAI-compatible
+        provider (OpenRouter, Groq, Cerebras, GitHub Models, ...) supports
+        every OpenAI feature identically:
+
+          - JSON mode (response_format): guarantees syntactically valid
+            JSON back. Real OpenAI models support it; some alternate
+            providers/models don't and reject the parameter.
+          - max_completion_tokens vs max_tokens: newer OpenAI models renamed
+            this and reject the old name; most other providers still expect
+            the old name.
+
+        At most 4 attempts, each one only ever removing a param that was
+        just rejected, so this always terminates.
+        """
+        base: Dict[str, Any] = {
+            "model": self.config.resolved_model,
+            "messages": [{"role": "user", "content": prompt}],
+        }
+        use_json_mode = True
+        token_param = "max_completion_tokens"
+
+        for _ in range(4):
+            kwargs = dict(base)
+            if use_json_mode:
+                kwargs["response_format"] = {"type": "json_object"}
+            kwargs[token_param] = max_tokens
+            try:
+                return self._sdk.chat.completions.create(**kwargs)
+            except Exception as exc:
+                if token_param == "max_completion_tokens" and \
+                        _is_unsupported_param(exc, "max_completion_tokens"):
+                    token_param = "max_tokens"
+                    continue
+                if use_json_mode and _is_unsupported_param(exc, "response_format"):
+                    use_json_mode = False
+                    continue
+                raise
+        raise RuntimeError("unreachable: fallback loop exhausted")  # pragma: no cover
+
     def _call_openai(self, prompt: str, *, max_tokens: int) -> str:
         if self._sdk is None:
             try:
@@ -174,32 +217,15 @@ class LLMClient:
                 ) from exc
             self._sdk = OpenAI(
                 api_key=self.config.llm_api_key,
+                # None => SDK default (api.openai.com). Set this to point at
+                # any OpenAI-compatible server instead — OpenRouter, Groq,
+                # Cerebras, GitHub Models — with no other code change.
+                base_url=self.config.llm_base_url,
                 timeout=self.config.llm_timeout_seconds,
                 max_retries=self.config.llm_max_retries,
             )
 
-        # JSON mode makes the API itself guarantee syntactically valid JSON,
-        # which removes a whole class of "model wrapped it in prose" parse
-        # failures. It requires the word "json" in the prompt — every prompt
-        # in ai/ says "Return ONLY a JSON object", so that holds.
-        kwargs: Dict[str, Any] = {
-            "model": self.config.resolved_model,
-            "messages": [{"role": "user", "content": prompt}],
-            "response_format": {"type": "json_object"},
-        }
-
-        # Newer OpenAI models renamed max_tokens -> max_completion_tokens and
-        # reject the old name. Rather than hardcode a model list that will go
-        # stale, try one and switch on the specific complaint.
-        try:
-            resp = self._sdk.chat.completions.create(
-                **kwargs, max_completion_tokens=max_tokens
-            )
-        except Exception as exc:
-            if not _is_unsupported_param(exc, "max_completion_tokens"):
-                raise
-            resp = self._sdk.chat.completions.create(**kwargs, max_tokens=max_tokens)
-
+        resp = self._create_chat_completion(prompt, max_tokens)
         choice = resp.choices[0]
         # A truncated response is invalid JSON and would fail parsing with a
         # confusing error. Name the real cause instead.

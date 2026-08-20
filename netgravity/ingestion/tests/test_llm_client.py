@@ -43,14 +43,17 @@ class _FakeCompletions:
                  fail_with=None, record=None):
         self._content = content
         self._finish = finish_reason
-        self._fail_with = fail_with
+        # A single exception is consumed once (existing tests rely on this).
+        # A list is consumed one-per-call, oldest first, so a test can prove
+        # the fallback loop survives more than one rejected parameter.
+        self._fail_queue = list(fail_with) if isinstance(fail_with, list) \
+            else ([fail_with] if fail_with is not None else [])
         self.record = record if record is not None else []
 
     def create(self, **kwargs):
         self.record.append(kwargs)
-        if self._fail_with is not None:
-            exc, self._fail_with = self._fail_with, None
-            raise exc
+        if self._fail_queue:
+            raise self._fail_queue.pop(0)
         return _Resp(self._content, self._finish)
 
 
@@ -101,6 +104,16 @@ def test_no_key_means_stub_mode():
     assert LLMClient(cfg).stub_mode is True
 
 
+def test_base_url_is_unset_by_default():
+    """Plain OpenAI use (the common case) must not carry a stray base_url."""
+    assert IngestionConfig().llm_base_url is None
+
+
+def test_base_url_env_var_is_picked_up(monkeypatch, isolated_env):
+    monkeypatch.setenv("NETGRAVITY_LLM_BASE_URL", "https://openrouter.ai/api/v1")
+    assert IngestionConfig().llm_base_url == "https://openrouter.ai/api/v1"
+
+
 # --- provider routing -------------------------------------------------------
 
 def test_codex_is_accepted_as_an_openai_alias():
@@ -145,6 +158,91 @@ def test_falls_back_to_max_tokens_when_model_rejects_the_new_name():
 
     assert "max_completion_tokens" in completions.record[0]
     assert completions.record[1]["max_tokens"] == 77
+
+
+def test_falls_back_when_provider_rejects_json_mode():
+    """
+    Not every OpenAI-compatible provider (OpenRouter, Groq, Cerebras, GitHub
+    Models, ...) supports response_format identically. A provider that
+    rejects it must still get a usable request, not a hard failure.
+    """
+    completions = _FakeCompletions(
+        '{"ok": true}',
+        fail_with=TypeError("Unsupported parameter: 'response_format' is not "
+                            "supported with this model."),
+    )
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(completions)
+    client._call_live("return json", max_tokens=77)
+
+    assert completions.record[0]["response_format"] == {"type": "json_object"}
+    assert "response_format" not in completions.record[1]
+
+
+def test_falls_back_through_both_rejections_in_one_call():
+    """Both quirks can happen on the same alternate provider — the loop must
+    survive shedding max_completion_tokens AND response_format, in either
+    order, without giving up early."""
+    completions = _FakeCompletions(
+        '{"ok": true}',
+        fail_with=[
+            TypeError("Unsupported parameter: 'max_completion_tokens'"),
+            TypeError("Unsupported parameter: 'response_format' is not supported"),
+        ],
+    )
+    client = LLMClient(_live_config())
+    client._sdk = _FakeOpenAI(completions)
+    result = client._call_live("return json", max_tokens=77)
+
+    assert result == '{"ok": true}'
+    assert len(completions.record) == 3
+    assert "max_completion_tokens" in completions.record[0]
+    assert completions.record[1]["max_tokens"] == 77
+    assert "response_format" in completions.record[1]
+    assert "response_format" not in completions.record[2]
+
+
+def test_base_url_defaults_to_none_which_means_real_openai(monkeypatch):
+    """No NETGRAVITY_LLM_BASE_URL set => the SDK gets base_url=None, which is
+    its own signal to use the real api.openai.com. This must not silently
+    regress to some other default."""
+    captured = {}
+
+    class _CapturingOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.chat = type(
+                "chat", (), {"completions": _FakeCompletions('{"ok": true}')}
+            )()
+
+    monkeypatch.setattr("openai.OpenAI", _CapturingOpenAI)
+    client = LLMClient(_live_config())
+    client._call_live("return json", max_tokens=10)
+
+    assert captured["base_url"] is None
+
+
+def test_base_url_is_forwarded_to_the_sdk_when_configured(monkeypatch):
+    """
+    This IS the OpenRouter/Groq/Cerebras/GitHub-Models switch: point the same
+    OpenAI SDK at a different server by setting one config value. No other
+    code path changes for those providers.
+    """
+    captured = {}
+
+    class _CapturingOpenAI:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.chat = type(
+                "chat", (), {"completions": _FakeCompletions('{"ok": true}')}
+            )()
+
+    monkeypatch.setattr("openai.OpenAI", _CapturingOpenAI)
+    cfg = _live_config(llm_base_url="https://openrouter.ai/api/v1")
+    client = LLMClient(cfg)
+    client._call_live("return json", max_tokens=10)
+
+    assert captured["base_url"] == "https://openrouter.ai/api/v1"
 
 
 def test_an_unrelated_error_is_not_swallowed_by_the_retry():
