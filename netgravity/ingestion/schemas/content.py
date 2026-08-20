@@ -81,3 +81,52 @@ _NETWORK_TYPES = {
 _STAGING_TYPES = {
     ContentType.SHIPMENT_LOG, ContentType.HISTORICAL_VOLUME,
 }
+
+
+# ---------------------------------------------------------------------------
+# Classification result
+# ---------------------------------------------------------------------------
+
+from dataclasses import dataclass, field          # noqa: E402
+from typing import Dict, List, Optional           # noqa: E402
+
+
+@dataclass
+class ContentClassification:
+    """
+    What one record set was judged to be, and how much to trust that.
+
+    Carries BOTH opinions — the model's and the deterministic rule scorer's —
+    rather than collapsing them to a single answer, because the disagreement
+    is itself the signal that a human should look.
+    """
+
+    content_type: ContentType = ContentType.UNKNOWN
+    confidence: float = 0.0
+    reasoning: str = ""
+    proposed_by: str = "rules"                       # "rules" | "<provider>:<model>"
+
+    #: The deterministic alias-overlap opinion, always computed.
+    rule_type: ContentType = ContentType.UNKNOWN
+    rule_score: float = 0.0
+    rule_scores: Dict[str, float] = field(default_factory=dict)
+
+    needs_review: bool = True
+    review_reasons: List[str] = field(default_factory=list)
+    ai_note: str = ""
+
+    @property
+    def rules_agree(self) -> bool:
+        return (self.rule_type != ContentType.UNKNOWN
+                and self.rule_type == self.content_type)
+
+    @property
+    def destination(self) -> str:
+        return self.content_type.destination
+
+    @property
+    def summary(self) -> str:
+        agreement = ("rules agree" if self.rules_agree
+                     else f"rules said {self.rule_type.value}")
+        return (f"{self.content_type.value} at {self.confidence:.0%} "
+                f"via {self.proposed_by} ({agreement})")

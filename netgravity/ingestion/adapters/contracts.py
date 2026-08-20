@@ -16,7 +16,12 @@ from typing import List, Optional, Tuple
 
 from netgravity.ingestion.ai.cache import load_cached_contract, save_contract
 from netgravity.ingestion.ai.client import LLM_FAILURE_MARKER, get_client
-from netgravity.ingestion.ai.contract_reader import extract_contract
+from netgravity.ingestion.ai.contract_reader import (
+    extract_contract,
+    extract_contract_from_pdf,
+)
+from netgravity.ingestion.memory.document_memory import DocumentMemory
+from netgravity.ingestion.pdf_quality import assess
 from netgravity.ingestion.config import IngestionConfig
 from netgravity.ingestion.schemas.contract import ContractRule
 from netgravity.ingestion.schemas.ingest_result import FileResult, RowIssue, Severity
@@ -57,6 +62,47 @@ def read_text(path: Path) -> Tuple[str, Optional[str]]:
     return "", f"unsupported contract file type '{suffix}'"
 
 
+def page_count(path: Path) -> int:
+    """Pages in a PDF, for scaling the emptiness check. 1 for plain text."""
+    if path.suffix.lower() != ".pdf":
+        return 1
+    try:
+        from pypdf import PdfReader
+        return max(1, len(PdfReader(str(path)).pages))
+    except Exception:
+        return 1
+
+
+def read_contract(path: Path) -> Tuple[str, Optional[str], bool]:
+    """
+    Read a contract and judge whether the extracted text can be TRUSTED.
+
+    Returns (text, warning, needs_model_read).
+
+    The third value is the hybrid decision. pypdf runs first because it is
+    free and instant, but it fails quietly as well as loudly: a broken font
+    encoding returns text that looks like text and is not. Handing that to
+    the model produces confident figures that were never in the document,
+    which is worse than any error. pdf_quality.assess() catches it, and
+    needs_model_read=True says "do not trust this — have the model read the
+    document itself instead".
+    """
+    text, warning = read_text(path)
+
+    if warning or not text:
+        # No text at all (a scan, or an unreadable file). If it is a PDF the
+        # model may still be able to read it directly; anything else cannot
+        # be escalated.
+        return text, warning, path.suffix.lower() == ".pdf"
+
+    quality = assess(text, page_count=path.suffix.lower() == ".pdf"
+                     and page_count(path) or 1)
+    if quality.usable:
+        return text, None, False
+
+    return text, (f"extracted text failed quality checks — {quality.summary}"), True
+
+
 def ingest_file(path: Path, config: IngestionConfig,
                 known_locations: Optional[List[str]] = None,
                 storage: Optional[StorageBackend] = None,
@@ -73,12 +119,21 @@ def ingest_file(path: Path, config: IngestionConfig,
         source_file=path.name, adapter="contracts", rows_read=1, ai_used=True,
     )
 
-    text, warning = read_text(path)
+    text, warning, needs_model_read = read_contract(path)
     if warning:
         result.issues.append(RowIssue(
             severity=Severity.WARNING, code="R-013",
             message=warning, source_file=path.name,
         ))
+
+    # A document we cannot read as text is no longer an automatic rejection:
+    # if it is a PDF, the model can be asked to read it directly (R-023).
+    if needs_model_read and not config.stub_mode:
+        rule, escalation_result = _read_via_model(
+            path, config, known_locations, result)
+        if rule is not None:
+            return rule, escalation_result
+
     if not text:
         result.rows_rejected = 1
         result.ai_stubbed = config.stub_mode
@@ -116,8 +171,95 @@ def ingest_file(path: Path, config: IngestionConfig,
     if use_cache and save_contract(rule, text, storage):
         result.ai_notes.append("extraction cached for future runs")
 
+    _remember_document_shape(text, rule, path.name, storage, result)
+
     _flag_hidden_costs(rule, result, path.name)
     return rule, result
+
+
+def _read_via_model(path: Path, config: IngestionConfig,
+                    known_locations: Optional[List[str]],
+                    result: FileResult
+                    ) -> Tuple[Optional[ContractRule], FileResult]:
+    """
+    Escalation: hand the PDF to the model when the text cannot be trusted.
+
+    Reached when pypdf returned nothing (a scan) or returned text that failed
+    the quality checks. Previously both cases ended the same way — the file
+    was rejected and its contents never reached the network at all.
+
+    A failure here is NOT quietly swallowed: the model refusing or the
+    provider not supporting document input leaves ai_failed set and the file
+    rejected, which is the honest outcome. Inventing figures for a document
+    nobody could read would be far worse than reporting that it could not be
+    read.
+    """
+    try:
+        pdf_bytes = path.read_bytes()
+    except OSError as exc:
+        result.issues.append(RowIssue(
+            severity=Severity.WARNING, code="R-023",
+            message=f"could not re-read '{path.name}' to send to the model: {exc}",
+            source_file=path.name,
+        ))
+        return None, result
+
+    result.issues.append(RowIssue(
+        severity=Severity.INFO, code="R-023",
+        message=(f"text extraction was not usable, so '{path.name}' was sent "
+                 f"to the model to be read directly"),
+        source_file=path.name,
+    ))
+
+    rule, note = extract_contract_from_pdf(
+        get_client(config), pdf_bytes,
+        source_key=f"contracts/{path.name}",
+        filename=path.name,
+        known_locations=known_locations,
+        stub_key="contract",
+    )
+
+    result.ai_notes.append(note)
+    result.ai_stubbed = rule.extracted_by == "stub"
+    result.ai_failed = LLM_FAILURE_MARKER in note
+
+    if result.ai_failed or result.ai_stubbed:
+        # The escalation did not produce a real extraction. Reject rather
+        # than pass stub figures off as a reading of this document.
+        result.rows_rejected = 1
+        return None, result
+
+    result.rows_accepted = 1
+    _flag_hidden_costs(rule, result, path.name)
+    return rule, result
+
+
+def _remember_document_shape(text: str, rule: ContractRule, filename: str,
+                             storage: Optional[StorageBackend],
+                             result: FileResult) -> None:
+    """
+    Record the document's wording shape, and say when it looked familiar.
+
+    Distinct from the exact-text cache: this recognises a RENEWAL — same
+    template, new rates — which the cache necessarily misses because the
+    bytes changed. Knowing a document is a known template is what lets a
+    renewal be treated with more confidence than a stranger.
+    """
+    if storage is None or rule.extracted_by == "stub":
+        return
+    try:
+        memory = DocumentMemory(storage)
+        match = memory.find(text)
+        if match.matched:
+            result.ai_notes.append(
+                f"document shape recognised — {match.rationale}")
+        memory.record(text, document_name=filename,
+                      labels={"vendor": rule.vendor_name or "",
+                              "extracted_by": rule.extracted_by})
+    except Exception:
+        # Memory is an optimisation. Losing it must never fail an extraction
+        # that otherwise succeeded.
+        pass
 
 
 def _flag_hidden_costs(rule: ContractRule, result: FileResult,

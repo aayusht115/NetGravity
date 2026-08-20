@@ -108,6 +108,53 @@ def extract_contract(
     return rule, note
 
 
+def extract_contract_from_pdf(
+    client: LLMClient,
+    pdf_bytes: bytes,
+    *,
+    source_key: str,
+    filename: str,
+    known_locations: Optional[List[str]] = None,
+    stub_key: str = "contract",
+) -> Tuple[ContractRule, str]:
+    """
+    Extract a contract by giving the model the PDF ITSELF.
+
+    The escalation path, used only when pypdf either returned nothing (a
+    scan) or returned text that failed the quality checks. It is more
+    expensive than sending extracted text and provider support for document
+    input is uneven, so it is never the first attempt — see
+    LLMClient.extract_json_from_pdf for the support caveats.
+
+    The prompt is deliberately the SAME one used for the text path, minus the
+    inlined text. Contract extraction rules ("never estimate a missing rate",
+    "a blanket surcharge has empty applies_to lists") must not quietly differ
+    between the two routes, or the same document could yield different
+    structure depending on how it happened to be read.
+    """
+    prompt = PROMPT_TEMPLATE.format(
+        known_locations=", ".join(known_locations or []) or "(none supplied)",
+        contract_text="(the document is attached — read it directly)",
+    )
+
+    response = client.extract_json_from_pdf(
+        task=f"contract extraction from document ({filename})",
+        prompt=prompt,
+        pdf_bytes=pdf_bytes,
+        filename=filename,
+        stub_key=stub_key,
+        stub_context={"filename": filename},
+        max_tokens=2500,
+    )
+
+    rule = _to_contract_rule(response.data, source_key=source_key,
+                             extracted_by=response.provenance)
+    note = response.notes
+    if response.data.get("notes"):
+        note = f"{note} — {response.data['notes']}"
+    return rule, note
+
+
 def _to_contract_rule(data: Dict[str, Any], *, source_key: str,
                       extracted_by: str) -> ContractRule:
     surcharges: List[SurchargeRule] = []

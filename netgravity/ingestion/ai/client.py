@@ -182,6 +182,170 @@ class LLMClient:
                       f"NETGRAVITY_LLM_STRICT=true to fail the run instead.",
             )
 
+    def extract_json_from_pdf(self, *, task: str, prompt: str,
+                              pdf_bytes: bytes, filename: str, stub_key: str,
+                              stub_context: Optional[Dict[str, Any]] = None,
+                              max_tokens: int = 2500) -> LLMResponse:
+        """
+        Ask the model to read a PDF DOCUMENT directly, rather than text we
+        extracted from it.
+
+        WHEN THIS IS USED
+            Only as an escalation. pypdf extraction runs first because it is
+            free and instant; this path exists for the cases pypdf cannot
+            serve — a scan with no text layer, or a text layer so garbled
+            that pdf_quality.assess() refuses it. Sending the document costs
+            meaningfully more than sending text, so it is never the default.
+
+        PROVIDER SUPPORT IS NOT UNIFORM — READ THIS
+            Native PDF input is a newer capability and is NOT implemented
+            identically across providers. Anthropic and OpenAI each accept a
+            base64 document but in different request shapes, and several
+            OpenAI-COMPATIBLE providers (OpenRouter's free tier, Groq,
+            Cerebras) support it only for some models or not at all.
+
+            This method therefore treats rejection as an ordinary failure,
+            not a crash: a provider that will not take a document produces
+            the same loud, labelled degradation as any other failed call.
+            The caller keeps the pypdf warning and reports honestly that the
+            document could not be read, which is the correct outcome — far
+            better than silently returning invented figures for a document
+            nobody could actually read.
+        """
+        if self.stub_mode:
+            from netgravity.ingestion.ai import stubs
+            return LLMResponse(
+                data=stubs.get(stub_key, stub_context or {}),
+                stubbed=True, model="stub",
+                notes=f"{task}: stubbed (no API key configured)",
+            )
+
+        try:
+            self._last_usage = None
+            raw = self._call_live_with_pdf(prompt, pdf_bytes=pdf_bytes,
+                                           filename=filename,
+                                           max_tokens=max_tokens)
+            usage = self._last_usage
+            tokens_note = ""
+            if usage:
+                tokens_note = (
+                    f" [{usage.get('total_tokens', '?')} tokens: "
+                    f"{usage.get('prompt_tokens', '?')} in + "
+                    f"{usage.get('completion_tokens', '?')} out]"
+                )
+            return LLMResponse(
+                data=_parse_json(raw), stubbed=False,
+                model=f"{self.config.llm_provider}:{self.config.resolved_model}",
+                notes=f"{task}: live document read{tokens_note}",
+                tokens=usage,
+            )
+        except Exception as exc:
+            detail = f"{type(exc).__name__}: {exc}"
+            if self.config.llm_strict:
+                raise LLMCallError(
+                    f"{task}: reading the PDF directly failed and "
+                    f"NETGRAVITY_LLM_STRICT is set — refusing to substitute "
+                    f"stub data. {detail}"
+                ) from exc
+            from netgravity.ingestion.ai import stubs
+            return LLMResponse(
+                data=stubs.get(stub_key, stub_context or {}),
+                stubbed=True, model="stub", failed=True,
+                notes=(f"{task}: {LLM_FAILURE_MARKER} reading the PDF directly "
+                       f"({detail}). The provider may not support document "
+                       f"input for this model. These numbers are NOT a real "
+                       f"extraction."),
+            )
+
+    def _call_live_with_pdf(self, prompt: str, *, pdf_bytes: bytes,
+                            filename: str, max_tokens: int) -> str:
+        """Route a document read to the configured provider."""
+        import base64
+
+        encoded = base64.b64encode(pdf_bytes).decode("ascii")
+        provider = (self.config.llm_provider or "").lower()
+
+        if provider in _OPENAI_PROVIDERS:
+            return self._pdf_openai(prompt, encoded=encoded, filename=filename,
+                                    max_tokens=max_tokens)
+        if provider == "anthropic":
+            return self._pdf_anthropic(prompt, encoded=encoded,
+                                       max_tokens=max_tokens)
+        raise NotImplementedError(
+            f"Reading a PDF directly is not implemented for provider "
+            f"'{self.config.llm_provider}'."
+        )
+
+    def _pdf_openai(self, prompt: str, *, encoded: str, filename: str,
+                    max_tokens: int) -> str:
+        if self._sdk is None:
+            from openai import OpenAI
+            self._sdk = OpenAI(
+                api_key=self.config.llm_api_key,
+                base_url=self.config.llm_base_url,
+                timeout=self.config.llm_timeout_seconds,
+                max_retries=self.config.llm_max_retries,
+            )
+        content = [
+            {"type": "text", "text": prompt},
+            {"type": "file",
+             "file": {"filename": filename,
+                      "file_data": f"data:application/pdf;base64,{encoded}"}},
+        ]
+        kwargs: Dict[str, Any] = {
+            "model": self.config.resolved_model,
+            "messages": [{"role": "user", "content": content}],
+            "max_tokens": max_tokens,
+        }
+        if self._looks_like_gemini():
+            kwargs["reasoning_effort"] = "none"
+        resp = self._sdk.chat.completions.create(**kwargs)
+        usage = getattr(resp, "usage", None)
+        if usage is not None:
+            self._last_usage = {
+                "prompt_tokens": getattr(usage, "prompt_tokens", None),
+                "completion_tokens": getattr(usage, "completion_tokens", None),
+                "total_tokens": getattr(usage, "total_tokens", None),
+            }
+        choice = resp.choices[0]
+        if getattr(choice, "finish_reason", None) == "length":
+            raise ValueError(_truncation_message(max_tokens, self._last_usage))
+        return choice.message.content or ""
+
+    def _pdf_anthropic(self, prompt: str, *, encoded: str,
+                       max_tokens: int) -> str:
+        if self._sdk is None:
+            from anthropic import Anthropic
+            self._sdk = Anthropic(
+                api_key=self.config.llm_api_key,
+                timeout=self.config.llm_timeout_seconds,
+                max_retries=self.config.llm_max_retries,
+            )
+        message = self._sdk.messages.create(
+            model=self.config.resolved_model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": [
+                {"type": "document",
+                 "source": {"type": "base64", "media_type": "application/pdf",
+                            "data": encoded}},
+                {"type": "text", "text": prompt},
+            ]}],
+        )
+        usage = getattr(message, "usage", None)
+        if usage is not None:
+            input_tokens = getattr(usage, "input_tokens", None)
+            output_tokens = getattr(usage, "output_tokens", None)
+            self._last_usage = {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
+                "total_tokens": (input_tokens + output_tokens)
+                if input_tokens is not None and output_tokens is not None else None,
+            }
+        if getattr(message, "stop_reason", None) == "max_tokens":
+            raise ValueError(_truncation_message(max_tokens, self._last_usage))
+        return "".join(b.text for b in message.content
+                       if getattr(b, "type", None) == "text")
+
     # -- provider-specific ------------------------------------------------
 
     def _call_live(self, prompt: str, *, max_tokens: int) -> str:
