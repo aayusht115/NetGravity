@@ -56,7 +56,40 @@ def api_status():
         "version": "2.0.0",
         "engine": "netgravity MILP (PuLP/HiGHS)",
         "mode": "interactive",
+        "orchestrator": _ORCHESTRATOR_STATUS,
     })
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator control plane (optional mount)
+# ---------------------------------------------------------------------------
+# Mounted best-effort so the existing static/API behaviour is unchanged if the
+# orchestrator cannot start. Endpoints live under /orchestrator/*.
+#
+# The LLM gateway reads TEXT_API_URL / TEXT_API_TOKEN from the environment.
+# With no token configured the control plane still runs, using rule-based
+# intent parsing and template reasoning; deterministic results are identical.
+
+_ORCHESTRATOR_STATUS = {"mounted": False, "reason": "not initialised"}
+
+try:
+    from netgravity.orchestrator import build_orchestrator
+    from netgravity.orchestrator.api import create_orchestrator_blueprint
+    from netgravity.tests.fixtures.case16_synthetic import build_case16_network
+
+    # NOTE: the Case-16 synthetic fixture is FABRICATED demonstration data.
+    # Replace this with the real observed network before any production use.
+    _orchestrator = build_orchestrator(network=build_case16_network())
+    app.register_blueprint(create_orchestrator_blueprint(_orchestrator))
+    _ORCHESTRATOR_STATUS = {
+        "mounted": True,
+        "url_prefix": "/orchestrator",
+        "capabilities": len(_orchestrator.capabilities()),
+        "llm_available": _orchestrator.health()["llm"].get("available", False),
+        "network_source": "case16_synthetic (FABRICATED demo data)",
+    }
+except Exception as exc:  # noqa: BLE001 - never block the existing app
+    _ORCHESTRATOR_STATUS = {"mounted": False, "reason": f"{type(exc).__name__}: {exc}"}
 
 
 if __name__ == "__main__":

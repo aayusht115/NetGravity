@@ -929,15 +929,18 @@ class TestREIIntegrityPreserved:
                 )
 
     def test_rei_normalisation_preserved(self):
+        """
+        REI normalises over ECONOMIC IMPACT = max(0, PI), bounding it to [0, 1].
+        """
         net = build_case16_network()
         reg = assess_network_resilience(net, net.config, DisruptionConfig())
         if reg.rei_status == REIStatus.COMPUTED:
             assert reg.results[0].rei == pytest.approx(1.0, abs=1e-9)
             for r in reg.results:
                 if r.performance_impact is not None:
-                    assert r.rei == pytest.approx(
-                        r.performance_impact / reg.max_performance_impact, abs=1e-6
-                    )
+                    expected = max(0.0, r.performance_impact) / reg.max_performance_impact
+                    assert r.rei == pytest.approx(expected, abs=1e-6)
+                    assert 0.0 <= r.rei <= 1.0
 
     def test_infeasible_disruption_handling_preserved(self):
         net = build_case16_network()

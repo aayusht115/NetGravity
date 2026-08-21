@@ -60,8 +60,10 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from netgravity.costs.business_cost import (
@@ -71,6 +73,7 @@ from netgravity.costs.business_cost import (
 )
 from netgravity.optimization.milp import solve as milp_solve
 from netgravity.resilience.engine import compute_rerouted_volume
+from netgravity.resilience.fingerprint import compute_material_fingerprint
 from netgravity.schemas.network import (
     CanonicalNetwork,
     FacilityRecord,
@@ -81,9 +84,11 @@ from netgravity.schemas.network import (
 )
 from netgravity.schemas.resilience import DisruptionConfig, DisruptionType
 from netgravity.schemas.results import (
+    CalculationStatus,
     FacilityResilienceRegistry,
     FacilityResilienceResult,
     OptimizationResult,
+    REIBatchStatus,
     REIStatus,
     RiskClassification,
     SolverStatus,
@@ -92,6 +97,10 @@ from netgravity.schemas.results import (
 logger = logging.getLogger(__name__)
 
 MARKET_ROLES = {NodeRole.MARKET, NodeRole.CUSTOMER}
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 # Solver injection point. Kept as a type alias so future execution strategies
 # (caching, parallel facility evaluation, async, Azure) can be supplied without
@@ -145,6 +154,13 @@ class ResilienceBaseline:
     served:            float
     carbon:            float
     solve_seconds:     float
+
+    # Identity of the data and maths this baseline was produced from. Carried
+    # onto every derived row so a REI value can always be tied back to the exact
+    # snapshot and model version that produced it.
+    snapshot_id:          Optional[str] = None
+    material_fingerprint: Optional[str] = None
+    model_version:        Optional[str] = None
 
     @property
     def cost(self) -> float:
@@ -211,6 +227,8 @@ def compute_baseline(
     config:            Optional[OptimizationConfig] = None,
     disruption_config: Optional[DisruptionConfig] = None,
     solve_fn:          Optional[SolveFn] = None,
+    *,
+    snapshot_id:       Optional[str] = None,
 ) -> ResilienceBaseline:
     """
     Solve the undisrupted network once and compute its business network cost.
@@ -253,23 +271,33 @@ def compute_baseline(
     total_demand = sum(d.quantity for d in network.demands)
     served, carbon = _served_and_carbon(result, network)
 
+    # Fingerprint the CALLER's config, not the disruption-adjusted effective
+    # one. The disruption overrides are deterministic given the disruption
+    # config, which the cache key already captures via `disruption_signature`;
+    # fingerprinting the effective config here would make the recorded value
+    # disagree with the key the service looked up under.
+    fingerprint = compute_material_fingerprint(network, config)
+
     logger.info(
         "resilience.baseline.business_cost_calculated network_id=%s status=%s "
-        "business_cost=%.4f solver_objective=%.4f runtime_s=%.4f",
+        "business_cost=%.4f solver_objective=%.4f runtime_s=%.4f fingerprint=%s",
         network.network_id, result.solver.status.value,
-        business.total, business.solver_objective, elapsed,
+        business.total, business.solver_objective, elapsed, fingerprint,
     )
 
     return ResilienceBaseline(
-        network           = network,
-        effective_config  = eff_config,
-        disruption_config = disruption_config,
-        result            = result,
-        business_cost     = business,
-        total_demand      = round(total_demand, 4),
-        served            = served,
-        carbon            = carbon,
-        solve_seconds     = elapsed,
+        network              = network,
+        effective_config     = eff_config,
+        disruption_config    = disruption_config,
+        result               = result,
+        business_cost        = business,
+        total_demand         = round(total_demand, 4),
+        served               = served,
+        carbon               = carbon,
+        solve_seconds        = elapsed,
+        snapshot_id          = snapshot_id or network.data_version,
+        material_fingerprint = fingerprint,
+        model_version        = eff_config.model_version,
     )
 
 
@@ -394,52 +422,73 @@ def apply_facility_disruption(
 # REI normalisation (pure arithmetic — no MILP, no LLM)
 # ---------------------------------------------------------------------------
 
+def economic_impact_of(performance_impact: Optional[float]) -> Optional[float]:
+    """
+    Positive economic exposure implied by a Performance Impact.
+
+        economic_impact_i = max(0, PI_i)
+
+    Floored at zero because a disruption that *reduces* optimized cost
+    represents no economic exposure to losing that facility. The raw signed PI
+    is retained separately and flagged — the flooring applies only to the
+    quantity REI normalises over, so the anomaly is never hidden, merely kept
+    out of the ranking where it would invert the order.
+    """
+    if performance_impact is None:
+        return None
+    return max(0.0, performance_impact)
+
+
 def normalize_rei(
     performance_impacts: Sequence[Optional[float]],
 ) -> Tuple[List[Optional[float]], Optional[float], REIStatus]:
     """
     Normalise Performance Impacts into Risk Exposure Indices.
 
-        REI_i = PI_i / max_j(PI_j)
+        economic_impact_i = max(0, PI_i)
+        REI_i             = economic_impact_i / max_j(economic_impact_j)
 
-    Rules, all explicit and safe:
+    Guarantees, all asserted by tests:
 
-      - max PI > 0  → REI computed for every facility with a PI.
-                      The highest-PI facility gets exactly 1.00.
-                      A negative PI yields a negative REI: it is RETAINED, not
-                      clamped, because a disruption that reduces business cost
-                      is an anomaly that must be investigated, not hidden.
-      - max PI == 0 → every REI is 0 and the status is
-                      NO_RELATIVE_COST_EXPOSURE. No division occurs.
-      - max PI < 0  → no facility has positive exposure. Every REI is 0 and the
-                      status is NO_RELATIVE_COST_EXPOSURE; dividing by a negative
-                      maximum would invert the ranking.
-      - PI is None  → REI is None (the facility could not be assessed).
+        0 ≤ REI_i ≤ 1                       for every assessed facility
+        REI = 1                             for the largest positive exposure
+        REI = 0                             where PI ≤ 0 (no exposure)
+        REI = None                          where the facility could not be assessed
+        no division by zero                 when every impact is zero
+
+    The [0, 1] bound is a hard requirement: REI feeds a future
+    RF = P + REI − P·REI, which is only defined on the unit interval.
+
+    A NEGATIVE PI does NOT produce a negative REI. It produces REI = 0 (no
+    exposure) while the signed PI remains visible on the result for
+    investigation — see `economic_impact_of`.
 
     Args:
-        performance_impacts: PI per facility, None where unavailable.
+        performance_impacts: signed PI per facility, None where unavailable.
 
     Returns:
-        (reis, max_pi, status) — `reis` aligns positionally with the input.
+        (reis, max_economic_impact, status) — `reis` aligns positionally.
     """
-    known = [pi for pi in performance_impacts if pi is not None]
+    impacts = [economic_impact_of(pi) for pi in performance_impacts]
+    known = [i for i in impacts if i is not None]
 
     if not known:
         return [None for _ in performance_impacts], None, REIStatus.NOT_COMPUTED
 
-    max_pi = max(known)
+    max_impact = max(known)
 
-    if max_pi <= 0.0:
-        # Includes the exact-zero case: no relative cost exposure anywhere.
+    if max_impact <= 0.0:
+        # Every impact is zero: no facility increases cost when disrupted.
+        # No division is performed.
         return (
-            [None if pi is None else 0.0 for pi in performance_impacts],
-            max_pi,
+            [None if i is None else 0.0 for i in impacts],
+            0.0,
             REIStatus.NO_RELATIVE_COST_EXPOSURE,
         )
 
     return (
-        [None if pi is None else pi / max_pi for pi in performance_impacts],
-        max_pi,
+        [None if i is None else i / max_impact for i in impacts],
+        max_impact,
         REIStatus.COMPUTED,
     )
 
@@ -575,6 +624,7 @@ def assess_facility_resilience(
     *,
     baseline:          Optional[ResilienceBaseline] = None,
     solve_fn:          Optional[SolveFn] = None,
+    batch_id:          Optional[str] = None,
 ) -> FacilityResilienceResult:
     """
     Assess the economic exposure of ONE facility to disruption.
@@ -638,12 +688,19 @@ def assess_facility_resilience(
     )
     elapsed = round(time.perf_counter() - started, 4)
 
+    # Provenance carried on EVERY row, whatever the outcome, so an unusable
+    # result is as traceable as a usable one.
     common = dict(
         facility_id               = facility_id,
         facility_name             = target.name,
         facility_role             = target.role.value,
         network_id                = network.network_id,
         data_version              = network.data_version,
+        network_snapshot_id       = baseline.snapshot_id,
+        model_version             = baseline.model_version,
+        batch_id                  = batch_id,
+        scenario_id               = f"REI_DISRUPT_{facility_id}",
+        calculation_timestamp     = _utc_now(),
         disruption_type           = disruption_config.disruption_type.value,
         disruption_period         = disruption_config.disruption_period.value,
         baseline_business_cost    = baseline.cost,
@@ -652,6 +709,38 @@ def assess_facility_resilience(
         baseline_solver_objective = baseline.business_cost.solver_objective,
         solve_seconds             = elapsed,
     )
+
+    # ---- Unverified result: TIME_LIMIT is NOT a valid REI ------------------
+    # `is_solved` accepts TIME_LIMIT because a time-limited incumbent is still
+    # useful for reporting. It is NOT acceptable as a REI input: the cost is not
+    # proven optimal, so the incremental cost against a proven-optimal baseline
+    # would be measuring solver effort, not exposure.
+    if disrupted_result.solver.status == SolverStatus.TIME_LIMIT:
+        diagnostics.append(
+            f"Disruption of '{facility_id}' hit the solver time limit. The incumbent is "
+            f"not proven optimal, so comparing it against a proven-optimal baseline would "
+            f"measure solver effort rather than exposure. REI is reported as unavailable "
+            f"rather than computed from an unverified cost."
+        )
+        res = FacilityResilienceResult(
+            solver_status          = disrupted_result.solver.status,
+            is_feasible            = True,   # a feasible incumbent does exist
+            rei_status             = REIStatus.NOT_COMPUTED,
+            calculation_status     = CalculationStatus.TIME_LIMIT,
+            failure_reason         = "solver time limit reached; result unverified",
+            solver_runtime_seconds = disrupted_result.solver.runtime_seconds,
+            optimality_gap         = disrupted_result.solver.mip_gap,
+            disrupted_solver_objective = disrupted_result.solver.objective_value,
+            diagnostics            = diagnostics,
+            **common,
+        )
+        res.risk_classification = classify_risk(res, disruption_config)
+        logger.warning(
+            "resilience.facility.time_limit facility_id=%s runtime_s=%s gap=%s",
+            facility_id, disrupted_result.solver.runtime_seconds,
+            disrupted_result.solver.mip_gap,
+        )
+        return res
 
     # ---- Infeasible / unsolved disruption: no fabricated cost --------------
     if not disrupted_result.is_solved:
@@ -687,6 +776,16 @@ def assess_facility_resilience(
             solver_status              = disrupted_result.solver.status,
             is_feasible                = False,
             rei_status                 = REIStatus.NOT_COMPUTED,
+            calculation_status         = (
+                CalculationStatus.INFEASIBLE
+                if disrupted_result.solver.status == SolverStatus.INFEASIBLE
+                else CalculationStatus.ERROR
+            ),
+            failure_reason             = (
+                f"disruption produced solver status "
+                f"{disrupted_result.solver.status.value}"
+            ),
+            solver_runtime_seconds     = disrupted_result.solver.runtime_seconds,
             service_diagnostic_applied = diagnostic_applied,
             diagnostics                = diagnostics,
             **{**common, **service_fields},
@@ -711,10 +810,12 @@ def assess_facility_resilience(
     except BusinessCostError as exc:
         diagnostics.append(f"Business cost reconciliation failed: {exc}")
         res = FacilityResilienceResult(
-            solver_status = disrupted_result.solver.status,
-            is_feasible   = False,
-            rei_status    = REIStatus.NOT_COMPUTED,
-            diagnostics   = diagnostics,
+            solver_status      = disrupted_result.solver.status,
+            is_feasible        = False,
+            rei_status         = REIStatus.NOT_COMPUTED,
+            calculation_status = CalculationStatus.ERROR,
+            failure_reason     = f"business cost reconciliation failed: {exc}",
+            diagnostics        = diagnostics,
             **common,
         )
         res.risk_classification = RiskClassification.UNKNOWN
@@ -801,7 +902,11 @@ def assess_facility_resilience(
     res = FacilityResilienceResult(
         disrupted_business_cost    = disrupted_business.total,
         performance_impact         = performance_impact,
+        economic_impact            = economic_impact_of(performance_impact),
         cost_impact_pct            = cost_impact_pct,
+        calculation_status         = CalculationStatus.OK,
+        solver_runtime_seconds     = disrupted_result.solver.runtime_seconds,
+        optimality_gap             = disrupted_result.solver.mip_gap,
         rei_status                 = REIStatus.NOT_COMPUTED,   # assigned by the registry
         disrupted_served           = served,
         service_loss               = service_loss,
@@ -839,6 +944,9 @@ def assess_network_resilience(
     disruption_config: Optional[DisruptionConfig] = None,
     *,
     solve_fn:          Optional[SolveFn] = None,
+    batch_id:          Optional[str] = None,
+    snapshot_id:       Optional[str] = None,
+    max_workers:       int = 1,
 ) -> FacilityResilienceRegistry:
     """
     Assess every eligible facility and return a ranked Facility Resilience Registry.
@@ -857,11 +965,22 @@ def assess_network_resilience(
         disruption_config: One shared set of disruption assumptions.
         solve_fn:          Solver hook. The default is the authoritative MILP;
                            supplying an alternative is the extension point for
-                           caching, parallel evaluation, async execution or
-                           remote (Azure) execution, with no interface change.
+                           caching, async or remote (Azure) execution, with no
+                           interface change.
+        batch_id:          Identifier stamped on every row. Generated if omitted.
+        snapshot_id:       Immutable snapshot identity, for traceability.
+        max_workers:       1 (default) runs scenarios sequentially. >1 runs them
+                           on a thread pool — scenarios are independent by
+                           construction, each operating on its own deep-copied
+                           network. Threads genuinely help: highspy releases the
+                           GIL inside the solve, measured at ~1.85x on 4 workers
+                           for the Case-16 fixture. Left at 1 by default so
+                           behaviour is predictable unless a caller opts in.
 
     Returns:
         FacilityResilienceRegistry, ranked by descending Performance Impact.
+        A failure in one scenario is ISOLATED: that node is recorded as failed
+        and every other node still yields a valid REI.
 
     Raises:
         BaselineSolveError:        the baseline is infeasible.
@@ -872,11 +991,15 @@ def assess_network_resilience(
     if disruption_config is None:
         disruption_config = DisruptionConfig()
     solve_fn = solve_fn or _default_solve
+    batch_id = batch_id or f"rei_{uuid.uuid4().hex[:12]}"
 
     batch_started = time.perf_counter()
+    started_at = _utc_now()
     warnings_list: List[str] = []
 
-    baseline = compute_baseline(network, config, disruption_config, solve_fn=solve_fn)
+    baseline = compute_baseline(
+        network, config, disruption_config, solve_fn=solve_fn, snapshot_id=snapshot_id,
+    )
     warnings_list.extend(baseline.business_cost.notes)
 
     facilities = discover_eligible_facilities(network, disruption_config, baseline.result)
@@ -894,23 +1017,37 @@ def assess_network_resilience(
         network.network_id, len(facilities), disruption_config.describe(),
     )
 
-    results: List[FacilityResilienceResult] = []
-    for fac in facilities:
+    def assess_one(fac: FacilityRecord) -> FacilityResilienceResult:
+        """
+        Assess one facility, converting ANY failure into a recorded row.
+
+        Catching broadly is deliberate: one scenario blowing up must not destroy
+        a batch in which every other node solved cleanly. Nothing is swallowed —
+        the failure becomes an explicit ERROR row carrying its reason, and the
+        batch status reflects it.
+        """
         try:
-            results.append(assess_facility_resilience(
+            return assess_facility_resilience(
                 network, config, fac.id, disruption_config,
-                baseline=baseline, solve_fn=solve_fn,
-            ))
-        except ResilienceAssessmentError as exc:
-            # Never silently swallowed: recorded as an explicit UNKNOWN row.
-            logger.error("resilience.facility.failed facility_id=%s error=%s", fac.id, exc)
-            warnings_list.append(f"Facility '{fac.id}' could not be assessed: {exc}")
-            results.append(FacilityResilienceResult(
+                baseline=baseline, solve_fn=solve_fn, batch_id=batch_id,
+            )
+        except Exception as exc:  # noqa: BLE001 - isolated, recorded, never hidden
+            logger.error(
+                "resilience.facility.failed facility_id=%s error_type=%s error=%s",
+                fac.id, type(exc).__name__, exc,
+            )
+            return FacilityResilienceResult(
                 facility_id            = fac.id,
                 facility_name          = fac.name,
                 facility_role          = fac.role.value,
                 network_id             = network.network_id,
                 data_version           = network.data_version,
+                network_snapshot_id    = baseline.snapshot_id,
+                model_version          = baseline.model_version,
+                batch_id               = batch_id,
+                calculation_timestamp  = _utc_now(),
+                calculation_status     = CalculationStatus.ERROR,
+                failure_reason         = f"{type(exc).__name__}: {exc}",
                 disruption_type        = disruption_config.disruption_type.value,
                 disruption_period      = disruption_config.disruption_period.value,
                 baseline_business_cost = baseline.cost,
@@ -918,8 +1055,24 @@ def assess_network_resilience(
                 is_feasible            = False,
                 rei_status             = REIStatus.NOT_COMPUTED,
                 risk_classification    = RiskClassification.UNKNOWN,
-                diagnostics            = [f"Assessment error: {exc}"],
-            ))
+                diagnostics            = [f"Assessment error: {type(exc).__name__}: {exc}"],
+            )
+
+    if max_workers > 1 and len(facilities) > 1:
+        # Scenarios are independent: each builds its own deep-copied network and
+        # shares only the read-only baseline. pool.map preserves input order, so
+        # the result is identical to a sequential run.
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(facilities))) as pool:
+            results: List[FacilityResilienceResult] = list(pool.map(assess_one, facilities))
+    else:
+        results = [assess_one(fac) for fac in facilities]
+
+    for res in results:
+        if res.calculation_status != CalculationStatus.OK:
+            warnings_list.append(
+                f"{res.facility_id}: {res.calculation_status.value}"
+                + (f" - {res.failure_reason}" if res.failure_reason else "")
+            )
 
     # ---- REI normalisation across the batch --------------------------------
     reis, max_pi, rei_status = normalize_rei([r.performance_impact for r in results])
@@ -954,18 +1107,44 @@ def assess_network_resilience(
 
     n_infeasible = sum(1 for r in results if not r.is_feasible)
     n_diagnostic = sum(1 for r in results if r.service_diagnostic_applied)
+    n_successful = sum(1 for r in results if r.calculation_status == CalculationStatus.OK)
+    n_failed = sum(1 for r in results
+                   if r.calculation_status in (CalculationStatus.ERROR,
+                                               CalculationStatus.TIME_LIMIT))
     total_seconds = round(time.perf_counter() - batch_started, 4)
+    n_milp_solves = 1 + len(results) + n_diagnostic
+
+    # Batch status: partial failure is reported, not hidden behind a green light,
+    # and not escalated to a total failure when usable results exist.
+    if n_successful == 0:
+        batch_status = REIBatchStatus.FAILED
+    elif n_successful < len(results):
+        batch_status = REIBatchStatus.COMPLETED_WITH_ERRORS
+    else:
+        batch_status = REIBatchStatus.COMPLETED
 
     logger.info(
-        "resilience.registry.ranking_completed network_id=%s n_assessed=%d n_infeasible=%d "
-        "n_diagnostic_solves=%d total_milp_solves=%d baseline_solve_s=%.4f total_s=%.4f",
-        network.network_id, len(results), n_infeasible, n_diagnostic,
-        1 + len(results) + n_diagnostic, baseline.solve_seconds, total_seconds,
+        "resilience.registry.ranking_completed network_id=%s batch_id=%s status=%s "
+        "n_assessed=%d n_successful=%d n_infeasible=%d n_failed=%d "
+        "n_milp_solves=%d baseline_solve_s=%.4f total_s=%.4f",
+        network.network_id, batch_id, batch_status.value, len(results), n_successful,
+        n_infeasible, n_failed, n_milp_solves, baseline.solve_seconds, total_seconds,
     )
 
     return FacilityResilienceRegistry(
         network_id                = network.network_id,
         data_version              = network.data_version,
+        batch_id                  = batch_id,
+        network_snapshot_id       = baseline.snapshot_id,
+        material_fingerprint      = baseline.material_fingerprint,
+        model_version             = baseline.model_version,
+        batch_status              = batch_status,
+        started_at                = started_at,
+        completed_at              = _utc_now(),
+        n_successful              = n_successful,
+        n_failed                  = n_failed,
+        n_milp_solves             = n_milp_solves,
+        served_from_cache         = False,
         disruption_type           = disruption_config.disruption_type.value,
         disruption_period         = disruption_config.disruption_period.value,
         disruption_summary        = disruption_config.describe(),

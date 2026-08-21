@@ -484,9 +484,25 @@ class ResilienceResult(BaseModel):
 
 class REIStatus(str, Enum):
     """Status of the REI normalisation for a registry (and each of its rows)."""
-    COMPUTED                  = "COMPUTED"                    # max PI > 0, REI meaningful
-    NO_RELATIVE_COST_EXPOSURE = "NO_RELATIVE_COST_EXPOSURE"   # max PI <= 0, all REI = 0
-    NOT_COMPUTED              = "NOT_COMPUTED"                # PI unavailable (e.g. infeasible)
+    COMPUTED                  = "COMPUTED"                    # max impact > 0, REI meaningful
+    NO_RELATIVE_COST_EXPOSURE = "NO_RELATIVE_COST_EXPOSURE"   # max impact = 0, all REI = 0
+    NOT_COMPUTED              = "NOT_COMPUTED"                # impact unavailable (e.g. infeasible)
+
+
+class CalculationStatus(str, Enum):
+    """Outcome of computing REI for ONE node."""
+    OK          = "OK"            # solved and REI computed
+    INFEASIBLE  = "INFEASIBLE"    # disruption leaves no feasible network
+    TIME_LIMIT  = "TIME_LIMIT"    # solver hit its limit; result unverified
+    ERROR       = "ERROR"         # engine or assessment failure
+    SKIPPED     = "SKIPPED"       # not eligible / deliberately not run
+
+
+class REIBatchStatus(str, Enum):
+    """Outcome of a whole REI batch."""
+    COMPLETED             = "COMPLETED"               # every node computed cleanly
+    COMPLETED_WITH_ERRORS = "COMPLETED_WITH_ERRORS"   # some nodes infeasible/errored
+    FAILED                = "FAILED"                  # batch could not produce results
 
 
 class RiskClassification(str, Enum):
@@ -536,10 +552,18 @@ class FacilityResilienceResult(BaseModel):
     baseline_business_cost:  Optional[float] = None
     disrupted_business_cost: Optional[float] = None
 
-    # PI_i = disrupted_business_cost − baseline_business_cost
+    # PI_i = disrupted_business_cost − baseline_business_cost.
+    # RAW and signed: a negative value (disruption reduces cost) is retained and
+    # flagged, never hidden.
     performance_impact:      Optional[float] = None
     # CI_i = PI_i / baseline_business_cost × 100
     cost_impact_pct:         Optional[float] = None
+
+    # economic_impact_i = max(0, PI_i) — the quantity REI normalises over.
+    # Floored at zero because a disruption that *reduces* cost represents no
+    # economic exposure; normalising a negative would invert the ranking and
+    # produce a REI outside [0, 1], which RF cannot consume.
+    economic_impact:         Optional[float] = None
 
     # ---- Relative exposure (assigned by the registry after all PIs known) ----
     rei:         Optional[float]  = None
@@ -572,6 +596,21 @@ class FacilityResilienceResult(BaseModel):
     # The artificial penalty that was EXCLUDED from disrupted_business_cost.
     excluded_shortage_penalty:  Optional[float] = None
 
+    # ---- Provenance (V1: every REI value must be traceable) ----
+    # Which batch produced this row.
+    batch_id:              Optional[str] = None
+    # Immutable snapshot identity the calculation ran against.
+    network_snapshot_id:   Optional[str] = None
+    # Model/formulation version, so a REI can be tied to the maths that made it.
+    model_version:         Optional[str] = None
+    calculation_timestamp: Optional[str] = None
+    calculation_status:    CalculationStatus = CalculationStatus.OK
+    failure_reason:        Optional[str] = None
+    # Solver telemetry, retained where the engine reports it.
+    solver_runtime_seconds: Optional[float] = None
+    optimality_gap:         Optional[float] = None
+    scenario_id:            Optional[str] = None
+
     # ---- Classification & audit ----
     risk_classification: RiskClassification = RiskClassification.NOT_CLASSIFIED
     diagnostics:         List[str]          = Field(default_factory=list)
@@ -597,6 +636,31 @@ class FacilityResilienceRegistry(BaseModel):
     """
     network_id:   str
     data_version: Optional[str] = None
+
+    # ---- Batch identity & provenance (V1) ----
+    batch_id:            Optional[str] = None
+    #: The snapshot this batch is VALID FOR. When a cached batch is served to a
+    #: request pinned to a different snapshot, this is re-stamped to the serving
+    #: snapshot — which is sound precisely because the cache key contains the
+    #: material fingerprint, so the two snapshots provably imply the same optimum.
+    network_snapshot_id: Optional[str] = None
+    #: The snapshot the batch was ORIGINALLY computed against, set only when it
+    #: differs from `network_snapshot_id`. Keeps the re-stamp above auditable
+    #: rather than silent.
+    computed_for_snapshot_id: Optional[str] = None
+    # Fingerprint of the MATERIAL optimization inputs. Two networks with the
+    # same fingerprint produce the same REI, which is what makes caching and
+    # invalidation sound.
+    material_fingerprint: Optional[str] = None
+    model_version:       Optional[str] = None
+    batch_status:        REIBatchStatus = REIBatchStatus.COMPLETED
+    started_at:          Optional[str] = None
+    completed_at:        Optional[str] = None
+    n_successful:        int = 0
+    n_failed:            int = 0
+    # Solves actually executed by this batch. 0 when served from cache.
+    n_milp_solves:       int = 0
+    served_from_cache:   bool = False
 
     # Assumptions shared by every row
     disruption_type:      str

@@ -78,12 +78,25 @@ def run_smoke_test():
         assert recon_tiny.is_reconciled is True, "Tiny network cost reconciliation failed"
 
         # Benchmark 2: Case-16 Synthetic Fixture
+        #
+        # 150,627.70 = 115,638.14 (the pre-V1.4 optimum) + 34,989.56 of closure
+        # cost. V1.4 added the term  Σ closure_cost_i · (1 − y_i)  to the
+        # objective, so shutting an EXISTING facility now carries its one-time
+        # transition cost. The old figure is still reproducible with
+        # `enable_closure_cost=False`, which is asserted immediately below so
+        # both anchors stay pinned.
         net_c16 = build_case16_network()
         res_c16 = solve(net_c16)
         obj_c16 = res_c16.solver.objective_value
         recon_c16 = reconcile_costs(res_c16, net_c16)
-        assert abs(obj_c16 - 115638.14) < 0.05, f"Case-16 expected 115638.14, got {obj_c16}"
+        assert abs(obj_c16 - 150627.70) < 0.05, f"Case-16 expected 150627.70, got {obj_c16}"
         assert recon_c16.is_reconciled is True, "Case-16 cost reconciliation failed"
+
+        cfg_no_closure = net_c16.config.model_copy(update={"enable_closure_cost": False})
+        obj_pre_v14 = solve(net_c16, config=cfg_no_closure).solver.objective_value
+        assert abs(obj_pre_v14 - 115638.14) < 0.05, (
+            f"Case-16 without closure cost expected 115638.14, got {obj_pre_v14}"
+        )
 
         # Benchmark 3: Infeasibility Bottleneck Diagnostic
         dc_small = FacilityRecord(id="DC_SMALL", name="Small DC", role=NodeRole.DC, status=FacilityStatus.EXISTING, capacity_units_per_period=500.0)

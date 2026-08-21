@@ -15,8 +15,19 @@ Neither module formulates an optimisation model. Both call
 """
 
 from netgravity.resilience.engine import ResilienceEngine, compute_rerouted_volume
+from netgravity.resilience.fingerprint import (
+    compute_material_fingerprint,
+    networks_are_materially_equal,
+)
+from netgravity.resilience.registry_store import (
+    REICacheKey,
+    REIRegistryStore,
+    disruption_signature,
+)
+from netgravity.resilience.service import REIService
 from netgravity.resilience.rei import (
     BaselineSolveError,
+    economic_impact_of,
     FacilityNotFoundError,
     InvalidDisruptionTargetError,
     NoEligibleFacilitiesError,
@@ -38,7 +49,14 @@ __all__ = [
     "compute_baseline",
     "discover_eligible_facilities",
     "normalize_rei",
+    "economic_impact_of",
     "classify_risk",
+    "REIService",
+    "REIRegistryStore",
+    "REICacheKey",
+    "disruption_signature",
+    "compute_material_fingerprint",
+    "networks_are_materially_equal",
     "ResilienceBaseline",
     "ResilienceAssessmentError",
     "FacilityNotFoundError",

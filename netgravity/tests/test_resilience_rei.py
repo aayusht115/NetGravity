@@ -39,6 +39,7 @@ from netgravity.costs.reconciliation import reconcile_costs
 from netgravity.optimization.milp import solve
 from netgravity.resilience.rei import (
     BaselineSolveError,
+    economic_impact_of,
     FacilityNotFoundError,
     InvalidDisruptionTargetError,
     NoEligibleFacilitiesError,
@@ -624,10 +625,17 @@ class TestREINormalisation:
         assert all(math.isfinite(r) for r in reis)
 
     def test_all_negative_pi_yields_zero_rei(self):
-        reis, max_pi, status = normalize_rei([-10.0, -20.0])
+        """
+        No facility has positive exposure, so every REI is 0.
+
+        The returned maximum is the maximum ECONOMIC IMPACT (max(0, PI)), which
+        is 0 here — not the maximum raw PI. Normalising against a negative
+        maximum would invert the ranking.
+        """
+        reis, max_impact, status = normalize_rei([-10.0, -20.0])
         assert status == REIStatus.NO_RELATIVE_COST_EXPOSURE
         assert reis == [0.0, 0.0]
-        assert max_pi == pytest.approx(-10.0, abs=TOL)
+        assert max_impact == pytest.approx(0.0, abs=TOL)
 
     def test_none_pi_maps_to_none_rei(self):
         reis, max_pi, status = normalize_rei([100.0, None, 50.0])
@@ -791,11 +799,25 @@ class TestNegativePerformanceImpact:
             "comparability caveat"
         )
 
-    def test_negative_pi_not_clamped_in_normalisation(self):
-        reis, max_pi, status = normalize_rei([100.0, -40.0])
+    def test_negative_pi_yields_zero_exposure_but_raw_pi_survives(self):
+        """
+        A negative PI means NO economic exposure, so REI is 0 — not negative.
+
+        REI must stay within [0, 1] because it feeds RF = P + REI - P*REI, which
+        is only defined on the unit interval. The anomaly is not hidden: the raw
+        signed PI is retained on the result and flagged separately (see
+        `test_negative_pi_is_retained_and_flagged`); only the quantity REI
+        normalises over is floored.
+        """
+        reis, max_impact, status = normalize_rei([100.0, -40.0])
         assert status == REIStatus.COMPUTED
-        assert reis[1] == pytest.approx(-0.4, abs=TOL)
-        assert reis[1] < 0.0, "negative REI must be retained, not clamped"
+        assert reis[0] == pytest.approx(1.0, abs=TOL)
+        assert reis[1] == pytest.approx(0.0, abs=TOL)
+        assert all(0.0 <= r <= 1.0 for r in reis if r is not None)
+        # The economic impact used for normalisation is the floored value.
+        assert economic_impact_of(-40.0) == pytest.approx(0.0)
+        # ...while the raw PI is untouched.
+        assert max_impact == pytest.approx(100.0, abs=TOL)
 
 
 # ---------------------------------------------------------------------------

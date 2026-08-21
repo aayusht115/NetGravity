@@ -36,15 +36,43 @@ built under different disruption assumptions are not comparable.
 For facility *i*, under a fixed disruption assumption:
 
 ```
-Performance Impact    PI_i  = C_business_i − C_business_base
+Performance Impact    PI_i     = C_business_i − C_business_base        (signed)
 
-Cost Impact           CI_i  = (C_business_i − C_business_base) / C_business_base × 100
+Cost Impact           CI_i     = PI_i / C_business_base × 100
 
-Risk Exposure Index   REI_i = PI_i / max_j(PI_j)
+Economic Impact       EI_i     = max(0, PI_i)                          (floored)
+
+Risk Exposure Index   REI_i    = EI_i / max_j(EI_j)                    ∈ [0, 1]
 ```
 
 where *j* ranges over **all facilities evaluated under the same disruption
 assumptions**.
+
+### Why REI normalises over `max(0, PI)` and not `PI`
+
+`PI` is signed and retained signed: a disruption that *reduces* optimized cost
+is a real result worth investigating, and it stays visible on the row.
+
+But such a facility has **no economic exposure** — losing it does not cost the
+business anything. Normalising a negative PI would produce a negative REI, which
+
+1. inverts the ranking (a cost-*reducing* facility would sort as "most negative
+   exposure"), and
+2. breaks the `[0, 1]` bound that `RF = P + REI − P·REI` requires.
+
+So the floor applies **only** to the quantity REI normalises over. Both values
+are reported: `performance_impact` (signed, raw) and `economic_impact`
+(floored). Nothing is hidden.
+
+Guarantees, all test-asserted:
+
+```
+0 ≤ REI ≤ 1                    for every assessed facility
+REI = 1                        for the largest positive exposure
+REI = 0                        where PI ≤ 0
+REI = None                     where the facility could not be assessed
+no division by zero            when every impact is zero
+```
 
 Worked example:
 
@@ -173,8 +201,13 @@ With shortage *enabled*, a disruption the network cannot absorb still solves —
 but the disrupted network then serves **less volume**, so its business cost
 falls and the facility scores a **negative** Performance Impact. The most
 operationally exposed facility ranks *last*. On the Case-16 fixture,
-`PLANT_NORTH` stranded 17.8% of demand and scored PI = −9,503 → REI = −1.571,
-sorting to the bottom of the registry.
+`PLANT_NORTH` stranded 17.8% of demand and scored PI = −9,503 — so its economic
+impact floors to 0 and it receives **REI = 0**, ranking joint-last despite being
+the most operationally exposed node in the network.
+
+(Before REI V1 the same case produced REI = −1.571. Flooring fixed the out-of-
+range value but not the underlying ranking problem: a cost-reducing disruption
+still cannot be ranked by cost, because there is no cost increase to rank.)
 
 That failure is silent, and it **worsens as the network grows**: more markets
 means more single-source coverage means more contaminated rows. A silent failure
@@ -236,7 +269,178 @@ single ranking.**
 
 ---
 
+## 6b. Batching, caching and invalidation (V1)
+
+### Solve count
+
+A batch costs **1 baseline + N disruptions** (plus one optional service
+diagnostic per infeasible node). The baseline is solved once and reused; it is
+never re-solved inside the loop. Measured on Case-16: 7 nodes → 9 solves.
+
+### The REI service
+
+```
+Orchestrator → REIService → assess_network_resilience → MILP → REIRegistryStore
+```
+
+`REIService.get_or_compute()` returns a stored batch when one is still valid,
+and computes only when it is not. A cache hit executes **zero** MILP solves.
+Layering is strict: `rei.py` knows the mathematics and nothing about caching;
+`registry_store.py` knows storage and nothing about the mathematics.
+
+### Cache identity
+
+A batch is reusable only for an exact match on:
+
+```
+(material_fingerprint, model_version, disruption_type, disruption_signature)
+```
+
+`disruption_signature` covers the shortage policy, cost basis, eligibility
+filters and risk rules — REI is only comparable within one set of assumptions,
+so a change to any of them is a different calculation, not a cache hit.
+
+### Material fingerprint
+
+`resilience/fingerprint.py` hashes **only inputs that can change the optimum**:
+
+| Material (invalidates) | Not material (does not) |
+|---|---|
+| demand, σ, SLA, priority | facility name |
+| capacity, status, open/close flags | region, country, tags |
+| fixed / handling / opening / closure cost, capex | network description |
+| lane existence, rate, distance, lead time, capacity | solver name, time limit, threads, verbosity |
+| contractual closure terms | parameter provenance/confidence |
+| product weight / value / holding rate | |
+| material config switches | |
+
+This is deliberately narrower than `compute_data_version()`, which hashes every
+field including labels — renaming a warehouse under that hash would force 1 + N
+solves for a cosmetic edit. Solver *tuning* is excluded on the same principle:
+raising a time limit does not change the optimum.
+
+### Invalidation
+
+A material change alters the fingerprint, so the old entry simply stops
+matching — no explicit sweep is needed. `REIService.invalidate_for()` exists for
+deliberate operator action ("recompute regardless").
+
+---
+
+## 6c. Phase 1 — the deterministic risk chain (MILP → REI → P → RF)
+
+```
+Network Snapshot -> Baseline MILP -> REI Batch -> REI Registry
+                                                       |
+                            External Event Probability |
+                                                    \  v
+                                                  RF Calculator
+                                                       |
+                                                 Risk Assessment
+```
+
+Responsibilities stay strictly separate. `risk/risk_assessment.py` is the
+integration layer: it maps an event to a node, looks the node's REI up, checks
+the snapshot, and asks the RF calculator. It contains no optimization, no REI
+arithmetic and no RF arithmetic of its own.
+
+### Node mapping is explicit
+
+RF is never computed against an arbitrary node. Resolution prefers explicit
+`affected_entity_ids`; failing that, an exact-or-token match on `location`. An
+event that resolves to nothing yields `NODE_MAPPING_UNAVAILABLE` — it never
+broadcasts across the network, because a flood in Delhi says nothing about
+Mumbai's probability.
+
+### RF not-computable reasons
+
+| Reason | Meaning |
+|---|---|
+| `NO_EVENT_PROBABILITY` | no defensible P; severity/confidence are never substituted |
+| `NO_REI` | node absent from the registry, or its REI is null (infeasible / time-limited / errored) |
+| `STALE_REI` | the registry was computed against a different network snapshot |
+| `NODE_MAPPING_UNAVAILABLE` | the event could not be tied to an eligible node |
+| `NO_INPUTS` | neither P nor REI available |
+| `INVALID_INPUT` | present but out of range |
+
+`P = 0` is an explicit value and **computes** (RF = REI). Missing P is not zero.
+
+### Snapshot consistency
+
+The REI batch records the snapshot id it ran against, and RF refuses to combine
+it with a different one. This required threading the orchestrator's snapshot id
+into the REI service — without it the batch defaulted to `data_version` and
+every RF was wrongly flagged stale.
+
+### Persistence
+
+`resilience/persistence.py` separates the durable source of truth from the
+in-memory performance cache:
+
+| Backend | Durable | Use |
+|---|---|---|
+| `NullPersistenceBackend` | no | default; preserves prior behaviour |
+| `JsonFilePersistenceBackend` | yes | one atomic JSON document per batch |
+
+Entries are written through on `put` and read back on a cache miss, so a
+restarted process does not re-run 1 + N solves. Invalidation deletes the durable
+record too, so a restart cannot resurrect a stale batch. A record with a
+mismatched format version or cache key is ignored rather than trusted.
+
+### Scale benchmark (measured)
+
+Synthetic 2-plant / N-DC / (N/2)-market networks, every DC reaching every market:
+
+| DCs | facilities | lanes | nodes | solves | baseline | node mean | sequential | parallel(4) | peak mem |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 7 | 13 | 42 | 9 | 10 | 0.11 s | 0.06 s | 0.67 s | 0.34 s (1.98x) | 0.8 MB |
+| 25 | 39 | 350 | 27 | 28 | 0.20 s | 0.23 s | 6.5 s | 5.2 s (1.26x) | 8.9 MB |
+| 50 | 77 | 1,350 | 52 | 53 | 1.05 s | 1.00 s | 53.2 s | 46.7 s (1.14x) | 58.7 MB |
+| 100 | 152 | 5,200 | ~101 | ~102 | 6.0 s | — | **~10-11 min (projected)** | — | — |
+
+The 100-DC row is a PROJECTION from three measured single solves
+(5.92 / 5.94 / 6.27 s, identical objective), not an end-to-end batch run.
+
+Cache effectiveness: 7 DCs 0.31 s -> 1.5 ms (209x); 25 DCs 2.86 s -> 3.1 ms (911x).
+
+**Honest reading:** cost grows super-linearly with network density, and thread
+parallelism decays as problems grow (1.98x at 7 DCs, 1.14x at 50) because the
+solve holds more of its time in GIL-bound Python. Beyond ~50 facilities a
+process pool or distributed workers would be needed; the `max_workers` /
+`solve_fn` seams accept either without touching REI domain logic.
+
+---
+
 ## 7. Edge cases
+
+### Solver status handling
+
+Each node records a `calculation_status` alongside the raw `solver_status`:
+
+| Solver outcome | `calculation_status` | REI |
+|---|---|---|
+| `OPTIMAL` | `OK` | computed |
+| `INFEASIBLE` | `INFEASIBLE` | `None` |
+| `TIME_LIMIT` | `TIME_LIMIT` | `None` |
+| engine exception | `ERROR` | `None` |
+
+**`TIME_LIMIT` yields no REI.** A time-limited incumbent is not proven optimal,
+so differencing it against a proven-optimal baseline would measure solver effort
+rather than exposure. The incumbent objective, runtime and gap are all retained
+for inspection; only the REI is withheld.
+
+### Batch status
+
+One failing node never destroys a batch:
+
+| Condition | `batch_status` |
+|---|---|
+| every node computed | `COMPLETED` |
+| some infeasible/errored, at least one usable | `COMPLETED_WITH_ERRORS` |
+| no node produced a usable result | `FAILED` |
+
+A `FAILED` batch is **not cached** — caching it would serve the failure back
+instead of retrying.
 
 ### Infeasible disruption
 
@@ -441,6 +645,28 @@ cost regardless of its multiplier.
 ---
 
 ## 13. Test coverage
+
+`netgravity/tests/test_rei_v1.py` — 65 tests covering the frozen V1 scope
+(baseline, single/multiple disruption, zero impact, negative incremental cost,
+infeasibility, failure isolation, baseline immutability, snapshot consistency,
+idempotency, material-change invalidation, normalisation bounds, store
+behaviour, parallel equivalence, orchestrator integration).
+
+`netgravity/tests/test_rei_performance.py` — 4 benchmark tests. Measured on
+Case-16 (15 facilities, 8 demands, 41 lanes; 7 nodes assessed, 9 solves):
+
+```
+baseline solve            0.022 s
+per node   min/mean/max   0.005 / 0.011 / 0.015 s
+batch total  sequential   0.099 s
+batch total  4 workers    0.054 s   (1.85x)
+cached batch              0.0005 s  (0 solves, 9 avoided)
+```
+
+Threads do help: `highspy` releases the GIL inside the solve, so independent
+scenarios genuinely overlap. `max_workers` defaults to 1 so behaviour is
+predictable unless a caller opts in; the same seam accepts a process pool or a
+remote worker without touching REI domain logic.
 
 `netgravity/tests/test_resilience_rei.py` — 53 tests:
 
