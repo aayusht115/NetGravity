@@ -1,0 +1,3 @@
+facility_id,facility_name,role,status,latitude,longitude,region,capacity_units_per_period,observed_throughput,fixed_cost_per_year,handling_cost_per_unit,is_mandatory,is_closable,replenishment_lead_time_days
+PLT_TEST,Test Plant,PLANT,EXISTING,28.61,77.21,North,5000,4000,0,0,TRUE,FALSE,0
+DC_TEST,Test DC,DC,EXISTING,19.08,72.88,West,3000,2000,600000,4.0,FALSE,TRUE,3

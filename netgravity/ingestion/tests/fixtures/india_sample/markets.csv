@@ -1,0 +1,3 @@
+market_id,market_name,latitude,longitude,region,state,priority_tier,sla_days
+MKT_A,Market A,28.70,77.10,North,Delhi,High,2
+MKT_B,Market B,19.08,72.88,West,Maharashtra,Medium,3

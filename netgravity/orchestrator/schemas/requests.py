@@ -160,6 +160,14 @@ class ExternalSignal(BaseModel):
     External information is EVIDENCE, never observed network truth. It carries
     its source and confidence and is never merged into a network snapshot.
 
+    NOT THE SAME THING AS `MarketIntelligenceSignal`
+    ────────────────────────────────────────────────
+    `netgravity.ingestion.schemas.signal.MarketIntelligenceSignal` is dated
+    news/macro/weather context with a qualitative confidence and, by design, no
+    probability at all. THIS class is a discrete event whose
+    `event_probability` feeds RF. Nothing converts one into the other; see that
+    module's docstring for why.
+
     THREE INDEPENDENT VARIABLES
     ───────────────────────────
     These are routinely conflated and must not be:
