@@ -262,6 +262,58 @@ instead.
   Stub output is never cached, which prevents canned demo data from being served
   after a real key is added.
 
+### Gateway Provider, Token Ledger & PDF Reading (Aug 2026 update)
+
+A third provider option sits alongside OpenAI/Claude:
+
+```bash
+NETGRAVITY_USE_GATEWAY=true         # checked before NETGRAVITY_USE_CLAUDE
+NETGRAVITY_GATEWAY_URL=...          # address, not a secret
+NETGRAVITY_GATEWAY_TOKEN=...        # shared bearer token
+```
+
+The **Text Generation Gateway** wraps a fixed model (`gpt-5-mini`) behind a
+much smaller protocol — a single `{"prompt": "..."}` field, no JSON mode, no
+document input, and no caller-chosen model. It is hand-rolled over `urllib`
+rather than the OpenAI SDK because it isn't OpenAI-compatible. Its budget is
+**shared and cumulative** — $10 total, does not reset, 100 requests/day,
+20/minute — so the retry policy is deliberately conservative: a rolling-minute
+rate limit is retried with jitter (so throttled callers don't retry in
+lockstep), but a spent budget, a daily cap, a malformed request, or a
+client-side timeout is never retried, since the gateway has no idempotency key
+and a retried timeout risks paying twice for one answer.
+
+**Every model call anywhere in NetGravity is recorded** to a token usage
+ledger (`netgravity/telemetry/`), kept outside the ingestion package because
+cost is a property of the run, not one subsystem. Stub calls are counted but
+never priced; failed live calls are tracked separately since the provider may
+still have billed for them; an unpriced model shows cost as "unknown," never
+`$0.00`, so a missing price never reads as free. Override prices without a
+code edit via `NETGRAVITY_TOKEN_PRICES="model:usd_per_1M_in:usd_per_1M_out,..."`.
+
+**PDF contract reading is one route**, not two: `pypdf` extracts text, and
+that text goes to the model. An earlier design escalated unreadable documents
+by sending the PDF file itself to the model; that was removed after live
+testing showed Gemini's OpenAI-compatible endpoint rejects document input
+outright (`400 Invalid content part type: file`). Anthropic's API does accept
+documents natively and the code path for it (`_pdf_anthropic`) is still
+present and tested, just not wired into this flow — setting
+`NETGRAVITY_USE_CLAUDE=true` with a Claude key is the fastest way to revive
+it. The pypdf quality checks are now a confidence signal rather than a
+routing decision: good text is extracted normally; text that fails the
+quality checks is still sent (imperfect text is often partly recoverable) but
+the result is ring-fenced — confidence forced to LOW throughout, never
+cached, never learned as a document shape; a page with no extractable text at
+all is rejected before any call is made, at zero cost (OCR remains parked).
+
+**Live-verification scripts** live in `scripts/` — one per pipeline flow, free
+ones with no API calls (`verify_1_config`, `verify_2_sources`,
+`verify_5_memory`) and live ones that exercise the model
+(`verify_3_classification`, `verify_4_column_mapping`, `verify_6_review`,
+`verify_7_end_to_end`, `verify_pdf_paths`). All take `--trace` to log the
+exact prompt and raw response; the AI ones take `--limit`. See
+[`scripts/README.md`](scripts/README.md) for the full command reference.
+
 ### Ingestion CLI
 
 ```bash
