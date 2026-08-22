@@ -85,6 +85,10 @@ STUB_MODE_BANNER = (
 DEFAULT_MODELS = {
     "openai": "gpt-4o-mini",
     "anthropic": "claude-sonnet-4-5",
+    # The gateway does not let a caller choose a model — it is fixed
+    # server-side. This name is recorded for provenance and cost accounting
+    # only; changing it here changes nothing about which model runs.
+    "gateway": "gpt-5-mini",
 }
 
 
@@ -152,16 +156,27 @@ def _flag(name: str, default: bool = False) -> bool:
 PROVIDER_KEY_VARS = {
     "openai": "NETGRAVITY_OPENAI_API_KEY",
     "anthropic": "NETGRAVITY_ANTHROPIC_API_KEY",
+    # The gateway's credential is a gateway-issued bearer token, NOT a
+    # vendor API key. It gets its own variable so it can never be confused
+    # with — or silently used as — an OpenAI/Anthropic key.
+    "gateway": "NETGRAVITY_GATEWAY_TOKEN",
 }
 
 
 def resolve_provider() -> str:
     """
-    Decide which provider to call. ONE switch, no precedence rules to remember.
+    Decide which provider to call. Switches only — no precedence puzzles.
 
-        NETGRAVITY_USE_CLAUDE unset/false  ->  openai   (default)
-        NETGRAVITY_USE_CLAUDE true         ->  anthropic
+        NETGRAVITY_USE_GATEWAY true        ->  gateway   (checked first)
+        NETGRAVITY_USE_CLAUDE  true        ->  anthropic
+        neither                            ->  openai    (default)
+
+    The gateway is checked first because it is the most specific choice: it
+    is a named internal endpoint, so anyone who deliberately switched it on
+    means it, whatever else is left lying around in their .env.
     """
+    if _flag("NETGRAVITY_USE_GATEWAY"):
+        return "gateway"
     return "anthropic" if _flag("NETGRAVITY_USE_CLAUDE") else "openai"
 
 
@@ -223,6 +238,16 @@ class IngestionConfig:
         default_factory=lambda: _env("NETGRAVITY_LLM_BASE_URL")
     )
 
+    # Base address of the Text Generation Gateway. Used ONLY when
+    # llm_provider == "gateway", and deliberately NOT llm_base_url: that one
+    # points the OpenAI SDK at an OpenAI-COMPATIBLE server, and the gateway
+    # is not one — it speaks its own smaller protocol (a single `prompt`
+    # field, POST /v1/generate). Keeping the two apart stops a gateway
+    # address from ever being handed to the OpenAI SDK.
+    gateway_url: Optional[str] = field(
+        default_factory=lambda: _env("NETGRAVITY_GATEWAY_URL")
+    )
+
     # --- Behaviour ---
     # Rows failing a WARNING-level check are kept but flagged; ERROR-level rows
     # are always dropped from the assembled network.
@@ -243,9 +268,20 @@ class IngestionConfig:
         otherwise the run just fails with an opaque 401.
         """
         key = self.llm_api_key
+        provider = (self.llm_provider or "").lower()
+
+        if provider == "gateway":
+            if not self.gateway_url:
+                return ("provider is 'gateway' but NETGRAVITY_GATEWAY_URL is "
+                        "not set. The gateway has no default address, so "
+                        "there is nowhere to send the request.")
+            if not key:
+                return ("provider is 'gateway' but NETGRAVITY_GATEWAY_TOKEN "
+                        "is not set — the run will fall back to stub mode.")
+            return None
+
         if not key:
             return None
-        provider = (self.llm_provider or "").lower()
         looks_anthropic = key.startswith("sk-ant-")
         # OpenAI keys start sk- but NOT sk-ant-.
         looks_openai = key.startswith("sk-") and not looks_anthropic
@@ -282,12 +318,20 @@ class IngestionConfig:
         """
         The model to call.
 
-        Explicit NETGRAVITY_LLM_MODEL always wins. Otherwise pick a sane
-        default for the configured provider, so switching provider does not
-        leave a model name from the previous vendor in place — which would
-        fail with a confusing 'unknown model' error rather than an obvious
-        configuration one.
+        The gateway is fixed server-side — no caller-supplied model name
+        can change what actually runs there, so NETGRAVITY_LLM_MODEL is
+        ignored for it (it belongs to the OpenAI-compatible base-URL path
+        and would otherwise mislabel every gateway call in the token
+        ledger with whichever vendor model was last configured).
+
+        For every other provider, explicit NETGRAVITY_LLM_MODEL always
+        wins. Otherwise pick a sane default for the configured provider,
+        so switching provider does not leave a model name from the
+        previous vendor in place — which would fail with a confusing
+        'unknown model' error rather than an obvious configuration one.
         """
+        if (self.llm_provider or "").lower() == "gateway":
+            return DEFAULT_MODELS["gateway"]
         if self.llm_model:
             return self.llm_model
         return DEFAULT_MODELS.get(
@@ -310,13 +354,24 @@ class IngestionConfig:
         return self.zone_path(ZONE_CURATED)
 
     def describe(self) -> str:
+        # llm_base_url only ever affects the "openai" provider (it points the
+        # OpenAI SDK at an alternate OpenAI-compatible server). Showing it
+        # for "gateway" or "anthropic" makes it look like the active call is
+        # going to that address when it never is -- gateway calls always go
+        # to gateway_url, and anthropic calls always go to Anthropic's API.
+        provider = (self.llm_provider or "").lower()
+        endpoint_line: list[str] = []
+        if provider == "openai" and self.llm_base_url:
+            endpoint_line = [f"  API endpoint    : {self.llm_base_url}  (not api.openai.com)"]
+        elif provider == "gateway":
+            endpoint_line = [f"  API endpoint    : {self.gateway_url or '(not set)'}"]
+
         lines = [
             f"  data root       : {self.data_root}",
             f"  storage backend : {self.storage_backend}",
             f"  LLM provider    : {self.llm_provider} ({self.resolved_model})"
             + ("" if self.stub_mode else f"   key from {self.key_source}"),
-        ] + ([f"  API endpoint    : {self.llm_base_url}  (not api.openai.com)"]
-             if self.llm_base_url else []) + [
+        ] + endpoint_line + [
             f"  LLM mode        : {'STUB (no key set)' if self.stub_mode else 'LIVE'}"
             + ("" if self.stub_mode else
                f", timeout {self.llm_timeout_seconds:g}s, "

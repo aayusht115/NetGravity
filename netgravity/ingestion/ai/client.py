@@ -23,11 +23,17 @@ WHY THAT MATTERS
 from __future__ import annotations
 
 import json
+import logging
+import random
 import re
+import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from netgravity.ingestion.config import IngestionConfig
+from netgravity.telemetry import record_call
 
 # Providers that speak the OpenAI chat-completions API. "codex" is tolerated
 # as a synonym for the same thing.
@@ -38,10 +44,50 @@ from netgravity.ingestion.config import IngestionConfig
 # deployment. When Azure OpenAI is actually needed, it gets its own branch.
 _OPENAI_PROVIDERS = {"openai", "codex"}
 
+# Traffic logger. Everything sent to and received from a provider is
+# logged here at DEBUG, so "what did we actually ask, and what came
+# back" is answerable without a debugger or a code change.
+#
+# DEBUG, not INFO, on purpose: prompts and responses are large and can
+# carry client data, so they stay off by default and are opted into.
+#     logging.getLogger("netgravity.ingestion.ai.client").setLevel(logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 # Sentinel embedded in the note when a live call failed and we degraded to
 # stub data. Adapters look for this to set FileResult.ai_failed, so the
 # report can distinguish "no key configured" from "the API call broke".
 LLM_FAILURE_MARKER = "LLM CALL FAILED"
+
+# --- Text Generation Gateway ------------------------------------------------
+# An internal endpoint that wraps a fixed model behind a much smaller
+# protocol than OpenAI's. It is NOT OpenAI-compatible, so it cannot be
+# reached by pointing the OpenAI SDK at it via base_url — it gets its own
+# transport below. The whole contract:
+#
+#     POST {base}/v1/generate   Authorization: Bearer <token>
+#     body     {"prompt": "..."}          <- exactly one field, no others
+#     returns  {"output": "...", "request_id": "...", "usage": {...}}
+#     GET  {base}/v1/usage      shared budget + request counters
+#     GET  {base}/health        no auth, no budget cost
+#
+# Limits it enforces, and why each one shows up in the code below:
+GATEWAY_MAX_PROMPT_CHARS = 100_000   # larger -> HTTP 413
+GATEWAY_MAX_OUTPUT_TOKENS = 2_000    # fixed server-side; max_tokens is ignored
+
+# Only these are worth retrying. Everything else is either a client mistake
+# (fix it, do not repeat it) or a spent budget (retrying cannot help).
+_GATEWAY_RETRYABLE_STATUS = {429, 500, 502}
+# ...but not every 429. A rolling-minute limit clears on its own; a daily
+# limit and an exhausted budget do not, so hammering them just burns time.
+_GATEWAY_TERMINAL_ERRORS = {"daily_limit_exceeded", "budget_exceeded"}
+
+# The gateway offers no JSON mode, so "return JSON" has to be asked for in
+# the prompt itself and enforced by the parser. Appended to every gateway
+# prompt; harmless if the caller's prompt already says the same thing.
+_GATEWAY_JSON_INSTRUCTION = (
+    "\n\nIMPORTANT: Reply with a single valid JSON object and nothing else. "
+    "No prose before or after it, no markdown code fences, no explanation."
+)
 
 
 def _truncation_message(max_tokens: int, usage: Optional[Dict[str, int]]) -> str:
@@ -91,6 +137,11 @@ class LLMResponse:
     # "deliberately running without a key" from "tried to call the API and
     # could not" — the second is a problem, the first is not.
     failed: bool = False
+    # The provider's raw, unparsed response text. Kept so a caller can see
+    # exactly what the model said, not just what survived JSON parsing —
+    # which is the difference between "the model was wrong" and "our parser
+    # dropped something". Empty for stub responses.
+    raw: str = ""
     # Token usage the provider reported for this call: prompt_tokens,
     # completion_tokens, total_tokens. None for stub responses, or if the
     # provider's response didn't include usage. This is what makes cost
@@ -132,6 +183,7 @@ class LLMClient:
         """
         if self.stub_mode:
             from netgravity.ingestion.ai import stubs
+            record_call(task=task, model="stub", stubbed=True)
             return LLMResponse(
                 data=stubs.get(stub_key, stub_context or {}),
                 stubbed=True,
@@ -141,7 +193,11 @@ class LLMClient:
 
         try:
             self._last_usage = None
+            logger.debug("[%s] PROMPT SENT (%d chars):\n%s",
+                         task, len(prompt), prompt)
             raw = self._call_live(prompt, max_tokens=max_tokens)
+            logger.debug("[%s] RAW RESPONSE (%d chars):\n%s",
+                         task, len(raw or ""), raw)
             usage = self._last_usage
             tokens_note = ""
             if usage:
@@ -150,15 +206,34 @@ class LLMClient:
                     f"{usage.get('prompt_tokens', '?')} in + "
                     f"{usage.get('completion_tokens', '?')} out]"
                 )
+            model_name = (f"{self.config.llm_provider}:"
+                          f"{self.config.resolved_model}")
+            # Parse before recording success: a parse failure here must
+            # fall through to the except block below and be recorded once,
+            # as a failed call -- recording success first would double-count
+            # a single request in the token ledger when parsing then fails.
+            data = _parse_json(raw)
+            record_call(task=task, model=model_name, usage=usage)
             return LLMResponse(
-                data=_parse_json(raw),
+                data=data,
+                raw=raw,
                 stubbed=False,
-                model=f"{self.config.llm_provider}:{self.config.resolved_model}",
+                model=model_name,
                 notes=f"{task}: live extraction{tokens_note}",
                 tokens=usage,
             )
         except Exception as exc:
             detail = f"{type(exc).__name__}: {exc}"
+            logger.debug("[%s] CALL FAILED: %s", task, detail)
+
+            # Recorded as a FAILED live call, not as a stub. The provider may
+            # well have billed for it even though nothing usable came back —
+            # counting it as a free stub would understate real spend.
+            record_call(
+                task=task,
+                model=f"{self.config.llm_provider}:{self.config.resolved_model}",
+                usage=self._last_usage, failed=True,
+            )
 
             # In strict mode a failed call is a failed run. Silently serving
             # canned demo data in place of a real extraction is the one
@@ -204,6 +279,18 @@ class LLMClient:
             OpenAI-COMPATIBLE providers (OpenRouter's free tier, Groq,
             Cerebras) support it only for some models or not at all.
 
+            CONFIRMED LIVE (2026-08-21): Gemini via its OpenAI-compatible
+            endpoint (the base_url swap this project uses) REJECTS the
+            OpenAI "file" content-part with a 400 "Invalid content part
+            type: file". This is the one path in the whole pipeline that
+            was still untested against a live provider before this — now
+            it is tested, and the answer for Gemini-via-OpenAI-compat is
+            "not supported". The text-only path (extract_json, no PDF) DOES
+            work against Gemini and was verified separately. Anthropic's
+            real API (_pdf_anthropic) natively supports PDF documents and
+            is the fastest fix if a Claude key becomes available — no code
+            change needed there, just NETGRAVITY_USE_CLAUDE=true.
+
             This method therefore treats rejection as an ordinary failure,
             not a crash: a provider that will not take a document produces
             the same loud, labelled degradation as any other failed call.
@@ -214,6 +301,7 @@ class LLMClient:
         """
         if self.stub_mode:
             from netgravity.ingestion.ai import stubs
+            record_call(task=task, model="stub", stubbed=True)
             return LLMResponse(
                 data=stubs.get(stub_key, stub_context or {}),
                 stubbed=True, model="stub",
@@ -222,9 +310,13 @@ class LLMClient:
 
         try:
             self._last_usage = None
+            logger.debug("[%s] PROMPT SENT with document %s (%d bytes):\n%s",
+                         task, filename, len(pdf_bytes), prompt)
             raw = self._call_live_with_pdf(prompt, pdf_bytes=pdf_bytes,
                                            filename=filename,
                                            max_tokens=max_tokens)
+            logger.debug("[%s] RAW RESPONSE (%d chars):\n%s",
+                         task, len(raw or ""), raw)
             usage = self._last_usage
             tokens_note = ""
             if usage:
@@ -233,14 +325,24 @@ class LLMClient:
                     f"{usage.get('prompt_tokens', '?')} in + "
                     f"{usage.get('completion_tokens', '?')} out]"
                 )
+            model_name = (f"{self.config.llm_provider}:"
+                          f"{self.config.resolved_model}")
+            # Parse before recording success -- see extract_json() for why.
+            data = _parse_json(raw)
+            record_call(task=task, model=model_name, usage=usage)
             return LLMResponse(
-                data=_parse_json(raw), stubbed=False,
-                model=f"{self.config.llm_provider}:{self.config.resolved_model}",
+                data=data, raw=raw, stubbed=False,
+                model=model_name,
                 notes=f"{task}: live document read{tokens_note}",
                 tokens=usage,
             )
         except Exception as exc:
             detail = f"{type(exc).__name__}: {exc}"
+            record_call(
+                task=task,
+                model=f"{self.config.llm_provider}:{self.config.resolved_model}",
+                usage=self._last_usage, failed=True,
+            )
             if self.config.llm_strict:
                 raise LLMCallError(
                     f"{task}: reading the PDF directly failed and "
@@ -271,6 +373,12 @@ class LLMClient:
         if provider == "anthropic":
             return self._pdf_anthropic(prompt, encoded=encoded,
                                        max_tokens=max_tokens)
+        if provider == "gateway":
+            raise NotImplementedError(
+                "The Text Generation Gateway accepts text prompts only — it "
+                "has no document/PDF input at all. Extract the text first "
+                "and send that instead."
+            )
         raise NotImplementedError(
             f"Reading a PDF directly is not implemented for provider "
             f"'{self.config.llm_provider}'."
@@ -362,12 +470,142 @@ class LLMClient:
             return self._call_openai(prompt, max_tokens=max_tokens)
         if provider == "anthropic":
             return self._call_anthropic(prompt, max_tokens=max_tokens)
+        if provider == "gateway":
+            return self._call_gateway(prompt, max_tokens=max_tokens)
 
         raise NotImplementedError(
             f"LLM provider '{provider}' is not wired up. Supported: "
-            f"{', '.join(sorted(_OPENAI_PROVIDERS | {'anthropic'}))}. "
+            f"{', '.join(sorted(_OPENAI_PROVIDERS | {'anthropic', 'gateway'}))}. "
             f"Add a branch in LLMClient._call_live()."
         )
+
+    # -- Text Generation Gateway -------------------------------------------
+
+    def _call_gateway(self, prompt: str, *, max_tokens: int) -> str:
+        """
+        Call the Text Generation Gateway.
+
+        Hand-rolled over urllib rather than an SDK, because the gateway has
+        no SDK and adding an HTTP library for one endpoint would be a new
+        dependency for four lines of work.
+
+        WHAT IS DIFFERENT ABOUT THIS PROVIDER
+            - No JSON mode. "Return JSON" is asked for in the prompt and
+              enforced by _parse_json(), which already tolerates prose and
+              fences — so a chatty reply still parses.
+            - No model choice, and max_tokens is ignored (fixed at
+              GATEWAY_MAX_OUTPUT_TOKENS server-side). A caller asking for
+              more is warned rather than silently truncated.
+            - No document/PDF input at all.
+            - A SHARED, CUMULATIVE budget. Retries are therefore deliberately
+              conservative: a rolling-minute 429 is worth waiting out, but a
+              spent budget or daily cap is not, and a client-side timeout is
+              never retried because the call may already have completed and
+              been billed (there is no idempotency key to protect us).
+        """
+        base = (self.config.gateway_url or "").rstrip("/")
+        if not base:
+            raise RuntimeError(
+                "provider is 'gateway' but no gateway address is set. Set "
+                "NETGRAVITY_GATEWAY_URL."
+            )
+
+        # GUARD AGAINST A LEFTOVER VENDOR URL.
+        # NETGRAVITY_LLM_BASE_URL commonly holds a vendor endpoint (Gemini's
+        # OpenAI-compatible address, OpenRouter, ...). If one of those ends
+        # up here, the gateway's request shape would be POSTed to a vendor
+        # that does not speak it — producing a confusing 4xx that looks like
+        # a gateway fault rather than a configuration mistake. Name it.
+        if _looks_like_vendor_endpoint(base):
+            raise RuntimeError(
+                f"the gateway address points at a model vendor ({base}). "
+                f"That is almost certainly a leftover NETGRAVITY_LLM_BASE_URL "
+                f"value — the gateway is a separate internal endpoint and "
+                f"does not speak the vendor API. Set NETGRAVITY_GATEWAY_URL "
+                f"to the gateway's own address."
+            )
+        if not self.config.llm_api_key:
+            raise RuntimeError(
+                "provider is 'gateway' but NETGRAVITY_GATEWAY_TOKEN is not set."
+            )
+
+        if max_tokens > GATEWAY_MAX_OUTPUT_TOKENS:
+            logger.debug(
+                "gateway ignores max_tokens=%d; its output is capped at %d",
+                max_tokens, GATEWAY_MAX_OUTPUT_TOKENS)
+
+        body = prompt + _GATEWAY_JSON_INSTRUCTION
+        if len(body) > GATEWAY_MAX_PROMPT_CHARS:
+            # Caught here rather than as a 413, so the message names the real
+            # problem and no request (or budget) is spent discovering it.
+            raise ValueError(
+                f"prompt is {len(body):,} characters, above the gateway's "
+                f"{GATEWAY_MAX_PROMPT_CHARS:,} limit. Shorten the input "
+                f"before sending."
+            )
+
+        payload = json.dumps({"prompt": body}).encode("utf-8")
+        request = urllib.request.Request(
+            f"{base}/v1/generate", data=payload, method="POST",
+            headers={
+                "Authorization": f"Bearer {self.config.llm_api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+
+        attempts = max(1, self.config.llm_max_retries)
+        for attempt in range(attempts):
+            try:
+                with urllib.request.urlopen(
+                        request,
+                        timeout=self.config.llm_timeout_seconds) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as exc:
+                error, message = _read_gateway_error(exc)
+                retryable = (exc.code in _GATEWAY_RETRYABLE_STATUS
+                             and error not in _GATEWAY_TERMINAL_ERRORS)
+                if retryable and attempt < attempts - 1:
+                    # Exponential backoff with jitter. The jitter matters
+                    # because the limits are SHARED: without it, several
+                    # callers throttled at the same moment would retry in
+                    # lockstep and throttle each other again.
+                    delay = (2 ** attempt) + random.uniform(0, 1)
+                    logger.debug("gateway %s (%s) — retrying in %.1fs",
+                                 exc.code, error, delay)
+                    time.sleep(delay)
+                    continue
+                raise RuntimeError(_gateway_failure_text(exc.code, error,
+                                                         message)) from exc
+            except urllib.error.URLError as exc:
+                # Includes client-side timeouts. NOT retried on purpose: the
+                # request may have been processed and billed, and the gateway
+                # accepts no idempotency key, so a retry risks paying twice
+                # for one answer.
+                raise RuntimeError(
+                    f"could not reach the gateway at {base}: {exc.reason}. "
+                    f"Not retried — the call may already have been processed "
+                    f"and billed."
+                ) from exc
+
+        usage = data.get("usage") or {}
+        self._last_usage = {
+            # The gateway names these differently from OpenAI. Translating
+            # here keeps every downstream consumer provider-agnostic.
+            "prompt_tokens": usage.get("input_tokens"),
+            "completion_tokens": usage.get("output_tokens"),
+            "total_tokens": usage.get("total_tokens"),
+        }
+        if data.get("request_id"):
+            logger.debug("gateway request_id=%s", data["request_id"])
+
+        output = data.get("output")
+        if not output:
+            raise ValueError(
+                f"gateway returned no output (request_id="
+                f"{data.get('request_id', 'unknown')})."
+            )
+        return output
 
     # -- OpenAI ------------------------------------------------------------
 
@@ -507,6 +745,90 @@ class LLMClient:
             block.text for block in message.content
             if getattr(block, "type", None) == "text"
         )
+
+
+_VENDOR_HOST_MARKERS = (
+    "openai.com", "anthropic.com", "googleapis.com", "openrouter.ai",
+    "groq.com", "cerebras.ai", "inference.ai.azure.com",
+)
+
+
+def _looks_like_vendor_endpoint(url: str) -> bool:
+    """True when a URL belongs to a model vendor rather than our gateway."""
+    lowered = url.lower()
+    return any(marker in lowered for marker in _VENDOR_HOST_MARKERS)
+
+
+def _read_gateway_error(exc: urllib.error.HTTPError) -> tuple:
+    """
+    Pull (error_code, message) out of a gateway error body.
+
+    The gateway returns structured JSON errors, but auth and validation
+    failures can happen before that body is built — so this never assumes
+    the body is parseable, and degrades to the raw text instead.
+    """
+    try:
+        body = json.loads(exc.read().decode("utf-8"))
+        return body.get("error", ""), body.get("message", "")
+    except Exception:
+        return "", ""
+
+
+def _gateway_failure_text(status: int, error: str, message: str) -> str:
+    """
+    Turn a gateway error into something that says what to DO about it.
+
+    The status code alone is not actionable — 429 could mean "wait a minute",
+    "wait until tomorrow", or "the shared budget is gone and no amount of
+    waiting will help". Those need different responses from whoever reads
+    the log, so they get different text.
+    """
+    guidance = {
+        "invalid_request": "the request was malformed — do not retry it unchanged.",
+        "invalid_api_key": "NETGRAVITY_GATEWAY_TOKEN is missing or wrong.",
+        "not_found": "the URL is wrong — check NETGRAVITY_GATEWAY_URL.",
+        "method_not_allowed": "wrong HTTP method for this endpoint.",
+        "prompt_too_large": "the prompt exceeded the gateway's size limit.",
+        "rate_limit_exceeded": ("the shared per-minute limit was hit and "
+                                "retries were exhausted. Wait and run again."),
+        "daily_limit_exceeded": ("the shared DAILY request limit is spent. It "
+                                 "resets at 00:00 UTC — not retried."),
+        "budget_exceeded": ("the shared cost budget is exhausted. This is "
+                            "cumulative and does NOT reset daily; someone has "
+                            "to raise it. Not retried."),
+        "gateway_disabled": "the gateway is switched off server-side.",
+        "gateway_not_configured": "the gateway is not configured server-side.",
+    }.get(error, "")
+
+    parts = [f"gateway call failed with HTTP {status}"]
+    if error:
+        parts.append(f"({error})")
+    if message:
+        parts.append(f"— {message}")
+    if guidance:
+        parts.append(f" {guidance}")
+    return " ".join(parts)
+
+
+def fetch_gateway_usage(config: IngestionConfig) -> Dict[str, Any]:
+    """
+    Read the gateway's shared budget and request counters.
+
+    Worth calling BEFORE a batch run. The budget is shared with everyone
+    holding the same credential and is cumulative — it does not reset daily
+    — so "how much is left" is a question with a real answer that is cheap
+    to ask. This endpoint costs no budget and no request quota.
+    """
+    base = (config.gateway_url or "").rstrip("/")
+    if not base:
+        raise RuntimeError("NETGRAVITY_GATEWAY_URL is not set.")
+    request = urllib.request.Request(
+        f"{base}/v1/usage",
+        headers={"Authorization": f"Bearer {config.llm_api_key or ''}"},
+    )
+    with urllib.request.urlopen(
+            request, timeout=config.llm_timeout_seconds) as response:
+        return json.loads(response.read().decode("utf-8"))
 
 
 def _parse_json(text: str) -> Dict[str, Any]:

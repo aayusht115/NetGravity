@@ -60,10 +60,10 @@ So the rule is: **reject only what cannot be interpreted at all; repair anything
 | R-021 | Demand exceeds capacity by roughly 30× / 12× / 7× | ERROR | Almost certainly a period mismatch, not a real shortfall — solving would report a **false INFEASIBLE** |
 | R-021 | Demand exceeds capacity by some other ratio | WARNING | May be a genuine shortfall; worth confirming the periods match |
 | R-022 | `Capacity_Per_Trip` without `Transit_Frequency` | WARNING | Lane left uncapacitated — a wrong cap invents a constraint, no cap merely loses one |
-| R-023 | PDF text could not be trusted, so the document was sent to the model to read | INFO | The hybrid escalation fired — see §10 |
 | R-024 | A file or sheet could not be read at all | WARNING | Reported and skipped; the rest of the run continues |
 | R-025 | A column mapping is awaiting human confirmation | INFO | The column is NOT applied until confirmed — see §11 |
 | R-026 | A record set could not be classified | WARNING | Held for a human to label rather than routed on a guess |
+| R-027 | PDF text was unusable, or was used despite failing the quality checks | WARNING | Either the file was rejected, or its figures are LOW confidence — see §10 |
 
 ### Time periods — everything lands on MONTH
 
@@ -333,7 +333,8 @@ document. This is the dangerous one, because the output is confident and
 wrong rather than an error.
 
 Three checks decide whether extracted text is trustworthy. If ANY trips, the
-document itself is sent to the model instead (R-023).
+the extracted text is still used but everything from it is marked LOW
+confidence and flagged (R-027) — see 'One route only' below.
 
 | Check | Threshold | Signature it catches |
 |---|---|---|
@@ -353,12 +354,47 @@ puts invented figures into a cost model. Those are not symmetric risks.
 All four constants live in `netgravity/ingestion/pdf_quality.py` and are the
 entire policy — changing strictness never requires touching adapter logic.
 
-**Caveat, recorded honestly:** native PDF input is not implemented
-identically across providers, and several OpenAI-compatible ones (free-tier
-OpenRouter, Groq, Cerebras) do not support it for all models. A provider
-refusing the document is handled as an ordinary labelled failure, and the
-file is rejected rather than filled with stub figures. **This escalation path
-has not yet been exercised against a live provider.**
+### One route only (simplified 2026-08-21)
+
+The pipeline has exactly one way to read a PDF: **pypdf extracts the text,
+the text goes to the model.** There is no second route.
+
+An earlier design escalated documents pypdf could not read by sending the
+PDF file itself to the model. That was **removed after live testing**:
+Gemini, via the OpenAI-compatible base URL this project uses, rejects
+document parts outright with `400 Invalid content part type: file`. The
+escalation could therefore only ever spend an API call to rediscover the
+same error. Anthropic's API does support document input, and the client
+code for it (`_pdf_anthropic`) is still present and tested — it is simply
+not wired into this flow.
+
+So the quality checks above are no longer a ROUTING decision. They are a
+CONFIDENCE signal:
+
+| pypdf result | What happens |
+|---|---|
+| Good text | Extracted normally. The everyday case. |
+| Text that fails the checks | **Still sent to the model** — imperfect text is all we have, and a corrupt text layer is often only partly corrupt. The result is ring-fenced (below). |
+| No text at all | Rejected as unreadable (R-027). **No API call is made** — an unreadable file costs nothing. |
+
+### Ring-fencing a degraded read (R-027)
+
+When text that failed the checks is used anyway, three things are enforced
+so a salvage job is never mistaken for a clean read:
+
+1. **Confidence is forced to LOW** on the rule and on every surcharge,
+   whatever the model claimed. The model scored its certainty from the text
+   it was handed; it had no way to know that text was already judged
+   untrustworthy, so the pipeline applies that judgement.
+2. **It is never cached.** A degraded read must not be silently served later
+   as though it were sound.
+3. **It never feeds document-shape memory.** Learning the wording shape of
+   text known to be corrupt would poison every future match.
+
+**OCR is PARKED, not built.** A page with no text layer is an image, and
+reading it needs OCR — deliberately deferred. Until then, an unreadable file
+is reported as unreadable, with the reason named, rather than being filled
+with assumed values.
 
 ---
 
@@ -449,7 +485,135 @@ distinct entity, a transaction log repeats the same entities over time.
 
 ---
 
-## 13. Open items
+## 13. Token usage — one ledger for every AI call
+
+Token spend is invisible until it is a problem. A provider dashboard gives
+a monthly total; it cannot tell you that one step of one run burned most of
+it. So every model call in NetGravity records to a single ledger, tagged
+with the task that made it.
+
+**It lives OUTSIDE the ingestion package**, at
+`netgravity/telemetry/token_usage.py`. Cost is a property of the run, not of
+a subsystem — a per-subsystem counter would have to be summed by hand and
+would silently miss any new caller that forgot to register itself. Anything
+that calls a model uses this, ingestion or not.
+
+Recording, from anywhere in the codebase:
+
+```python
+from netgravity.telemetry import record_call
+
+record_call(task="contract extraction", model="openai:gpt-4o-mini",
+            usage={"prompt_tokens": 900, "completion_tokens": 120,
+                   "total_tokens": 1020})
+```
+
+Reading, at the end of a run:
+
+```python
+from netgravity.telemetry import ledger
+print(ledger().summary())
+```
+
+That is the whole API. Ingestion needs no further wiring — every call already
+routes through `ai/client.py`, which records on all six outcomes (stub,
+live, and failure, for both the text and document paths), so a new ingestion
+call site is counted automatically.
+
+### The rules it enforces
+
+| Rule | Why |
+|---|---|
+| A stub call is counted but never priced | Stubs cost nothing; pricing them would invent spend that never happened |
+| A FAILED live call is counted separately, not folded in with stubs | The provider may well have billed for it — a run of failures must not read as a cheap run |
+| An unknown model returns cost `None`, never `0.0` | `None` renders as "cost unknown"; `0.0` renders as free, which is a confident wrong number |
+| A total covering only some calls is labelled `PARTIAL` | A partial total passed off as complete is worse than no total |
+| Recording never raises | Accounting is a bystander to the work; a malformed usage payload must not break an extraction that otherwise succeeded |
+
+### Prices
+
+Rates live in `_DEFAULT_PRICES` as USD per million tokens, `(input, output)`.
+They are **estimates for local visibility, not an invoice** — provider prices
+change without notice and the provider's billing is always the authority.
+
+Rates change more often than code should, so they are overridable without an
+edit:
+
+```
+NETGRAVITY_TOKEN_PRICES="my-model:0.25:2.00,other-model:1.0:3.0"
+```
+
+A model with no configured rate is not guessed at. Its tokens are still
+counted; only its cost is reported as unknown.
+
+---
+
+## 14. Providers — and what the gateway changes
+
+Every model call goes through `ai/client.py`. Three providers are wired up,
+chosen by switch in `.env`:
+
+| Switch | Provider | Transport |
+|---|---|---|
+| *(none)* | `openai` | OpenAI SDK. Also reaches any OpenAI-COMPATIBLE server via `NETGRAVITY_LLM_BASE_URL` — OpenRouter, Groq, Cerebras, Gemini |
+| `NETGRAVITY_USE_CLAUDE=true` | `anthropic` | Anthropic SDK |
+| `NETGRAVITY_USE_GATEWAY=true` | `gateway` | Hand-rolled over stdlib `urllib` |
+
+`NETGRAVITY_USE_GATEWAY` is checked first: it names a specific internal
+endpoint, so switching it on is unambiguous.
+
+### Why the gateway needs its own code path
+
+It is **not** OpenAI-compatible, so it cannot be reached by pointing the
+OpenAI SDK at it. Its whole protocol is one endpoint taking one field:
+
+```
+POST {base}/v1/generate     Authorization: Bearer <token>
+{"prompt": "..."}        <- exactly one field; any other is rejected
+```
+
+`NETGRAVITY_GATEWAY_URL` is therefore deliberately **separate** from
+`NETGRAVITY_LLM_BASE_URL`. The latter means "an OpenAI-compatible server
+lives here"; putting a gateway address in it would hand a non-compatible
+endpoint to the OpenAI SDK and fail confusingly.
+
+### What it cannot do
+
+| | |
+|---|---|
+| Model choice | None — fixed server-side |
+| Max output | 2,000 tokens; `max_tokens` from a call site is ignored |
+| Max prompt | 100,000 characters — **checked locally before sending**, so an oversized prompt fails with a clear message instead of a 413 |
+| JSON mode | Not available. "Reply with JSON only" is appended to every gateway prompt, and `_parse_json()` (which already tolerates prose and code fences) is the enforcement |
+| PDF / documents | Not supported at all. `extract_json_from_pdf` raises with that stated plainly, rather than a generic "not implemented" |
+
+### Retry policy, and why it is unusually cautious
+
+The budget behind the gateway is **shared with everyone holding the same
+token** and **cumulative — it does not reset daily**. So retries are scoped
+tightly:
+
+| Outcome | Retried? | Why |
+|---|---|---|
+| 429 `rate_limit_exceeded` | **Yes**, exponential backoff + jitter | A rolling-minute limit clears by itself. Jitter matters because the limit is shared — without it, throttled callers retry in lockstep and re-throttle each other |
+| 500 / 502 | **Yes** | Transient server-side |
+| 429 `daily_limit_exceeded` | **No** | Resets at 00:00 UTC; retrying within a run cannot help |
+| 429 `budget_exceeded` | **No** | Cumulative and spent. Retrying cannot make money appear |
+| 400 / 401 / 404 / 405 / 413 | **No** | A malformed request stays malformed |
+| Client-side timeout | **No** | The call may already have been processed **and billed**, and the gateway accepts no idempotency key — an automatic retry risks paying twice for one answer |
+
+Every failure message names what to do about it, because the status code
+alone does not: three different 429s need three different responses.
+
+### Checking the budget before a batch
+
+`fetch_gateway_usage(config)` reads the shared budget and request counters.
+It costs no budget and no request quota, so it is worth calling before any
+batch run.
+
+---
+
+## 15. Open items
 
 | Item | Owner | Blocking? |
 |---|---|---|

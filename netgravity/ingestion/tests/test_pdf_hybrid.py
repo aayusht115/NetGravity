@@ -1,9 +1,17 @@
 """
-Hybrid PDF extraction tests.
+PDF extraction tests.
 
-The rule: try the free pypdf extraction first, judge whether its output can
-be TRUSTED, and only hand the document to the model when it cannot. No live
-API calls — the client is faked.
+ONE ROUTE: pypdf extracts the text, the text goes to the model.
+
+  - clean text        -> extracted normally
+  - poor-quality text -> still sent, but ring-fenced: LOW confidence, R-027,
+                         never cached, never learned as a document shape
+  - no text at all    -> rejected as unreadable (R-027). No second attempt.
+
+Sending the PDF file itself to the model was REMOVED (2026-08-21): the
+configured provider rejects document parts outright, so it could only ever
+spend an API call to rediscover the same 400. No live API calls here either
+— the client is faked.
 """
 
 from __future__ import annotations
@@ -16,6 +24,7 @@ from netgravity.ingestion.adapters import contracts as adapter
 from netgravity.ingestion.ai.client import LLM_FAILURE_MARKER, LLMResponse
 from netgravity.ingestion.config import IngestionConfig
 from netgravity.ingestion.memory import DocumentMemory
+from netgravity.ingestion.schemas.contract import ExtractionConfidence
 from netgravity.ingestion.storage.local import LocalStorage
 
 CONTRACT_DIR = Path(__file__).resolve().parents[3] / "data" / "mock" / "india" / "contracts"
@@ -103,113 +112,174 @@ def _garbled_pdf(path):
 
 # --- the cheap path is tried first -----------------------------------------
 
-def test_a_clean_pdf_never_escalates(live_config, patch_client):
+def test_a_clean_pdf_takes_the_text_path(live_config, patch_client):
     client = patch_client(_FakeClient())
     rule, result = adapter.ingest_file(GOOD_PDF, live_config, None, None,
                                        use_cache=False)
     assert rule is not None
     assert client.text_calls == 1
-    assert client.pdf_calls == 0, "a readable PDF must not cost a document read"
-    assert not any(i.code == "R-023" for i in result.issues)
+    assert client.pdf_calls == 0, "the document route no longer exists"
+    assert not any(i.code == "R-027" for i in result.issues)
 
 
 def test_read_contract_reports_clean_text_as_trustworthy():
-    text, warning, needs_model = adapter.read_contract(GOOD_PDF)
+    text, warning, quality_failed = adapter.read_contract(GOOD_PDF)
     assert warning is None
-    assert needs_model is False
+    assert quality_failed is False
     assert "TRANSCORP" in text
 
 
-# --- escalation -------------------------------------------------------------
+# --- poor-quality text is used, but ring-fenced ----------------------------
 
-def test_a_scan_with_no_text_layer_escalates(tmp_path, live_config, patch_client):
+def test_garbled_text_is_still_sent_to_the_model(tmp_path, live_config,
+                                                 patch_client):
     """
-    Previously an automatic rejection: the file's contents never reached the
-    network at all.
-    """
-    path = _blank_pdf(tmp_path / "scan.pdf")
-    _, _, needs_model = adapter.read_contract(path)
-    assert needs_model is True
-
-    client = patch_client(_FakeClient())
-    rule, result = adapter.ingest_file(path, live_config, None, None,
-                                       use_cache=False)
-    assert client.pdf_calls == 1
-    assert rule is not None
-    assert rule.vendor_name == "TransCorp Logistics"
-    assert result.rows_accepted == 1
-    assert any(i.code == "R-023" for i in result.issues)
-
-
-def test_garbled_text_escalates_rather_than_being_trusted(tmp_path, live_config,
-                                                          patch_client):
-    """
-    The dangerous case. The text layer returns something that looks like
-    text; trusting it would produce confident figures never in the document.
+    Imperfect text is all we have, and a corrupt text layer is often only
+    partly corrupt. Throwing it away guarantees nothing; sending it might
+    recover something.
     """
     path = _garbled_pdf(tmp_path / "garbled.pdf")
-    text, warning, needs_model = adapter.read_contract(path)
-    assert text, "this PDF does have a text layer"
-    assert needs_model is True
-    assert warning and "quality checks" in warning
+    _, _, quality_failed = adapter.read_contract(path)
+    assert quality_failed is True
 
     client = patch_client(_FakeClient())
     rule, result = adapter.ingest_file(path, live_config, None, None,
                                        use_cache=False)
-    assert client.pdf_calls == 1
-    assert client.text_calls == 0, "garbled text must not also be sent as text"
+
+    assert client.text_calls == 1
+    assert client.pdf_calls == 0, "the document route no longer exists"
     assert rule is not None
+    assert result.rows_accepted == 1
+    assert result.rows_rejected == 0
 
 
-def test_the_actual_document_bytes_are_sent(tmp_path, live_config, patch_client):
-    path = _blank_pdf(tmp_path / "scan.pdf")
-    client = patch_client(_FakeClient())
-    adapter.ingest_file(path, live_config, None, None, use_cache=False)
-    assert client.pdf_bytes_seen == path.read_bytes()
-
-
-# --- failure must not become invention --------------------------------------
-
-def test_a_failed_document_read_rejects_rather_than_inventing(tmp_path,
-                                                              live_config,
-                                                              patch_client):
+def test_a_degraded_read_is_forced_to_low_confidence(tmp_path, live_config,
+                                                     patch_client):
     """
-    A provider that cannot take a document is a real, reportable outcome.
-    Passing stub figures off as a reading of an unreadable scan would be the
-    worst possible result.
+    The model scores its certainty from the text it was handed. It has no way
+    to know that text had already been judged untrustworthy, so the pipeline
+    applies that judgement itself — on the rule AND on every surcharge.
     """
-    path = _blank_pdf(tmp_path / "scan.pdf")
-    patch_client(_FakeClient(pdf_fails=True))
+    path = _garbled_pdf(tmp_path / "garbled.pdf")
+    patch_client(_FakeClient())
+
     rule, result = adapter.ingest_file(path, live_config, None, None,
                                        use_cache=False)
+
+    assert rule.extraction_confidence == ExtractionConfidence.LOW
+    assert all(s.confidence == ExtractionConfidence.LOW
+               for s in rule.surcharges), \
+        "a surcharge read from unreliable text is not MEDIUM confidence"
+    assert any(i.code == "R-027" for i in result.issues)
+
+
+def test_a_clean_read_keeps_the_confidence_the_model_reported(live_config,
+                                                              patch_client):
+    """The LOW override must apply ONLY to degraded reads."""
+    patch_client(_FakeClient())
+    rule, result = adapter.ingest_file(GOOD_PDF, live_config, None, None,
+                                       use_cache=False)
+    assert rule.extraction_confidence != ExtractionConfidence.LOW
+    assert not any(i.code == "R-027" for i in result.issues)
+
+
+def test_a_degraded_read_never_enters_document_memory(tmp_path, live_config,
+                                                      patch_client):
+    """
+    Learning the wording shape of text we KNOW is corrupt would poison every
+    future match against that template.
+    """
+    storage = LocalStorage(tmp_path / "data")
+    path = _garbled_pdf(tmp_path / "garbled.pdf")
+    patch_client(_FakeClient())
+
+    rule, _ = adapter.ingest_file(path, live_config, None, storage,
+                                  use_cache=False)
+    assert rule is not None
+    assert DocumentMemory(storage)._all() == []
+
+
+def test_a_degraded_read_is_never_cached_for_reuse(tmp_path, live_config,
+                                                   patch_client):
+    """
+    Caching it would let one low-confidence read be silently served later as
+    though it were a sound extraction.
+    """
+    from netgravity.ingestion.ai.cache import load_cached_contract
+
+    storage = LocalStorage(tmp_path / "data")
+    path = _garbled_pdf(tmp_path / "garbled.pdf")
+    patch_client(_FakeClient())
+
+    adapter.ingest_file(path, live_config, None, storage, use_cache=True)
+
+    text, _, _ = adapter.read_contract(path)
+    assert load_cached_contract(text, storage) is None
+
+
+# --- no text at all ---------------------------------------------------------
+
+def test_a_scan_is_rejected_and_names_ocr_as_the_missing_capability(
+        tmp_path, live_config, patch_client):
+    """
+    OCR is PARKED, not built. The rejection message is often the only thing a
+    user sees, so it has to say WHY — otherwise a deliberate gap reads as a
+    bug.
+    """
+    path = _blank_pdf(tmp_path / "scan.pdf")
+    client = patch_client(_FakeClient())
+
+    rule, result = adapter.ingest_file(path, live_config, None, None,
+                                       use_cache=False)
+
     assert rule is None
     assert result.rows_rejected == 1
-    assert result.ai_failed is True
-    assert any(LLM_FAILURE_MARKER in n for n in result.ai_notes)
+    reasons = [i.message for i in result.issues if i.code == "R-027"]
+    assert reasons, "a rejected unreadable file must carry an R-027 reason"
+    assert "OCR" in reasons[0]
 
 
-def test_without_a_key_a_scan_is_rejected_not_escalated(tmp_path, patch_client):
-    """No key means no escalation is possible — say so, do not pretend."""
+def test_an_unreadable_file_costs_no_api_call(tmp_path, live_config,
+                                              patch_client):
+    """
+    THE POINT OF THE SIMPLIFICATION. A file we cannot turn into text used to
+    burn an API call proving the provider would not read it either. It must
+    now cost nothing at all.
+    """
+    path = _blank_pdf(tmp_path / "scan.pdf")
+    client = patch_client(_FakeClient())
+
+    adapter.ingest_file(path, live_config, None, None, use_cache=False)
+
+    assert client.text_calls == 0
+    assert client.pdf_calls == 0
+
+
+def test_an_unsupported_file_type_costs_no_api_call(tmp_path, live_config,
+                                                    patch_client):
+    path = tmp_path / "rate_card.docx"
+    path.write_text("not a pdf")
+    client = patch_client(_FakeClient())
+
+    rule, _ = adapter.ingest_file(path, live_config, None, None,
+                                  use_cache=False)
+
+    assert rule is None
+    assert client.text_calls == 0
+    assert client.pdf_calls == 0
+
+
+def test_without_a_key_a_scan_is_still_rejected(tmp_path, patch_client):
     config = IngestionConfig()
     config.llm_api_key = None
     client = patch_client(_FakeClient(stub_mode=True))
     path = _blank_pdf(tmp_path / "scan.pdf")
 
-    rule, result = adapter.ingest_file(path, config, None, None, use_cache=False)
-    assert client.pdf_calls == 0
+    rule, result = adapter.ingest_file(path, config, None, None,
+                                       use_cache=False)
     assert rule is None
     assert result.rows_rejected == 1
-
-
-def test_an_unsupported_file_type_is_not_escalated(tmp_path, live_config,
-                                                   patch_client):
-    path = tmp_path / "rate_card.docx"
-    path.write_text("not a pdf")
-    client = patch_client(_FakeClient())
-    rule, result = adapter.ingest_file(path, live_config, None, None,
-                                       use_cache=False)
-    assert client.pdf_calls == 0
-    assert rule is None
+    assert client.text_calls == 0
 
 
 # --- document shape memory --------------------------------------------------
@@ -261,7 +331,7 @@ def test_stub_extractions_never_pollute_document_memory(tmp_path, patch_client):
 
 
 def test_memory_failure_never_breaks_a_good_extraction(tmp_path, live_config,
-                                                       patch_client, monkeypatch):
+                                                       patch_client):
     """Memory is an optimisation, not a dependency."""
     class _BrokenStorage(LocalStorage):
         def list(self, zone, prefix=""):

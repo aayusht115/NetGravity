@@ -169,7 +169,7 @@ file is from its ROW DATA and routing on that, not on its path.
 
 Both paths have been verified to produce a byte-identical network on the
 sample data (same content-addressed `data_version`), so `--unified` is opt-in
-rather than default while it settles. See §10–§12 of
+rather than default while it settles. See §10–§13 of
 [`docs/ingestion_business_rules.md`](docs/ingestion_business_rules.md).
 
 **ERP / WMS is a documented stub, not a build.** `ingestion/sources/erp.py`
