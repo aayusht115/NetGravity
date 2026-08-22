@@ -11,7 +11,7 @@ from datetime import date
 
 from netgravity.ingestion.guardrails import evaluate, load_policy
 from netgravity.ingestion.schemas.signal import (
-    ExternalSignal,
+    MarketIntelligenceSignal,
     ScenarioUse,
     SignalBucket,
     SignalConfidence,
@@ -20,14 +20,14 @@ from netgravity.ingestion.schemas.signal import (
 KNOWN = {"DC_DELHI", "DC_GUWAHATI", "PLT_PUNE", "MKT_KOLKATA"}
 
 
-def _signal(**kw) -> ExternalSignal:
+def _signal(**kw) -> MarketIntelligenceSignal:
     base = dict(
         signal_id="SIG-TEST", title="Test signal",
         published_date="2026-08-01", effective_date="2026-08-15",
         confidence=SignalConfidence.HIGH,
     )
     base.update(kw)
-    return ExternalSignal(**base)
+    return MarketIntelligenceSignal(**base)
 
 
 def test_competitor_news_is_excluded_by_default():

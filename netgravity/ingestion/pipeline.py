@@ -30,7 +30,7 @@ from netgravity.ingestion.config import IngestionConfig, load_config
 from netgravity.ingestion.schemas.contract import ContractRule
 from netgravity.ingestion.schemas.ingest_result import IngestionReport, Severity
 from netgravity.ingestion.schemas.mapping import DistributorMapping
-from netgravity.ingestion.schemas.signal import ExternalSignal
+from netgravity.ingestion.schemas.signal import MarketIntelligenceSignal
 from netgravity.ingestion.snapshot import save_snapshot
 from netgravity.ingestion.storage import get_storage
 from netgravity.schemas.network import CanonicalNetwork
@@ -43,7 +43,7 @@ class IngestionResult:
     def __init__(self, report: IngestionReport,
                  network: Optional[CanonicalNetwork] = None,
                  contracts: Optional[List[ContractRule]] = None,
-                 signals: Optional[List[ExternalSignal]] = None,
+                 signals: Optional[List[MarketIntelligenceSignal]] = None,
                  distributor_mappings: Optional[List[DistributorMapping]] = None,
                  tabular=None):
         self.report = report
@@ -189,7 +189,7 @@ def run_ingestion(
                 )
 
     # --- 3. External signals (AI or stub) + guardrail ---------------------
-    signals: List[ExternalSignal] = []
+    signals: List[MarketIntelligenceSignal] = []
     if include_signals:
         signal_dir = source / "signals"
         if signal_dir.exists():

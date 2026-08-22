@@ -18,14 +18,14 @@ from typing import Iterable, Optional, Set
 
 from netgravity.ingestion.guardrails.buckets import GuardrailPolicy, load_policy
 from netgravity.ingestion.schemas.signal import (
-    ExternalSignal,
+    MarketIntelligenceSignal,
     GuardrailVerdict,
     ScenarioUse,
     SignalBucket,
 )
 
 
-def evaluate(signal: ExternalSignal, *,
+def evaluate(signal: MarketIntelligenceSignal, *,
              known_entity_ids: Optional[Set[str]] = None,
              policy: Optional[GuardrailPolicy] = None,
              today: Optional[date] = None) -> GuardrailVerdict:
@@ -111,9 +111,9 @@ def evaluate(signal: ExternalSignal, *,
     )
 
 
-def apply(signals: Iterable[ExternalSignal], *,
+def apply(signals: Iterable[MarketIntelligenceSignal], *,
           known_entity_ids: Optional[Set[str]] = None,
-          policy: Optional[GuardrailPolicy] = None) -> list[ExternalSignal]:
+          policy: Optional[GuardrailPolicy] = None) -> list[MarketIntelligenceSignal]:
     """
     Attach a verdict to every signal and set its permitted downstream use.
 

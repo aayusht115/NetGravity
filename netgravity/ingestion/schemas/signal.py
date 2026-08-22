@@ -1,12 +1,36 @@
 """
-NetGravity — External Signal Schemas
-=====================================
+NetGravity — Market Intelligence Signal Schemas
+================================================
 Dated, sourced external information (news, macro, policy, weather).
+
+NOT THE SAME THING AS `ExternalSignal`
+--------------------------------------
+This class was called `ExternalSignal` until Phase 4A, which collided with
+`netgravity.orchestrator.schemas.requests.ExternalSignal` — a different
+concept entirely. The two are now named apart because confusing them is a
+correctness hazard, not a style problem:
+
+    MarketIntelligenceSignal (here)   ExternalSignal (orchestrator)
+    ───────────────────────────────   ─────────────────────────────
+    news / macro / policy / weather   a discrete hazard EVENT
+    bucket, direction, magnitude      event_type, location, severity
+    confidence HIGH|MEDIUM|LOW        event_probability ∈ [0,1] or None
+    NO probability, by design         P feeds RF = P + REI − P·REI
+    enriches assumptions and          drives a governed risk assessment
+    root-cause narrative
+
+There is deliberately **no conversion between them**. Turning
+`confidence=HIGH` into `P=0.8` would manufacture the single number that most
+directly drives RF and governance, out of a qualitative judgement that was
+never a likelihood. Severity is not probability and neither is confidence; if
+a genuine event probability is ever needed from a news source, it must be
+extracted because the source stated one, through the orchestrator's own
+`ExternalSignalAgent`.
 
 GUARDRAIL PRINCIPLE
 -------------------
-No external signal reaches the forecast or the optimizer without passing a
-materiality check first. Filtered signals are STILL STORED, flagged
+No signal reaches the forecast or the optimizer without passing a materiality
+check first. Filtered signals are STILL STORED, flagged
 `passed_guardrail=False`, so the filter itself is auditable — a reader can
 see what was excluded and why, rather than trusting a silent black box.
 
@@ -66,8 +90,14 @@ class GuardrailVerdict(BaseModel):
     matched_entities: List[str] = Field(default_factory=list)
 
 
-class ExternalSignal(BaseModel):
-    """A dated, sourced external signal."""
+class MarketIntelligenceSignal(BaseModel):
+    """
+    A dated, sourced piece of market intelligence.
+
+    Deliberately has no probability field. This is context that shifts an
+    assumption, not an event with a likelihood — see the module docstring for
+    why it must never be converted into an orchestrator `ExternalSignal`.
+    """
     signal_id: str
     title: str
 

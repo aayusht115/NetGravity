@@ -19,7 +19,7 @@ from netgravity.ingestion.guardrails import apply as apply_guardrails
 from netgravity.ingestion.guardrails import load_policy
 from netgravity.ingestion.schemas.ingest_result import FileResult, RowIssue, Severity
 from netgravity.ingestion.schemas.signal import (
-    ExternalSignal,
+    MarketIntelligenceSignal,
     SignalBucket,
     SignalConfidence,
     SignalDirection,
@@ -27,7 +27,7 @@ from netgravity.ingestion.schemas.signal import (
 
 
 def _parse_signal(raw: Dict[str, Any], index: int, file: str
-                  ) -> Tuple[Optional[ExternalSignal], List[RowIssue]]:
+                  ) -> Tuple[Optional[MarketIntelligenceSignal], List[RowIssue]]:
     issues: List[RowIssue] = []
 
     for field in ("signal_id", "title", "published_date"):
@@ -46,7 +46,7 @@ def _parse_signal(raw: Dict[str, Any], index: int, file: str
         except (ValueError, AttributeError):
             return default
 
-    signal = ExternalSignal(
+    signal = MarketIntelligenceSignal(
         signal_id=str(raw["signal_id"]),
         title=str(raw["title"]),
         source_title=str(raw.get("source_title") or raw.get("source") or ""),
@@ -67,7 +67,7 @@ def _parse_signal(raw: Dict[str, Any], index: int, file: str
 
 def ingest_file(path: Path, config: IngestionConfig,
                 known_entity_ids: Optional[Set[str]] = None
-                ) -> Tuple[List[ExternalSignal], FileResult]:
+                ) -> Tuple[List[MarketIntelligenceSignal], FileResult]:
     result = FileResult(source_file=path.name, adapter="signals")
 
     try:
@@ -82,7 +82,7 @@ def ingest_file(path: Path, config: IngestionConfig,
     raw_signals = payload if isinstance(payload, list) else payload.get("signals", [])
     result.rows_read = len(raw_signals)
 
-    signals: List[ExternalSignal] = []
+    signals: List[MarketIntelligenceSignal] = []
     for i, raw in enumerate(raw_signals, start=1):
         signal, issues = _parse_signal(raw, i, path.name)
         result.issues.extend(issues)
@@ -114,9 +114,9 @@ def ingest_file(path: Path, config: IngestionConfig,
 
 def ingest_directory(signal_dir: Path, config: IngestionConfig,
                      known_entity_ids: Optional[Set[str]] = None
-                     ) -> Tuple[List[ExternalSignal], List[FileResult]]:
+                     ) -> Tuple[List[MarketIntelligenceSignal], List[FileResult]]:
     signal_dir = Path(signal_dir)
-    all_signals: List[ExternalSignal] = []
+    all_signals: List[MarketIntelligenceSignal] = []
     results: List[FileResult] = []
 
     for path in sorted(signal_dir.glob("*.json")):

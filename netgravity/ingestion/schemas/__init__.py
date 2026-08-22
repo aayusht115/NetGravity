@@ -14,7 +14,7 @@ from netgravity.ingestion.schemas.ingest_result import (
 )
 from netgravity.ingestion.schemas.mapping import ColumnMapping, DistributorMapping
 from netgravity.ingestion.schemas.signal import (
-    ExternalSignal,
+    MarketIntelligenceSignal,
     GuardrailVerdict,
     ScenarioUse,
     SignalBucket,
@@ -26,6 +26,6 @@ __all__ = [
     "ContractRule", "SurchargeRule", "SurchargeType", "ExtractionConfidence",
     "FileResult", "IngestionReport", "RowIssue", "Severity",
     "ColumnMapping", "DistributorMapping",
-    "ExternalSignal", "GuardrailVerdict", "ScenarioUse",
+    "MarketIntelligenceSignal", "GuardrailVerdict", "ScenarioUse",
     "SignalBucket", "SignalConfidence", "SignalDirection",
 ]
