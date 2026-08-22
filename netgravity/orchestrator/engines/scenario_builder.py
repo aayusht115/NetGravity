@@ -63,7 +63,7 @@ class ScenarioBuilder:
         elif spec.action == ScenarioActionType.CHANGE_CAPACITY:
             working, overrides = self._change_capacity(
                 working, spec.facility_ids, spec.capacity_multiplier,
-                spec.capacity_delta_units,
+                spec.capacity_delta_units, spec.capacity_set_units,
             )
         elif spec.action == ScenarioActionType.CHANGE_DEMAND:
             working, overrides = self._change_demand(working, spec.demand_multiplier)
@@ -170,22 +170,31 @@ class ScenarioBuilder:
         facility_ids: List[str],
         multiplier: Optional[float],
         delta_units: Optional[float] = None,
+        set_units: Optional[float] = None,
     ) -> Tuple[CanonicalNetwork, List[str]]:
         """
-        Scale capacity by a ratio, or shift it by an absolute number of units.
+        Scale capacity by a ratio, shift it by units, or set it outright.
 
-        Exactly one form applies; `ScenarioValidator` has already rejected both
-        and neither, and has already refused a delta that would go negative.
+        The three are kept distinct all the way down. "Reduce by 2,000" and
+        "set to 2,000" coincide only by accident, and collapsing one into the
+        other requires knowing the current capacity — so a wrong guess changes
+        the answer rather than degrading it.
+
+        Exactly one form applies; `ScenarioValidator` has already rejected
+        several and none, and has already refused a delta that would go
+        negative.
         """
-        if multiplier is None and delta_units is None:
+        supplied = [v for v in (multiplier, delta_units, set_units) if v is not None]
+        if not supplied:
             raise InvalidScenarioError(
-                "CHANGE_CAPACITY requires a capacity_multiplier or capacity_delta_units.",
+                "CHANGE_CAPACITY requires a capacity_multiplier, "
+                "capacity_delta_units or capacity_set_units.",
                 context={"facility_ids": facility_ids},
             )
-        if multiplier is not None and delta_units is not None:
+        if len(supplied) > 1:
             raise InvalidScenarioError(
-                "CHANGE_CAPACITY accepts capacity_multiplier or capacity_delta_units, "
-                "not both.",
+                "CHANGE_CAPACITY accepts exactly one of capacity_multiplier, "
+                "capacity_delta_units or capacity_set_units.",
                 context={"facility_ids": facility_ids},
             )
 
@@ -194,6 +203,8 @@ class ScenarioBuilder:
         def new_capacity(current: float) -> float:
             if multiplier is not None:
                 return current * multiplier
+            if set_units is not None:
+                return float(set_units)
             return current + float(delta_units)  # type: ignore[arg-type]
 
         facilities = [
@@ -202,11 +213,14 @@ class ScenarioBuilder:
             }) if fac.id in targets else fac
             for fac in network.facilities
         ]
-        overrides = [
-            (f"CHANGE_CAPACITY {fid} x{multiplier}" if multiplier is not None
-             else f"CHANGE_CAPACITY {fid} {float(delta_units):+,.0f} units/period")
-            for fid in facility_ids
-        ]
+        def describe(fid: str) -> str:
+            if multiplier is not None:
+                return f"CHANGE_CAPACITY {fid} x{multiplier}"
+            if set_units is not None:
+                return f"CHANGE_CAPACITY {fid} = {float(set_units):,.0f} units/period"
+            return f"CHANGE_CAPACITY {fid} {float(delta_units):+,.0f} units/period"
+
+        overrides = [describe(fid) for fid in facility_ids]
         return network.model_copy(update={"facilities": facilities}), overrides
 
     @staticmethod

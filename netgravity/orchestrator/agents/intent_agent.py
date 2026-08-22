@@ -36,8 +36,18 @@ logger = logging.getLogger(__name__)
 #: Confidence at or above which the rule parser is trusted outright.
 RULES_CONFIDENT = 0.75
 
-_CLOSE_WORDS = ("close", "closing", "shut", "shutdown", "shut down", "lose", "losing",
-                "remove", "offline", "down", "disrupt", "disruption", "outage", "fail")
+#: Closure/disruption vocabulary. Extended in Phase 3.1 after evaluation found
+#: "Simulate closure of DC_DELHI" matching nothing here — "closure" does not
+#: contain "close" — so the rules returned UNKNOWN at confidence 0.0 and the
+#: request was handed to the model. Every phrase the rules recognise is a
+#: request the model never sees, which is both cheaper and safer: a model asked
+#: to classify a closure can answer something else, and a closure re-labelled as
+#: an optimization request is governed as a REPORT rather than as the structural
+#: change it describes.
+_CLOSE_WORDS = ("close", "closing", "closure", "shut", "shutdown", "shut down",
+                "lose", "losing", "remove", "offline", "down", "disrupt",
+                "disruption", "outage", "fail", "decommission", "mothball",
+                "halt", "suspend", "disable", "stop")
 _COMPARE_WORDS = ("compare", "versus", " vs ", "vs.", "against", "either")
 _RESILIENCE_WORDS = ("most exposed", "exposure", "resilien", "vulnerab", "riskiest",
                      "most critical", "single point", "rei")
@@ -60,14 +70,31 @@ _CAPACITY_DOWN = ("reduce", "reduced", "reducing", "cut", "decrease", "decreased
 _CAPACITY_UP = ("increase", "increased", "increasing", "expand", "add", "raise",
                 "boost", "uplift", "grow")
 #: "by 2,000 units" / "by 2000 units per day" — absolute.
+#:
+#: `by` is optional but a lead-in word is not: "add another 2,000 units of
+#: capacity" states its quantity as plainly as "by 2,000 units" does, and
+#: evaluation found the stricter pattern asking "by how much?" about a request
+#: that had already said. The lead-in list stays closed so a bare numeral
+#: elsewhere in the sentence can never be read as a capacity change.
 _CAPACITY_ABS_RE = re.compile(
-    r"\bby\s+([\d,]+(?:\.\d+)?)\s*(?:units?|unit/day|units?\s*(?:/|per)\s*\w+)",
+    r"\b(?:by|another|a\s+further|an\s+extra|extra|additional)\s+"
+    r"([\d,]+(?:\.\d+)?)\s*(?:units?|unit/day|units?\s*(?:/|per)\s*\w+)",
     re.IGNORECASE,
 )
 #: "by 20%" / "by 20 percent" — relative.
 _CAPACITY_PCT_RE = re.compile(
     r"\bby\s+([\d,]+(?:\.\d+)?)\s*(?:%|percent|per\s*cent)", re.IGNORECASE,
 )
+#: "to 8,000 units" / "at 8000 units per day" — an absolute TARGET, not a
+#: change. Requires "set"/"make"/"cap" phrasing or a bare "to N units", both of
+#: which state a new total rather than a delta.
+_CAPACITY_SET_RE = re.compile(
+    r"\b(?:to|at)\s+([\d,]+(?:\.\d+)?)\s*(?:units?|unit/day|units?\s*(?:/|per)\s*\w+)",
+    re.IGNORECASE,
+)
+#: Verbs that make a quantity a new total rather than a change.
+_CAPACITY_SET_VERBS = ("set", "make it", "cap at", "cap it", "fix", "change to",
+                       "bring to", "take to")
 
 
 class IntentAgent:
@@ -86,6 +113,7 @@ class IntentAgent:
         *,
         known_facility_ids: Sequence[str] = (),
         allow_llm: bool = True,
+        context_block: str = "",
     ) -> IntentResolution:
         """
         Resolve free text into an intent.
@@ -95,6 +123,13 @@ class IntentAgent:
             known_facility_ids: Real facility ids, used both to ground the rule
                                 parser and to constrain the LLM prompt.
             allow_llm:          False forces the deterministic path.
+            context_block:      Pre-rendered conversation context from
+                                `ConversationContext.as_prompt_block()`. Used
+                                only to interpret references such as "it" and
+                                "why"; never a source of facts, and never
+                                consulted by the rule tier — an elliptical
+                                follow-up that the rules can answer without
+                                context is still answered without it.
 
         Returns:
             IntentResolution. Never raises — an unparseable request resolves to
@@ -115,7 +150,7 @@ class IntentAgent:
             return rules
 
         try:
-            llm = self._llm_based(text, known_facility_ids)
+            llm = self._llm_based(text, known_facility_ids, context_block)
         except LLMFailureError as exc:
             logger.warning("orchestrator.intent.llm_failed error=%s", exc.message)
             rules.rationale = f"{rules.rationale} (LLM interpretation failed: {exc.code.value})"
@@ -270,6 +305,20 @@ class IntentAgent:
         if not any(w in lowered for w in _CAPACITY_WORDS):
             return None
 
+        # An absolute TARGET is checked first, because "set capacity to 2,000"
+        # also contains no direction word and would otherwise fall through as
+        # "understood but unusable" — asking "by how much?" about a request
+        # that already gave a number.
+        set_match = _CAPACITY_SET_RE.search(raw)
+        if set_match and any(v in lowered for v in _CAPACITY_SET_VERBS):
+            total = float(set_match.group(1).replace(",", ""))
+            return ScenarioIntentSpec(
+                action=ScenarioActionType.CHANGE_CAPACITY,
+                facility_ids=list(mentioned),
+                capacity_set_units=total,
+                label=f"Set {', '.join(mentioned)} capacity to {total:,.0f} units",
+            )
+
         down = any(w in lowered for w in _CAPACITY_DOWN)
         up = any(w in lowered for w in _CAPACITY_UP)
         if down == up:          # neither stated, or contradictory
@@ -331,7 +380,12 @@ class IntentAgent:
     # Tier 2 — model interpretation
     # ------------------------------------------------------------------
 
-    def _llm_based(self, text: str, known_ids: Sequence[str]) -> Optional[IntentResolution]:
+    def _llm_based(
+        self,
+        text: str,
+        known_ids: Sequence[str],
+        context_block: str = "",
+    ) -> Optional[IntentResolution]:
         """
         Ask the model to classify. Constrained to the real facility list.
 
@@ -356,7 +410,8 @@ class IntentAgent:
             '  "facility_ids": ["<exact identifiers mentioned>"],\n'
             '  "scenarios": [{"action": "<valid action>", "facility_ids": ["..."], '
             '"target_facility_id": null, "capacity_multiplier": null, '
-            '"capacity_delta_units": null, "demand_multiplier": null, '
+            '"capacity_delta_units": null, "capacity_set_units": null, '
+            '"demand_multiplier": null, '
             '"label": "short label"}],\n'
             '  "rationale": "one short sentence"\n'
             "}\n\n"
@@ -367,11 +422,16 @@ class IntentAgent:
             "- Use EXTERNAL_EVENT for weather, disaster, strike or other outside events.\n"
             "- Use EXPLANATION when the user asks WHY something is the case, rather than\n"
             "  asking for a new analysis.\n"
-            "- For CHANGE_CAPACITY set capacity_delta_units for an absolute change stated\n"
-            "  in units (negative to reduce), or capacity_multiplier for a percentage\n"
-            "  change (0.8 = 20% reduction). Never set both, and never guess a quantity\n"
-            "  the user did not state.\n\n"
-            f"User request: {text}\n"
+            "- For CHANGE_CAPACITY set capacity_delta_units for an absolute CHANGE\n"
+            "  stated in units (negative to reduce), capacity_multiplier for a\n"
+            "  percentage change (0.8 = 20% reduction), or capacity_set_units when the\n"
+            "  user gives a new TOTAL (\"set capacity to 8,000\"). Set exactly one, and\n"
+            "  never guess a quantity the user did not state.\n"
+            "- Do not decide whether a facility exists. If the user names a site that is\n"
+            "  not in the list above, return an empty facility_ids list and leave it to\n"
+            "  the system, which checks against master data.\n"
+            + (f"\n{context_block}\n" if context_block else "")
+            + f"\nUser request: {text}\n"
         )
 
         response = self.gateway.generate(prompt, purpose="intent")
@@ -414,15 +474,16 @@ class IntentAgent:
 
             multiplier = number("capacity_multiplier")
             delta = number("capacity_delta_units")
-            if multiplier is not None and delta is not None:
-                # Ambiguous. Drop both rather than picking one — the validator
-                # would reject the pair anyway, and guessing here would hide
-                # which quantity the model actually meant.
+            set_units = number("capacity_set_units")
+            if sum(v is not None for v in (multiplier, delta, set_units)) > 1:
+                # Ambiguous. Drop all rather than picking one — the validator
+                # would reject the combination anyway, and guessing here would
+                # hide which quantity the model actually meant.
                 logger.warning(
-                    "orchestrator.intent.capacity_ambiguous multiplier=%s delta=%s",
-                    multiplier, delta,
+                    "orchestrator.intent.capacity_ambiguous multiplier=%s delta=%s set=%s",
+                    multiplier, delta, set_units,
                 )
-                multiplier = delta = None
+                multiplier = delta = set_units = None
 
             scenarios.append(ScenarioIntentSpec(
                 action=action,
@@ -430,6 +491,7 @@ class IntentAgent:
                 target_facility_id=target if target in allowed else None,
                 capacity_multiplier=multiplier,
                 capacity_delta_units=delta,
+                capacity_set_units=set_units,
                 demand_multiplier=number("demand_multiplier"),
                 label=str(raw.get("label") or f"{action.value} {', '.join(fids)}")[:120],
             ))

@@ -2,7 +2,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![MILP Core](https://img.shields.io/badge/Solver-PuLP%20%7C%20HiGHS%20%7C%20CBC-purple.svg)](https://github.com/coin-or/pulp)
-[![Tests](https://img.shields.io/badge/Automated%20Tests-962%20Passing-brightgreen.svg)](netgravity/tests/)
+[![Tests](https://img.shields.io/badge/Automated%20Tests-1308%20Passing-brightgreen.svg)](netgravity/tests/)
 [![Architecture](https://img.shields.io/badge/Architecture-Deterministic%20MILP%20%2B%20Governed%20Orchestrator-orange.svg)](#3-system-architecture)
 
 > **NetGravity** is a decision-intelligence and network optimization platform for logistics networks. It joins mathematically rigorous Mixed-Integer Linear Programming with a governed AI control plane — and keeps a hard line between the two.
@@ -38,6 +38,8 @@ A fourth principle runs through everything: **missing is not zero.** When exposu
 | Risk Factor (RF) calculation from external event probability | Complete, with explicit refusal semantics |
 | Orchestrator control plane (planning, dependencies, governance, audit) | Complete |
 | Orchestrator ↔ deterministic core integration | Complete — see [§6](#6-integration-phases) |
+| Conversational layer (chatbot → NLU → orchestrator) | Complete — see [§6](#6-integration-phases) |
+| Forecasting agent | **Not built** — requests are recognised and honestly declined |
 | Interactive web cockpit | Demonstration build on a synthetic Case-16 fixture |
 | Authentication / multi-process persistence | **Not built** — see [§9](#9-known-limitations) |
 
@@ -155,6 +157,40 @@ P = 0.70   REI = 0.80   ⇒   RF = 0.7 + 0.8 − 0.56 = 0.94
 
 ---
 
+## 4b. Conversational Layer
+
+```
+USER → CHATBOT → NLU → STRUCTURED INTENT → ORCHESTRATOR → workflow → engines
+                        ↑ the LLM stops here
+```
+
+The model's influence ends at an `Intent` enum value. It cannot name a workflow, a capability or a step; `WorkflowPlanner` alone maps intent to graph. The `LLMClient` protocol has exactly three members — `available`, `generate`, `stats` — and no tool-invocation mechanism, so there is no path by which a model could reach MILP, REI, RF or governance whatever a prompt instructs.
+
+Three enforcement mechanisms, each structural rather than advisory:
+
+| Mechanism | Prevents |
+|---|---|
+| `ConversationalIntent` has **no field** able to hold a cost, REI, RF, SLA or governance outcome, and `parameters` rejects result-value key names | A model asserting an authoritative number |
+| Every entity id comes from `CanonicalNetwork.facilities`; no code path produces an identifier from user text | A hallucinated facility reaching the solver |
+| Language modules are scanned for engine imports by test | A future edit quietly wiring the layers together |
+
+**Ambiguity is decided from the network, not by the model.** Whether "Delhi" is ambiguous is a fact about how many Delhi nodes exist. `"Close Delhi."` asks whether you mean closure, volume shift or capacity reduction; `"close Bangalore DC"` offers the DCs that actually exist. No clarification path runs the solver or creates a scenario.
+
+**Conversation context is inherited only for elliptical follow-ups** ("Why?", "What about Mumbai?"). A message naming its own subject replaces it, and `ChatTurn` has no field capable of carrying a scenario override — so a conversation cannot silently accumulate "Delhi closed AND Mumbai reduced".
+
+**The LLM never decides whether an entity exists.** Every mention is checked against `CanonicalNetwork.facilities`: resolved to a canonical id, reported ambiguous, or refused as unknown. A request naming a site the network does not contain runs nothing — no MILP, no REI, no RF, no governance — for *any* intent, in any capitalisation. Verified by replaying the live model's own wrong answers through the full system: it still calls `"Assess DC_JAIPUR."` a resilience query, and the system still refuses all eight such cases. There is no fuzzy fallback; "Bangalore" never becomes the nearest DC, because a wrong-but-plausible answer is worse than a refusal the user can see.
+
+**The model is consulted for about a quarter of requests, and none that produce a number.** `IntentAgent` calls the gateway only below rule confidence 0.75, and the conversational NLU settles status, forecast and metric queries before the agent is reached. Measured across the 159-case evaluation set: **118/159 decided deterministically, 41/159 reach the model** — and those 41 are malformed input, unknown sites, injections and elliptical follow-ups. Zero scenario, external-event, status, state or explanation requests are classified by a model.
+
+**A model may resolve what the rules could not; it may not overrule what they read plainly.** The intent is the one model output nothing downstream re-derives — an id is checked against master data and a number against the engines, but an intent has no second opinion, and it selects the workflow. So an explicit closure request cannot be relabelled into something milder. See [§6](#6-integration-phases).
+
+```
+POST /orchestrator/chat                {"message": "...", "conversation_id": "..."}
+GET  /orchestrator/chat/<id>/history
+```
+
+---
+
 ## 5. Orchestrator Control Plane
 
 ```
@@ -210,6 +246,10 @@ R7   settlement of the candidate       → AUTO_ACTION    ◄─┘
 | **REI V1** | Persistence, caching, invalidation, batch status, parallelism, benchmarks | Complete |
 | **Phase 1** | Integrate and validate the deterministic risk core (MILP → REI → P → RF) | Complete — [`docs/facility_resilience_rei.md`](docs/facility_resilience_rei.md) |
 | **Phase 2** | Integrate the orchestrator with the real MILP, REI, RF, reasoning, grounding and governance services | Complete — [`docs/phase2_integration.md`](docs/phase2_integration.md) |
+| **R7 governance** | Missing critical evidence must never increase action autonomy | Complete — [`docs/r7_governance_precedence.md`](docs/r7_governance_precedence.md) |
+| **Phase 3** | Conversational layer: chatbot → NLU → structured intent → orchestrator | Complete — [`docs/phase3_conversational_layer.md`](docs/phase3_conversational_layer.md) |
+| **Phase 3.1** | Evaluate and harden the NLU boundary against measured results | Complete, incl. live `gpt-5-mini` evaluation — [`docs/phase3_1_llm_evaluation.md`](docs/phase3_1_llm_evaluation.md) |
+| **Phase 3.2** | Deterministic entity validation and conversational context | Complete — [`docs/phase3_2_entity_and_context.md`](docs/phase3_2_entity_and_context.md) |
 
 Phase 2 added **no** new algorithms, agents, risk scores or optimization objectives. It connected what existed and proved the connections hold. The pre-implementation audit is preserved in [`docs/phase2_integration_gap_report.md`](docs/phase2_integration_gap_report.md).
 
@@ -278,16 +318,17 @@ NetGravity/
 
 ```bash
 python smoke_test.py                    # 7-check verification (~2s)
-pytest -m "not slow"                    # 962 tests, ~32s
+pytest -m "not slow"                    # ~1,308 tests, ~220s
 pytest                                  # includes large-scale benchmarks
-pytest netgravity/tests/integration/    # Phase 2 integration suite only
+pytest netgravity/tests/integration/    # integration suites only
+python scripts/run_nlu_eval.py          # 159-case NLU evaluation, offline, free
 ```
 
-**962 passing, 0 failing** (2 slow benchmarks deselected by default).
+**1,308 passing, 1 skipped, 0 failing.**
 
 | Suite | Tests |
 |---|---|
-| `integration/` — Phase 2 end-to-end + R7 governance | **243** |
+| `integration/` — Phase 2, R7 governance, Phase 3 conversational, Phase 3.1 NLU, Phase 3.2 entity/context | **588** |
 | `test_phase1_risk_chain.py` | 84 |
 | `test_orchestrator.py` | 114 |
 | `test_orchestrator_hardening.py` | 84 |
@@ -329,10 +370,30 @@ Stated plainly. **NetGravity is not production-ready**, and passing tests is not
 - Parallel speed-up decays with size (1.98× at 7 facilities → 1.14× at 50). Beyond ~50 facilities a process pool or distributed workers is needed; the `max_workers` / `solve_fn` seams accept either.
 - The 100-DC batch figure is a **projection** from three measured single solves, labelled as such in the benchmark rather than reported as a measurement.
 
+**Conversational layer — measured offline over 159 labelled requests** ([`docs/phase3_1_llm_evaluation.md`](docs/phase3_1_llm_evaluation.md))
+
+| Metric | Before Phase 3.1 | After |
+|---|---:|---:|
+| Intent accuracy | 88.7% | **99.3%** |
+| Entity accuracy | 98.6% | **100.0%** |
+| Probability extraction | 77.8% | **100.0%** |
+| Ambiguity detection | 92.2% | **99.3%** |
+| Wrong-workflow rate | 11.3% | **0.7%** |
+| Adversarial violations | 0 | 0 |
+
+Nine defect classes were found by measurement. The three that mattered: explicitly stated probabilities such as `"0.35 probability of"` and `"15 percent chance"` were **silently dropped**, so a user who had quantified a risk got the same refusal as one who had not; a compromised model could **relabel a closure** as an optimization request, moving the governed verdict from `HUMAN_ONLY` to `APPROVAL_REQUIRED`; and fabricated identifiers like `DC_SHADOW` were **invisible** rather than refused, because `_` is a regex word character so no `\b` falls inside them.
+
+**Live-model evaluation (`gpt-5-mini`, 24 gateway requests, ~$0.13):** intent **84.7%**, entity **91.9%**, probability **100%**, hallucinated entities **0%**, adversarial violations **0**, median latency **2.1 s**. The model is materially worse than the rules on everything the rules already cover, and scores **0/8** on noticing that a named facility does not exist — it invents no ids, it just fails to miss the ones that are absent. Its one win is `rs13`, the pure paraphrase the rules cannot handle, which is exactly the case the LLM tier exists for. Batching is only partly trustworthy (5/8 single-call controls agree), and three of sixteen batches returned unusable output against the 2,000-token response cap.
+- Entity resolution is token matching, not semantic. "Our biggest warehouse" resolves to nothing.
+- Conversation state is in-memory and bounded (50 turns × 500 conversations); a restart loses history.
+- `STATUS_QUERY` answers facility counts by role and nothing wider.
+- Injection testing is 18 strings plus the structural invariants, including a deliberately **hostile** model that returns fabricated facilities, asserts `rei: 0.0` / `governance: AUTO_ACTION`, and narrates a fabricated cost. Zero violations. It is not red-teaming; the structural guarantees are the durable protection, not the string list.
+
 **Scope deliberately excluded**
 - Lane, supplier and demand-surge REI (REI requires one uniform disruption assumption across compared entities).
 - Automatic mitigation and scenario generation.
 - Time-to-Recovery modelling — the MILP is single-period, and a multi-period TTR cannot be produced without fabricating a temporal calculation. `time_to_recovery_days` rejects any value rather than pretending.
+- **Forecasting.** There is no demand model and no projection engine. Forecast requests are recognised and declined, because any number produced would be invented rather than computed. Registering a real forecasting capability later needs no change to the conversational layer.
 
 ---
 

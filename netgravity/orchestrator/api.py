@@ -8,6 +8,8 @@ classes, so the wire format can evolve without touching the core.
 Endpoints
 ─────────
     POST /orchestrator/run                  execute a request
+    POST /orchestrator/chat                 conversational message
+    GET  /orchestrator/chat/<id>/history    conversation turns
     POST /orchestrator/approvals/<id>       approve or reject a pending action
     GET  /orchestrator/executions/<id>      execution status
     GET  /orchestrator/executions/<id>/trace   full audit provenance
@@ -45,6 +47,16 @@ def create_orchestrator_blueprint(orchestrator: Orchestrator, url_prefix: str = 
 
     def _error(exc: OrchestratorError, status: int = 400):
         return jsonify({"error": exc.to_dict()}), status
+
+    # One chat service per blueprint, built lazily so conversation history
+    # survives across requests without constructing it when chat is unused.
+    _chat_holder: Dict[str, Any] = {}
+
+    def _chat_service():
+        if "service" not in _chat_holder:
+            from netgravity.orchestrator.conversation import ChatService
+            _chat_holder["service"] = ChatService(orchestrator)
+        return _chat_holder["service"]
 
     # ------------------------------------------------------------------
     @bp.route("/run", methods=["POST"])
@@ -152,6 +164,65 @@ def create_orchestrator_blueprint(orchestrator: Orchestrator, url_prefix: str = 
         if request.args.get("format") == "text":
             return trace.explain(), 200, {"Content-Type": "text/plain; charset=utf-8"}
         return jsonify(trace.to_dict()), 200
+
+    # ------------------------------------------------------------------
+    # Conversational surface (Phase 3)
+    # ------------------------------------------------------------------
+
+    @bp.route("/chat", methods=["POST"])
+    def chat():
+        """
+        Send one conversational message.
+
+        Body::
+
+            {
+              "message": "What happens if we reduce Delhi capacity by 2,000?",
+              "conversation_id": "conv_...",   // optional; created if absent
+              "network_snapshot_id": "snap_...", // optional
+              "disable_llm": false               // optional
+            }
+
+        Status reflects the OUTCOME KIND, as elsewhere in this API:
+        200 answered, 202 awaiting clarification or a human, 500 controlled
+        failure. A clarification is a 202 because the exchange is unfinished,
+        not because anything went wrong.
+        """
+        from netgravity.orchestrator.schemas.conversation import ChatRequest
+
+        body: Dict[str, Any] = request.get_json(silent=True) or {}
+        try:
+            chat_request = ChatRequest(**body)
+        except Exception as exc:  # noqa: BLE001 - malformed client input
+            return jsonify({"error": {
+                "code": "INVALID_REQUEST",
+                "message": f"Malformed chat request: {exc}",
+            }}), 400
+
+        service = _chat_service()
+        response = service.chat(chat_request)
+
+        status_code = 200
+        if response.status in ("AWAITING_CLARIFICATION", "REQUIRES_APPROVAL",
+                               "REQUIRES_HUMAN"):
+            status_code = 202
+        elif response.status == "FAILED":
+            status_code = 500
+        return jsonify(response.model_dump(mode="json")), status_code
+
+    @bp.route("/chat/<conversation_id>/history", methods=["GET"])
+    def chat_history(conversation_id: str):
+        service = _chat_service()
+        turns = service.history(conversation_id)
+        if not turns and service.store.get(conversation_id) is None:
+            return jsonify({"error": {
+                "code": "NOT_FOUND",
+                "message": f"Conversation '{conversation_id}' not found.",
+            }}), 404
+        return jsonify({
+            "conversation_id": conversation_id,
+            "turns": [t.model_dump(mode="json") for t in turns],
+        }), 200
 
     # ------------------------------------------------------------------
     @bp.route("/capabilities", methods=["GET"])

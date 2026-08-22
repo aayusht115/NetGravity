@@ -47,13 +47,18 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Protocol, runtime_checkable
 
 from netgravity.orchestrator.exceptions import LLMFailureError, LLMNonRetryableError
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://rapidinsights-openai-gateway-dev.azurewebsites.net"
+
+#: The gateway pins one model and exposes no way to select or query it, so the
+#: name is configuration rather than a response field. Override with
+#: TEXT_API_MODEL if the gateway is repointed.
+DEFAULT_MODEL_NAME = "gpt-5-mini"
 
 #: Slightly above the gateway's 60s processing timeout, per the guide.
 CONNECT_TIMEOUT = 10.0
@@ -81,6 +86,40 @@ class LLMResponse:
     request_id: Optional[str] = None
     usage: LLMUsage = field(default_factory=LLMUsage)
     latency_seconds: float = 0.0
+    #: Provider/model provenance, recorded on the intent for audit. Optional
+    #: because the shared gateway does not report a model identifier.
+    model_name: Optional[str] = None
+    model_version: Optional[str] = None
+
+
+@runtime_checkable
+class LLMClient(Protocol):
+    """
+    The narrow provider interface the conversational layer depends on.
+
+    Deliberately minimal: language in, language out, plus enough metadata to
+    audit which model said it. Retry, timeout, backoff and budget accounting
+    belong to the implementation, not to callers.
+
+    `LLMGateway` satisfies this structurally, so nothing is bound to one
+    provider — a different backend needs only these three members. Note what is
+    NOT here: no tool-calling, no function invocation, no callbacks. A provider
+    reached through this interface has no mechanism by which to invoke MILP,
+    REI, RF or governance, which is the point.
+    """
+
+    @property
+    def available(self) -> bool:
+        """True when a call could plausibly succeed."""
+        ...
+
+    def generate(self, prompt: str, *, purpose: str = "generic") -> LLMResponse:
+        """Send one prompt; return generated text. Raises LLMFailureError."""
+        ...
+
+    def stats(self) -> Dict[str, Any]:
+        """Call accounting. Must never contain credential material."""
+        ...
 
 
 @dataclass
@@ -100,13 +139,20 @@ class LLMGatewayConfig:
     backoff_seconds: float = 1.0
     max_backoff_seconds: float = 8.0
     max_requests_per_execution: int = 4
+    #: The gateway offers no model selection and reports no model identifier, so
+    #: provenance has to be configured rather than observed. Recorded on every
+    #: intent: an audit record saying only "an LLM said so" cannot be
+    #: re-evaluated when the backing model changes.
+    model_name: str = DEFAULT_MODEL_NAME
 
     @classmethod
     def from_env(cls) -> "LLMGatewayConfig":
         token = os.environ.get("TEXT_API_TOKEN", "").strip()
         base = os.environ.get("TEXT_API_URL", DEFAULT_BASE_URL).strip().rstrip("/")
         disabled = os.environ.get("NETGRAVITY_DISABLE_LLM", "").strip().lower() in {"1", "true", "yes"}
-        return cls(base_url=base, token=token, enabled=bool(token) and not disabled)
+        model = os.environ.get("TEXT_API_MODEL", DEFAULT_MODEL_NAME).strip() or DEFAULT_MODEL_NAME
+        return cls(base_url=base, token=token, model_name=model,
+                   enabled=bool(token) and not disabled)
 
 
 class LLMGateway:
@@ -326,6 +372,9 @@ class LLMGateway:
             request_id=body.get("request_id"),
             usage=usage,
             latency_seconds=latency,
+            # Prefer what the gateway reports, if it ever starts reporting it.
+            model_name=str(body.get("model") or self.config.model_name),
+            model_version=body.get("model_version"),
         )
 
     @staticmethod

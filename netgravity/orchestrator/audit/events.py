@@ -56,6 +56,23 @@ GROUNDING_COMPLETED  = "grounding_completed"
 GOVERNANCE_DECISION  = "governance_decision"
 GOVERNANCE_APPLIED   = "governance_applied"
 
+# --- conversational layer (Phase 3) ---------------------------------------
+CHAT_REQUEST_RECEIVED    = "chat_request_received"
+INTENT_CLASSIFIED        = "intent_classified"
+INTENT_VALIDATION_FAILED = "intent_validation_failed"
+ENTITY_RESOLUTION_FAILED = "entity_resolution_failed"
+CLARIFICATION_REQUIRED   = "clarification_required"
+WORKFLOW_SELECTED        = "workflow_selected"
+LLM_FAILURE              = "llm_failure"
+CHAT_RESPONSE_GENERATED  = "chat_response_generated"
+
+#: Chat events that occur BEFORE an orchestrator execution exists, and so are
+#: recorded on the conversation rather than on an execution trace.
+PRE_EXECUTION_CHAT_EVENTS: Set[str] = {
+    CHAT_REQUEST_RECEIVED, INTENT_CLASSIFIED, INTENT_VALIDATION_FAILED,
+    ENTITY_RESOLUTION_FAILED, CLARIFICATION_REQUIRED, LLM_FAILURE,
+}
+
 #: Every event the control plane is expected to be able to emit. Asserted by the
 #: observability test so a renamed constant cannot silently drop an event.
 CANONICAL_EVENTS: Set[str] = {
@@ -67,6 +84,15 @@ CANONICAL_EVENTS: Set[str] = {
     REI_LOOKUP, RF_CALCULATED, RF_NOT_COMPUTABLE, SOLVER_INFEASIBLE,
     REASONING_COMPLETED, GROUNDING_COMPLETED,
     GOVERNANCE_DECISION, GOVERNANCE_APPLIED,
+}
+
+#: Conversational events. Kept as a separate set because most of them fire
+#: before an execution exists, so they are not reachable from an execution
+#: trace and must not be asserted as part of `CANONICAL_EVENTS` coverage.
+CHAT_EVENTS: Set[str] = {
+    CHAT_REQUEST_RECEIVED, INTENT_CLASSIFIED, INTENT_VALIDATION_FAILED,
+    ENTITY_RESOLUTION_FAILED, CLARIFICATION_REQUIRED, WORKFLOW_SELECTED,
+    LLM_FAILURE, CHAT_RESPONSE_GENERATED,
 }
 
 #: Correlation keys stamped onto every event detail. §26 requires these four.

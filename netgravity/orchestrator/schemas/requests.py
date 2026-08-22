@@ -55,6 +55,13 @@ class Intent(str, Enum):
     # Distinct from RESILIENCE_QUERY because it must not trigger a fresh
     # optimization: it explains what has been computed, it does not compute more.
     EXPLANATION           = "EXPLANATION"
+    # "how many warehouses do we have?" — answerable from the digital twin
+    # alone. Distinct from NETWORK_STATE_QUERY, which reports cost and service
+    # and therefore genuinely requires a solve.
+    STATUS_QUERY          = "STATUS_QUERY"
+    # "forecast demand for the next six months". Recognised so the system can
+    # answer honestly; no forecasting capability is registered today.
+    FORECAST              = "FORECAST"
     UNKNOWN               = "UNKNOWN"
 
 
@@ -86,10 +93,29 @@ class ScenarioIntentSpec(BaseModel):
     # knows a facility's current capacity to convert one into the other.
     # Mutually exclusive with capacity_multiplier — see ScenarioValidator.
     capacity_delta_units: Optional[float] = None
+    # An absolute TARGET capacity: "set DC_DELHI capacity to 8,000 units/day".
+    # Distinct from capacity_delta_units, and the distinction is the whole
+    # point: "reduce by 2,000" and "set to 2,000" are different instructions
+    # that coincide only by accident. Representing one as the other requires
+    # knowing the current capacity, which the caller may not, and silently
+    # guessing wrong changes the answer rather than degrading it. Mutually
+    # exclusive with the other two — see ScenarioValidator.
+    capacity_set_units: Optional[float] = None
     demand_multiplier: Optional[float] = None
     label: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
+
+    @property
+    def capacity_operation(self) -> Optional[str]:
+        """"SET" | "DECREASE" | "INCREASE" | "SCALE", or None."""
+        if self.capacity_set_units is not None:
+            return "SET"
+        if self.capacity_delta_units is not None:
+            return "DECREASE" if self.capacity_delta_units < 0 else "INCREASE"
+        if self.capacity_multiplier is not None:
+            return "SCALE"
+        return None
 
 
 class IntentResolution(BaseModel):

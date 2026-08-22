@@ -253,7 +253,9 @@ class TestScenarioOverrideValidation:
         spec = ScenarioIntentSpec(
             action=ScenarioActionType.CHANGE_CAPACITY, facility_ids=["DC_DELHI"],
         )
-        with pytest.raises(InvalidScenarioError, match="requires either"):
+        # Matched on the field names rather than the sentence: Phase 3.2 added
+        # capacity_set_units to the message and the assertion should not care.
+        with pytest.raises(InvalidScenarioError, match="capacity_delta_units"):
             ScenarioValidator().validate(spec, delhi_network)
 
     def test_a_delta_that_would_go_negative_is_refused_not_clamped(self, delhi_network):

@@ -55,14 +55,30 @@ _SEVERITY_WORDS = {
 }
 
 #: Phrases that state a probability explicitly. Only these produce a P.
+#:
+#: Every pattern requires probability VOCABULARY adjacent to the number. That is
+#: the whole safety property: a bare numeral ("reduce by 20") can never become a
+#: likelihood, and no amount of severity language produces one either. The list
+#: was extended in Phase 3.1 after evaluation showed three explicitly-stated
+#: forms silently yielding None — "0.35 probability of", "15 percent chance",
+#: and "probability 0.8" with no colon. Each of those is a source stating a
+#: likelihood outright, and dropping it meant RF refused to compute for a risk
+#: the user had actually quantified.
 _PROBABILITY_PATTERNS = (
     # "70% chance", "70 % probability of", "70% likelihood"
     r"(\d{1,3}(?:\.\d+)?)\s*%\s*(?:chance|probability|likelihood|risk|likely)",
+    # "15 percent chance", "15 per cent probability"
+    r"(\d{1,3}(?:\.\d+)?)\s*(?:percent|per\s*cent)\s+(?:chance|probability|likelihood|risk|likely)",
     # "chance of 70%", "probability of 0.7"
     r"(?:chance|probability|likelihood)\s+of\s+(\d{1,3}(?:\.\d+)?)\s*%",
+    r"(?:chance|probability|likelihood)\s+of\s+(\d{1,3}(?:\.\d+)?)\s*(?:percent|per\s*cent)",
     r"(?:chance|probability|likelihood)\s+of\s+(0?\.\d+)",
-    # "probability: 0.72"
+    # "0.35 probability of a typhoon" — number first, vocabulary after.
+    r"(0?\.\d+|1\.0+)\s+(?:chance|probability|likelihood)\b",
+    # "probability: 0.72", "probability = 0.72"
     r"(?:probability|p)\s*[:=]\s*(0?\.\d+|1\.0+|\d{1,3}(?:\.\d+)?%)",
+    # "probability 0.8", "likelihood is 0.8" — no separator at all.
+    r"(?:probability|likelihood|chance)\s+(?:is\s+|at\s+)?(0?\.\d+|1\.0+)\b",
 )
 
 _EVENT_KEYWORDS = {

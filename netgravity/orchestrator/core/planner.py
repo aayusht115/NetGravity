@@ -248,6 +248,40 @@ def _build_explanation(_: IntentResolution) -> List[PlanStep]:
     ]
 
 
+def _build_status(_: IntentResolution) -> List[PlanStep]:
+    """
+    "How many warehouses do we have?" — answered from the digital twin.
+
+    Contains NO solver step, by construction. A count of facilities does not
+    require an optimum, and running one to answer it would burn solver time for
+    nothing. Questions that genuinely need cost or service resolve to
+    NETWORK_STATE_QUERY instead, which does solve.
+
+    Governance still runs: every response leaves with a verdict.
+    """
+    return [
+        PlanStep(step_id="load", capability=CAP_LOAD_NETWORK,
+                 description="Read the observed network snapshot."),
+        *_reason_and_govern(["load"]),
+    ]
+
+
+def _build_forecast(_: IntentResolution) -> List[PlanStep]:
+    """
+    Forecast requests are RECOGNISED but not served.
+
+    There is no forecasting engine in NetGravity. Rather than route the request
+    somewhere plausible-looking or invent a projection, the workflow loads the
+    snapshot and reports honestly that the capability is unavailable. Registering
+    a real forecasting capability later needs no change to the NLU layer.
+    """
+    return [
+        PlanStep(step_id="load", capability=CAP_LOAD_NETWORK,
+                 description="Read the observed network snapshot."),
+        *_reason_and_govern(["load"]),
+    ]
+
+
 def _build_optimization(_: IntentResolution) -> List[PlanStep]:
     return [
         PlanStep(step_id="load", capability=CAP_LOAD_NETWORK,
@@ -287,6 +321,14 @@ WORKFLOW_TEMPLATES: Dict[Intent, WorkflowTemplate] = {
         "wf_explanation", Intent.EXPLANATION,
         "Explain an existing result from evidence already computed; no new optimization.",
         _build_explanation),
+    Intent.STATUS_QUERY: WorkflowTemplate(
+        "wf_status", Intent.STATUS_QUERY,
+        "Answer an inventory/count question from the digital twin; no solve.",
+        _build_status),
+    Intent.FORECAST: WorkflowTemplate(
+        "wf_forecast", Intent.FORECAST,
+        "Recognise a forecast request; no forecasting capability is registered.",
+        _build_forecast),
 }
 
 

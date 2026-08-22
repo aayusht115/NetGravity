@@ -120,18 +120,31 @@ class ScenarioValidator:
                 f"capacity_multiplier must be >= 0, got {spec.capacity_multiplier}.",
             )
 
-        if spec.capacity_multiplier is not None and spec.capacity_delta_units is not None:
+        supplied = [
+            name for name, value in (
+                ("capacity_multiplier", spec.capacity_multiplier),
+                ("capacity_delta_units", spec.capacity_delta_units),
+                ("capacity_set_units", spec.capacity_set_units),
+            ) if value is not None
+        ]
+        if len(supplied) > 1:
             raise InvalidScenarioError(
-                "capacity_multiplier and capacity_delta_units are mutually exclusive; "
-                "supplying both leaves the intended capacity ambiguous.",
-                context={"action": spec.action.value},
+                f"{' and '.join(supplied)} are mutually exclusive; supplying more "
+                f"than one leaves the intended capacity ambiguous. 'reduce by "
+                f"2,000' and 'set to 2,000' are different instructions.",
+                context={"action": spec.action.value, "supplied": supplied},
+            )
+
+        if spec.capacity_set_units is not None and spec.capacity_set_units < 0:
+            raise InvalidScenarioError(
+                f"capacity_set_units must be >= 0, got {spec.capacity_set_units}.",
             )
 
         if spec.action == ScenarioActionType.CHANGE_CAPACITY:
-            if spec.capacity_multiplier is None and spec.capacity_delta_units is None:
+            if not supplied:
                 raise InvalidScenarioError(
-                    "CHANGE_CAPACITY requires either capacity_multiplier or "
-                    "capacity_delta_units.",
+                    "CHANGE_CAPACITY requires capacity_multiplier, "
+                    "capacity_delta_units or capacity_set_units.",
                     context={"facility_ids": spec.facility_ids},
                 )
             # A delta that drives capacity below zero is rejected rather than
