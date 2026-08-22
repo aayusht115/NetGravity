@@ -131,14 +131,22 @@ is expected"` yields `event_probability=None` and a `NO_EVENT_PROBABILITY`
 warning; RF then reports `NOT_COMPUTABLE` rather than inferring a likelihood
 from severity. Severity, confidence and probability stay three separate things.
 
-> **A note on the two `ExternalSignal` classes.** `netgravity/ingestion/schemas/signal.py`
-> defines a class of the same name that is a *different concept*: news and
-> materiality signals with bucket, direction, magnitude and a qualitative
-> confidence, used for forecast enrichment and root-cause context. It carries
-> **no probability at all** — `grep` finds zero occurrences in the package — and
-> nothing converts one into the other. Deriving `P = 0.8` from
-> `confidence: HIGH` would be precisely the fabrication the risk core exists to
-> prevent. See the Phase 4A report §6.
+> **The two signal types, now named apart.** The ingestion package's news and
+> materiality signal was called `ExternalSignal` until Phase 4A, colliding with
+> the orchestrator class above. It is now
+> **`MarketIntelligenceSignal`** — bucket, direction, magnitude, and a
+> qualitative confidence, used for forecast enrichment and root-cause context.
+> It carries **no probability at all**, by design, and nothing converts one into
+> the other. Deriving `P = 0.8` from `confidence: HIGH` would manufacture the
+> single number that most directly drives RF and governance, out of a
+> qualitative judgement that was never a likelihood.
+>
+> | | `MarketIntelligenceSignal` | `ExternalSignal` |
+> |---|---|---|
+> | Package | `netgravity.ingestion.schemas.signal` | `netgravity.orchestrator.schemas.requests` |
+> | Subject | news / macro / policy / weather | a discrete hazard event |
+> | Likelihood | none, deliberately | `event_probability` ∈ [0,1] or `None` |
+> | Feeds | assumptions, root-cause narrative | `RF = P + REI − P·REI` |
 
 ## 6. Observed vs scenario
 
@@ -214,15 +222,11 @@ calls — complementary, not competing.
 
 ## 10. Known limitations
 
-1. **Seven ingestion tests still fail** for want of demo assets — five need PDF
-   binaries, one asserts the original corpus's exact shape, one needs rows that
-   fail column mapping. Pre-existing; `generate_mock_dataset.py` takes it from
-   21 to 7.
-2. **Two LLM clients exist** — `ingestion/ai/client.py` and
+1. **Two LLM clients exist** — `ingestion/ai/client.py` and
    `orchestrator/agents/llm_gateway.py`. Both are credential-gated and neither
    is authoritative, but they are duplicate infrastructure and should converge.
-3. **Performance is measured only at small scale** — 1,632 rows in ~73 ms.
+2. **Performance is measured only at small scale** — 1,632 rows in ~73 ms.
    That is not evidence about production files.
-4. **Good-to-have datasets are partly unproven.** Contracts and SKU are
+3. **Good-to-have datasets are partly unproven.** Contracts and SKU are
    exercised; WMS, packaging, pick-and-pack and inbound/outbound activity have
    schema support that no test drives.

@@ -228,16 +228,35 @@ class TestSingleCanonicalModel:
         assert report is not None
 
     def test_the_network_has_the_expected_shape(self, extraction):
+        """
+        The corpus shape is fixed by the ingestion suite's own contract
+        (`test_india_network_has_the_expected_shape`): 10 facilities as 4
+        plants + 5 existing DCs + 1 candidate, 10 markets, 1 product, 10
+        demand rows, more than 30 lanes.
+        """
         net = extraction.canonical_data
         roles = {}
         for f in net.facilities:
             roles[f.role] = roles.get(f.role, 0) + 1
-        assert roles[NodeRole.PLANT] == 3
-        assert roles[NodeRole.DC] == 5
-        assert roles[NodeRole.MARKET] == 8
-        assert len(net.products) == 2
-        assert len(net.demands) == 13
-        assert len(net.lanes) == 35
+        assert roles[NodeRole.PLANT] == 4
+        assert roles[NodeRole.DC] == 6          # 5 EXISTING + 1 CANDIDATE
+        assert roles[NodeRole.MARKET] == 10
+        assert len(net.products) == 1
+        assert len(net.demands) == 10
+        assert len(net.lanes) > 30
+
+    def test_the_candidate_site_is_ingested_as_a_candidate(self, extraction):
+        """
+        A candidate is not an open facility. If ingestion flattened status to
+        EXISTING the optimum would be handed a site it was supposed to decide
+        about, and the network-design problem would quietly become a routing
+        problem.
+        """
+        from netgravity.schemas.network import FacilityStatus
+
+        nagpur = next(f for f in extraction.canonical_data.facilities
+                      if f.id == "DC_NAGPUR")
+        assert nagpur.status == FacilityStatus.CANDIDATE
 
 
 # ===========================================================================
@@ -396,24 +415,46 @@ class TestREIIntegration:
         assert all(0.0 <= r.rei <= 1.0 for r in scored)
         assert max(r.rei for r in scored) == pytest.approx(1.0)
 
-    def test_an_infeasible_disruption_reports_none_not_zero(self, registry):
+    def test_the_reference_corpus_absorbs_the_loss_of_any_single_node(
+        self, registry,
+    ):
         """
-        The core invariant, on real ingested data. Removing DC_BHIWANDI or
-        DC_HOSUR leaves demand unservable at this capacity. That is an ABSENCE
-        of a computable exposure, not an exposure of zero — a zero would rank
-        the node as perfectly safe, which is the opposite of the truth.
+        Every disruption in the reference network is computable. That is a
+        property of the corpus — four plants and six DCs leave a route for any
+        single loss — and it is the realistic case, so it is worth stating
+        rather than leaving implicit.
         """
+        assert all(r.calculation_status == CalculationStatus.OK
+                   for r in registry.results)
+        assert registry.batch_status == REIBatchStatus.COMPLETED
+
+    def test_an_infeasible_disruption_reports_none_not_zero(self, extraction):
+        """
+        The core invariant, on ingested data starved of capacity.
+
+        Tested against a deliberately tightened copy rather than the reference
+        corpus: the reference network can absorb any single loss, which is the
+        realistic case and the right default for a shared fixture. Shrinking
+        the DCs until a loss cannot be absorbed is what exercises this path.
+
+        An unservable disruption is an ABSENCE of a computable exposure, not an
+        exposure of zero. A zero would rank the node as perfectly safe, which
+        is the exact opposite of the truth.
+        """
+        starved = extraction.canonical_data.model_copy(deep=True)
+        for facility in starved.facilities:
+            if facility.role == NodeRole.DC:
+                facility.capacity_units_per_period = 16_000
+        starved.data_version = starved.compute_data_version()
+
+        registry = REIService().get_or_compute(starved)
         infeasible = [r for r in registry.results
                       if r.calculation_status == CalculationStatus.INFEASIBLE]
-        assert infeasible, "expected at least one infeasible disruption"
+        assert infeasible, "expected at least one unservable disruption"
         for row in infeasible:
             assert row.rei is None
             assert row.performance_impact is None
-
-    def test_the_batch_reports_partial_success_honestly(self, registry):
-        if any(r.calculation_status == CalculationStatus.INFEASIBLE
-               for r in registry.results):
-            assert registry.batch_status == REIBatchStatus.COMPLETED_WITH_ERRORS
+        assert registry.batch_status == REIBatchStatus.COMPLETED_WITH_ERRORS
 
     def test_results_are_deterministic_across_runs(self, extraction):
         first = REIService().get_or_compute(extraction.canonical_data)
@@ -457,6 +498,60 @@ class TestExternalSignalPath:
         assert result.status == ExtractionStatus.WARNING
         assert any(f.code == "NO_EVENT_PROBABILITY"
                    for f in result.validation_results)
+
+    def test_the_two_signal_types_are_unambiguous(self):
+        """
+        Phase 4A renamed the ingestion signal because two different concepts
+        shared the name `ExternalSignal`. Pinned here because the collision was
+        not a style problem: one carries an event probability that drives RF and
+        governance, the other carries a qualitative confidence and deliberately
+        carries no likelihood at all. A future edit that reunites the names
+        makes it possible to pass one where the other is expected.
+        """
+        from netgravity.ingestion.schemas.signal import MarketIntelligenceSignal
+        from netgravity.orchestrator.schemas.requests import ExternalSignal
+
+        assert MarketIntelligenceSignal.__name__ != ExternalSignal.__name__
+
+        # The RF-eligible type carries a probability; the intelligence type
+        # has no field capable of holding one, in any spelling.
+        assert "event_probability" in ExternalSignal.model_fields
+        for field in MarketIntelligenceSignal.model_fields:
+            assert "probability" not in field
+            assert "likelihood" not in field
+
+        # `confidence` exists on both and means different things: a [0,1]
+        # extraction confidence there, a categorical judgement here. Neither is
+        # a probability, and this is the field most likely to be mistaken for
+        # one.
+        assert MarketIntelligenceSignal.model_fields["confidence"].annotation \
+            is not float
+
+    def test_no_conversion_exists_between_the_signal_types(self):
+        """
+        There is no adapter, and there must not be. Deriving `P = 0.8` from
+        `confidence: HIGH` would manufacture the single number that most
+        directly drives RF, out of a qualitative judgement that was never a
+        likelihood.
+        """
+        import pkgutil
+
+        import netgravity.ingestion as pkg
+
+        offenders = []
+        for mod in pkgutil.walk_packages(pkg.__path__, f"{pkg.__name__}."):
+            if ".tests" in mod.name:
+                continue
+            source = Path(mod.module_finder.path) / f"{mod.name.rsplit('.', 1)[-1]}.py"
+            if not source.exists():
+                continue
+            code = _code_only(source)
+            if "orchestrator.schemas.requests" in code or \
+                    "event_probability" in code:
+                offenders.append(mod.name)
+        assert offenders == [], (
+            f"ingestion modules referencing the RF-eligible signal: {offenders}"
+        )
 
     def test_the_agent_does_not_calculate_rf(self):
         """
