@@ -1,0 +1,4 @@
+origin_id,destination_id,mode,rate_per_unit,distance_km,lead_time_days,lane_capacity,is_active_baseline,observed_current_volume
+PLT_TEST,DC_TEST,ROAD,12,1400,2.5,,TRUE,1400
+DC_TEST,MKT_A,ROAD,6,200,1.0,,TRUE,800
+DC_TEST,MKT_B,ROAD,3,25,0.5,,TRUE,600

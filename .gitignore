@@ -139,3 +139,22 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# NetGravity data zones (Phase 4A — ingestion)
+# Raw client files and generated snapshots must never be committed.
+# .gitkeep files preserve the folder structure; contents are ignored.
+data/raw/*
+!data/raw/.gitkeep
+data/standardized/*
+!data/standardized/.gitkeep
+data/curated/*
+!data/curated/.gitkeep
+
+# Sample / demo datasets are NOT committed.
+# data/mock/india/ is fabricated demo data used to exercise the pipeline.
+# It must be shared separately or regenerated before running:
+#     python -m netgravity.ingestion --source data/mock/india
+data/mock/
+
+# Local transfer scratch — not part of the project
+_to_delete/
