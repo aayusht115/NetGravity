@@ -54,18 +54,32 @@ async def _in_thread(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
 # ---------------------------------------------------------------------------
 
 class OptimizationClient:
-    """Adapter over the single authoritative MILP."""
+    """
+    Adapter over the single authoritative MILP.
 
-    async def solve(
+    Each solve is exposed twice, following the same split `REIClient` uses
+    below: a `*_result` method returning the TYPED frozen contract, and a
+    convenience method returning the flattened dict the control plane passes
+    between steps.
+
+    The typed form is the authoritative one. Flattening drops the per-facility
+    and per-lane detail — utilisation, throughput, lane volumes — keeping only
+    id lists, which is enough for governance and reasoning but not for anything
+    that has to represent the network. Consumers needing that detail take the
+    contract; rebuilding it from the projection is impossible, not merely
+    wasteful.
+    """
+
+    async def solve_result(
         self,
         network: CanonicalNetwork,
         *,
         config: Optional[OptimizationConfig] = None,
         mode: Optional[OptimizationMode] = None,
         scenario_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """
-        Solve and return a flattened network-state contract.
+        Solve and return the TYPED `NetworkStateResult` contract.
 
         Raises:
             SolverInfeasibleError: the solver proved no feasible solution.
@@ -105,10 +119,23 @@ class OptimizationClient:
                          "solver_status": result.solver.status.value},
             )
 
-        state = await _in_thread(build_network_state_result, result, network, cfg, None)
-        return _flatten_state(state, result)
+        return await _in_thread(build_network_state_result, result, network, cfg, None)
 
-    async def solve_scenario(
+    async def solve(
+        self,
+        network: CanonicalNetwork,
+        *,
+        config: Optional[OptimizationConfig] = None,
+        mode: Optional[OptimizationMode] = None,
+        scenario_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Solve and flatten in one call, for callers that only need the dict."""
+        state = await self.solve_result(
+            network, config=config, mode=mode, scenario_id=scenario_id,
+        )
+        return flatten_network_state(state)
+
+    async def solve_scenario_result(
         self,
         scenario_network: CanonicalNetwork,
         *,
@@ -117,9 +144,9 @@ class OptimizationClient:
         baseline_state: Any = None,
         overrides: Optional[List[str]] = None,
         config: Optional[OptimizationConfig] = None,
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """
-        Solve a scenario and return the scenario contract, deltas included.
+        Solve a scenario and return the TYPED `ScenarioResult` contract.
 
         The scenario network is a separate materialised object; observed state
         is untouched.
@@ -152,30 +179,62 @@ class OptimizationClient:
                 context={"scenario_id": scenario_id},
             )
 
-        scenario_result = await _in_thread(
+        return await _in_thread(
             build_scenario_result,
             result, scenario_network, scenario_id, scenario_name,
             "CUSTOM", baseline_state, list(overrides or []), cfg, None,
         )
 
-        flat = _flatten_state(scenario_result.state, result)
-        flat.update({
-            "scenario_id": scenario_result.scenario_id,
-            "scenario_name": scenario_result.scenario_name,
-            "is_hypothetical": True,
-            "business_cost_delta": scenario_result.business_cost_delta,
-            "business_cost_delta_pct": scenario_result.business_cost_delta_pct,
-            "served_demand_delta": scenario_result.served_demand_delta,
-            "carbon_delta_kg": scenario_result.carbon_delta_kg,
-            "baseline_business_cost": scenario_result.baseline_business_cost,
-            "baseline_snapshot_id": scenario_result.baseline_network_id,
-            "scenario_overrides": list(scenario_result.scenario_overrides),
-        })
-        return flat
+    async def solve_scenario(
+        self,
+        scenario_network: CanonicalNetwork,
+        *,
+        scenario_id: str,
+        scenario_name: str,
+        baseline_state: Any = None,
+        overrides: Optional[List[str]] = None,
+        config: Optional[OptimizationConfig] = None,
+    ) -> Dict[str, Any]:
+        """Solve a scenario and flatten it, deltas included."""
+        scenario_result = await self.solve_scenario_result(
+            scenario_network,
+            scenario_id=scenario_id,
+            scenario_name=scenario_name,
+            baseline_state=baseline_state,
+            overrides=overrides,
+            config=config,
+        )
+        return flatten_scenario_result(scenario_result)
 
 
-def _flatten_state(state: Any, result: Any) -> Dict[str, Any]:
-    """Flatten a NetworkStateResult into control-plane-friendly primitives."""
+def flatten_scenario_result(scenario_result: Any) -> Dict[str, Any]:
+    """Project a typed `ScenarioResult` into control-plane primitives."""
+    flat = flatten_network_state(scenario_result.state)
+    flat.update({
+        "scenario_id": scenario_result.scenario_id,
+        "scenario_name": scenario_result.scenario_name,
+        "is_hypothetical": True,
+        "business_cost_delta": scenario_result.business_cost_delta,
+        "business_cost_delta_pct": scenario_result.business_cost_delta_pct,
+        "served_demand_delta": scenario_result.served_demand_delta,
+        "carbon_delta_kg": scenario_result.carbon_delta_kg,
+        "baseline_business_cost": scenario_result.baseline_business_cost,
+        "baseline_snapshot_id": scenario_result.baseline_network_id,
+        "scenario_overrides": list(scenario_result.scenario_overrides),
+    })
+    return flat
+
+
+def flatten_network_state(state: Any) -> Dict[str, Any]:
+    """
+    Flatten a `NetworkStateResult` into control-plane-friendly primitives.
+
+    A PROJECTION, and a lossy one: per-facility utilisation and per-lane flow do
+    not survive it. That is deliberate — governance, reasoning and the delta
+    arithmetic all work from network-level figures, and carrying thousands of
+    lane rows through every step of every plan would cost far more than it buys.
+    Anything needing the detail consumes the typed contract instead.
+    """
     costs = state.costs
     return {
         "network_id": state.network_id,
@@ -214,7 +273,7 @@ def _flatten_state(state: Any, result: Any) -> Dict[str, Any]:
         "service_unsupported_features": (
             list(state.service.unsupported_features) if state.service else []
         ),
-        "run_id": result.run_id,
+        "run_id": state.metadata.run_id,
     }
 
 

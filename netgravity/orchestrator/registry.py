@@ -42,7 +42,9 @@ from netgravity.orchestrator.engines.deterministic import (
     KPIClient,
     OptimizationClient,
     REIClient,
+    flatten_network_state,
     flatten_rei_registry,
+    flatten_scenario_result,
 )
 from netgravity.orchestrator.engines.scenario_builder import ScenarioBuilder
 from netgravity.orchestrator.exceptions import (
@@ -248,7 +250,12 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
         snapshot = orch.snapshots.get(ctx.baseline_snapshot_id or "")
         mode_name = req.params.get("mode")
         mode = OptimizationMode(mode_name) if mode_name else None
-        output = await svc["optimization"].solve(snapshot.network, mode=mode)
+        state = await svc["optimization"].solve_result(snapshot.network, mode=mode)
+        # Keep the TYPED contract for the Digital Twin projection. The flattened
+        # dict below drops per-facility utilisation and per-lane flow, and no
+        # consumer can recover them from it.
+        ctx.network_states[req.capability] = state
+        output = flatten_network_state(state)
         # The observed counterpart to the scenario stamp above: this result IS
         # current network state, and says so.
         output.update({
@@ -275,12 +282,18 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
                 baseline_state = payload
                 break
 
-        output = await svc["optimization"].solve_scenario(
+        scenario_result = await svc["optimization"].solve_scenario_result(
             record.network,
             scenario_id=record.scenario_id,
             scenario_name=record.label,
             overrides=record.overrides,
         )
+        # Typed contract retained for the twin; see solve_network above.
+        # Keyed by scenario, NOT by capability: a comparison workflow runs
+        # several steps under this one capability name, and a capability key
+        # would leave only the last scenario standing.
+        ctx.network_states[f"scenario:{record.scenario_id}"] = scenario_result.state
+        output = flatten_scenario_result(scenario_result)
 
         # Deltas are computed here rather than inside the engine adapter so the
         # baseline reference stays explicit and auditable.

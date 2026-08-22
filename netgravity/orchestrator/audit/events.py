@@ -56,6 +56,11 @@ GROUNDING_COMPLETED  = "grounding_completed"
 GOVERNANCE_DECISION  = "governance_decision"
 GOVERNANCE_APPLIED   = "governance_applied"
 
+# --- digital twin ----------------------------------------------------------
+#: One network state published to the Digital Twin. Emitted per state, so a
+#: comparison run producing three scenarios emits three.
+TWIN_STATE_PUBLISHED = "twin_state_published"
+
 # --- conversational layer (Phase 3) ---------------------------------------
 CHAT_REQUEST_RECEIVED    = "chat_request_received"
 INTENT_CLASSIFIED        = "intent_classified"
@@ -84,6 +89,7 @@ CANONICAL_EVENTS: Set[str] = {
     REI_LOOKUP, RF_CALCULATED, RF_NOT_COMPUTABLE, SOLVER_INFEASIBLE,
     REASONING_COMPLETED, GROUNDING_COMPLETED,
     GOVERNANCE_DECISION, GOVERNANCE_APPLIED,
+    TWIN_STATE_PUBLISHED,
 }
 
 #: Conversational events. Kept as a separate set because most of them fire

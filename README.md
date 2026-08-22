@@ -229,6 +229,24 @@ Rules are evaluated in strict precedence order, most restrictive first, and ever
 
 The evidence rule is **action-aware**, not a blanket override. It asks whether the action would have leaned on risk evidence to justify running unattended; a hypothetical scenario is exempt, because no measurement is load-bearing for something that cannot touch observed state. The rule constrains **autonomy**, never **information delivery**: a report whose exposure analysis failed is still produced and still returned, it simply no longer clears itself for unattended action.
 
+### Digital Twin
+
+Every run publishes its network state to the Digital Twin, through **one** call site in the orchestrator. No engine reaches it and it reaches no engine — `twin/` imports nothing from `optimization`, `resilience`, `costs`, `metrics` or `risk`, and a test asserts that against the compiled source with docstrings stripped. It is handed only frozen result *contracts*, never a `CanonicalNetwork`, so it could not solve anything if it tried.
+
+**Scenarios are deltas, not copies.** A scenario stores only the facilities and lanes that differ from its baseline, plus removals. On a 100-facility network one scenario is **6.5%** of a full state, and ten scenarios cost **5.7%** of copying. Nothing holds a network: states reference `snapshot_id`, and the network stays single-sourced in `SnapshotManager`.
+
+**Absence is a value.** An unassessed facility carries `rei=None`, never `0.0` — on a [0,1] relative scale zero is the value of the *least exposed node in the network*, a specific claim about a node nobody measured. A failed or infeasible run still publishes a state, because showing nothing leaves the previous picture on screen with no sign the run collapsed.
+
+Retrieval is flat with network size — **0.07 ms at 2,000 lanes and at 50,000** — via pagination, aggregate rollups and a summary path that skips lanes entirely.
+
+```
+GET /orchestrator/twin/states[/<state_id>]      ?flow_offset= &flow_limit= &include_flows=
+GET /orchestrator/twin/snapshots/<id>           ?scenario_id=
+GET /orchestrator/twin/compare                  ?snapshot_id= &scenario_id=
+```
+
+Full design note: [docs/digital_twin.md](docs/digital_twin.md).
+
 ```
 R7   analytical output                 → AUTO candidate  ─┐
 R7B  required risk evidence unresolved → APPROVAL         │ evidence constraints
@@ -300,6 +318,7 @@ NetGravity/
 │   │   ├── validation/                 #    numeric grounding, validators
 │   │   ├── governance/                 #    action classifier, approvals, authorization
 │   │   ├── state/                      #    snapshot / scenario / execution stores
+│   │   ├── twin/                       #    Digital Twin: states, deltas, comparison
 │   │   ├── audit/                      #    execution traces, canonical events
 │   │   └── routing/, tools/, schemas/
 │   ├── network/  inventory/  service/  carbon/  metrics/

@@ -13,6 +13,10 @@ Endpoints
     POST /orchestrator/approvals/<id>       approve or reject a pending action
     GET  /orchestrator/executions/<id>      execution status
     GET  /orchestrator/executions/<id>/trace   full audit provenance
+    GET  /orchestrator/twin/states          published Digital Twin states
+    GET  /orchestrator/twin/states/<id>     one state, flows paginated
+    GET  /orchestrator/twin/snapshots/<id>  state for a snapshot/scenario
+    GET  /orchestrator/twin/compare         baseline vs scenario
     GET  /orchestrator/capabilities         registered capability catalogue
     GET  /orchestrator/workflows            available workflow templates
     GET  /orchestrator/health               control-plane health
@@ -43,10 +47,25 @@ def create_orchestrator_blueprint(orchestrator: Orchestrator, url_prefix: str = 
     """
     from flask import Blueprint, jsonify, request
 
+    from netgravity.orchestrator.twin import DEFAULT_FLOW_LIMIT, TwinStateNotFound
+
     bp = Blueprint("orchestrator", __name__, url_prefix=url_prefix)
 
     def _error(exc: OrchestratorError, status: int = 400):
         return jsonify({"error": exc.to_dict()}), status
+
+    def _int_arg(name: str, default: int) -> int:
+        """A malformed paging argument falls back rather than 500-ing."""
+        try:
+            return int(request.args[name])
+        except (KeyError, TypeError, ValueError):
+            return default
+
+    def _bool_arg(name: str, default: bool) -> bool:
+        raw = request.args.get(name)
+        if raw is None:
+            return default
+        return raw.strip().lower() not in ("false", "0", "no")
 
     # One chat service per blueprint, built lazily so conversation history
     # survives across requests without constructing it when chat is unused.
@@ -223,6 +242,97 @@ def create_orchestrator_blueprint(orchestrator: Orchestrator, url_prefix: str = 
             "conversation_id": conversation_id,
             "turns": [t.model_dump(mode="json") for t in turns],
         }), 200
+
+    # ------------------------------------------------------------------
+    # Digital Twin (Phase 5)
+    # ------------------------------------------------------------------
+
+    @bp.route("/twin/states", methods=["GET"])
+    def twin_states():
+        """
+        List published Digital Twin states.
+
+        Query: ``?snapshot_id=snap_...`` to filter.
+
+        Returns handles, not payloads — a state grows with the network, and a
+        listing must not.
+        """
+        snapshot_id = request.args.get("snapshot_id")
+        refs = orchestrator.twin.list_states(snapshot_id)
+        return jsonify({
+            "snapshot_id": snapshot_id,
+            "states": [r.model_dump(mode="json") for r in refs],
+        }), 200
+
+    @bp.route("/twin/states/<state_id>", methods=["GET"])
+    def twin_state(state_id: str):
+        """
+        Read one state by id.
+
+        Query:
+            ``flow_offset`` / ``flow_limit``  page the lane set
+                (``flow_limit=0`` returns every lane)
+            ``include_flows=false``           aggregate only — the cheap path
+                for a summary view of a large network
+        """
+        try:
+            view = orchestrator.twin.get_by_id(
+                state_id,
+                flow_offset=_int_arg("flow_offset", 0),
+                flow_limit=_int_arg("flow_limit", DEFAULT_FLOW_LIMIT),
+                include_flows=_bool_arg("include_flows", True),
+            )
+        except TwinStateNotFound as exc:
+            return jsonify({"error": {"code": "NOT_FOUND", "message": str(exc)}}), 404
+        return jsonify(view.model_dump(mode="json")), 200
+
+    @bp.route("/twin/snapshots/<snapshot_id>", methods=["GET"])
+    def twin_snapshot_state(snapshot_id: str):
+        """
+        Read the state for a snapshot, optionally a scenario on it.
+
+        Query: ``?scenario_id=scn_...``, plus the same paging arguments.
+        """
+        try:
+            view = orchestrator.twin.get(
+                snapshot_id,
+                request.args.get("scenario_id"),
+                flow_offset=_int_arg("flow_offset", 0),
+                flow_limit=_int_arg("flow_limit", DEFAULT_FLOW_LIMIT),
+                include_flows=_bool_arg("include_flows", True),
+            )
+        except TwinStateNotFound as exc:
+            return jsonify({"error": {"code": "NOT_FOUND", "message": str(exc)}}), 404
+        return jsonify(view.model_dump(mode="json")), 200
+
+    @bp.route("/twin/compare", methods=["GET"])
+    def twin_compare():
+        """
+        Compare two states.
+
+        Either ``?baseline=<state_id>&comparison=<state_id>``, or the common
+        form ``?snapshot_id=...&scenario_id=...`` which compares a scenario
+        against its own baseline.
+        """
+        baseline = request.args.get("baseline")
+        comparison = request.args.get("comparison")
+        snapshot_id = request.args.get("snapshot_id")
+        scenario_id = request.args.get("scenario_id")
+
+        try:
+            if baseline and comparison:
+                result = orchestrator.twin.compare(baseline, comparison)
+            elif snapshot_id and scenario_id:
+                result = orchestrator.twin.compare_scenario(snapshot_id, scenario_id)
+            else:
+                return jsonify({"error": {
+                    "code": "INVALID_REQUEST",
+                    "message": ("Supply either baseline= and comparison=, or "
+                                "snapshot_id= and scenario_id=."),
+                }}), 400
+        except TwinStateNotFound as exc:
+            return jsonify({"error": {"code": "NOT_FOUND", "message": str(exc)}}), 404
+        return jsonify(result.model_dump(mode="json")), 200
 
     # ------------------------------------------------------------------
     @bp.route("/capabilities", methods=["GET"])

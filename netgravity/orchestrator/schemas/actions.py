@@ -139,6 +139,12 @@ class FinalResponse(BaseModel):
     governance: Optional[GovernanceDecision] = None
     approval: Optional[ApprovalRequest] = None
 
+    # Handles to the Digital Twin states this run published — one per network
+    # state, so a scenario comparison carries a baseline plus one per scenario.
+    # References rather than payloads: a state grows with the network, and a
+    # workflow response should not.
+    twin_states: List[Dict[str, Any]] = Field(default_factory=list)
+
     errors: List[Dict[str, Any]] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
 

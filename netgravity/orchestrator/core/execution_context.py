@@ -118,6 +118,15 @@ class ExecutionContext:
     # instead. Reconstructing a registry from the flattened dict would silently
     # default a FAILED node's status to OK.
     rei_registry: Optional[FacilityResilienceRegistry] = None
+    # The AUTHORITATIVE typed network-state contracts, keyed by capability.
+    # Same rationale as `rei_registry`: `engine_results` holds a flattened
+    # projection that discards per-facility utilisation and per-lane flow, and
+    # nothing can reconstruct those from it. The Digital Twin projection reads
+    # these, so what a viewer sees is the engine's own output rather than a
+    # re-derivation from summary figures.
+    network_states: Dict[str, Any] = field(default_factory=dict)
+    # Handles to Digital Twin states published for this run.
+    twin_refs: List[Any] = field(default_factory=list)
     risk_results: Optional[RiskAssessment] = None
     reasoning: Optional[ReasoningResult] = None
     governance_result: Optional[GovernanceDecision] = None

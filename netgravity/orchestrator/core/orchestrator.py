@@ -68,6 +68,46 @@ from netgravity.orchestrator.validation.validators import (
 logger = logging.getLogger(__name__)
 
 
+#: `EvidenceStatus` (control plane) → `ValueStatus` (twin). The twin reports the
+#: same absences the orchestrator recorded rather than inventing a second
+#: vocabulary for missing data.
+_EVIDENCE_TO_VALUE_STATUS: Dict[str, Any] = {}
+
+#: Terminal execution state → the twin status for a run that produced nothing.
+_TERMINAL_TO_TWIN_STATUS: Dict[str, Any] = {}
+
+
+def _init_twin_status_maps() -> None:
+    """
+    Populate the status maps on first use.
+
+    Deferred so importing the orchestrator core does not pull in the twin
+    schemas, keeping the dependency one-directional: the twin knows nothing
+    about the orchestrator, and the orchestrator reaches for it only when it
+    actually publishes.
+    """
+    if _EVIDENCE_TO_VALUE_STATUS:
+        return
+    from netgravity.orchestrator.schemas.plans import EvidenceStatus
+    from netgravity.orchestrator.schemas.twin import TwinCalculationStatus, ValueStatus
+
+    _EVIDENCE_TO_VALUE_STATUS.update({
+        EvidenceStatus.UNAVAILABLE.value: ValueStatus.UNAVAILABLE,
+        EvidenceStatus.NOT_RUN.value: ValueStatus.NOT_COMPUTED,
+        EvidenceStatus.TIMEOUT.value: ValueStatus.FAILED,
+        EvidenceStatus.INVALID.value: ValueStatus.FAILED,
+    })
+    _TERMINAL_TO_TWIN_STATUS.update({
+        ExecutionState.INFEASIBLE.value: TwinCalculationStatus.INFEASIBLE,
+        ExecutionState.STALE.value: TwinCalculationStatus.STALE,
+        ExecutionState.FAILED.value: TwinCalculationStatus.FAILED,
+        ExecutionState.REQUIRES_HUMAN.value: TwinCalculationStatus.PARTIAL,
+        ExecutionState.REQUIRES_APPROVAL.value: TwinCalculationStatus.PARTIAL,
+        ExecutionState.COMPLETED.value: TwinCalculationStatus.PARTIAL,
+        ExecutionState.CANCELLED.value: TwinCalculationStatus.PARTIAL,
+    })
+
+
 class Orchestrator:
     """
     NetGravity's control plane.
@@ -86,13 +126,21 @@ class Orchestrator:
         audit: Optional[AuditLogger] = None,
         gateway: Optional[LLMGateway] = None,
         governance_policy: Optional[GovernancePolicy] = None,
+        twin: Optional["DigitalTwinService"] = None,
     ) -> None:
+        from netgravity.orchestrator.twin.service import DigitalTwinService
+
         self.registry = registry
         self.snapshots = snapshots
         self.scenarios = scenarios
         self.state_store = state_store or ExecutionStateStore()
         self.audit = audit or AuditLogger()
         self.gateway = gateway
+        # The Digital Twin. Held by the orchestrator because the orchestrator is
+        # its sole upstream integration point — no engine has a reference to it,
+        # and none can acquire one without passing through here.
+        self.twin = twin if twin is not None else DigitalTwinService()
+        _init_twin_status_maps()
 
         self.planner = WorkflowPlanner(registry)
         self.request_validator = RequestValidator()
@@ -148,6 +196,12 @@ class Orchestrator:
             if not context.is_terminal:
                 context.transition(ExecutionState.FAILED, note=str(exc)[:200])
         finally:
+            # ---- PROJECT (Digital Twin) ---------------------------------
+            # In `finally` so a stale, failed or infeasible run is represented
+            # too. Publishing nothing on those paths would leave the previous
+            # state on screen, and a viewer would see a healthy network with no
+            # sign that the run behind it collapsed.
+            self._project_twin(context, trace)
             self.audit.finish(trace, context)
 
         return self._build_response(context)
@@ -474,6 +528,157 @@ class Orchestrator:
         )
 
     # ------------------------------------------------------------------
+    # PROJECT — Digital Twin
+    # ------------------------------------------------------------------
+
+    def _project_twin(self, context: ExecutionContext, trace: ExecutionTrace) -> None:
+        """
+        Publish this run's network state to the Digital Twin.
+
+        The ONLY path into the twin. No engine reaches it: MILP, REI and RF all
+        report here first, and the orchestrator composes what they produced into
+        one authoritative payload. A test asserts the absence of the direct
+        paths, because an architecture rule nobody checks is a comment.
+
+        Never raises. The twin is a representation layer, and a failure to draw
+        the picture must not fail the analysis that produced it — the run
+        carries a warning instead.
+        """
+        from netgravity.orchestrator.schemas.twin import (
+            TwinCalculationStatus,
+            TwinStateType,
+            UnavailableValue,
+            ValueStatus,
+        )
+        from netgravity.orchestrator.twin.builder import (
+            build_twin_state,
+            build_unavailable_state,
+        )
+
+        snapshot_id = context.baseline_snapshot_id
+        if not snapshot_id:
+            # No snapshot was ever pinned, so there is no network for a state to
+            # describe. Nothing to publish, and nothing lost by not publishing.
+            return
+
+        try:
+            unavailable = [
+                UnavailableValue(
+                    field=f"engine.{cap}",
+                    status=_EVIDENCE_TO_VALUE_STATUS.get(
+                        ev.status.value, ValueStatus.UNAVAILABLE,
+                    ),
+                    reason=ev.reason,
+                    capability=cap,
+                )
+                for cap, ev in sorted(context.unavailable_evidence.items())
+            ]
+
+            published: List[Any] = []
+
+            # ---- the observed / optimized state --------------------------
+            baseline_state = context.network_states.get("optimization.solve")
+            if baseline_state is not None:
+                state_type = (
+                    TwinStateType.BASELINE if not baseline_state.is_hypothetical
+                    else TwinStateType.OPTIMIZED
+                )
+                published.append(self.twin.update(build_twin_state(
+                    snapshot_id=snapshot_id,
+                    state_type=state_type,
+                    network_state=baseline_state,
+                    execution_id=context.execution_id,
+                    rei_registry=context.rei_registry,
+                    risk_assessment=context.risk_results,
+                    unavailable=unavailable,
+                )))
+
+            # ---- scenario states, one per scenario -----------------------
+            # Each is published independently and compressed against the
+            # baseline by the service. Scenario B's record never touches
+            # scenario A's.
+            for key, scenario_state in sorted(context.network_states.items()):
+                if not key.startswith("scenario:"):
+                    continue
+                scenario_id = key.split(":", 1)[1]
+                record = None
+                try:
+                    record = self.scenarios.get(scenario_id)
+                except Exception:  # noqa: BLE001 - scenario store is advisory here
+                    pass
+
+                published.append(self.twin.update(build_twin_state(
+                    snapshot_id=snapshot_id,
+                    state_type=TwinStateType.SCENARIO,
+                    network_state=scenario_state,
+                    execution_id=context.execution_id,
+                    scenario_id=scenario_id,
+                    scenario_version=(record.version if record else None),
+                    parent_snapshot_id=(record.parent_snapshot_id if record else None),
+                    scenario_overrides=(list(record.overrides) if record else []),
+                    rei_registry=context.rei_registry,
+                    risk_assessment=context.risk_results,
+                    unavailable=unavailable,
+                )))
+
+            # ---- nothing solved -----------------------------------------
+            # An empty state, explicitly. `kpis` stays None: a TwinKPIs of
+            # zeros would describe a network that ran perfectly for free.
+            if not published:
+                status = _TERMINAL_TO_TWIN_STATUS.get(
+                    context.current_state.value, TwinCalculationStatus.FAILED,
+                )
+                if not unavailable:
+                    unavailable = [UnavailableValue(
+                        field="network_state",
+                        status=ValueStatus.UNAVAILABLE,
+                        reason=(
+                            f"the run ended {context.current_state.value} without "
+                            f"producing a network state"
+                        ),
+                    )]
+                try:
+                    snapshot = self.snapshots.get(snapshot_id)
+                except OrchestratorError:
+                    # The snapshot itself is gone — the state can still name it,
+                    # which is more use to a reader than publishing nothing.
+                    snapshot = None
+                published.append(self.twin.update(build_unavailable_state(
+                    snapshot_id=snapshot_id,
+                    state_type=TwinStateType.OPTIMIZED,
+                    calculation_status=status,
+                    unavailable=unavailable,
+                    execution_id=context.execution_id,
+                    data_version=(snapshot.data_version if snapshot else None),
+                    network_id=(snapshot.network_id if snapshot else None),
+                    rei_registry=context.rei_registry,
+                    risk_assessment=context.risk_results,
+                )))
+
+            context.twin_refs = published
+            for ref in published:
+                trace.record(
+                    events.TWIN_STATE_PUBLISHED,
+                    state_id=ref.state_id,
+                    state_type=ref.state_type.value,
+                    snapshot_id=ref.snapshot_id,
+                    scenario_id=ref.scenario_id,
+                    calculation_status=ref.calculation_status.value,
+                    n_facilities=ref.n_facilities,
+                    n_flows=ref.n_flows,
+                )
+
+        except Exception as exc:  # noqa: BLE001 - representation must not break analysis
+            logger.exception(
+                "orchestrator.twin.projection_failed %s", context.correlation(),
+            )
+            context.add_warning(
+                f"The Digital Twin state could not be published "
+                f"({type(exc).__name__}: {exc}). The analysis results below are "
+                f"unaffected; only the visual representation is missing."
+            )
+
+    # ------------------------------------------------------------------
     # GOVERN
     # ------------------------------------------------------------------
 
@@ -768,6 +973,7 @@ class Orchestrator:
             reasoning=context.reasoning,
             governance=context.governance_result,
             approval=context.approval_request,
+            twin_states=[ref.model_dump(mode="json") for ref in context.twin_refs],
             errors=list(context.errors),
             warnings=warnings,
             duration_seconds=context.duration_seconds,
