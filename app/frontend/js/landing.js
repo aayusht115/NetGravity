@@ -308,13 +308,22 @@ function handleNodeLeave() {
  */
 export function enterApp(targetTab = 'home') {
   const landing = document.getElementById('landing-page');
-  const appShell = document.querySelector('.app-shell');
-
   if (landing) {
     landing.classList.add('hidden');
     landing.style.display = 'none';
   }
 
+  // Hide all auth pages
+  document.querySelectorAll('.auth-page-shell').forEach(shell => {
+    shell.classList.remove('active');
+    shell.style.display = 'none';
+  });
+
+  const appLayout = document.querySelector('.app-layout');
+  if (appLayout) {
+    appLayout.style.display = 'flex';
+  }
+  const appShell = document.querySelector('.app-shell');
   if (appShell) {
     appShell.style.display = 'flex';
   }
@@ -335,6 +344,12 @@ export function enterApp(targetTab = 'home') {
  * Return to landing page view
  */
 export function returnToLanding() {
+  // Hide all auth shells
+  document.querySelectorAll('.auth-page-shell').forEach(shell => {
+    shell.classList.remove('active');
+    shell.style.display = 'none';
+  });
+
   const landing = document.getElementById('landing-page');
   if (landing) {
     landing.classList.remove('hidden');
@@ -357,7 +372,11 @@ function bindLandingEvents() {
   if (btnGetStarted) {
     btnGetStarted.onclick = (e) => {
       e.preventDefault();
-      enterApp('home');
+      if (typeof window.navigateToAuth === 'function') {
+        window.navigateToAuth('signup');
+      } else {
+        enterApp('home');
+      }
     };
   }
 
@@ -365,7 +384,11 @@ function bindLandingEvents() {
   if (btnSignIn) {
     btnSignIn.onclick = (e) => {
       e.preventDefault();
-      enterApp('home');
+      if (typeof window.navigateToAuth === 'function') {
+        window.navigateToAuth('signin');
+      } else {
+        enterApp('home');
+      }
     };
   }
 

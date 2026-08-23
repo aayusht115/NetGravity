@@ -529,21 +529,145 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .sidebar-status-line { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
 .nav-svg { width: 18px; height: 18px; flex-shrink: 0; }
 
-/* ─── Top Bar (Global Header) ─────────────────────────────── */
-.app-topbar {
+
+/* ═══════════════════════════════════════════════════════════
+   GLOBAL TOPBAR & SUB-TOPBAR (Approved Header Architecture)
+   ═══════════════════════════════════════════════════════════ */
+
+.app-global-topbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-md);
-  padding: 10px 0 16px;
-  margin-bottom: var(--space-md);
+  justify-content: space-between;
+  padding: 14px 28px 12px;
+  background: var(--bg);
   border-bottom: 1px solid var(--border-light);
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+
+.topbar-left-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-right-area {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Upload Data Button (Home Overview Only) */
+.btn-topbar-upload {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 16px;
+  border-radius: 20px;
+  background: #9218EA;
+  color: #ffffff;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(146, 24, 234, 0.25);
+  transition: all 0.15s ease;
+}
+
+.btn-topbar-upload:hover {
+  background: #7c14c7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(146, 24, 234, 0.35);
+}
+
+/* Global Clickable Icon Buttons (Available Across All Pages) */
+.topbar-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.topbar-icon-btn:hover {
+  border-color: #9218EA;
+  color: #9218EA;
+  background: rgba(146, 24, 234, 0.04);
+}
+
+.notif-badge-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 1.5px solid #ffffff;
+}
+
+.topbar-profile-btn {
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.topbar-profile-btn:hover {
+  transform: scale(1.05);
+}
+
+/* Sub-Topbar (Page Title / Greeting + Facility & Period Selectors in Parallel) */
+.app-sub-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 28px;
+  background: var(--bg-page);
+  border-bottom: 1px solid var(--border-light);
+  min-height: 50px;
+  gap: 16px;
+}
+
+.sub-topbar-title-wrap,
+.sub-topbar-greeting {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sub-topbar-main-title,
+.greeting-text {
+  font-size: 16.5px;
+  color: #111827;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sub-topbar-main-title strong,
+.greeting-text strong {
+  color: #9218EA;
+  font-weight: 700;
+}
+
+.sub-topbar-sub-title,
+.greeting-sub {
+  font-size: 12.5px;
+  color: #6b7280;
+  font-weight: 400;
 }
 
 .topbar-controls {
   display: flex;
   align-items: center;
   gap: 16px;
+  margin-left: auto;
 }
 
 .topbar-control-group {
@@ -565,16 +689,17 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   color: var(--text-1);
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--r-full);
+  border-radius: 20px;
   padding: 6px 14px;
   box-shadow: var(--shadow-sm);
   transition: all var(--t-fast);
   cursor: pointer;
+  outline: none;
 }
 
 .topbar-facility-select:hover,
 .topbar-period-select:hover {
-  border-color: var(--primary-light);
+  border-color: #9218EA;
 }
 
 /* ─── Sidebar Sub-Item ────────────────────────────────────── */
@@ -2568,3 +2693,152 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   padding-top: 5px;
 }
 
+
+
+
+
+
+
+/* ═══════════════════════════════════════════════════════════
+   UNIFIED SLIDE-IN DRAWERS WITH BLURRED BACKDROP
+   ═══════════════════════════════════════════════════════════ */
+.drawer-overlay,
+.insight-drawer-overlay,
+.action-drawer-overlay,
+.scenario-drawer-overlay,
+.facility-panel-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 99999;
+  display: none;
+  justify-content: flex-end;
+  align-items: stretch;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.drawer-overlay.active,
+.drawer-overlay.visible,
+.insight-drawer-overlay.active,
+.insight-drawer-overlay.visible,
+.action-drawer-overlay.active,
+.action-drawer-overlay.visible,
+.scenario-drawer-overlay.active,
+.scenario-drawer-overlay.visible,
+.facility-panel-overlay.active,
+.facility-panel-overlay.visible {
+  display: flex !important;
+  opacity: 1 !important;
+}
+
+.drawer,
+.insight-drawer,
+.action-drawer,
+.scenario-drawer,
+.facility-panel {
+  width: 520px;
+  max-width: 90vw;
+  height: 100vh;
+  background: #ffffff;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.22);
+  display: flex;
+  flex-direction: column;
+  padding: 28px 30px;
+  overflow-y: auto;
+  position: relative;
+  box-sizing: border-box;
+  z-index: 100000;
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drawer-overlay.active .drawer,
+.drawer-overlay.visible .drawer,
+.insight-drawer-overlay.active .insight-drawer,
+.insight-drawer-overlay.visible .insight-drawer,
+.action-drawer-overlay.active .action-drawer,
+.action-drawer-overlay.visible .action-drawer,
+.scenario-drawer-overlay.active .scenario-drawer,
+.scenario-drawer-overlay.visible .scenario-drawer,
+.facility-panel-overlay.active .facility-panel,
+.facility-panel-overlay.visible .facility-panel {
+  transform: translateX(0) !important;
+}
+
+
+
+/* ═══════════════════════════════════════════════════════════
+   UNIFIED SLIDE-IN DRAWERS WITH BLURRED BACKDROP
+   ═══════════════════════════════════════════════════════════ */
+.drawer-overlay,
+.insight-drawer-overlay,
+.action-drawer-overlay,
+.scenario-drawer-overlay,
+.facility-panel-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 99999;
+  display: none;
+  justify-content: flex-end;
+  align-items: stretch;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.drawer-overlay.active,
+.drawer-overlay.visible,
+.insight-drawer-overlay.active,
+.insight-drawer-overlay.visible,
+.action-drawer-overlay.active,
+.action-drawer-overlay.visible,
+.scenario-drawer-overlay.active,
+.scenario-drawer-overlay.visible,
+.facility-panel-overlay.active,
+.facility-panel-overlay.visible {
+  display: flex !important;
+  opacity: 1 !important;
+}
+
+.drawer,
+.insight-drawer,
+.action-drawer,
+.scenario-drawer,
+.facility-panel {
+  width: 520px;
+  max-width: 90vw;
+  height: 100vh;
+  background: #ffffff;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.22);
+  display: flex;
+  flex-direction: column;
+  padding: 28px 30px;
+  overflow-y: auto;
+  position: relative;
+  box-sizing: border-box;
+  z-index: 100000;
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drawer-overlay.active .drawer,
+.drawer-overlay.visible .drawer,
+.insight-drawer-overlay.active .insight-drawer,
+.insight-drawer-overlay.visible .insight-drawer,
+.action-drawer-overlay.active .action-drawer,
+.action-drawer-overlay.visible .action-drawer,
+.scenario-drawer-overlay.active .scenario-drawer,
+.scenario-drawer-overlay.visible .scenario-drawer,
+.facility-panel-overlay.active .facility-panel,
+.facility-panel-overlay.visible .facility-panel {
+  transform: translateX(0) !important;
+}

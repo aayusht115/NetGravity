@@ -18,6 +18,8 @@ import { renderForecastChart,
 import { initScenarios } from './scenarios.js';
 import { initAgent } from './agent.js';
 import { initLandingPage } from './landing.js';
+import { initInsightsPage } from './insights.js';
+import { initAuth } from './auth.js';
 
 // ─── State ──────────────────────────────────────────────────
 const state = {
@@ -34,11 +36,14 @@ const state = {
 // Expose globally on window
 if (typeof window !== 'undefined') {
   window.navigateToTab = navigateToTab;
+  window.openActionDrawer = openActionDrawer;
+  window.closeActionDrawer = closeActionDrawer;
   window.renderHome = renderHome;
 }
 
 // ─── Boot ───────────────────────────────────────────────────
 function bootApp() {
+  try { initAuth(); } catch (e) { console.error('initAuth error:', e); }
   try { initLandingPage(); } catch (e) { console.error('initLandingPage error:', e); }
   try { initTabs(); } catch (e) { console.error('initTabs error:', e); }
   try { initHomeSelectors(); } catch (e) { console.error('initHomeSelectors error:', e); }
@@ -46,6 +51,7 @@ function bootApp() {
   try { renderTwinTables(); } catch (e) { console.error('renderTwinTables error:', e); }
   try { initScenarios(); } catch (e) { console.error('initScenarios error:', e); }
   try { initAgent(); } catch (e) { console.error('initAgent error:', e); }
+  try { initInsightsPage(); } catch (e) { console.error('initInsightsPage error:', e); }
 }
 
 if (document.readyState === 'loading') {
@@ -54,19 +60,126 @@ if (document.readyState === 'loading') {
   bootApp();
 }
 
+// ─── Header & Topbar Visibility Controller ──────────────────
+function updateTopBarLayout(tab) {
+  const isHomeOverview = (tab === 'home' || tab === 'overview');
+
+  // Upload Data button: ONLY on Home Overview page
+  const btnUpload = document.getElementById('btn-topbar-upload');
+  if (btnUpload) {
+    btnUpload.style.display = isHomeOverview ? 'flex' : 'none';
+  }
+
+  // Sub-topbar Page Title in parallel with selectors across ALL pages
+  const mainTitle = document.getElementById('sub-topbar-main-title');
+  const subTitle = document.getElementById('sub-topbar-sub-title');
+
+  if (mainTitle && subTitle) {
+    if (tab === 'home' || tab === 'overview') {
+      mainTitle.innerHTML = 'Hello, <strong id="logged-in-user-name">Amit Kumar</strong>';
+      subTitle.textContent = '· Network Decision Command Center';
+    } else if (tab === 'insights') {
+      mainTitle.innerHTML = 'Insights';
+      subTitle.textContent = '· AI-generated observations from your network';
+    } else if (tab === 'facility-dashboard') {
+      mainTitle.innerHTML = 'Facility KPIs & Analytics';
+      subTitle.textContent = '· Telemetry & cost breakdown';
+    } else if (tab === 'forecast') {
+      mainTitle.innerHTML = 'Demand Forecast';
+      subTitle.textContent = '· AI predictive projections';
+    } else if (tab === 'twin') {
+      mainTitle.innerHTML = 'Digital Twin';
+      subTitle.textContent = '· India network topology';
+    } else if (tab === 'scenarios') {
+      mainTitle.innerHTML = 'Scenario Planning';
+      subTitle.textContent = '· Multi-echelon network optimization';
+    } else if (tab === 'recommendations' || tab === 'recommend') {
+      mainTitle.innerHTML = 'Recommendations';
+      subTitle.textContent = '· Prescriptive AI actions';
+    }
+  }
+
+  // Facility & Period selectors: STAYS visible across all pages
+  const controls = document.getElementById('topbar-controls');
+  if (controls) {
+    controls.style.display = 'flex';
+  }
+}
+
 // ─── Tab Routing & Sub-Navigation ───────────────────────────
 export function navigateToTab(tab) {
-  if (tab === 'facility-dashboard') {
-    // Show sub-menu under Home in sidebar
-    const subKpi = document.getElementById('nav-sub-kpi');
-    if (subKpi) {
-      subKpi.style.display = 'flex';
-      subKpi.classList.add('active');
-    }
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  updateTopBarLayout(tab);
+
+  // 1. Insights Page (nested under Home)
+  if (tab === 'insights') {
+    const homeGroup = document.getElementById('nav-group-home');
+    if (homeGroup) homeGroup.classList.add('expanded');
+
+    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
     document.getElementById('nav-item-home')?.classList.add('active');
 
-    // Show panel
+    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
+    document.getElementById('nav-sub-insights')?.classList.add('active');
+
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById('tab-insights');
+    if (panel) panel.classList.add('active');
+
+    state.activeTab = 'insights';
+    try { initInsightsPage(); } catch (e) { console.error(e); }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  // 2. Recommendations Page (nested under Home)
+  if (tab === 'recommendations' || tab === 'recommend') {
+    const homeGroup = document.getElementById('nav-group-home');
+    if (homeGroup) homeGroup.classList.add('expanded');
+
+    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
+    document.getElementById('nav-item-home')?.classList.add('active');
+
+    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
+    document.getElementById('nav-sub-recommendations')?.classList.add('active');
+
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById('tab-recommendations') || document.getElementById('tab-recommend');
+    if (panel) panel.classList.add('active');
+
+    state.activeTab = 'recommendations';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  // 3. Home / Overview (nested under Home)
+  if (tab === 'home' || tab === 'overview') {
+    const homeGroup = document.getElementById('nav-group-home');
+    if (homeGroup) homeGroup.classList.add('expanded');
+
+    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
+    document.getElementById('nav-item-home')?.classList.add('active');
+
+    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
+    document.getElementById('nav-sub-overview')?.classList.add('active');
+
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-home')?.classList.add('active');
+
+    state.activeTab = 'home';
+    setTimeout(() => {
+      renderHome();
+      window.dispatchEvent(new Event('resize'));
+    }, 50);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  // 4. Facility KPI Dashboard
+  if (tab === 'facility-dashboard') {
+    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
+    document.getElementById('nav-item-kpis')?.classList.add('active');
+    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
+
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.getElementById('tab-facility-dashboard')?.classList.add('active');
     state.activeTab = 'facility-dashboard';
@@ -75,36 +188,17 @@ export function navigateToTab(tab) {
     return;
   }
 
-  // If navigating to Home or other top tabs
-  const subKpi = document.getElementById('nav-sub-kpi');
-  if (subKpi) {
-    if (tab === 'home') {
-      subKpi.classList.remove('active');
-      subKpi.style.display = 'none';
-    } else {
-      subKpi.style.display = 'none';
-      subKpi.classList.remove('active');
-    }
-  }
-
-  // Update nav highlights
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  // 5. Other Top Tabs (Digital Twin, Scenario Planning, Forecasting)
+  document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
   document.querySelector(`.nav-item[data-tab="${tab}"]`)?.classList.add('active');
+  document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
 
-  // Update panels
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById('tab-' + tab);
   if (panel) panel.classList.add('active');
 
   state.activeTab = tab;
 
-  // Lazy-init maps, 3D twin and charts
-  if (tab === 'home') {
-    setTimeout(() => {
-      renderHome();
-      window.dispatchEvent(new Event('resize'));
-    }, 50);
-  }
   if (tab === 'twin') {
     setTimeout(() => {
       try {
@@ -139,9 +233,6 @@ export function navigateToTab(tab) {
       invalidateMapSize('scenario-leaflet-map');
     }, 50);
   }
-  if (tab === 'recommend') {
-    renderRecommendation();
-  }
 }
 
 function initTabs() {
@@ -153,9 +244,54 @@ function initTabs() {
     });
   });
 
-  // Sub-nav item for KPI Dashboard
-  document.getElementById('nav-sub-kpi')?.addEventListener('click', () => {
-    navigateToTab('facility-dashboard');
+  // Expandable Home Menu Click
+  const navItemHome = document.getElementById('nav-item-home');
+  if (navItemHome) {
+    navItemHome.addEventListener('click', (e) => {
+      const homeGroup = document.getElementById('nav-group-home');
+      if (homeGroup) {
+        // Toggle expansion or navigate
+        if (state.activeTab !== 'home' && state.activeTab !== 'insights' && state.activeTab !== 'recommendations') {
+          navigateToTab('home');
+        } else {
+          homeGroup.classList.toggle('expanded');
+        }
+      }
+    });
+  }
+
+  // Nested sub-pills under Home
+  document.querySelectorAll('.nav-sub-pill[data-tab]').forEach(pill => {
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tab = pill.dataset.tab;
+      navigateToTab(tab);
+    });
+  });
+
+  // Home Page: Click on Insights Card or Items -> Navigate to Insights Page
+  document.getElementById('home-insights-card')?.addEventListener('click', () => {
+    navigateToTab('insights');
+  });
+  document.getElementById('home-insights-header')?.addEventListener('click', () => {
+    navigateToTab('insights');
+  });
+
+  // Topbar Global Action Handlers
+  document.getElementById('btn-topbar-upload')?.addEventListener('click', () => {
+    alert('Upload Network Data\n\nSAP S/4HANA, Manhattan WMS, and Oracle OTM data pipelines are connected.\nSelect CSV/Excel freight matrix or ERP dump to sync.');
+  });
+
+  document.getElementById('btn-topbar-notifications')?.addEventListener('click', () => {
+    alert('Notifications & System Alerts\n\n• Critical: Delhi NCR DC capacity at 94%\n• Opportunity: Kolkata DC spare volume absorption\n• Notice: Winter fog lead-time adjustments active');
+  });
+
+  document.getElementById('btn-topbar-help')?.addEventListener('click', () => {
+    alert('Netgravity Help & Documentation\n\nAI Decision Intelligence for Logistics Networks.\n• Overview: Network telemetry & KPIs\n• Insights: AI-generated observations & diagnosis\n• Recommendations: Prescriptive optimization actions\n• Digital Twin: 2D/3D network topology\n• Scenarios: What-if decision planning');
+  });
+
+  document.getElementById('btn-topbar-profile')?.addEventListener('click', () => {
+    alert('User Profile\n\nLogged in as: Amit Kumar\nRole: Lead Supply Chain Architect (Admin)\nOrganization: Kearney Decision Systems');
   });
 
   // 2D / 3D View Toggle (Digital Twin Tab)
@@ -382,17 +518,22 @@ export function renderFacilityDashboard() {
   const utilColor = getUtilColor(utilPct);
 
   // Update Top Bar & Header
-  document.getElementById('dash-facility-name').textContent = fac.name;
-  document.getElementById('dash-facility-type').textContent = isDC ? 'Distribution Centre' : 'Manufacturing Plant';
-  document.getElementById('dash-period-label').textContent = period ? period.label : 'August 2026';
+  const elFacName = document.getElementById('dash-facility-name');
+  if (elFacName) elFacName.textContent = fac.name;
+  const elFacType = document.getElementById('dash-facility-type');
+  if (elFacType) elFacType.textContent = isDC ? 'Distribution Centre' : 'Manufacturing Plant';
+  const elPeriodLabel = document.getElementById('dash-period-label');
+  if (elPeriodLabel) elPeriodLabel.textContent = period ? period.label : 'August 2026';
   
   const dashDot = document.getElementById('dash-facility-dot');
   if (dashDot) {
     dashDot.style.background = utilPct >= 90 ? 'var(--red)' : utilPct >= 75 ? 'var(--amber)' : 'var(--green)';
   }
 
-  document.getElementById('dash-title').textContent = `${fac.name} — Performance & Analytics`;
-  document.getElementById('dash-subtitle').textContent = `${fac.city}, ${fac.state} · ${fac.region} Region · Full operational telemetry and cost breakdown for ${period ? period.short : 'Aug 2026'}.`;
+  const elDashTitle = document.getElementById('dash-title');
+  if (elDashTitle) elDashTitle.textContent = `${fac.name} — Performance & Analytics`;
+  const elDashSubtitle = document.getElementById('dash-subtitle');
+  if (elDashSubtitle) elDashSubtitle.textContent = `${fac.city}, ${fac.state} · ${fac.region} Region · Full operational telemetry and cost breakdown for ${period ? period.short : 'Aug 2026'}.`;
 
   // 6 Executive Metric Cards
   const metricsGrid = document.getElementById('dash-metrics-grid');
@@ -627,9 +768,9 @@ function renderHomeInsights() {
 
   list.innerHTML = insights.map((ins, idx) => {
     const num = ins.num || (idx + 1);
-    const actionText = ins.action || 'click → overlay';
+    const actionText = ins.action || 'view details →';
     return `
-      <div class="home-insight-row" data-insight-id="${ins.id}">
+      <div class="home-insight-row" data-insight-id="${ins.id}" onclick="window.openInsightDrawer && window.openInsightDrawer('${ins.id}')" style="cursor:pointer;" title="Click to view insight details">
         <div class="insight-row-left">
           <span class="insight-num-badge">${num}</span>
           <span>${ins.title}</span>
@@ -640,31 +781,24 @@ function renderHomeInsights() {
     `;
   }).join('');
 
-  // Wire click handlers to open drawer
-  list.querySelectorAll('.home-insight-row').forEach(row => {
-    row.addEventListener('click', (e) => {
+  // Wire View More Insights Button
+  const btnViewMore = document.getElementById('btn-view-more-insights');
+  if (btnViewMore) {
+    btnViewMore.onclick = (e) => {
       e.stopPropagation();
-      const insightId = row.dataset.insightId;
-      const insight = insights.find(i => i.id === insightId);
-      if (!insight) return;
-
-      if (insightId === 'INS_RECOMMENDATION') {
-        navigateToTab('scenarios');
-      } else if (insight.detail) {
-        openInsightDrawer(insight);
-      }
-    });
-  });
+      navigateToTab('insights');
+    };
+  }
 }
 
-// ─── Home Action Items (Right Rail) ──────────────────────────
+// ─── Home Recommendations (Right Rail) ────────────────────────
 function renderHomeActions() {
-  const list = document.getElementById('home-actions-list');
+  const list = document.getElementById('home-actions-list') || document.getElementById('home-recommendations-list');
   if (!list) return;
 
   list.innerHTML = HOME_ACTION_ITEMS.map(act => `
-    <div class="home-action-row" data-action-id="${act.id}">
-      <div class="home-action-checkbox">☐</div>
+    <div class="home-action-row" data-action-id="${act.id}" onclick="window.openActionDrawer && window.openActionDrawer('${act.id}')" style="cursor:pointer;" title="Click to view recommendation details">
+      <div class="home-action-checkbox" style="color:#9218EA;font-weight:700">✦</div>
       <div class="home-action-text">
         ${act.title}
         <span class="home-action-tag" style="color:${act.tagColor}">(${act.tag})</span>
@@ -672,142 +806,118 @@ function renderHomeActions() {
     </div>
   `).join('');
 
-  // Wire click handlers to open Action Drawer
+  // Wire click handlers as well
   list.querySelectorAll('.home-action-row').forEach(row => {
     row.addEventListener('click', (e) => {
       e.stopPropagation();
       const actionId = row.dataset.actionId;
-      const action = HOME_ACTION_ITEMS.find(a => a.id === actionId);
-      if (action) {
-        openActionDrawer(action);
+      if (typeof window.openActionDrawer === 'function') {
+        window.openActionDrawer(actionId);
       }
     });
   });
+
+  // Wire View More Recommendations Button
+  const btnViewMoreRec = document.getElementById('btn-view-more-recommendations');
+  if (btnViewMoreRec) {
+    btnViewMoreRec.onclick = (e) => {
+      e.stopPropagation();
+      navigateToTab('recommendations');
+    };
+  }
 }
 
-// ─── Action Detail Drawer ───────────────────────────────────
-function openActionDrawer(action) {
+// ─── Recommendation Detail Drawer ───────────────────────────
+export function openActionDrawer(actionOrId) {
   const overlay = document.getElementById('action-drawer-overlay');
   const content = document.getElementById('action-drawer-content');
   if (!overlay || !content) return;
 
-  content.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <h2 style="font-size:20px;font-weight:800;margin:0;color:var(--text-1)">${action.title}</h2>
-      <span class="tag" style="background:var(--purple-50);color:${action.tagColor};font-weight:700">${action.tag}</span>
-    </div>
-    <span class="provenance-badge ai-assessment">AI RECOMMENDATION</span>
-
-    <div class="drawer-section-title">Why am I recommending this?</div>
-    <p class="drawer-text" style="font-size:13.5px;line-height:1.6;color:var(--text-2)">${action.why}</p>
-
-    <div class="drawer-section-title">Root Cause & Network Telemetry</div>
-    ${action.rootCause.map(r => `
-      <div class="evidence-row">
-        <span class="evidence-label">${r.label}</span>
-        <span>
-          <span class="evidence-value">${r.value}</span>
-          <span class="provenance-badge ${r.provenance.toLowerCase().replace(/ /g, '-')}">${r.provenance}</span>
-        </span>
-      </div>
-    `).join('')}
-
-    <div class="drawer-section-title">Expected Impact</div>
-    <div class="grid-3" style="gap:10px;margin-top:8px">
-      <div style="background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:var(--r-md);padding:10px;text-align:center">
-        <div class="text-xs text-muted" style="font-weight:600;text-transform:uppercase">Cost</div>
-        <div style="font-size:16px;font-weight:800;color:var(--green);margin-top:2px">${action.expectedImpact.cost}</div>
-      </div>
-      <div style="background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:var(--r-md);padding:10px;text-align:center">
-        <div class="text-xs text-muted" style="font-weight:600;text-transform:uppercase">SLA</div>
-        <div style="font-size:16px;font-weight:800;color:var(--green);margin-top:2px">${action.expectedImpact.sla}</div>
-      </div>
-      <div style="background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:var(--r-md);padding:10px;text-align:center">
-        <div class="text-xs text-muted" style="font-weight:600;text-transform:uppercase">Capacity Risk</div>
-        <div style="font-size:16px;font-weight:800;color:var(--green);margin-top:2px">${action.expectedImpact.risk}</div>
-      </div>
-    </div>
-
-    <div class="drawer-section-title">What I Tested</div>
-    <ul style="font-size:13px;color:var(--text-2);padding-left:20px;line-height:2">
-      ${action.whatITested.map(t => `<li>${t}</li>`).join('')}
-    </ul>
-
-    <div class="drawer-section-title">Next Step</div>
-    <button class="btn btn-primary mt-sm" id="action-drawer-scenario-btn" style="width:100%">
-      Review Scenario in Scenario Planning →
-    </button>
-  `;
-
-  overlay.classList.add('visible');
-
-  // Wire CTA button to navigate directly to Scenario Planning
-  document.getElementById('action-drawer-scenario-btn')?.addEventListener('click', () => {
-    closeActionDrawer();
-    navigateToTab('scenarios');
-  });
-}
-
-function closeActionDrawer() {
-  document.getElementById('action-drawer-overlay')?.classList.remove('visible');
-}
-
-// ─── Insight Drawer ─────────────────────────────────────────
-function openInsightDrawer(insight) {
-  const overlay = document.getElementById('insight-drawer-overlay');
-  const content = document.getElementById('insight-drawer-content');
-  if (!overlay || !content) return;
-
-  const d = insight.detail;
+  let action = null;
+  if (typeof actionOrId === 'object' && actionOrId !== null) {
+    action = actionOrId;
+  } else if (typeof actionOrId === 'string' && typeof HOME_ACTION_ITEMS !== 'undefined') {
+    action = HOME_ACTION_ITEMS.find(a => a.id === actionOrId);
+  }
+  if (!action && typeof HOME_ACTION_ITEMS !== 'undefined' && HOME_ACTION_ITEMS.length > 0) {
+    action = HOME_ACTION_ITEMS[0];
+  }
+  if (!action) return;
 
   content.innerHTML = `
-    <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">${insight.title}</h2>
-    <span class="insight-impact-tag" style="background:${insight.impactColor}">${insight.impact}</span>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+      <span class="provenance-badge ai-assessment" style="padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;background:#f5f3ff;color:#9218EA;">AI RECOMMENDATION</span>
+      <button class="facility-panel-close" onclick="window.closeActionDrawer && window.closeActionDrawer()" style="background:none;border:none;font-size:22px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1;">✕</button>
+    </div>
 
-    <div class="drawer-section-title">What I Found</div>
-    <p class="drawer-text">${d.whatIFound}</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h2 style="font-size:20px;font-weight:800;margin:0;color:#111827;">${action.title}</h2>
+      <span class="tag" style="background:#faf5ff;color:${action.tagColor};font-weight:700;padding:4px 8px;border-radius:6px;font-size:11px;">${action.tag}</span>
+    </div>
 
-    <div class="drawer-section-title">Why It Matters</div>
-    <p class="drawer-text">${d.whyItMatters}</p>
+    <div style="background:#fafafc;border:1px solid #f0f0f5;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#9218EA;margin-bottom:6px;letter-spacing:0.05em;">Why am I recommending this?</div>
+      <p style="font-size:13px;line-height:1.6;color:#374151;margin:0;">${action.why}</p>
+    </div>
 
-    <div class="drawer-section-title">Evidence</div>
-    ${d.evidence.map(e => `
-      <div class="evidence-row">
-        <span class="evidence-label">${e.label}</span>
-        <span>
-          <span class="evidence-value">${e.value}</span>
-          <span class="provenance-badge ${e.provenance.toLowerCase().replace(/ /g, '-')}">${e.provenance}</span>
-        </span>
+    <div style="margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:8px;letter-spacing:0.05em;">Root Cause & Network Telemetry</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${action.rootCause ? action.rootCause.map(r => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#ffffff;border:1px solid #eef0f3;border-radius:8px;">
+            <span style="font-size:12.5px;color:#6b7280;">${r.label}</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:13px;font-weight:700;color:#111827;">${r.value}</span>
+              <span class="provenance-badge ${r.provenance.toLowerCase().replace(/ /g, '-')}" style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f3f4f6;color:#6b7280;">${r.provenance}</span>
+            </div>
+          </div>
+        `).join('') : ''}
       </div>
-    `).join('')}
+    </div>
 
-    ${d.whatITested.length > 0 ? `
-      <div class="drawer-section-title">What I Tested</div>
-      <ul style="font-size:13px;color:var(--text-2);padding-left:20px;line-height:2">
-        ${d.whatITested.map(t => `<li>${t}</li>`).join('')}
-      </ul>
+    ${action.expectedImpact ? `
+      <div style="margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:8px;letter-spacing:0.05em;">Expected Impact</div>
+        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+          <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:12px 10px;text-align:center">
+            <div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase">Cost</div>
+            <div style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px">${action.expectedImpact.cost}</div>
+          </div>
+          <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:12px 10px;text-align:center">
+            <div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase">SLA</div>
+            <div style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px">${action.expectedImpact.sla}</div>
+          </div>
+          <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:12px 10px;text-align:center">
+            <div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase">Capacity Risk</div>
+            <div style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px">${action.expectedImpact.risk}</div>
+          </div>
+        </div>
+      </div>
     ` : ''}
 
-    <div class="drawer-section-title">Recommendation</div>
-    <p class="drawer-text" style="font-weight:600;color:var(--primary)">${d.recommendation}</p>
-
-    <div class="drawer-section-title">Next Action</div>
-    <button class="btn btn-primary mt-sm" id="drawer-next-action">${d.nextAction} →</button>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:auto;padding-top:16px;">
+      <button class="btn-primary" onclick="window.navigateToTab && window.navigateToTab('scenarios'); window.closeActionDrawer && window.closeActionDrawer();" style="width:100%;padding:12px;border-radius:8px;background:#9218EA;color:#fff;border:none;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(146,24,234,0.25);">
+        Simulate in Scenario Planner →
+      </button>
+      <button onclick="window.navigateToTab && window.navigateToTab('recommendations'); window.closeActionDrawer && window.closeActionDrawer();" style="width:100%;padding:9px;border-radius:8px;background:#f9fafb;color:#374151;border:1px solid #e5e7eb;font-weight:600;font-size:12.5px;cursor:pointer;">
+        View All Recommendations →
+      </button>
+    </div>
   `;
 
+  overlay.classList.add('active');
   overlay.classList.add('visible');
-
-  // Wire next action button
-  document.getElementById('drawer-next-action')?.addEventListener('click', () => {
-    closeInsightDrawer();
-    navigateToTab('scenarios');
-  });
+  overlay.style.display = 'flex';
 }
 
-function closeInsightDrawer() {
-  document.getElementById('insight-drawer-overlay')?.classList.remove('visible');
+export function closeActionDrawer() {
+  const overlay = document.getElementById('action-drawer-overlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    overlay.classList.remove('visible');
+    overlay.style.display = 'none';
+  }
 }
-
 // ─── Contextual Home Chatbot ────────────────────────────────
 function handleHomeChat() {
   const input = document.getElementById('home-chat-input');
@@ -915,7 +1025,7 @@ window.openFacilityPanel = function(facilityId) {
   const isBaddi = facilityId === 'DC_DELHI';
   const forecastSection = isBaddi ? `
     <div class="fp-stat" style="border-bottom:2px solid var(--red)">
-      <span class="fp-stat-label">Forecast Dec'26</span>
+      <span class="fp-stat-label">Forecast Dec 2026</span>
       <span class="fp-stat-value" style="color:var(--red)">10,800 units/day</span>
     </div>
     <div class="fp-stat">

@@ -21,6 +21,23 @@
 
   <!-- Design System -->
   
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
   <style>
 /* ═══════════════════════════════════════════════════════════
    NetGravity — Design System
@@ -553,21 +570,145 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .sidebar-status-line { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
 .nav-svg { width: 18px; height: 18px; flex-shrink: 0; }
 
-/* ─── Top Bar (Global Header) ─────────────────────────────── */
-.app-topbar {
+
+/* ═══════════════════════════════════════════════════════════
+   GLOBAL TOPBAR & SUB-TOPBAR (Approved Header Architecture)
+   ═══════════════════════════════════════════════════════════ */
+
+.app-global-topbar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-md);
-  padding: 10px 0 16px;
-  margin-bottom: var(--space-md);
+  justify-content: space-between;
+  padding: 14px 28px 12px;
+  background: var(--bg);
   border-bottom: 1px solid var(--border-light);
+  position: sticky;
+  top: 0;
+  z-index: 90;
+}
+
+.topbar-left-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-right-area {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* Upload Data Button (Home Overview Only) */
+.btn-topbar-upload {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 16px;
+  border-radius: 20px;
+  background: #9218EA;
+  color: #ffffff;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(146, 24, 234, 0.25);
+  transition: all 0.15s ease;
+}
+
+.btn-topbar-upload:hover {
+  background: #7c14c7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(146, 24, 234, 0.35);
+}
+
+/* Global Clickable Icon Buttons (Available Across All Pages) */
+.topbar-icon-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #4b5563;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.topbar-icon-btn:hover {
+  border-color: #9218EA;
+  color: #9218EA;
+  background: rgba(146, 24, 234, 0.04);
+}
+
+.notif-badge-dot {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 1.5px solid #ffffff;
+}
+
+.topbar-profile-btn {
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.topbar-profile-btn:hover {
+  transform: scale(1.05);
+}
+
+/* Sub-Topbar (Page Title / Greeting + Facility & Period Selectors in Parallel) */
+.app-sub-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 28px;
+  background: var(--bg-page);
+  border-bottom: 1px solid var(--border-light);
+  min-height: 50px;
+  gap: 16px;
+}
+
+.sub-topbar-title-wrap,
+.sub-topbar-greeting {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sub-topbar-main-title,
+.greeting-text {
+  font-size: 16.5px;
+  color: #111827;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.sub-topbar-main-title strong,
+.greeting-text strong {
+  color: #9218EA;
+  font-weight: 700;
+}
+
+.sub-topbar-sub-title,
+.greeting-sub {
+  font-size: 12.5px;
+  color: #6b7280;
+  font-weight: 400;
 }
 
 .topbar-controls {
   display: flex;
   align-items: center;
   gap: 16px;
+  margin-left: auto;
 }
 
 .topbar-control-group {
@@ -589,16 +730,17 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   color: var(--text-1);
   background: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: var(--r-full);
+  border-radius: 20px;
   padding: 6px 14px;
   box-shadow: var(--shadow-sm);
   transition: all var(--t-fast);
   cursor: pointer;
+  outline: none;
 }
 
 .topbar-facility-select:hover,
 .topbar-period-select:hover {
-  border-color: var(--primary-light);
+  border-color: #9218EA;
 }
 
 /* ─── Sidebar Sub-Item ────────────────────────────────────── */
@@ -2594,6 +2736,155 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 
 
+
+
+
+
+/* ═══════════════════════════════════════════════════════════
+   UNIFIED SLIDE-IN DRAWERS WITH BLURRED BACKDROP
+   ═══════════════════════════════════════════════════════════ */
+.drawer-overlay,
+.insight-drawer-overlay,
+.action-drawer-overlay,
+.scenario-drawer-overlay,
+.facility-panel-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 99999;
+  display: none;
+  justify-content: flex-end;
+  align-items: stretch;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.drawer-overlay.active,
+.drawer-overlay.visible,
+.insight-drawer-overlay.active,
+.insight-drawer-overlay.visible,
+.action-drawer-overlay.active,
+.action-drawer-overlay.visible,
+.scenario-drawer-overlay.active,
+.scenario-drawer-overlay.visible,
+.facility-panel-overlay.active,
+.facility-panel-overlay.visible {
+  display: flex !important;
+  opacity: 1 !important;
+}
+
+.drawer,
+.insight-drawer,
+.action-drawer,
+.scenario-drawer,
+.facility-panel {
+  width: 520px;
+  max-width: 90vw;
+  height: 100vh;
+  background: #ffffff;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.22);
+  display: flex;
+  flex-direction: column;
+  padding: 28px 30px;
+  overflow-y: auto;
+  position: relative;
+  box-sizing: border-box;
+  z-index: 100000;
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drawer-overlay.active .drawer,
+.drawer-overlay.visible .drawer,
+.insight-drawer-overlay.active .insight-drawer,
+.insight-drawer-overlay.visible .insight-drawer,
+.action-drawer-overlay.active .action-drawer,
+.action-drawer-overlay.visible .action-drawer,
+.scenario-drawer-overlay.active .scenario-drawer,
+.scenario-drawer-overlay.visible .scenario-drawer,
+.facility-panel-overlay.active .facility-panel,
+.facility-panel-overlay.visible .facility-panel {
+  transform: translateX(0) !important;
+}
+
+
+
+/* ═══════════════════════════════════════════════════════════
+   UNIFIED SLIDE-IN DRAWERS WITH BLURRED BACKDROP
+   ═══════════════════════════════════════════════════════════ */
+.drawer-overlay,
+.insight-drawer-overlay,
+.action-drawer-overlay,
+.scenario-drawer-overlay,
+.facility-panel-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 99999;
+  display: none;
+  justify-content: flex-end;
+  align-items: stretch;
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+
+.drawer-overlay.active,
+.drawer-overlay.visible,
+.insight-drawer-overlay.active,
+.insight-drawer-overlay.visible,
+.action-drawer-overlay.active,
+.action-drawer-overlay.visible,
+.scenario-drawer-overlay.active,
+.scenario-drawer-overlay.visible,
+.facility-panel-overlay.active,
+.facility-panel-overlay.visible {
+  display: flex !important;
+  opacity: 1 !important;
+}
+
+.drawer,
+.insight-drawer,
+.action-drawer,
+.scenario-drawer,
+.facility-panel {
+  width: 520px;
+  max-width: 90vw;
+  height: 100vh;
+  background: #ffffff;
+  box-shadow: -12px 0 40px rgba(0, 0, 0, 0.22);
+  display: flex;
+  flex-direction: column;
+  padding: 28px 30px;
+  overflow-y: auto;
+  position: relative;
+  box-sizing: border-box;
+  z-index: 100000;
+  transform: translateX(100%);
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.drawer-overlay.active .drawer,
+.drawer-overlay.visible .drawer,
+.insight-drawer-overlay.active .insight-drawer,
+.insight-drawer-overlay.visible .insight-drawer,
+.action-drawer-overlay.active .action-drawer,
+.action-drawer-overlay.visible .action-drawer,
+.scenario-drawer-overlay.active .scenario-drawer,
+.scenario-drawer-overlay.visible .scenario-drawer,
+.facility-panel-overlay.active .facility-panel,
+.facility-panel-overlay.visible .facility-panel {
+  transform: translateX(0) !important;
+}
+
+
 /* ═══════════════════════════════════════════════════════════
    Netgravity — Landing Page Design System
    Kearney Purple (#9218EA) · Minimal · Modern Consulting SaaS
@@ -3205,10 +3496,1457 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   }
 }
 
+
+/* ═══════════════════════════════════════════════════════════
+   Netgravity — Insights Page Styles
+   Reference: d:\Case Comp\Kearney\Dump\Insights.png
+   Theme: Consulting-grade SaaS · Kearney Purple (#9218EA) · Minimal & Crisp
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── Top Brand Lockup in Sidebar ────────────────────────── */
+.sidebar-brand-netgravity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 20px 20px;
+  cursor: pointer;
+}
+
+.sidebar-logo-mark {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-brand-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.sidebar-brand-sub {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b7280;
+  letter-spacing: -0.01em;
+  margin-top: 1px;
+}
+
+/* ─── Sidebar Nested Submenus ─────────────────────────────── */
+.nav-group {
+  margin-bottom: 2px;
+}
+
+.nav-item-expandable {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 8px;
+  color: #374151;
+  font-weight: 500;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.nav-item-expandable:hover {
+  background: rgba(146, 24, 234, 0.04);
+  color: #111827;
+}
+
+.nav-item-expandable.active {
+  color: #9218EA;
+  font-weight: 600;
+}
+
+.nav-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nav-chevron {
+  width: 14px;
+  height: 14px;
+  color: #9ca3af;
+  transition: transform 0.2s ease;
+}
+
+.nav-group.expanded .nav-chevron {
+  transform: rotate(180deg);
+}
+
+.nav-sub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 0 6px 20px;
+}
+
+.nav-sub-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #4b5563;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.nav-sub-pill:hover {
+  color: #9218EA;
+  background: rgba(146, 24, 234, 0.04);
+}
+
+.nav-sub-pill.active {
+  background: rgba(146, 24, 234, 0.08);
+  color: #9218EA;
+  font-weight: 600;
+}
+
+.nav-sub-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #9ca3af;
+  flex-shrink: 0;
+}
+
+.nav-sub-pill.active .nav-sub-dot {
+  background: #9218EA;
+  box-shadow: 0 0 0 2px rgba(146, 24, 234, 0.2);
+}
+
+/* ─── Sidebar Bottom User Profile ─────────────────────────── */
+.sidebar-bottom-profile {
+  margin-top: auto;
+  padding: 16px 14px;
+  border-top: 1px solid #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-avatar-ak {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #9218EA;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.02em;
+}
+
+.user-name-role {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.2;
+}
+
+.user-role {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+/* ─── Insights Page Layout ──────────────────────────────────/* Page Layout */
+.insights-page-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 0 24px;
+  max-width: 1480px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.insights-main-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.insights-main-subtitle {
+  font-size: 14px;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.btn-ask-netgravity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 18px;
+  border-radius: 22px;
+  border: 1.5px solid #9218EA;
+  background: #ffffff;
+  color: #9218EA;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(146, 24, 234, 0.08);
+}
+
+.btn-ask-netgravity:hover {
+  background: #9218EA;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(146, 24, 234, 0.25);
+  transform: translateY(-1px);
+}
+
+/* Filter Bar */
+.insights-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.filter-pills-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-pill {
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-pill:hover {
+  border-color: #9218EA;
+  color: #9218EA;
+  background: rgba(146, 24, 234, 0.02);
+}
+
+.filter-pill.active {
+  background: #ffffff;
+  border-color: #9218EA;
+  color: #9218EA;
+  font-weight: 600;
+  box-shadow: 0 0 0 1px #9218EA;
+}
+
+.filter-severity-select {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+}
+
+/* ─── Summary Cards Grid ──────────────────────────────────── */
+.insights-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.summary-card {
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+
+.summary-card:hover {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  border-color: #e2e5ea;
+}
+
+.summary-card-top-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.summary-icon-box {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.summary-icon-purple {
+  background: rgba(146, 24, 234, 0.08);
+  color: #9218EA;
+}
+
+.summary-icon-green {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.summary-icon-red {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.summary-icon-amber {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.summary-number {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.summary-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 1.25;
+}
+
+.summary-sub {
+  font-size: 11.5px;
+  color: #6b7280;
+  line-height: 1.2;
+}
+
+/* ─── Main Content Split (Feed + Detail Drawer) ───────────── */
+.insights-content-split {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  position: relative;
+}
+
+.insights-feed-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* Insight Card */
+.insight-feed-card {
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 18px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  position: relative;
+}
+
+.insight-feed-card:hover {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.insight-feed-card.selected {
+  box-shadow: 0 0 0 2px rgba(146, 24, 234, 0.25), 0 6px 16px rgba(146, 24, 234, 0.08);
+}
+
+.insight-card-red {
+  border-left-color: #ef4444;
+}
+
+.insight-card-green {
+  border-left-color: #10b981;
+}
+
+.insight-card-amber {
+  border-left-color: #f59e0b;
+}
+
+.insight-card-purple {
+  border-left-color: #9218EA;
+}
+
+.insight-card-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.icon-wrap-red {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.icon-wrap-green {
+  background: #d1fae5;
+  color: #10b981;
+}
+
+.icon-wrap-amber {
+  background: #fef3c7;
+  color: #f59e0b;
+}
+
+.icon-wrap-purple {
+  background: rgba(146, 24, 234, 0.1);
+  color: #9218EA;
+}
+
+.insight-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.insight-card-top-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.insight-category-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.category-red {
+  color: #ef4444;
+}
+
+.category-green {
+  color: #10b981;
+}
+
+.category-amber {
+  color: #f59e0b;
+}
+
+.category-purple {
+  color: #9218EA;
+}
+
+.insight-status-tag {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.tag-critical {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.tag-opportunity {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.tag-attention {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.tag-informational {
+  background: rgba(146, 24, 234, 0.1);
+  color: #9218EA;
+}
+
+.insight-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.insight-card-desc {
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.5;
+}
+
+.insight-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 8px;
+}
+
+.insight-card-metrics {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.card-metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metric-item-label {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.metric-item-value {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.val-red {
+  color: #dc2626;
+}
+
+.val-green {
+  color: #059669;
+}
+
+.val-amber {
+  color: #d97706;
+}
+
+.val-purple {
+  color: #9218EA;
+}
+
+.val-dark {
+  color: #111827;
+}
+
+.insight-card-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #9218EA;
+  transition: gap 0.15s ease;
+}
+
+.insight-feed-card:hover .insight-card-action {
+  gap: 9px;
+}
+
+/* ─── Right-Side Detail Panel ─────────────────────────────── */
+.insight-detail-panel {
+  width: 380px;
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 14px;
+  padding: 24px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  position: sticky;
+  top: 20px;
+}
+
+.detail-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.detail-category-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.detail-close-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: #f3f4f6;
+  color: #4b5563;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.detail-close-btn:hover {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.detail-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.35;
+}
+
+.detail-desc {
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.5;
+}
+
+.detail-section-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-section-heading {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #111827;
+}
+
+.detail-why-text {
+  font-size: 12.5px;
+  color: #4b5563;
+  line-height: 1.55;
+}
+
+/* Detail Metrics 3-Card Grid */
+.detail-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.detail-metric-card {
+  background: #fafafc;
+  border: 1px solid #f0f0f5;
+  border-radius: 10px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.detail-metric-label {
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.2;
+}
+
+.detail-metric-val {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.detail-metric-sub {
+  font-size: 10.5px;
+  color: #9ca3af;
+}
+
+/* Evidence Bullet List */
+.detail-evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.evidence-bullet-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #374151;
+  line-height: 1.45;
+}
+
+.evidence-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #9218EA;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+/* Source Icons */
+.detail-source-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.source-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.source-icon {
+  color: #9218EA;
+  font-size: 13px;
+}
+
+/* Confidence */
+.detail-confidence-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.confidence-val-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confidence-high-tag {
+  font-size: 13px;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.confidence-support-text {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   NETGRAVITY AUTHENTICATION STYLES (Sign In, Sign Up, Reset)
+   ═══════════════════════════════════════════════════════════ */
+
+/* ─── Global Auth Page Shell ──────────────────────────────── */
+.auth-page-shell {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #faf9fd;
+  z-index: 9999;
+  display: none;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #111827;
+}
+
+.auth-page-shell.active {
+  display: flex !important;
+}
+
+/* ─── Auth Top Bar ────────────────────────────────────────── */
+.auth-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 48px;
+  background: transparent;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.auth-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.auth-brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-brand-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.auth-brand-sub {
+  font-size: 11px;
+  color: #9218EA;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.auth-topbar-link {
+  font-size: 13.5px;
+  color: #4b5563;
+  text-decoration: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.15s ease;
+}
+
+.auth-topbar-link strong,
+.auth-topbar-link .auth-link-bold {
+  color: #9218EA;
+  font-weight: 600;
+}
+
+.auth-topbar-link:hover {
+  color: #9218EA;
+}
+
+/* ─── Auth Main Container ─────────────────────────────────── */
+.auth-main-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 32px 48px;
+  position: relative;
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* ─── Background Network Decorative Graphics ──────────────── */
+.auth-bg-network-left {
+  position: absolute;
+  top: 10%;
+  left: 4%;
+  width: 320px;
+  height: 320px;
+  pointer-events: none;
+  opacity: 0.65;
+  z-index: 0;
+}
+
+.auth-bg-network-right {
+  position: absolute;
+  bottom: 5%;
+  right: 5%;
+  width: 360px;
+  height: 360px;
+  pointer-events: none;
+  opacity: 0.65;
+  z-index: 0;
+}
+
+/* ─── Page 1: Sign In 2-Col Split Layout ───────────────────── */
+.auth-signin-split-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 80px;
+  width: 100%;
+  max-width: 1040px;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-signin-left {
+  flex: 1;
+  max-width: 440px;
+}
+
+.auth-hero-title {
+  font-size: 34px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.03em;
+  margin: 0 0 8px;
+  line-height: 1.2;
+}
+
+.auth-hero-subtitle {
+  font-size: 15px;
+  color: #6b7280;
+  margin: 0 0 36px;
+  line-height: 1.5;
+}
+
+.auth-features-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.auth-feature-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.auth-feature-icon-box {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(146, 24, 234, 0.08);
+  color: #9218EA;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.auth-feature-text h4 {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 3px;
+}
+
+.auth-feature-text p {
+  font-size: 13px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* ─── Common Auth Card ────────────────────────────────────── */
+.auth-card {
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 16px;
+  padding: 36px 36px 32px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-card-signin {
+  max-width: 430px;
+}
+
+.auth-card-header {
+  margin-bottom: 24px;
+}
+
+.auth-card-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px;
+}
+
+.auth-card-subtitle {
+  font-size: 13.5px;
+  color: #6b7280;
+  margin: 0;
+}
+
+/* ─── Centered Layout for Sign Up and Reset Password ──────── */
+.auth-centered-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 520px;
+  position: relative;
+  z-index: 1;
+}
+
+.auth-centered-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.auth-centered-header .auth-hero-title {
+  font-size: 32px;
+  margin-bottom: 8px;
+}
+
+.auth-centered-header .auth-hero-subtitle {
+  margin-bottom: 0;
+}
+
+/* ─── Forms & Inputs ──────────────────────────────────────── */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.auth-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.auth-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.auth-input-icon {
+  position: absolute;
+  left: 14px;
+  color: #9ca3af;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 11px 14px 11px 40px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  font-size: 13.5px;
+  color: #111827;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+  font-family: inherit;
+}
+
+.auth-input::placeholder {
+  color: #9ca3af;
+}
+
+.auth-input:focus {
+  border-color: #9218EA;
+  box-shadow: 0 0 0 3px rgba(146, 24, 234, 0.12);
+}
+
+.auth-password-toggle {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-password-toggle:hover {
+  color: #6b7280;
+}
+
+.auth-field-row-flex {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: -6px;
+}
+
+.auth-forgot-link {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #9218EA;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.auth-forgot-link:hover {
+  text-decoration: underline;
+}
+
+/* ─── Auth Buttons ────────────────────────────────────────── */
+.btn-auth-primary {
+  width: 100%;
+  padding: 12px;
+  border-radius: 8px;
+  background: #9218EA;
+  color: #ffffff;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px rgba(146, 24, 234, 0.25);
+  font-family: inherit;
+}
+
+.btn-auth-primary:hover {
+  background: #7c14c7;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(146, 24, 234, 0.35);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 4px 0;
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.auth-divider span {
+  padding: 0 12px;
+}
+
+.btn-auth-google {
+  width: 100%;
+  padding: 11px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.btn-auth-google:hover {
+  border-color: #d1d5db;
+  background: #f9fafb;
+}
+
+.auth-card-footer {
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 20px;
+}
+
+.auth-card-footer a {
+  color: #9218EA;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.auth-card-footer a:hover {
+  text-decoration: underline;
+}
+
+/* ─── Password Requirements Card ──────────────────────────── */
+.auth-requirements-box {
+  background: #f8f5fd;
+  border: 1px solid #ede5f9;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-requirements-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #374151;
+}
+
+.auth-requirements-header svg {
+  color: #9218EA;
+}
+
+.auth-requirements-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+
+.auth-req-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.auth-req-item.valid {
+  color: #10b981;
+}
+
+.auth-req-item svg {
+  color: #9218EA;
+  flex-shrink: 0;
+}
+
+/* ─── Checkbox Row ────────────────────────────────────────── */
+.auth-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12.5px;
+  color: #4b5563;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.auth-checkbox-row input[type="checkbox"] {
+  accent-color: #9218EA;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.auth-checkbox-row a {
+  color: #9218EA;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.auth-checkbox-row a:hover {
+  text-decoration: underline;
+}
+
+/* ─── Reset Password Info Box ─────────────────────────────── */
+.auth-inbox-info-box {
+  background: #f8f5fd;
+  border: 1px solid #ede5f9;
+  border-radius: 10px;
+  padding: 16px 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 4px;
+}
+
+.auth-inbox-icon {
+  color: #9218EA;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.auth-inbox-text h5 {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 4px;
+}
+
+.auth-inbox-text p {
+  font-size: 12.5px;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.45;
+}
+
+/* ─── Auth Global Footer ──────────────────────────────────── */
+.auth-footer {
+  padding: 16px 32px 24px;
+  text-align: center;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* ─── Responsiveness ──────────────────────────────────────── */
+@media (max-width: 900px) {
+  .auth-signin-split-wrap {
+    flex-direction: column;
+    gap: 36px;
+  }
+  .auth-signin-left {
+    text-align: center;
+    max-width: 100%;
+  }
+  .auth-features-list {
+    align-items: center;
+  }
+  .auth-feature-item {
+    text-align: left;
+    max-width: 380px;
+  }
+}
+
+@media (max-width: 600px) {
+  .auth-topbar {
+    padding: 16px 20px;
+  }
+  .auth-main-content {
+    padding: 16px 16px 32px;
+  }
+  .auth-card {
+    padding: 24px 20px;
+  }
+  .auth-requirements-list {
+    grid-template-columns: 1fr;
+  }
+}
+
   </style>
 
+  <script>
+    // Synchronous Immediate Global Router & Drawer Controls
+    window.navigateToAuth = function(view) {
+      var landing = document.getElementById('landing-page');
+      if (landing) { landing.style.display = 'none'; landing.classList.add('hidden'); }
+      
+      var sIn = document.getElementById('auth-page-signin');
+      var sUp = document.getElementById('auth-page-signup');
+      var rSt = document.getElementById('auth-page-reset');
+      
+      if (sIn) { sIn.classList.remove('active'); sIn.style.display = 'none'; }
+      if (sUp) { sUp.classList.remove('active'); sUp.style.display = 'none'; }
+      if (rSt) { rSt.classList.remove('active'); rSt.style.display = 'none'; }
+      
+      if (view === 'signin' && sIn) { sIn.classList.add('active'); sIn.style.display = 'flex'; }
+      if (view === 'signup' && sUp) { sUp.classList.add('active'); sUp.style.display = 'flex'; }
+      if (view === 'reset' && rSt) { rSt.classList.add('active'); rSt.style.display = 'flex'; }
+      window.scrollTo(0, 0);
+    };
+
+    window.completeAuth = function() {
+      var landing = document.getElementById('landing-page');
+      if (landing) { landing.style.display = 'none'; landing.classList.add('hidden'); }
+      
+      var shells = document.querySelectorAll('.auth-page-shell');
+      for (var i = 0; i < shells.length; i++) {
+        shells[i].classList.remove('active');
+        shells[i].style.display = 'none';
+      }
+      
+      var appLayout = document.querySelector('.app-layout');
+      if (appLayout) appLayout.style.display = 'flex';
+      var appShell = document.querySelector('.app-shell');
+      if (appShell) appShell.style.display = 'flex';
+
+      if (window.navigateToTab) {
+        window.navigateToTab('home');
+      }
+      if (window.renderHome) {
+        window.renderHome();
+      }
+      setTimeout(function() {
+        if (window.renderHome) window.renderHome();
+        window.dispatchEvent(new Event('resize'));
+      }, 50);
+    };
+
+    window.returnToLanding = function() {
+      var shells = document.querySelectorAll('.auth-page-shell');
+      for (var i = 0; i < shells.length; i++) {
+        shells[i].classList.remove('active');
+        shells[i].style.display = 'none';
+      }
+      var landing = document.getElementById('landing-page');
+      if (landing) { landing.classList.remove('hidden'); landing.style.display = 'flex'; }
+      window.scrollTo(0, 0);
+    };
+  </script>
+
 </head>
-<body>
+<body style="margin:0;padding:0;">
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   <!-- ═══════════════════════════════════════ NETGRAVITY LANDING PAGE -->
   <div id="landing-page">
@@ -3244,10 +4982,10 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
         </p>
         <div class="landing-accent-bar"></div>
         <div class="landing-cta-group">
-          <button class="btn-landing-primary" id="landing-btn-get-started" onclick="window.enterApp ? window.enterApp('home') : (document.getElementById('landing-page').style.display='none')">
+          <button class="btn-landing-primary" id="landing-btn-get-started" onclick="window.navigateToAuth('signup')">
             Get Started <span class="btn-arrow">→</span>
           </button>
-          <button class="btn-landing-secondary" id="landing-btn-sign-in" onclick="window.enterApp ? window.enterApp('home') : (document.getElementById('landing-page').style.display='none')">
+          <button class="btn-landing-secondary" id="landing-btn-sign-in" onclick="window.navigateToAuth('signin')">
             Sign In
           </button>
         </div>
@@ -4047,26 +5785,75 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
       <!-- ═══════════════════════════════════════ SIDEBAR -->
       <nav class="sidebar" id="sidebar">
-        <div class="sidebar-brand">
-          <div class="logo-icon">N</div>
-          <div>
-            <div class="logo-text">NETGRAVITY</div>
-            <div class="logo-sub">AI Decision Intelligence<br>for Logistics Networks</div>
+        <!-- Approved Netgravity Logo Lockup (Identical to Landing Page) -->
+        <div class="sidebar-brand-netgravity" id="sidebar-brand-lockup" onclick="window.returnToLanding ? window.returnToLanding() : (document.getElementById('landing-page').style.display='flex')" title="Return to Netgravity Landing Page">
+          <div class="sidebar-logo-mark">
+            <svg viewBox="0 0 38 38" width="34" height="34" fill="none">
+              <!-- Top bar -->
+              <line x1="8" y1="9" x2="30" y2="9" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+              <!-- Bottom bar -->
+              <line x1="8" y1="29" x2="30" y2="29" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+              <!-- Diagonal link -->
+              <line x1="10" y1="10" x2="28" y2="28" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
+              <!-- Nodes -->
+              <circle cx="8" cy="9" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+              <circle cx="30" cy="9" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+              <circle cx="8" cy="29" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+              <circle cx="30" cy="29" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+            </svg>
+          </div>
+          <div class="sidebar-brand-text">
+            <span class="sidebar-brand-name">Netgravity</span>
+            <span class="sidebar-brand-sub">by Kearney</span>
           </div>
         </div>
 
         <div class="sidebar-nav">
-          <div class="nav-item active" data-tab="home" id="nav-item-home">
+          <!-- Expandable Home Group with Submenus -->
+          <div class="nav-group nav-group-home expanded" id="nav-group-home">
+            <div class="nav-item-expandable active" data-tab="home" id="nav-item-home">
+              <div class="nav-item-left">
+                <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+                  <path d="M3 10L10 3l7 7M5 8.5V16a1 1 0 001 1h3v-4h2v4h3a1 1 0 001-1V8.5" />
+                </svg>
+                <span>Home</span>
+              </div>
+              <svg class="nav-chevron" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/>
+              </svg>
+            </div>
+            <div class="nav-sub-list" id="nav-sub-list-home">
+              <div class="nav-sub-pill active" data-tab="home" data-subtab="overview" id="nav-sub-overview">
+                <span class="nav-sub-dot"></span>
+                <span>Overview</span>
+              </div>
+              <div class="nav-sub-pill" data-tab="insights" data-subtab="insights" id="nav-sub-insights">
+                <span class="nav-sub-dot"></span>
+                <span>Insights</span>
+              </div>
+              <div class="nav-sub-pill" data-tab="recommendations" data-subtab="recommendations" id="nav-sub-recommendations">
+                <span class="nav-sub-dot"></span>
+                <span>Recommendations</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="nav-item" data-tab="facility-dashboard" id="nav-item-kpis">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M3 10L10 3l7 7M5 8.5V16a1 1 0 001 1h3v-4h2v4h3a1 1 0 001-1V8.5" />
+              <path d="M3 3v14h14M7 13v-4M11 13V7M15 13v-7" />
             </svg>
-            <span>Home</span>
+            <span>KPIs</span>
           </div>
-          <!-- Sub-menu for KPI Dashboard (expands when active) -->
-          <div class="nav-sub-item" id="nav-sub-kpi" data-tab="facility-dashboard" style="display:none">
-            <span class="sub-nav-indicator">└─</span> KPI Dashboard
+
+          <div class="nav-item" data-tab="forecast" id="nav-item-forecast">
+            <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+              <polyline points="3,15 7,9 11,12 17,4" />
+              <polyline points="14,4 17,4 17,7" />
+            </svg>
+            <span>Forecast</span>
           </div>
-          <div class="nav-item" data-tab="twin">
+
+          <div class="nav-item" data-tab="twin" id="nav-item-twin">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
               <circle cx="7" cy="7" r="2" />
               <circle cx="14" cy="7" r="2" />
@@ -4076,22 +5863,16 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
             </svg>
             <span>Digital Twin</span>
           </div>
-          <div class="nav-item" data-tab="scenarios">
+
+          <div class="nav-item" data-tab="scenarios" id="nav-item-scenarios">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 13l2 2 4-4" />
             </svg>
             <span>Scenario Planning</span>
           </div>
-          <div class="nav-item" data-tab="forecast">
-            <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
-              <polyline points="3,15 7,9 11,12 17,4" />
-              <polyline points="14,4 17,4 17,7" />
-            </svg>
-            <span>Forecasting</span>
-          </div>
         </div>
 
-        <div class="sidebar-meta">
+        <div class="sidebar-meta" style="margin-top:auto">
           <div class="meta-block">
             <div class="meta-label">Network</div>
             <div class="meta-value">India Network</div>
@@ -4100,24 +5881,78 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
             <div class="meta-label">Model Version</div>
             <div class="meta-value">v7.0</div>
           </div>
-          <div class="meta-block">
-            <div class="meta-label">Last Updated</div>
-            <div class="meta-value">18 Aug 2026, 09:30 AM</div>
-          </div>
         </div>
 
-        <div class="sidebar-status">
-          <div class="sidebar-status-title">System Status</div>
-          <div class="sidebar-status-line"><span class="status-dot"></span> All Systems Operational</div>
+        
+
+        <!-- Settings Button on Bottom Left Corner -->
+        <div class="nav-item" id="nav-item-settings" style="margin: 6px 8px 12px; cursor:pointer;" onclick="alert('Netgravity Settings
+
+• API & MILP Optimization Engine
+• Data Ingestion Pipelines (SAP S/4HANA, Manhattan WMS, Oracle OTM)
+• Access Control & Team Permissions')">
+          <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="10" cy="10" r="3"/>
+            <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.93 4.93l1.41 1.41M13.66 13.66l1.41 1.41M4.93 15.07l1.41-1.41M13.66 6.34l1.41-1.41"/>
+          </svg>
+          <span>Settings</span>
         </div>
       </nav>
 
       <!-- ═══════════════════════════════════ MAIN CONTENT -->
       <main class="main-content">
 
-        <!-- Global Top Bar (Facility & Period Selectors in Parallel) -->
-        <header class="app-topbar">
-          <div class="topbar-controls">
+        <!-- Top Row: Upload Data (Home Overview Only) + Notification, Help, Profile (Across All Pages) -->
+        <header class="app-global-topbar">
+          <div class="topbar-left-area">
+            <div class="project-select-btn" style="border-radius:20px;padding:5px 14px;border:1px solid #e5e7eb;background:#fff;display:flex;align-items:center;gap:6px;font-size:12.5px;color:#374151;font-weight:500;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              </svg>
+              <span>Current Project: <strong>India Logistics Network</strong></span>
+            </div>
+          </div>
+
+          <div class="topbar-right-area">
+            <!-- Upload Data Button: ONLY available on Home Overview page -->
+            <button class="btn-topbar-upload" id="btn-topbar-upload" title="Upload Network Data">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+              </svg>
+              <span>Upload Data</span>
+            </button>
+
+            <!-- Global Clickable Icons: Notification, Help, Profile (Available across ALL pages) -->
+            <button class="topbar-icon-btn" id="btn-topbar-notifications" title="System Notifications & Alerts">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span class="notif-badge-dot"></span>
+            </button>
+
+            <button class="topbar-icon-btn" id="btn-topbar-help" title="Help & Documentation">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </button>
+
+            <div class="topbar-profile-btn" id="btn-topbar-profile" title="User Profile: Amit Kumar">
+              <div class="user-avatar-ak">AK</div>
+            </div>
+          </div>
+        </header>
+
+                <!-- Second Row: Customised Page Title / Greeting + Facility & Period Selectors in Parallel -->
+        <div class="app-sub-topbar" id="app-sub-topbar">
+          <div class="sub-topbar-title-wrap" id="sub-topbar-title-wrap">
+            <span class="sub-topbar-main-title" id="sub-topbar-main-title">Hello, <strong id="logged-in-user-name">Amit Kumar</strong></span>
+            <span class="sub-topbar-sub-title" id="sub-topbar-sub-title">· Network Decision Command Center</span>
+          </div>
+
+          <div class="topbar-controls" id="topbar-controls">
             <div class="topbar-control-group">
               <span class="control-label">Facility</span>
               <select class="control-select topbar-facility-select" id="sel-facility">
@@ -4136,9 +5971,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
               </select>
             </div>
           </div>
-        </header>
+        </div>
 
-        <!-- ─────────────────── TAB: HOME (Decision Cockpit 2/3 + 1/3 Command Centre) -->
         <section class="tab-panel active" id="tab-home">
           <div class="home-2col-layout">
             
@@ -4164,7 +5998,45 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
                   <!-- 4 KPI Items Grid (2x2) -->
                   <div class="home-kpi-2x2-grid" id="home-kpi-grid">
-                    <!-- Populated by JS -->
+                    <!-- Card 1: Capacity Utilisation -->
+                    <div class="home-kpi-item">
+                      <div class="home-kpi-item-header">
+                        <div class="home-kpi-name">Capacity Utilisation</div>
+                        <div class="home-kpi-icon-badge" style="background:#f5f0fa;color:var(--primary)">📊</div>
+                      </div>
+                      <div class="home-kpi-val">94.0%</div>
+                      <div class="home-kpi-sub">of 10,000 units/day</div>
+                    </div>
+
+                    <!-- Card 2: On-time Service (SLA) -->
+                    <div class="home-kpi-item">
+                      <div class="home-kpi-item-header">
+                        <div class="home-kpi-name">On-time Service (SLA)</div>
+                        <div class="home-kpi-icon-badge" style="background:#f0fdf4;color:var(--green)">✅</div>
+                      </div>
+                      <div class="home-kpi-val">96.7%</div>
+                      <div class="home-kpi-sub">Target: ≥95%</div>
+                    </div>
+
+                    <!-- Card 3: Total Cost -->
+                    <div class="home-kpi-item">
+                      <div class="home-kpi-item-header">
+                        <div class="home-kpi-name">Total Cost</div>
+                        <div class="home-kpi-icon-badge" style="background:#f5f0fa;color:var(--primary);font-weight:700">₹</div>
+                      </div>
+                      <div class="home-kpi-val">₹11.8L</div>
+                      <div class="home-kpi-sub">Total cost for period</div>
+                    </div>
+
+                    <!-- Card 4: Inventory Days -->
+                    <div class="home-kpi-item">
+                      <div class="home-kpi-item-header">
+                        <div class="home-kpi-name">Inventory Days</div>
+                        <div class="home-kpi-icon-badge" style="background:#fffbeb;color:var(--amber)">📦</div>
+                      </div>
+                      <div class="home-kpi-val">11.2 days</div>
+                      <div class="home-kpi-sub">of supply</div>
+                    </div>
                   </div>
 
                   <div class="home-card-footer">
@@ -4218,25 +6090,92 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
             <!-- 1/3 RIGHT COLUMN -->
             <div class="home-right-col">
               
-              <!-- BLOCK 1: INSIGHTS -->
+                                                        <!-- BLOCK 1: INSIGHTS -->
               <div class="home-card insights-card-section">
                 <div class="home-card-header">
                   <h2 class="home-right-title">INSIGHTS</h2>
                 </div>
 
                 <div class="home-numbered-insights" id="home-insights-list">
-                  <!-- Populated by JS: 5 numbered items -->
+                  <div class="home-insight-row" data-insight-id="INS_CAP_RISK" onclick="window.openInsightDrawer && window.openInsightDrawer('INS_CAP_RISK')" style="cursor:pointer;" title="Click to view insight details">
+                    <div class="insight-row-left">
+                      <span class="insight-num-badge">1</span>
+                      <span>Capacity risk at Delhi NCR DC</span>
+                      <span class="insight-info-icon">ⓘ</span>
+                    </div>
+                    <span class="insight-overlay-hint">view details →</span>
+                  </div>
+                  <div class="home-insight-row" data-insight-id="INS_COST_SAVING" onclick="window.openInsightDrawer && window.openInsightDrawer('INS_COST_SAVING')" style="cursor:pointer;" title="Click to view insight details">
+                    <div class="insight-row-left">
+                      <span class="insight-num-badge">2</span>
+                      <span>Cost optimization opportunity</span>
+                      <span class="insight-info-icon">ⓘ</span>
+                    </div>
+                    <span class="insight-overlay-hint">view details →</span>
+                  </div>
+                  <div class="home-insight-row" data-insight-id="INS_SLA_IMPACT" onclick="window.openInsightDrawer && window.openInsightDrawer('INS_SLA_IMPACT')" style="cursor:pointer;" title="Click to view insight details">
+                    <div class="insight-row-left">
+                      <span class="insight-num-badge">3</span>
+                      <span>Service level buffer in West region</span>
+                      <span class="insight-info-icon">ⓘ</span>
+                    </div>
+                    <span class="insight-overlay-hint">view details →</span>
+                  </div>
+                  <div class="home-insight-row" data-insight-id="INS_SPARE_CAPACITY" onclick="window.openInsightDrawer && window.openInsightDrawer('INS_SPARE_CAPACITY')" style="cursor:pointer;" title="Click to view insight details">
+                    <div class="insight-row-left">
+                      <span class="insight-num-badge">4</span>
+                      <span>Underutilised capacity at Mumbai DC</span>
+                      <span class="insight-info-icon">ⓘ</span>
+                    </div>
+                    <span class="insight-overlay-hint">view details →</span>
+                  </div>
+                  <div class="home-insight-row" data-insight-id="INS_RECOMMENDATION" onclick="window.openInsightDrawer && window.openInsightDrawer('INS_RECOMMENDATION')" style="cursor:pointer;" title="Click to view insight details">
+                    <div class="insight-row-left">
+                      <span class="insight-num-badge">5</span>
+                      <span>Recommendation ready</span>
+                      <span class="insight-info-icon">ⓘ</span>
+                    </div>
+                    <span class="insight-overlay-hint">view details →</span>
+                  </div>
+                </div>
+
+                <div class="home-card-footer">
+                  <button class="link-btn" id="btn-view-more-insights">View more insights →</button>
                 </div>
               </div>
 
-              <!-- BLOCK 2: ACTION ITEMS -->
+              <!-- BLOCK 2: RECOMMENDATIONS -->
               <div class="home-card actions-card-section">
                 <div class="home-card-header">
-                  <h2 class="home-right-title">ACTION ITEMS</h2>
+                  <h2 class="home-right-title">RECOMMENDATIONS</h2>
                 </div>
 
                 <div class="home-actions-list" id="home-actions-list">
-                  <!-- Populated by JS: 3 action items -->
+                  <div class="home-action-row" data-action-id="ACT_REBALANCE_BADDI" onclick="window.openActionDrawer && window.openActionDrawer('ACT_REBALANCE_BADDI')" style="cursor:pointer;" title="Click to view recommendation details">
+                    <div class="home-action-checkbox" style="color:#9218EA;font-weight:700">✦</div>
+                    <div class="home-action-text">
+                      Rebalance Baddi volume
+                      <span class="home-action-tag" style="color:#6B2FA0">(High Value)</span>
+                    </div>
+                  </div>
+                  <div class="home-action-row" data-action-id="ACT_INVESTIGATE_DELHI" onclick="window.openActionDrawer && window.openActionDrawer('ACT_INVESTIGATE_DELHI')" style="cursor:pointer;" title="Click to view recommendation details">
+                    <div class="home-action-checkbox" style="color:#9218EA;font-weight:700">✦</div>
+                    <div class="home-action-text">
+                      Investigate Delhi capacity risk
+                      <span class="home-action-tag" style="color:#dc2626">(High Impact)</span>
+                    </div>
+                  </div>
+                  <div class="home-action-row" data-action-id="ACT_EXPLORE_UNDERUTIL" onclick="window.openActionDrawer && window.openActionDrawer('ACT_EXPLORE_UNDERUTIL')" style="cursor:pointer;" title="Click to view recommendation details">
+                    <div class="home-action-checkbox" style="color:#9218EA;font-weight:700">✦</div>
+                    <div class="home-action-text">
+                      Explore underutilised capacity
+                      <span class="home-action-tag" style="color:#16a34a">(Opportunity)</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="home-card-footer">
+                  <button class="link-btn" id="btn-view-more-recommendations">View more recommendations →</button>
                 </div>
               </div>
 
@@ -4260,24 +6199,70 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
           </div>
         </section>
 
-        <!-- ─────────────────── TAB: FACILITY DASHBOARD / ANALYTICS ─────────────────── -->
-        <section class="tab-panel" id="tab-facility-dashboard">
-          <!-- Dashboard Top Bar / Breadcrumb -->
-          <div class="dash-topbar">
-            <button class="btn btn-secondary btn-sm" id="btn-back-to-home">
-              <span>← Back to Decision Cockpit</span>
-            </button>
-            <div class="dash-meta-badge">
-              <span class="facility-dot" id="dash-facility-dot"></span>
-              <span id="dash-facility-name" style="font-weight:700">Delhi NCR DC</span>
-              <span class="tag tag-primary" id="dash-facility-type">Distribution Centre</span>
+        <!-- ─────────────────── TAB: INSIGHTS (AI-Generated Observations & Diagnosis) -->
+        <section class="tab-panel" id="tab-insights">
+          <div class="insights-page-wrapper" style="margin-top: 4px;">
+            
+            <!-- Filter Bar (Positioned cleanly at top, with title in parallel in sub-topbar above) -->
+            <div class="insights-filter-bar" style="margin-top: 2px; margin-bottom: 2px;">
+              <div class="filter-pills-group">
+                <button class="filter-pill active" data-filter="All">All</button>
+                <button class="filter-pill" data-filter="Capacity">Capacity</button>
+                <button class="filter-pill" data-filter="Cost">Cost</button>
+                <button class="filter-pill" data-filter="Service">Service</button>
+                <button class="filter-pill" data-filter="Demand">Demand</button>
+                <button class="filter-pill" data-filter="Network">Network</button>
+                <button class="filter-pill" data-filter="Resilience">Resilience</button>
+              </div>
+              <select class="filter-severity-select" id="filter-severity-select">
+                <option value="All">Severity: All</option>
+                <option value="Critical">Critical</option>
+                <option value="Opportunity">Opportunity</option>
+                <option value="Attention">Attention</option>
+                <option value="Informational">Informational</option>
+              </select>
             </div>
-            <div class="dash-actions">
-              <span class="text-sm text-muted" id="dash-period-label">1 Aug – 31 Aug 2026</span>
+
+            <!-- 4 Compact Summary Cards Grid -->
+            <div class="insights-summary-grid" id="insights-summary-grid">
+              <!-- Populated by JS -->
+            </div>
+
+            <!-- Main Content Split (Feed on Left + Detail Drawer on Right) -->
+            <div class="insights-content-split">
+              <div class="insights-feed-column" id="insights-feed-list">
+                <!-- Populated by JS: 5 Insight Cards -->
+              </div>
+
+              <div class="insight-detail-panel" id="insight-detail-panel">
+                <!-- Populated by JS: Detail info for selected insight -->
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- ─────────────────── TAB: RECOMMENDATIONS -->
+        <section class="tab-panel" id="tab-recommendations">
+          <div class="insights-page-wrapper" style="margin-top: 4px;">
+            <div class="home-card" style="padding: 36px 32px; text-align: center; border-radius: 14px; margin-top: 8px; background:#fff; border: 1px solid #eef0f3;">
+              <div style="font-size: 32px; margin-bottom: 12px; color:#9218EA">✦</div>
+              <h2 style="font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 8px;">Recommendation: Rebalance Baddi → Delhi/Kolkata</h2>
+              <p style="color: #6b7280; max-width: 600px; margin: 0 auto 24px; font-size: 14px; line-height: 1.6;">
+                Shift 1,800 units/day from Baddi → Delhi corridor to Kolkata DC to relieve northern capacity pressure and capture ₹14.8L monthly freight savings.
+              </p>
+              <button class="btn-primary" onclick="window.navigateToTab && window.navigateToTab('scenarios')" style="padding: 10px 24px; font-size: 13.5px; border-radius: 20px; background:#9218EA; color:#fff; border:none; font-weight:600; cursor:pointer;">
+                Explore Scenario Planning →
+              </button>
             </div>
           </div>
+        </section>
 
-          <div class="dash-header mb-lg">
+
+
+        <!-- ─────────────────── TAB: FACILITY DASHBOARD / ANALYTICS ─────────────────── -->
+        <section class="tab-panel" id="tab-facility-dashboard">
+          <div class="dash-header mb-lg" style="margin-top: 4px;">
             <div>
               <h1 class="home-greeting" id="dash-title">Facility Performance & Analytics Dashboard</h1>
               <p class="home-subtitle" id="dash-subtitle">Complete operational telemetry, capacity utilisation, cost
@@ -4373,27 +6358,20 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
         </section>
 
 
-        <!-- ─────────────────── TAB: DIGITAL TWIN -->
+                <!-- ─────────────────── TAB: DIGITAL TWIN -->
         <section class="tab-panel" id="tab-twin">
-          <div class="flex items-center justify-between mb-lg">
-            <div>
-              <div class="section-header" style="margin-bottom:4px">Digital Twin — India Logistics Network</div>
-              <div class="section-intro" style="margin-bottom:0">
-                Click any facility to inspect capacity, utilisation, and forecast. Toggle between network states.
-              </div>
+          <!-- Controls Bar (2D/3D & Network State Toggles aligned like other pages) -->
+          <div class="twin-toolbar" style="display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-bottom:14px;margin-top:2px;">
+            <!-- 2D / 3D View Toggle -->
+            <div class="toggle-group" id="twin-view-toggle">
+              <button class="toggle-btn" data-view="2d">2D Map</button>
+              <button class="toggle-btn active" data-view="3d">3D Twin</button>
             </div>
-            <div class="flex items-center gap-sm">
-              <!-- 2D / 3D View Toggle -->
-              <div class="toggle-group" id="twin-view-toggle">
-                <button class="toggle-btn" data-view="2d">2D Map</button>
-                <button class="toggle-btn active" data-view="3d">3D Twin</button>
-              </div>
-              <!-- Network State Toggle -->
-              <div class="toggle-group" id="map-toggle-twin">
-                <button class="toggle-btn active" data-state="actual">Actual</button>
-                <button class="toggle-btn" data-state="optimised">Optimised Base</button>
-                <button class="toggle-btn" data-state="recommended">Recommended</button>
-              </div>
+            <!-- Network State Toggle -->
+            <div class="toggle-group" id="map-toggle-twin">
+              <button class="toggle-btn active" data-state="actual">Actual</button>
+              <button class="toggle-btn" data-state="optimised">Optimised Base</button>
+              <button class="toggle-btn" data-state="recommended">Recommended</button>
             </div>
           </div>
 
@@ -4852,154 +6830,511 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     </div>
   </div>
 
-  <!-- Facility Detail Panel (slide-in) -->
-  <div class="facility-panel" id="facility-panel">
-    <button class="facility-panel-close" id="fp-close">✕</button>
-    <div id="fp-content"></div>
+          <!-- Facility Detail Panel Overlay (Hidden by default, slides in from right when active) -->
+  <div class="facility-panel-overlay" id="facility-panel-overlay" style="display:none;" onclick="if(event.target===this) document.getElementById('facility-panel-overlay').classList.remove('active')">
+    <div class="facility-panel" id="facility-panel">
+      <button class="facility-panel-close" id="fp-close" onclick="document.getElementById('facility-panel-overlay').classList.remove('active')">✕</button>
+      <div id="fp-content"></div>
+    </div>
   </div>
 
-  <!-- Insight Detail Drawer -->
-  <div class="insight-drawer-overlay" id="insight-drawer-overlay">
+  <!-- Insight Detail Drawer Overlay (Right slide-in with backdrop blur) -->
+  <div class="insight-drawer-overlay" id="insight-drawer-overlay" onclick="if(event.target===this) window.closeInsightDrawer && window.closeInsightDrawer()">
     <div class="insight-drawer" id="insight-drawer">
-      <button class="facility-panel-close" id="insight-drawer-close">✕</button>
+      <button class="facility-panel-close" id="insight-drawer-close" onclick="window.closeInsightDrawer && window.closeInsightDrawer()">✕</button>
       <div id="insight-drawer-content"></div>
     </div>
   </div>
 
-  <!-- Action Detail Drawer -->
-  <div class="insight-drawer-overlay" id="action-drawer-overlay">
-    <div class="insight-drawer" id="action-drawer">
-      <button class="facility-panel-close" id="action-drawer-close">✕</button>
+  <!-- Recommendation / Action Drawer Overlay (Right slide-in with backdrop blur) -->
+  <div class="action-drawer-overlay" id="action-drawer-overlay" onclick="if(event.target===this) window.closeActionDrawer && window.closeActionDrawer()">
+    <div class="action-drawer" id="action-drawer">
+      <button class="facility-panel-close" id="action-drawer-close" onclick="window.closeActionDrawer && window.closeActionDrawer()">✕</button>
       <div id="action-drawer-content"></div>
     </div>
   </div>
 
-  <!-- Scenario Detail Drawer (Right-side slide-over) -->
-  <div class="scenario-drawer-overlay" id="scenario-drawer-overlay">
-    <div class="scenario-drawer" id="scenario-drawer">
-      <button class="facility-panel-close" id="scenario-drawer-close">✕</button>
-      <div id="scenario-drawer-content">
-        <!-- Populated by JS -->
-      </div>
-    </div>
-  </div>
+  <!-- ═══════════════════════════════════════════════════════════
+       AUTHENTICATION PAGE 2: CREATE NEW ACCOUNT
+       ═══════════════════════════════════════════════════════════ -->
+  
 
-  <!-- Metric Customization Modal -->
-  <div class="modal-overlay" id="modal-metric-customizer">
-    <div class="modal-box" style="max-width:520px">
-      <div class="flex items-center justify-between mb-md">
-        <div>
-          <div class="card-title">Customize Comparison Metrics</div>
-          <div class="text-xs text-muted">Select which rows appear in the side-by-side scenario comparison table.</div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       AUTHENTICATION PAGE 3: RESET PASSWORD
+       ═══════════════════════════════════════════════════════════ -->
+  
+
+  
+
+  <!-- ═══════════════════════════════════════════════════════════
+       AUTHENTICATION PAGE 1: SIGN IN / WELCOME BACK
+       ═══════════════════════════════════════════════════════════ -->
+  
+
+
+  <!-- ═══════════════════════════════════════════════════════════
+       AUTHENTICATION PAGE 2: CREATE NEW ACCOUNT
+       ═══════════════════════════════════════════════════════════ -->
+  
+
+
+  <!-- ═══════════════════════════════════════════════════════════
+       AUTHENTICATION PAGE 3: RESET PASSWORD
+       ═══════════════════════════════════════════════════════════ -->
+  
+
+  
+
+  <!-- ═══════════════════════════════════════════════════════════
+       AUTHENTICATION PAGE 1: SIGN IN / WELCOME BACK
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="auth-page-shell" id="auth-page-signin" style="display:none;">
+    <!-- Top Navigation Bar -->
+    <header class="auth-topbar">
+      <div class="auth-brand-lockup" onclick="window.returnToLanding && window.returnToLanding()" title="Return to Landing Page">
+        <div class="sidebar-logo-mark">
+          <svg viewBox="0 0 38 38" width="34" height="34" fill="none">
+            <line x1="8" y1="9" x2="30" y2="9" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+            <line x1="8" y1="29" x2="30" y2="29" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+            <line x1="10" y1="10" x2="28" y2="28" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="8" cy="9" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+            <circle cx="30" cy="9" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+            <circle cx="8" cy="29" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+            <circle cx="30" cy="29" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+          </svg>
         </div>
-        <button class="btn btn-ghost btn-sm" id="modal-close-metrics">✕</button>
-      </div>
-
-      <div class="metric-category-group mb-md">
-        <div class="metric-category-title">Financial & Cost Metrics</div>
-        <div class="metric-checkbox-grid">
-          <label class="metric-check-item"><input type="checkbox" data-metric="totalCost" checked> Total Cost
-            (₹)</label>
-          <label class="metric-check-item"><input type="checkbox" data-metric="costChange" checked> Cost Change
-            (%)</label>
-          <label class="metric-check-item"><input type="checkbox" data-metric="transportCost"> Transport Freight
-            Cost</label>
-          <label class="metric-check-item"><input type="checkbox" data-metric="fixedCost"> Fixed Facility Cost</label>
-          <label class="metric-check-item"><input type="checkbox" data-metric="inventoryCost"> Inventory Holding
-            Cost</label>
-        </div>
-      </div>
-
-      <div class="metric-category-group mb-md">
-        <div class="metric-category-title">Service & Operations</div>
-        <div class="metric-checkbox-grid">
-          <label class="metric-check-item"><input type="checkbox" data-metric="sla" checked> SLA (On-time Service
-            %)</label>
-          <label class="metric-check-item"><input type="checkbox" data-metric="capacityRisk" checked> Capacity Risk
-            (Dec)</label>
-          <label class="metric-check-item"><input type="checkbox" data-metric="delhiUtil" checked> Utilisation – Delhi
-            NCR</label>
-          <label class="metric-check-item"><input type="checkbox" data-metric="avgUtil"> Network Average
-            Utilisation</label>
-        </div>
-      </div>
-
-      <div class="metric-category-group mb-md">
-        <div class="metric-category-title">Sustainability & Implementation</div>
-        <div class="metric-checkbox-grid">
-          <label class="metric-check-item"><input type="checkbox" data-metric="carbonKg"> Scope 3 Carbon (kg
-            CO₂)</label>
-          <label class="metric-check-item"><input type="checkbox" data-metric="implementationTime" checked>
-            Implementation Lead Time</label>
-          <label class="metric-check-item"><input type="checkbox" data-metric="confidence" checked> Robustness /
-            Confidence</label>
+        <div class="auth-brand-text">
+          <span class="auth-brand-name">Netgravity</span>
+          <span class="auth-brand-sub">by Kearney</span>
         </div>
       </div>
-
-      <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border)">
-        <button class="btn btn-ghost btn-sm" id="btn-reset-metrics">Reset to Default</button>
-        <div class="flex gap-sm">
-          <button class="btn btn-secondary btn-sm" id="btn-cancel-metrics">Cancel</button>
-          <button class="btn btn-primary btn-sm" id="btn-save-metrics">Apply Metrics</button>
-        </div>
+      <div class="auth-topbar-link" id="btn-help-auth" onclick="alert('Need help signing in?\n\nContact Netgravity IT Support at support@netgravity.kearney.com or refer to your corporate single sign-on directory.')">
+        <span>Need help?</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
       </div>
-    </div>
-  </div>
+    </header>
 
-  <!-- Metric Drilldown Modal (Clickable Table Metric Deep-Dive) -->
-  <div class="modal-overlay" id="modal-metric-drilldown">
-    <div class="modal-box" style="max-width:600px">
-      <div class="flex items-center justify-between mb-md">
-        <div>
-          <div class="card-title" id="drilldown-title">Metric Drill-Down</div>
-          <div class="text-xs text-muted" id="drilldown-subtitle">Mathematical decomposition and network impact evidence.</div>
-        </div>
-        <button class="btn btn-ghost btn-sm" id="modal-close-drilldown">✕</button>
-      </div>
+    <!-- Main Content Body -->
+    <main class="auth-main-content">
+      <!-- Subtle Background Network Graphics -->
+      <svg class="auth-bg-network-left" viewBox="0 0 300 300" fill="none">
+        <line x1="40" y1="60" x2="160" y2="100" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18" stroke-dasharray="3 3"/>
+        <line x1="160" y1="100" x2="240" y2="40" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18"/>
+        <line x1="160" y1="100" x2="120" y2="220" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18"/>
+        <line x1="40" y1="60" x2="60" y2="180" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18"/>
+        <circle cx="40" cy="60" r="4.5" fill="#9218EA" fill-opacity="0.25"/>
+        <circle cx="160" cy="100" r="6" fill="#9218EA" fill-opacity="0.35"/>
+        <circle cx="240" cy="40" r="4" fill="#9218EA" fill-opacity="0.2"/>
+        <circle cx="120" cy="220" r="5" fill="#9218EA" fill-opacity="0.3"/>
+        <circle cx="60" cy="180" r="4" fill="#9218EA" fill-opacity="0.2"/>
+      </svg>
 
-      <div id="drilldown-body-content">
-        <!-- Populated dynamically by JS -->
-      </div>
+      <div class="auth-signin-split-wrap">
+        <!-- Left Column: Welcome Back & Value Props -->
+        <div class="auth-signin-left">
+          <h1 class="auth-hero-title">Welcome back</h1>
+          <p class="auth-hero-subtitle">Sign in to continue to Netgravity</p>
 
-      <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border-light)">
-        <div class="text-xs text-muted" id="drilldown-provenance-tag">PROVENANCE: MODEL FACT</div>
-        <button class="btn btn-secondary btn-sm" id="btn-close-drilldown-bottom">Close</button>
-      </div>
-    </div>
-  </div>
+          <div class="auth-features-list">
+            <div class="auth-feature-item">
+              <div class="auth-feature-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  <polyline points="9 12 11 14 15 10"/>
+                </svg>
+              </div>
+              <div class="auth-feature-text">
+                <h4>Secure</h4>
+                <p>Enterprise-grade security to keep your data protected</p>
+              </div>
+            </div>
 
-  <!-- All Scenarios Drawer (Right Slide-over Window) -->
-  <div class="drawer-overlay" id="all-scenarios-drawer-overlay">
-    <div class="drawer" id="all-scenarios-drawer" style="max-width:540px;width:100%">
-      <div class="drawer-header">
-        <div>
-          <div class="flex items-center gap-xs">
-            <span class="tag tag-primary" style="font-size:10px;padding:2px 8px">All Scenarios</span>
-            <span class="text-xs text-muted" id="all-scenarios-count-badge">4 Active</span>
+            <div class="auth-feature-item">
+              <div class="auth-feature-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="20" x2="18" y2="10"/>
+                  <line x1="12" y1="20" x2="12" y2="4"/>
+                  <line x1="6" y1="20" x2="6" y2="14"/>
+                </svg>
+              </div>
+              <div class="auth-feature-text">
+                <h4>Intelligent</h4>
+                <p>AI-powered insights to optimize your network decisions</p>
+              </div>
+            </div>
+
+            <div class="auth-feature-item">
+              <div class="auth-feature-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="18" cy="5" r="3"/>
+                  <circle cx="6" cy="12" r="3"/>
+                  <circle cx="18" cy="19" r="3"/>
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                </svg>
+              </div>
+              <div class="auth-feature-text">
+                <h4>Integrated</h4>
+                <p>End-to-end platform for strategic network design and planning</p>
+              </div>
+            </div>
           </div>
-          <div class="drawer-title" style="margin-top:4px;font-size:18px">All Network Scenarios</div>
-          <div class="text-xs text-muted">Inspect, compare, or delete active scenarios.</div>
         </div>
-        <button class="drawer-close" id="all-scenarios-drawer-close">✕</button>
-      </div>
 
-      <div class="drawer-body" id="all-scenarios-drawer-list" style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
-        <!-- Populated dynamically by JS -->
-      </div>
+        <!-- Right Column: Sign In Card -->
+        <div class="auth-card auth-card-signin">
+          <div class="auth-card-header">
+            <h2 class="auth-card-title">Sign in</h2>
+            <p class="auth-card-subtitle">Enter your credentials to access your account</p>
+          </div>
 
-      <div class="drawer-footer" style="padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg-subtle)">
-        <button class="btn btn-danger btn-sm" id="btn-clear-user-scenarios" style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;font-weight:600">
-          🗑️ Clear User Scenarios
-        </button>
-        <div class="flex gap-xs">
-          <button class="btn btn-secondary btn-sm" id="btn-close-all-scenarios">Close</button>
+          <form class="auth-form" id="form-auth-signin" onsubmit="event.preventDefault(); window.completeAuth();">
+            <div class="auth-field-group">
+              <label class="auth-label" for="signin-email">Email address</label>
+              <div class="auth-input-wrap">
+                <span class="auth-input-icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                    <polyline points="22,6 12,13 2,6"/>
+                  </svg>
+                </span>
+                <input type="email" id="signin-email" class="auth-input" placeholder="Enter your email" value="amit.kumar@kearney.com" required>
+              </div>
+            </div>
+
+            <div class="auth-field-group">
+              <label class="auth-label" for="signin-password">Password</label>
+              <div class="auth-input-wrap">
+                <span class="auth-input-icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                </span>
+                <input type="password" id="signin-password" class="auth-input" placeholder="Enter your password" value="••••••••••••" required>
+                <button type="button" class="auth-password-toggle" title="Toggle password visibility">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="auth-field-row-flex">
+              <a class="auth-forgot-link" onclick="window.navigateToAuth('reset')">Forgot password?</a>
+            </div>
+
+            <button type="submit" class="btn-auth-primary">Sign in</button>
+
+            <div class="auth-divider">
+              <span>or</span>
+            </div>
+
+            <button type="button" class="btn-auth-google" id="btn-signin-google" onclick="window.completeAuth()">
+              <svg width="18" height="18" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+              </svg>
+              <span>Continue with Google</span>
+            </button>
+          </form>
+
+          <div class="auth-card-footer">
+            Don't have an account? <a onclick="window.navigateToAuth('signup')">Create new account</a>
+          </div>
         </div>
       </div>
-    </div>
+    </main>
+
+    <footer class="auth-footer">
+      © 2026 Netgravity by Kearney. All rights reserved.
+    </footer>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════
+       AUTHENTICATION PAGE 2: CREATE NEW ACCOUNT
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="auth-page-shell" id="auth-page-signup" style="display:none;">
+    <header class="auth-topbar">
+      <div class="auth-brand-lockup" onclick="window.returnToLanding && window.returnToLanding()" title="Return to Landing Page">
+        <div class="sidebar-logo-mark">
+          <svg viewBox="0 0 38 38" width="34" height="34" fill="none">
+            <line x1="8" y1="9" x2="30" y2="9" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+            <line x1="8" y1="29" x2="30" y2="29" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+            <line x1="10" y1="10" x2="28" y2="28" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="8" cy="9" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+            <circle cx="30" cy="9" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+            <circle cx="8" cy="29" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+            <circle cx="30" cy="29" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+          </svg>
+        </div>
+        <div class="auth-brand-text">
+          <span class="auth-brand-name">Netgravity</span>
+          <span class="auth-brand-sub">by Kearney</span>
+        </div>
+      </div>
+      <div class="auth-topbar-link">
+        <span>Already have an account?</span>
+        <span class="auth-link-bold" onclick="window.navigateToAuth('signin')">Sign in</span>
+      </div>
+    </header>
+
+    <main class="auth-main-content">
+      <!-- Subtle Background Network Graphics -->
+      <svg class="auth-bg-network-right" viewBox="0 0 300 300" fill="none">
+        <line x1="100" y1="240" x2="180" y2="180" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18"/>
+        <line x1="180" y1="180" x2="260" y2="220" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18"/>
+        <line x1="180" y1="180" x2="200" y2="80" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18" stroke-dasharray="3 3"/>
+        <line x1="260" y1="220" x2="280" y2="120" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18"/>
+        <circle cx="100" cy="240" r="4" fill="#9218EA" fill-opacity="0.2"/>
+        <circle cx="180" cy="180" r="6" fill="#9218EA" fill-opacity="0.35"/>
+        <circle cx="260" cy="220" r="5" fill="#9218EA" fill-opacity="0.25"/>
+        <circle cx="200" cy="80" r="4.5" fill="#9218EA" fill-opacity="0.2"/>
+        <circle cx="280" cy="120" r="4" fill="#9218EA" fill-opacity="0.2"/>
+      </svg>
+
+      <div class="auth-centered-wrap">
+        <div class="auth-centered-header">
+          <h1 class="auth-hero-title">Create new account</h1>
+          <p class="auth-hero-subtitle">Fill in your details to get started with Netgravity</p>
+        </div>
+
+        <div class="auth-card">
+          <form class="auth-form" id="form-auth-signup" onsubmit="event.preventDefault(); window.completeAuth();">
+            <div class="auth-field-group">
+              <label class="auth-label" for="signup-name">Full name</label>
+              <div class="auth-input-wrap">
+                <span class="auth-input-icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  </svg>
+                </span>
+                <input type="text" id="signup-name" class="auth-input" placeholder="Enter your full name" value="Amit Kumar" required>
+              </div>
+            </div>
+
+            <div class="auth-field-group">
+              <label class="auth-label" for="signup-email">Work email</label>
+              <div class="auth-input-wrap">
+                <span class="auth-input-icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                    <polyline points="22,6 12,13 2,6"/>
+                  </svg>
+                </span>
+                <input type="email" id="signup-email" class="auth-input" placeholder="Enter your work email" value="amit.kumar@kearney.com" required>
+              </div>
+            </div>
+
+            <div class="auth-field-group">
+              <label class="auth-label" for="signup-password">Password</label>
+              <div class="auth-input-wrap">
+                <span class="auth-input-icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                </span>
+                <input type="password" id="signup-password" class="auth-input" placeholder="Create a password" value="Netgravity@2026" required>
+                <button type="button" class="auth-password-toggle" title="Toggle password visibility">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="auth-field-group">
+              <label class="auth-label" for="signup-confirm-password">Confirm password</label>
+              <div class="auth-input-wrap">
+                <span class="auth-input-icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                </span>
+                <input type="password" id="signup-confirm-password" class="auth-input" placeholder="Confirm your password" value="Netgravity@2026" required>
+                <button type="button" class="auth-password-toggle" title="Toggle password visibility">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Password Requirements Box -->
+            <div class="auth-requirements-box">
+              <div class="auth-requirements-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  <polyline points="9 12 11 14 15 10"/>
+                </svg>
+                <span>Password requirements</span>
+              </div>
+              <div class="auth-requirements-list">
+                <div class="auth-req-item valid">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                  </svg>
+                  <span>At least 8 characters</span>
+                </div>
+                <div class="auth-req-item valid">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                  </svg>
+                  <span>One uppercase letter</span>
+                </div>
+                <div class="auth-req-item valid">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                  </svg>
+                  <span>One number</span>
+                </div>
+                <div class="auth-req-item valid">
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                  </svg>
+                  <span>One special character</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Acknowledgement Checkbox -->
+            <label class="auth-checkbox-row">
+              <input type="checkbox" checked required>
+              <span>I agree to the <a href="#" onclick="event.preventDefault()">Terms of Service</a> and <a href="#" onclick="event.preventDefault()">Privacy Policy</a></span>
+            </label>
+
+            <button type="submit" class="btn-auth-primary">Create account</button>
+          </form>
+        </div>
+      </div>
+    </main>
+
+    <footer class="auth-footer">
+      © 2026 Netgravity by Kearney. All rights reserved.
+    </footer>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════════════════════════
+       AUTHENTICATION PAGE 3: RESET PASSWORD
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="auth-page-shell" id="auth-page-reset" style="display:none;">
+    <header class="auth-topbar">
+      <div class="auth-brand-lockup" onclick="window.returnToLanding && window.returnToLanding()" title="Return to Landing Page">
+        <div class="sidebar-logo-mark">
+          <svg viewBox="0 0 38 38" width="34" height="34" fill="none">
+            <line x1="8" y1="9" x2="30" y2="9" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+            <line x1="8" y1="29" x2="30" y2="29" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+            <line x1="10" y1="10" x2="28" y2="28" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="8" cy="9" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+            <circle cx="30" cy="9" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+            <circle cx="8" cy="29" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+            <circle cx="30" cy="29" r="4.2" fill="#ffffff" stroke="#9218EA" stroke-width="3"/>
+          </svg>
+        </div>
+        <div class="auth-brand-text">
+          <span class="auth-brand-name">Netgravity</span>
+          <span class="auth-brand-sub">by Kearney</span>
+        </div>
+      </div>
+      <div class="auth-topbar-link" onclick="window.navigateToAuth('signin')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        <span>Back to sign in</span>
+      </div>
+    </header>
+
+    <main class="auth-main-content">
+      <!-- Subtle Background Network Graphics -->
+      <svg class="auth-bg-network-right" viewBox="0 0 300 300" fill="none">
+        <line x1="100" y1="240" x2="180" y2="180" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18"/>
+        <line x1="180" y1="180" x2="260" y2="220" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18"/>
+        <line x1="180" y1="180" x2="200" y2="80" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18" stroke-dasharray="3 3"/>
+        <line x1="260" y1="220" x2="280" y2="120" stroke="#9218EA" stroke-width="1.5" stroke-opacity="0.18"/>
+        <circle cx="100" cy="240" r="4" fill="#9218EA" fill-opacity="0.2"/>
+        <circle cx="180" cy="180" r="6" fill="#9218EA" fill-opacity="0.35"/>
+        <circle cx="260" cy="220" r="5" fill="#9218EA" fill-opacity="0.25"/>
+        <circle cx="200" cy="80" r="4.5" fill="#9218EA" fill-opacity="0.2"/>
+        <circle cx="280" cy="120" r="4" fill="#9218EA" fill-opacity="0.2"/>
+      </svg>
+
+      <div class="auth-centered-wrap">
+        <div class="auth-centered-header">
+          <h1 class="auth-hero-title">Reset password</h1>
+          <p class="auth-hero-subtitle">Enter your email and we'll send you a link to reset your password</p>
+        </div>
+
+        <div class="auth-card">
+          <form class="auth-form" id="form-auth-reset" onsubmit="event.preventDefault(); alert('Password reset link has been sent to your email!\nPlease check your inbox to proceed.');">
+            <div class="auth-field-group">
+              <label class="auth-label" for="reset-email">Work email</label>
+              <div class="auth-input-wrap">
+                <span class="auth-input-icon">
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                    <polyline points="22,6 12,13 2,6"/>
+                  </svg>
+                </span>
+                <input type="email" id="reset-email" class="auth-input" placeholder="Enter your work email" value="amit.kumar@kearney.com" required>
+              </div>
+            </div>
+
+            <button type="submit" class="btn-auth-primary">Send reset link</button>
+
+            <!-- Check Your Inbox Info Box -->
+            <div class="auth-inbox-info-box">
+              <div class="auth-inbox-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </div>
+              <div class="auth-inbox-text">
+                <h5>Check your inbox</h5>
+                <p>We'll send a password reset link to your email address. The link will expire in 15 minutes for security reasons.</p>
+              </div>
+            </div>
+
+            <div class="auth-card-footer" style="margin-top: 14px;">
+              Didn't receive the email? <a onclick="alert('Verification link resent to your email! Please check spam folder.')">Check spam folder</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </main>
+
+    <footer class="auth-footer">
+      © 2026 Netgravity by Kearney. All rights reserved.
+    </footer>
   </div>
 
   
-  <script type="module">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  <script>
 /* ══════════════ data.js ══════════════ */
 /**
  * NetGravity — Central Mock Data Layer
@@ -9963,6 +12298,767 @@ function simulateInvestigation(query, onComplete) {
 }
 
 
+/* ══════════════ insights.js ══════════════ */
+/**
+ * Netgravity — Insights Page Controller
+ * =====================================
+ * Manages category/severity filtering, insight feed rendering,
+ * and insight detail panel population based on the approved reference.
+ */
+
+const INSIGHTS_FEED_DATA = [
+  {
+    id: 'delhi-capacity-ceiling',
+    category: 'CAPACITY RISK',
+    categoryFilter: 'Capacity',
+    severity: 'Critical',
+    accentColor: 'red',
+    iconType: 'shield',
+    title: 'Delhi NCR DC is approaching its capacity ceiling',
+    desc: 'Current utilization is 94%, with forecast demand expected to push peak utilization above available capacity.',
+    metrics: [
+      { label: 'Utilization', value: '94%', color: 'red' },
+      { label: 'Forecast Peak', value: '108%', color: 'red' },
+      { label: 'Demand Growth', value: '+14%', color: 'red' }
+    ],
+    detail: {
+      category: 'CAPACITY RISK',
+      title: 'Delhi NCR DC is approaching its capacity ceiling',
+      desc: 'Current utilization is 94%, with forecast demand expected to push peak utilization above available capacity.',
+      whyItMatters: 'Without intervention, projected demand will exceed available DC capacity, increasing risk of service breaches and higher expediting costs.',
+      metrics: [
+        { label: 'Current Utilization', value: '94%', color: 'red' },
+        { label: 'Forecast Peak', value: '108%', color: 'red' },
+        { label: 'Demand Growth', value: '+14%', sub: 'vs. current', color: 'red' }
+      ],
+      evidence: [
+        'Demand forecast for Q4 FY26 shows strong growth',
+        'Historical peak utilization reached 92% last year',
+        'Limited alternate capacity within same service radius',
+        'Optimization model indicates constraint in peak period'
+      ],
+      sources: [
+        { name: 'Network Data', icon: '🗄️' },
+        { name: 'Demand Forecast', icon: '📈' },
+        { name: 'Optimization Model', icon: '⚛️' }
+      ],
+      confidence: 'High',
+      confidenceText: 'Based on validated network data and demand forecast.'
+    }
+  },
+  {
+    id: 'kolkata-spare-capacity',
+    category: 'COST OPPORTUNITY',
+    categoryFilter: 'Cost',
+    severity: 'Opportunity',
+    accentColor: 'green',
+    iconType: 'arrow-down',
+    title: 'Kolkata DC has available capacity to absorb additional volume',
+    desc: 'Spare capacity in Kolkata can absorb flows from higher-pressure corridors, reducing overall network cost.',
+    metrics: [
+      { label: 'Utilization', value: '62%', color: 'green' },
+      { label: 'Cost Impact', value: '-7.8%', color: 'green' }
+    ],
+    detail: {
+      category: 'COST OPPORTUNITY',
+      title: 'Kolkata DC has available capacity to absorb additional volume',
+      desc: 'Spare capacity in Kolkata can absorb flows from higher-pressure corridors, reducing overall network cost.',
+      whyItMatters: 'Redirecting non-urgent northern overflow to eastern nodes leverages existing fixed warehouse leases and eliminates rush transport surcharges.',
+      metrics: [
+        { label: 'Current Utilization', value: '53.3%', color: 'green' },
+        { label: 'Absorbable Capacity', value: '2,800 u', color: 'green' },
+        { label: 'Cost Savings', value: '-7.8%', sub: 'network-wide', color: 'green' }
+      ],
+      evidence: [
+        'Kolkata DC historical throughput is under 60% of baseline capacity',
+        'Direct rail and road connectivity exists from Baddi Plant',
+        'Handling unit cost in Kolkata is ₹3.5 vs ₹4.2 in Delhi NCR'
+      ],
+      sources: [
+        { name: 'Facility Master', icon: '🏢' },
+        { name: 'Cost Baseline', icon: '💰' },
+        { name: 'Routing Engine', icon: '🛣️' }
+      ],
+      confidence: 'High',
+      confidenceText: 'Based on audited warehouse throughput and contract freight matrices.'
+    }
+  },
+  {
+    id: 'service-buffer-sla',
+    category: 'SERVICE RISK',
+    categoryFilter: 'Service',
+    severity: 'Attention',
+    accentColor: 'amber',
+    iconType: 'alert-triangle',
+    title: 'Limited service buffer against demand growth',
+    desc: 'Projected demand growth may lead to SLA breaches in key lanes by Q4 FY26 without network adjustments.',
+    metrics: [
+      { label: 'SLA Risk', value: '18% ↑', color: 'amber' },
+      { label: 'Lead Time', value: '+1.4 days', color: 'amber' }
+    ],
+    detail: {
+      category: 'SERVICE RISK',
+      title: 'Limited service buffer against demand growth',
+      desc: 'Projected demand growth may lead to SLA breaches in key lanes by Q4 FY26 without network adjustments.',
+      whyItMatters: 'Lead times on Delhi-to-consumer fulfillment lanes are projected to stretch from 1.0 day to 2.4 days during peak demand spikes.',
+      metrics: [
+        { label: 'On-Time SLA', value: '96.7%', color: 'amber' },
+        { label: 'Peak SLA Risk', value: '18% ↑', color: 'amber' },
+        { label: 'Lead Time Drift', value: '+1.4 d', sub: 'in peak', color: 'amber' }
+      ],
+      evidence: [
+        'Tier-1 consumer markets in North zone show 14% Q4 demand growth',
+        'Last-mile dispatch docks operate at 91% capacity during morning surge',
+        'Carrier turn-around time increases by 28% during winter fog window'
+      ],
+      sources: [
+        { name: 'SLA Telemetry', icon: '⏱️' },
+        { name: 'Demand Forecast', icon: '📈' },
+        { name: 'Carrier Logs', icon: '🚚' }
+      ],
+      confidence: 'High',
+      confidenceText: 'Based on historical SLA telemetry and carrier dispatch logs.'
+    }
+  },
+  {
+    id: 'single-lane-dependence',
+    category: 'NETWORK INSIGHT',
+    categoryFilter: 'Network',
+    severity: 'Informational',
+    accentColor: 'purple',
+    iconType: 'network',
+    title: 'High dependence on single-lane routes',
+    desc: '34% of total volume is routed through single-lane corridors, increasing disruption risk.',
+    metrics: [
+      { label: 'Single-lane', value: '34%', color: 'purple' },
+      { label: 'Risk', value: 'Medium', color: 'dark' }
+    ],
+    detail: {
+      category: 'NETWORK INSIGHT',
+      title: 'High dependence on single-lane routes',
+      desc: '34% of total volume is routed through single-lane corridors, increasing disruption risk.',
+      whyItMatters: 'Network resilience analysis indicates that a localized outage or highway closure on NH44 would disrupt over one-third of active national shipments.',
+      metrics: [
+        { label: 'Single-Lane Volume', value: '34%', color: 'purple' },
+        { label: 'Alternate Route Lead Time', value: '+2.1 d', color: 'purple' },
+        { label: 'Resilience Score', value: '68/100', sub: 'index', color: 'purple' }
+      ],
+      evidence: [
+        'Baddi-to-Delhi primary freight corridor handles 8,200 units/day',
+        'Secondary bypass routes currently lack pre-contracted carrier SLA',
+        'Optimization model identifies 2 viable alternate multi-modal paths'
+      ],
+      sources: [
+        { name: 'Lane GIS Data', icon: '🗺️' },
+        { name: 'Disruption Simulator', icon: '⚡' },
+        { name: 'Network Graph', icon: '🌐' }
+      ],
+      confidence: 'High',
+      confidenceText: 'Derived from topology analysis and multi-commodity graph flow simulations.'
+    }
+  },
+  {
+    id: 'low-emission-modes',
+    category: 'SUSTAINABILITY OPPORTUNITY',
+    categoryFilter: 'Resilience',
+    severity: 'Opportunity',
+    accentColor: 'green',
+    iconType: 'leaf',
+    title: 'Shift to low-emission modes can reduce CO₂ emissions',
+    desc: 'Optimizing mode mix and routes can reduce emissions by 6.1% with minimal cost impact.',
+    metrics: [
+      { label: 'CO₂ Impact', value: '↓ 6.1%', color: 'green' },
+      { label: 'Cost Impact', value: 'Low', color: 'green' }
+    ],
+    detail: {
+      category: 'SUSTAINABILITY OPPORTUNITY',
+      title: 'Shift to low-emission modes can reduce CO₂ emissions',
+      desc: 'Optimizing mode mix and routes can reduce emissions by 6.1% with minimal cost impact.',
+      whyItMatters: 'Modal shifting of long-haul non-perishable freight from road to dedicated freight rail corridors achieves sustainability targets while maintaining lead-time SLA.',
+      metrics: [
+        { label: 'CO₂ Reduction', value: '-6.1%', color: 'green' },
+        { label: 'Carbon Avoided', value: '1,135 t', color: 'green' },
+        { label: 'Cost Variance', value: '+0.2%', sub: 'negligible', color: 'green' }
+      ],
+      evidence: [
+        'Western and Eastern Dedicated Freight Corridors (DFC) provide 98% rail transit reliability',
+        'Current carbon baseline is 18.6K tonnes per quarter',
+        'Modal shift potential is highest on Pune-to-Kolkata and Baddi-to-Mumbai lanes'
+      ],
+      sources: [
+        { name: 'Emission Factor DB', icon: '🌱' },
+        { name: 'Freight Rates Matrix', icon: '📊' },
+        { name: 'Modal Engine', icon: '🚂' }
+      ],
+      confidence: 'High',
+      confidenceText: 'Validated against GLEC framework carbon calculations and rail container tariffs.'
+    }
+  }
+];
+
+let activeFilter = 'All';
+let activeSeverity = 'All';
+let selectedInsightId = 'delhi-capacity-ceiling';
+
+/**
+ * Initialize the Insights Page
+ */
+function initInsightsPage() {
+  bindInsightsEvents();
+  renderInsightsSummary();
+  renderInsightsFeed();
+  renderInsightDetail(selectedInsightId);
+}
+
+/**
+ * Bind Filter and Click Events
+ */
+function bindInsightsEvents() {
+  // Category Filter Pills
+  document.querySelectorAll('.filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+      activeFilter = pill.getAttribute('data-filter') || 'All';
+      renderInsightsFeed();
+    });
+  });
+
+  // Severity Dropdown
+  const severitySelect = document.getElementById('filter-severity-select');
+  if (severitySelect) {
+    severitySelect.addEventListener('change', (e) => {
+      activeSeverity = e.target.value;
+      renderInsightsFeed();
+    });
+  }
+
+  // Ask Netgravity Button
+  const btnAsk = document.getElementById('btn-insights-ask-netgravity');
+  if (btnAsk) {
+    btnAsk.addEventListener('click', () => {
+      if (typeof window.navigateToTab === 'function') {
+        window.navigateToTab('home');
+      }
+    });
+  }
+}
+
+/**
+ * Render Summary Cards
+ */
+function renderInsightsSummary() {
+  const container = document.getElementById('insights-summary-grid');
+  if (!container) return;
+
+  container.innerHTML = `
+    <div class="summary-card">
+      <div class="summary-card-top-row">
+        <div class="summary-icon-box summary-icon-purple">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+          </svg>
+        </div>
+        <div class="summary-number">5</div>
+      </div>
+      <div class="summary-title">Key Insights</div>
+      <div class="summary-sub">Across 6 categories</div>
+    </div>
+
+    <div class="summary-card">
+      <div class="summary-card-top-row">
+        <div class="summary-icon-box summary-icon-green">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <polyline points="19 12 12 19 5 12"></polyline>
+          </svg>
+        </div>
+        <div class="summary-number">2</div>
+      </div>
+      <div class="summary-title">Cost Opportunities</div>
+      <div class="summary-sub">Potential savings identified</div>
+    </div>
+
+    <div class="summary-card">
+      <div class="summary-card-top-row">
+        <div class="summary-icon-box summary-icon-red">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+          </svg>
+        </div>
+        <div class="summary-number">2</div>
+      </div>
+      <div class="summary-title">Capacity Risks</div>
+      <div class="summary-sub">Require attention</div>
+    </div>
+
+    <div class="summary-card">
+      <div class="summary-card-top-row">
+        <div class="summary-icon-box summary-icon-amber">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </div>
+        <div class="summary-number">1</div>
+      </div>
+      <div class="summary-title">Service Risk</div>
+      <div class="summary-sub">Impacting SLA</div>
+    </div>
+  `;
+}
+
+/**
+ * Render Feed of Insight Cards
+ */
+function renderInsightsFeed() {
+  const container = document.getElementById('insights-feed-list');
+  if (!container) return;
+
+  const filtered = INSIGHTS_FEED_DATA.filter(item => {
+    const matchCategory = activeFilter === 'All' || item.categoryFilter === activeFilter;
+    const matchSeverity = activeSeverity === 'All' || item.severity === activeSeverity;
+    return matchCategory && matchSeverity;
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div style="padding: 48px; text-align: center; color: #6b7280; background: #fff; border-radius: 12px; border: 1px dashed #e5e7eb;">
+        <p style="font-weight: 600; font-size: 15px; color: #374151;">No matching insights found</p>
+        <p style="font-size: 13px; margin-top: 4px;">Try selecting a different filter category or severity level.</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = filtered.map(item => {
+    const isSelected = item.id === selectedInsightId;
+    const iconSvg = getIconSvg(item.iconType);
+
+    return `
+      <div class="insight-feed-card insight-card-${item.accentColor} ${isSelected ? 'selected' : ''}" data-insight-id="${item.id}">
+        <div class="insight-card-icon-wrap icon-wrap-${item.accentColor}">
+          ${iconSvg}
+        </div>
+        <div class="insight-card-body">
+          <div class="insight-card-top-meta">
+            <span class="insight-category-label category-${item.accentColor}">${item.category}</span>
+            <span class="insight-status-tag tag-${item.severity.toLowerCase()}">${item.severity}</span>
+          </div>
+          <div class="insight-card-title">${item.title}</div>
+          <div class="insight-card-desc">${item.desc}</div>
+          <div class="insight-card-footer">
+            <div class="insight-card-metrics">
+              ${item.metrics.map(m => `
+                <div class="card-metric-item">
+                  <span class="metric-item-label">${m.label}</span>
+                  <span class="metric-item-value val-${m.color}">${m.value}</span>
+                </div>
+              `).join('')}
+            </div>
+            <div class="insight-card-action">
+              <span>Explore Insight</span>
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M5 10h10M11 6l4 4-4 4"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Bind click on each card
+  container.querySelectorAll('.insight-feed-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const id = card.getAttribute('data-insight-id');
+      if (id) {
+        selectedInsightId = id;
+        container.querySelectorAll('.insight-feed-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+        renderInsightDetail(id);
+      }
+    });
+  });
+}
+
+/**
+ * Render Detail Panel for Selected Insight
+ */
+function renderInsightDetail(insightId) {
+  const panel = document.getElementById('insight-detail-panel');
+  if (!panel) return;
+
+  const item = INSIGHTS_FEED_DATA.find(i => i.id === insightId) || INSIGHTS_FEED_DATA[0];
+  const d = item.detail;
+
+  panel.innerHTML = `
+    <div class="detail-panel-header">
+      <div class="detail-category-badge category-${item.accentColor}">
+        <span>${getCategoryIcon(item.category)}</span>
+        <span>${d.category}</span>
+      </div>
+      <button class="detail-close-btn" id="btn-close-detail" title="Close Panel">✕</button>
+    </div>
+
+    <div class="detail-title">${d.title}</div>
+    <div class="detail-desc">${d.desc}</div>
+
+    <div class="detail-section-block">
+      <div class="detail-section-heading">Why it matters</div>
+      <div class="detail-why-text">${d.whyItMatters}</div>
+    </div>
+
+    <div class="detail-metrics-grid">
+      ${d.metrics.map(m => `
+        <div class="detail-metric-card">
+          <div class="detail-metric-label">${m.label}</div>
+          <div class="detail-metric-val val-${m.color}">${m.value}</div>
+          ${m.sub ? `<div class="detail-metric-sub">${m.sub}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="detail-section-block">
+      <div class="detail-section-heading">Evidence</div>
+      <div class="detail-evidence-list">
+        ${d.evidence.map(e => `
+          <div class="evidence-bullet-item">
+            <span class="evidence-dot"></span>
+            <span>${e}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="detail-section-block">
+      <div class="detail-section-heading">Source</div>
+      <div class="detail-source-row">
+        ${d.sources.map(s => `
+          <div class="source-item">
+            <span class="source-icon">${s.icon}</span>
+            <span>${s.name}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+
+    <div class="detail-confidence-box">
+      <div class="detail-section-heading">Confidence</div>
+      <div class="confidence-val-row">
+        <span class="confidence-high-tag">${d.confidence}</span>
+      </div>
+      <div class="confidence-support-text">${d.confidenceText}</div>
+    </div>
+  `;
+
+  // Bind close button
+  const btnClose = panel.querySelector('#btn-close-detail');
+  if (btnClose) {
+    btnClose.addEventListener('click', () => {
+      panel.style.display = 'none';
+    });
+  } else {
+    panel.style.display = 'flex';
+  }
+}
+
+/**
+ * Return SVGs for Icons
+ */
+function getIconSvg(type) {
+  switch (type) {
+    case 'shield':
+      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+    case 'arrow-down':
+      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><polyline points="19 12 12 19 5 12"></polyline></svg>`;
+    case 'alert-triangle':
+      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`;
+    case 'network':
+      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>`;
+    case 'leaf':
+      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`;
+    default:
+      return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`;
+  }
+}
+
+function getCategoryIcon(cat) {
+  if (cat.includes('CAPACITY')) return '🛡️';
+  if (cat.includes('COST')) return '📉';
+  if (cat.includes('SERVICE')) return '⚠️';
+  if (cat.includes('NETWORK')) return '🌐';
+  if (cat.includes('SUSTAINABILITY')) return '🌱';
+  return '✦';
+}
+
+if (typeof window !== 'undefined') {
+  window.initInsightsPage = initInsightsPage;
+  window.renderInsightsFeed = renderInsightsFeed;
+  window.renderInsightDetail = renderInsightDetail;
+}
+
+
+
+/**
+ * Open Insight Detail Slide-in Drawer from Right with Blurred Backdrop
+ */
+function openInsightDrawer(insightIdOrObj) {
+  const overlay = document.getElementById('insight-drawer-overlay');
+  const content = document.getElementById('insight-drawer-content');
+  if (!overlay || !content) return;
+
+  let ins = null;
+  if (typeof insightIdOrObj === 'object' && insightIdOrObj !== null) {
+    ins = insightIdOrObj;
+  } else if (typeof insightIdOrObj === 'string') {
+    if (typeof HOME_INSIGHTS !== 'undefined') {
+      for (const fac in HOME_INSIGHTS) {
+        const found = HOME_INSIGHTS[fac].find(i => i.id === insightIdOrObj);
+        if (found) { ins = found; break; }
+      }
+    }
+    if (!ins && typeof INSIGHTS_FEED_DATA !== 'undefined') {
+      ins = INSIGHTS_FEED_DATA.find(i => i.id === insightIdOrObj);
+    }
+  }
+  if (!ins && typeof INSIGHTS_FEED_DATA !== 'undefined' && INSIGHTS_FEED_DATA.length > 0) {
+    ins = INSIGHTS_FEED_DATA[0];
+  }
+  if (!ins) return;
+
+  const title = ins.title || 'Insight Details';
+  const category = ins.detail?.category || ins.category || 'NETWORK OPTIMIZATION';
+  const why = ins.detail?.whyItMatters || ins.why || 'Critical network condition requiring tactical rebalancing.';
+  const whatIFound = ins.detail?.whatIFound || ins.subtitle || ins.desc || '';
+  const evidence = ins.detail?.evidence || [];
+  const metrics = ins.detail?.metrics || [];
+
+  content.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">
+      <div style="display:inline-flex;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;letter-spacing:0.04em;background:#f5f3ff;color:#9218EA;">
+        <span>${category.toUpperCase()}</span>
+      </div>
+      <button class="facility-panel-close" onclick="window.closeInsightDrawer && window.closeInsightDrawer()" style="background:none;border:none;font-size:22px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1;">✕</button>
+    </div>
+
+    <h2 style="font-size:20px;font-weight:800;color:#111827;line-height:1.3;margin:0 0 8px;">${title}</h2>
+    ${whatIFound ? `<p style="font-size:13.5px;color:#4b5563;line-height:1.5;margin:0 0 16px;">${whatIFound}</p>` : ''}
+
+    <div style="background:#fafafc;border:1px solid #f0f0f5;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#9218EA;margin-bottom:6px;letter-spacing:0.05em;">Why it matters</div>
+      <div style="font-size:13px;color:#374151;line-height:1.55;">${why}</div>
+    </div>
+
+    ${metrics.length > 0 ? `
+      <div class="detail-metrics-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">
+        ${metrics.map(m => `
+          <div class="detail-metric-card" style="background:#fafafc;border:1px solid #f0f0f5;border-radius:10px;padding:12px 10px;display:flex;flex-direction:column;gap:4px;">
+            <div style="font-size:11px;color:#6b7280;">${m.label}</div>
+            <div style="font-size:18px;font-weight:800;color:${m.color === 'red' ? '#ef4444' : m.color === 'green' ? '#10b981' : '#9218EA'};">${m.value}</div>
+            ${m.sub ? `<div style="font-size:10.5px;color:#9ca3af;">${m.sub}</div>` : ''}
+          </div>
+        `).join('')}
+      </div>
+    ` : ''}
+
+    ${evidence.length > 0 ? `
+      <div style="margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:8px;letter-spacing:0.05em;">Evidence & Findings</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${evidence.map(e => {
+            const lbl = typeof e === 'string' ? e : `${e.label}: ${e.value}`;
+            const prov = e.provenance ? `<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f3f4f6;color:#6b7280;margin-left:auto;">${e.provenance}</span>` : '';
+            return `
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#ffffff;border:1px solid #eef0f3;border-radius:8px;font-size:12.5px;color:#374151;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <span style="width:6px;height:6px;border-radius:50%;background:#9218EA;flex-shrink:0;"></span>
+                  <span>${lbl}</span>
+                </div>
+                ${prov}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:auto;padding-top:16px;">
+      <button class="btn-primary" onclick="window.navigateToTab && window.navigateToTab('scenarios'); window.closeInsightDrawer && window.closeInsightDrawer();" style="width:100%;padding:12px;border-radius:8px;background:#9218EA;color:#fff;border:none;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(146,24,234,0.25);">
+        Simulate Rebalancing in Scenario Planner →
+      </button>
+      <button onclick="window.navigateToTab && window.navigateToTab('insights'); window.closeInsightDrawer && window.closeInsightDrawer();" style="width:100%;padding:9px;border-radius:8px;background:#f9fafb;color:#374151;border:1px solid #e5e7eb;font-weight:600;font-size:12.5px;cursor:pointer;">
+        Open Full Insights Page →
+      </button>
+    </div>
+  `;
+
+  overlay.classList.add('active');
+  overlay.style.display = 'flex';
+}
+
+function closeInsightDrawer() {
+  const overlay = document.getElementById('insight-drawer-overlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    overlay.style.display = 'none';
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.openInsightDrawer = openInsightDrawer;
+  window.closeInsightDrawer = closeInsightDrawer;
+}
+
+/* ══════════════ auth.js ══════════════ */
+/**
+ * Netgravity Authentication Controller
+ * Handles 3 distinct views: Sign In, Create New Account, Reset Password
+ */
+
+function navigateToAuth(view) {
+  // 1. Hide landing page
+  const landing = document.getElementById('landing-page');
+  if (landing) {
+    landing.style.display = 'none';
+    landing.classList.add('hidden');
+  }
+
+  // 2. Hide all auth shells first
+  const signinShell = document.getElementById('auth-page-signin');
+  const signupShell = document.getElementById('auth-page-signup');
+  const resetShell = document.getElementById('auth-page-reset');
+
+  if (signinShell) { signinShell.classList.remove('active'); signinShell.style.display = 'none'; }
+  if (signupShell) { signupShell.classList.remove('active'); signupShell.style.display = 'none'; }
+  if (resetShell) { resetShell.classList.remove('active'); resetShell.style.display = 'none'; }
+
+  // 3. Activate requested view
+  if (view === 'signin') {
+    if (signinShell) {
+      signinShell.classList.add('active');
+      signinShell.style.display = 'flex';
+    }
+  } else if (view === 'signup') {
+    if (signupShell) {
+      signupShell.classList.add('active');
+      signupShell.style.display = 'flex';
+    }
+  } else if (view === 'reset') {
+    if (resetShell) {
+      resetShell.classList.add('active');
+      resetShell.style.display = 'flex';
+    }
+  }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function completeAuth() {
+  // 1. Hide all auth shells
+  document.querySelectorAll('.auth-page-shell').forEach(shell => {
+    shell.classList.remove('active');
+    shell.style.display = 'none';
+  });
+
+  // 2. Hide landing page
+  const landing = document.getElementById('landing-page');
+  if (landing) {
+    landing.classList.add('hidden');
+    landing.style.display = 'none';
+  }
+
+  // 3. Ensure app-layout is visible and active
+  const appLayout = document.querySelector('.app-layout');
+  if (appLayout) {
+    appLayout.style.display = 'flex';
+  }
+
+  // 4. Navigate to Home
+  if (typeof window.navigateToTab === 'function') {
+    window.navigateToTab('home');
+  }
+
+  // 5. Trigger resize and full render of Home components
+  setTimeout(() => {
+    if (typeof window.renderHome === 'function') {
+      window.renderHome();
+    }
+    window.dispatchEvent(new Event('resize'));
+  }, 60);
+}
+
+function returnToLanding() {
+  // 1. Hide all auth shells
+  document.querySelectorAll('.auth-page-shell').forEach(shell => {
+    shell.classList.remove('active');
+    shell.style.display = 'none';
+  });
+
+  // 2. Show landing page
+  const landing = document.getElementById('landing-page');
+  if (landing) {
+    landing.classList.remove('hidden');
+    landing.style.display = 'flex';
+  }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function initAuth() {
+  // Expose globally on window
+  if (typeof window !== 'undefined') {
+    window.navigateToAuth = navigateToAuth;
+    window.completeAuth = completeAuth;
+    window.returnToLanding = returnToLanding;
+  }
+
+  // 1. Password toggles
+  document.querySelectorAll('.auth-password-toggle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const wrap = btn.closest('.auth-input-wrap');
+      const input = wrap ? wrap.querySelector('input') : null;
+      if (input) {
+        if (input.type === 'password') {
+          input.type = 'text';
+          btn.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
+        } else {
+          input.type = 'password';
+          btn.innerHTML = `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+        }
+      }
+    });
+  });
+
+  // 2. Forms Submit Handlers
+  document.getElementById('form-auth-signin')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    completeAuth();
+  });
+
+  document.getElementById('form-auth-signup')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    completeAuth();
+  });
+
+  document.getElementById('form-auth-reset')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    alert('Password reset link has been sent to your email!\nPlease check your inbox to proceed.');
+  });
+
+  // 3. Social / Secondary Action Handlers
+  document.getElementById('btn-signin-google')?.addEventListener('click', () => {
+    completeAuth();
+  });
+
+  document.getElementById('btn-help-auth')?.addEventListener('click', () => {
+    alert('Need help signing in?\n\nContact Netgravity IT Support at support@netgravity.kearney.com or refer to your corporate single sign-on directory.');
+  });
+}
+
+
 /* ══════════════ landing.js ══════════════ */
 /**
  * Netgravity — Landing Page Controller & Network Visualization
@@ -10274,13 +13370,22 @@ function handleNodeLeave() {
  */
 function enterApp(targetTab = 'home') {
   const landing = document.getElementById('landing-page');
-  const appShell = document.querySelector('.app-shell');
-
   if (landing) {
     landing.classList.add('hidden');
     landing.style.display = 'none';
   }
 
+  // Hide all auth pages
+  document.querySelectorAll('.auth-page-shell').forEach(shell => {
+    shell.classList.remove('active');
+    shell.style.display = 'none';
+  });
+
+  const appLayout = document.querySelector('.app-layout');
+  if (appLayout) {
+    appLayout.style.display = 'flex';
+  }
+  const appShell = document.querySelector('.app-shell');
   if (appShell) {
     appShell.style.display = 'flex';
   }
@@ -10301,6 +13406,12 @@ function enterApp(targetTab = 'home') {
  * Return to landing page view
  */
 function returnToLanding() {
+  // Hide all auth shells
+  document.querySelectorAll('.auth-page-shell').forEach(shell => {
+    shell.classList.remove('active');
+    shell.style.display = 'none';
+  });
+
   const landing = document.getElementById('landing-page');
   if (landing) {
     landing.classList.remove('hidden');
@@ -10323,7 +13434,11 @@ function bindLandingEvents() {
   if (btnGetStarted) {
     btnGetStarted.onclick = (e) => {
       e.preventDefault();
-      enterApp('home');
+      if (typeof window.navigateToAuth === 'function') {
+        window.navigateToAuth('signup');
+      } else {
+        enterApp('home');
+      }
     };
   }
 
@@ -10331,7 +13446,11 @@ function bindLandingEvents() {
   if (btnSignIn) {
     btnSignIn.onclick = (e) => {
       e.preventDefault();
-      enterApp('home');
+      if (typeof window.navigateToAuth === 'function') {
+        window.navigateToAuth('signin');
+      } else {
+        enterApp('home');
+      }
     };
   }
 
@@ -10368,6 +13487,8 @@ function bindLandingEvents() {
 
 
 
+
+
 // ─── State ──────────────────────────────────────────────────
 const state = {
   activeTab: 'home',
@@ -10383,11 +13504,14 @@ const state = {
 // Expose globally on window
 if (typeof window !== 'undefined') {
   window.navigateToTab = navigateToTab;
+  window.openActionDrawer = openActionDrawer;
+  window.closeActionDrawer = closeActionDrawer;
   window.renderHome = renderHome;
 }
 
 // ─── Boot ───────────────────────────────────────────────────
 function bootApp() {
+  try { initAuth(); } catch (e) { console.error('initAuth error:', e); }
   try { initLandingPage(); } catch (e) { console.error('initLandingPage error:', e); }
   try { initTabs(); } catch (e) { console.error('initTabs error:', e); }
   try { initHomeSelectors(); } catch (e) { console.error('initHomeSelectors error:', e); }
@@ -10395,6 +13519,7 @@ function bootApp() {
   try { renderTwinTables(); } catch (e) { console.error('renderTwinTables error:', e); }
   try { initScenarios(); } catch (e) { console.error('initScenarios error:', e); }
   try { initAgent(); } catch (e) { console.error('initAgent error:', e); }
+  try { initInsightsPage(); } catch (e) { console.error('initInsightsPage error:', e); }
 }
 
 if (document.readyState === 'loading') {
@@ -10403,19 +13528,126 @@ if (document.readyState === 'loading') {
   bootApp();
 }
 
+// ─── Header & Topbar Visibility Controller ──────────────────
+function updateTopBarLayout(tab) {
+  const isHomeOverview = (tab === 'home' || tab === 'overview');
+
+  // Upload Data button: ONLY on Home Overview page
+  const btnUpload = document.getElementById('btn-topbar-upload');
+  if (btnUpload) {
+    btnUpload.style.display = isHomeOverview ? 'flex' : 'none';
+  }
+
+  // Sub-topbar Page Title in parallel with selectors across ALL pages
+  const mainTitle = document.getElementById('sub-topbar-main-title');
+  const subTitle = document.getElementById('sub-topbar-sub-title');
+
+  if (mainTitle && subTitle) {
+    if (tab === 'home' || tab === 'overview') {
+      mainTitle.innerHTML = 'Hello, <strong id="logged-in-user-name">Amit Kumar</strong>';
+      subTitle.textContent = '· Network Decision Command Center';
+    } else if (tab === 'insights') {
+      mainTitle.innerHTML = 'Insights';
+      subTitle.textContent = '· AI-generated observations from your network';
+    } else if (tab === 'facility-dashboard') {
+      mainTitle.innerHTML = 'Facility KPIs & Analytics';
+      subTitle.textContent = '· Telemetry & cost breakdown';
+    } else if (tab === 'forecast') {
+      mainTitle.innerHTML = 'Demand Forecast';
+      subTitle.textContent = '· AI predictive projections';
+    } else if (tab === 'twin') {
+      mainTitle.innerHTML = 'Digital Twin';
+      subTitle.textContent = '· India network topology';
+    } else if (tab === 'scenarios') {
+      mainTitle.innerHTML = 'Scenario Planning';
+      subTitle.textContent = '· Multi-echelon network optimization';
+    } else if (tab === 'recommendations' || tab === 'recommend') {
+      mainTitle.innerHTML = 'Recommendations';
+      subTitle.textContent = '· Prescriptive AI actions';
+    }
+  }
+
+  // Facility & Period selectors: STAYS visible across all pages
+  const controls = document.getElementById('topbar-controls');
+  if (controls) {
+    controls.style.display = 'flex';
+  }
+}
+
 // ─── Tab Routing & Sub-Navigation ───────────────────────────
 function navigateToTab(tab) {
-  if (tab === 'facility-dashboard') {
-    // Show sub-menu under Home in sidebar
-    const subKpi = document.getElementById('nav-sub-kpi');
-    if (subKpi) {
-      subKpi.style.display = 'flex';
-      subKpi.classList.add('active');
-    }
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  updateTopBarLayout(tab);
+
+  // 1. Insights Page (nested under Home)
+  if (tab === 'insights') {
+    const homeGroup = document.getElementById('nav-group-home');
+    if (homeGroup) homeGroup.classList.add('expanded');
+
+    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
     document.getElementById('nav-item-home')?.classList.add('active');
 
-    // Show panel
+    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
+    document.getElementById('nav-sub-insights')?.classList.add('active');
+
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById('tab-insights');
+    if (panel) panel.classList.add('active');
+
+    state.activeTab = 'insights';
+    try { initInsightsPage(); } catch (e) { console.error(e); }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  // 2. Recommendations Page (nested under Home)
+  if (tab === 'recommendations' || tab === 'recommend') {
+    const homeGroup = document.getElementById('nav-group-home');
+    if (homeGroup) homeGroup.classList.add('expanded');
+
+    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
+    document.getElementById('nav-item-home')?.classList.add('active');
+
+    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
+    document.getElementById('nav-sub-recommendations')?.classList.add('active');
+
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById('tab-recommendations') || document.getElementById('tab-recommend');
+    if (panel) panel.classList.add('active');
+
+    state.activeTab = 'recommendations';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  // 3. Home / Overview (nested under Home)
+  if (tab === 'home' || tab === 'overview') {
+    const homeGroup = document.getElementById('nav-group-home');
+    if (homeGroup) homeGroup.classList.add('expanded');
+
+    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
+    document.getElementById('nav-item-home')?.classList.add('active');
+
+    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
+    document.getElementById('nav-sub-overview')?.classList.add('active');
+
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-home')?.classList.add('active');
+
+    state.activeTab = 'home';
+    setTimeout(() => {
+      renderHome();
+      window.dispatchEvent(new Event('resize'));
+    }, 50);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    return;
+  }
+
+  // 4. Facility KPI Dashboard
+  if (tab === 'facility-dashboard') {
+    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
+    document.getElementById('nav-item-kpis')?.classList.add('active');
+    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
+
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.getElementById('tab-facility-dashboard')?.classList.add('active');
     state.activeTab = 'facility-dashboard';
@@ -10424,36 +13656,17 @@ function navigateToTab(tab) {
     return;
   }
 
-  // If navigating to Home or other top tabs
-  const subKpi = document.getElementById('nav-sub-kpi');
-  if (subKpi) {
-    if (tab === 'home') {
-      subKpi.classList.remove('active');
-      subKpi.style.display = 'none';
-    } else {
-      subKpi.style.display = 'none';
-      subKpi.classList.remove('active');
-    }
-  }
-
-  // Update nav highlights
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  // 5. Other Top Tabs (Digital Twin, Scenario Planning, Forecasting)
+  document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
   document.querySelector(`.nav-item[data-tab="${tab}"]`)?.classList.add('active');
+  document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
 
-  // Update panels
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById('tab-' + tab);
   if (panel) panel.classList.add('active');
 
   state.activeTab = tab;
 
-  // Lazy-init maps, 3D twin and charts
-  if (tab === 'home') {
-    setTimeout(() => {
-      renderHome();
-      window.dispatchEvent(new Event('resize'));
-    }, 50);
-  }
   if (tab === 'twin') {
     setTimeout(() => {
       try {
@@ -10488,9 +13701,6 @@ function navigateToTab(tab) {
       invalidateMapSize('scenario-leaflet-map');
     }, 50);
   }
-  if (tab === 'recommend') {
-    renderRecommendation();
-  }
 }
 
 function initTabs() {
@@ -10502,9 +13712,54 @@ function initTabs() {
     });
   });
 
-  // Sub-nav item for KPI Dashboard
-  document.getElementById('nav-sub-kpi')?.addEventListener('click', () => {
-    navigateToTab('facility-dashboard');
+  // Expandable Home Menu Click
+  const navItemHome = document.getElementById('nav-item-home');
+  if (navItemHome) {
+    navItemHome.addEventListener('click', (e) => {
+      const homeGroup = document.getElementById('nav-group-home');
+      if (homeGroup) {
+        // Toggle expansion or navigate
+        if (state.activeTab !== 'home' && state.activeTab !== 'insights' && state.activeTab !== 'recommendations') {
+          navigateToTab('home');
+        } else {
+          homeGroup.classList.toggle('expanded');
+        }
+      }
+    });
+  }
+
+  // Nested sub-pills under Home
+  document.querySelectorAll('.nav-sub-pill[data-tab]').forEach(pill => {
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tab = pill.dataset.tab;
+      navigateToTab(tab);
+    });
+  });
+
+  // Home Page: Click on Insights Card or Items -> Navigate to Insights Page
+  document.getElementById('home-insights-card')?.addEventListener('click', () => {
+    navigateToTab('insights');
+  });
+  document.getElementById('home-insights-header')?.addEventListener('click', () => {
+    navigateToTab('insights');
+  });
+
+  // Topbar Global Action Handlers
+  document.getElementById('btn-topbar-upload')?.addEventListener('click', () => {
+    alert('Upload Network Data\n\nSAP S/4HANA, Manhattan WMS, and Oracle OTM data pipelines are connected.\nSelect CSV/Excel freight matrix or ERP dump to sync.');
+  });
+
+  document.getElementById('btn-topbar-notifications')?.addEventListener('click', () => {
+    alert('Notifications & System Alerts\n\n• Critical: Delhi NCR DC capacity at 94%\n• Opportunity: Kolkata DC spare volume absorption\n• Notice: Winter fog lead-time adjustments active');
+  });
+
+  document.getElementById('btn-topbar-help')?.addEventListener('click', () => {
+    alert('Netgravity Help & Documentation\n\nAI Decision Intelligence for Logistics Networks.\n• Overview: Network telemetry & KPIs\n• Insights: AI-generated observations & diagnosis\n• Recommendations: Prescriptive optimization actions\n• Digital Twin: 2D/3D network topology\n• Scenarios: What-if decision planning');
+  });
+
+  document.getElementById('btn-topbar-profile')?.addEventListener('click', () => {
+    alert('User Profile\n\nLogged in as: Amit Kumar\nRole: Lead Supply Chain Architect (Admin)\nOrganization: Kearney Decision Systems');
   });
 
   // 2D / 3D View Toggle (Digital Twin Tab)
@@ -10731,17 +13986,22 @@ function renderFacilityDashboard() {
   const utilColor = getUtilColor(utilPct);
 
   // Update Top Bar & Header
-  document.getElementById('dash-facility-name').textContent = fac.name;
-  document.getElementById('dash-facility-type').textContent = isDC ? 'Distribution Centre' : 'Manufacturing Plant';
-  document.getElementById('dash-period-label').textContent = period ? period.label : 'August 2026';
+  const elFacName = document.getElementById('dash-facility-name');
+  if (elFacName) elFacName.textContent = fac.name;
+  const elFacType = document.getElementById('dash-facility-type');
+  if (elFacType) elFacType.textContent = isDC ? 'Distribution Centre' : 'Manufacturing Plant';
+  const elPeriodLabel = document.getElementById('dash-period-label');
+  if (elPeriodLabel) elPeriodLabel.textContent = period ? period.label : 'August 2026';
   
   const dashDot = document.getElementById('dash-facility-dot');
   if (dashDot) {
     dashDot.style.background = utilPct >= 90 ? 'var(--red)' : utilPct >= 75 ? 'var(--amber)' : 'var(--green)';
   }
 
-  document.getElementById('dash-title').textContent = `${fac.name} — Performance & Analytics`;
-  document.getElementById('dash-subtitle').textContent = `${fac.city}, ${fac.state} · ${fac.region} Region · Full operational telemetry and cost breakdown for ${period ? period.short : 'Aug 2026'}.`;
+  const elDashTitle = document.getElementById('dash-title');
+  if (elDashTitle) elDashTitle.textContent = `${fac.name} — Performance & Analytics`;
+  const elDashSubtitle = document.getElementById('dash-subtitle');
+  if (elDashSubtitle) elDashSubtitle.textContent = `${fac.city}, ${fac.state} · ${fac.region} Region · Full operational telemetry and cost breakdown for ${period ? period.short : 'Aug 2026'}.`;
 
   // 6 Executive Metric Cards
   const metricsGrid = document.getElementById('dash-metrics-grid');
@@ -10976,9 +14236,9 @@ function renderHomeInsights() {
 
   list.innerHTML = insights.map((ins, idx) => {
     const num = ins.num || (idx + 1);
-    const actionText = ins.action || 'click → overlay';
+    const actionText = ins.action || 'view details →';
     return `
-      <div class="home-insight-row" data-insight-id="${ins.id}">
+      <div class="home-insight-row" data-insight-id="${ins.id}" onclick="window.openInsightDrawer && window.openInsightDrawer('${ins.id}')" style="cursor:pointer;" title="Click to view insight details">
         <div class="insight-row-left">
           <span class="insight-num-badge">${num}</span>
           <span>${ins.title}</span>
@@ -10989,31 +14249,24 @@ function renderHomeInsights() {
     `;
   }).join('');
 
-  // Wire click handlers to open drawer
-  list.querySelectorAll('.home-insight-row').forEach(row => {
-    row.addEventListener('click', (e) => {
+  // Wire View More Insights Button
+  const btnViewMore = document.getElementById('btn-view-more-insights');
+  if (btnViewMore) {
+    btnViewMore.onclick = (e) => {
       e.stopPropagation();
-      const insightId = row.dataset.insightId;
-      const insight = insights.find(i => i.id === insightId);
-      if (!insight) return;
-
-      if (insightId === 'INS_RECOMMENDATION') {
-        navigateToTab('scenarios');
-      } else if (insight.detail) {
-        openInsightDrawer(insight);
-      }
-    });
-  });
+      navigateToTab('insights');
+    };
+  }
 }
 
-// ─── Home Action Items (Right Rail) ──────────────────────────
+// ─── Home Recommendations (Right Rail) ────────────────────────
 function renderHomeActions() {
-  const list = document.getElementById('home-actions-list');
+  const list = document.getElementById('home-actions-list') || document.getElementById('home-recommendations-list');
   if (!list) return;
 
   list.innerHTML = HOME_ACTION_ITEMS.map(act => `
-    <div class="home-action-row" data-action-id="${act.id}">
-      <div class="home-action-checkbox">☐</div>
+    <div class="home-action-row" data-action-id="${act.id}" onclick="window.openActionDrawer && window.openActionDrawer('${act.id}')" style="cursor:pointer;" title="Click to view recommendation details">
+      <div class="home-action-checkbox" style="color:#9218EA;font-weight:700">✦</div>
       <div class="home-action-text">
         ${act.title}
         <span class="home-action-tag" style="color:${act.tagColor}">(${act.tag})</span>
@@ -11021,142 +14274,118 @@ function renderHomeActions() {
     </div>
   `).join('');
 
-  // Wire click handlers to open Action Drawer
+  // Wire click handlers as well
   list.querySelectorAll('.home-action-row').forEach(row => {
     row.addEventListener('click', (e) => {
       e.stopPropagation();
       const actionId = row.dataset.actionId;
-      const action = HOME_ACTION_ITEMS.find(a => a.id === actionId);
-      if (action) {
-        openActionDrawer(action);
+      if (typeof window.openActionDrawer === 'function') {
+        window.openActionDrawer(actionId);
       }
     });
   });
+
+  // Wire View More Recommendations Button
+  const btnViewMoreRec = document.getElementById('btn-view-more-recommendations');
+  if (btnViewMoreRec) {
+    btnViewMoreRec.onclick = (e) => {
+      e.stopPropagation();
+      navigateToTab('recommendations');
+    };
+  }
 }
 
-// ─── Action Detail Drawer ───────────────────────────────────
-function openActionDrawer(action) {
+// ─── Recommendation Detail Drawer ───────────────────────────
+function openActionDrawer(actionOrId) {
   const overlay = document.getElementById('action-drawer-overlay');
   const content = document.getElementById('action-drawer-content');
   if (!overlay || !content) return;
 
+  let action = null;
+  if (typeof actionOrId === 'object' && actionOrId !== null) {
+    action = actionOrId;
+  } else if (typeof actionOrId === 'string' && typeof HOME_ACTION_ITEMS !== 'undefined') {
+    action = HOME_ACTION_ITEMS.find(a => a.id === actionOrId);
+  }
+  if (!action && typeof HOME_ACTION_ITEMS !== 'undefined' && HOME_ACTION_ITEMS.length > 0) {
+    action = HOME_ACTION_ITEMS[0];
+  }
+  if (!action) return;
+
   content.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-      <h2 style="font-size:20px;font-weight:800;margin:0;color:var(--text-1)">${action.title}</h2>
-      <span class="tag" style="background:var(--purple-50);color:${action.tagColor};font-weight:700">${action.tag}</span>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
+      <span class="provenance-badge ai-assessment" style="padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;background:#f5f3ff;color:#9218EA;">AI RECOMMENDATION</span>
+      <button class="facility-panel-close" onclick="window.closeActionDrawer && window.closeActionDrawer()" style="background:none;border:none;font-size:22px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1;">✕</button>
     </div>
-    <span class="provenance-badge ai-assessment">AI RECOMMENDATION</span>
 
-    <div class="drawer-section-title">Why am I recommending this?</div>
-    <p class="drawer-text" style="font-size:13.5px;line-height:1.6;color:var(--text-2)">${action.why}</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <h2 style="font-size:20px;font-weight:800;margin:0;color:#111827;">${action.title}</h2>
+      <span class="tag" style="background:#faf5ff;color:${action.tagColor};font-weight:700;padding:4px 8px;border-radius:6px;font-size:11px;">${action.tag}</span>
+    </div>
 
-    <div class="drawer-section-title">Root Cause & Network Telemetry</div>
-    ${action.rootCause.map(r => `
-      <div class="evidence-row">
-        <span class="evidence-label">${r.label}</span>
-        <span>
-          <span class="evidence-value">${r.value}</span>
-          <span class="provenance-badge ${r.provenance.toLowerCase().replace(/ /g, '-')}">${r.provenance}</span>
-        </span>
-      </div>
-    `).join('')}
+    <div style="background:#fafafc;border:1px solid #f0f0f5;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#9218EA;margin-bottom:6px;letter-spacing:0.05em;">Why am I recommending this?</div>
+      <p style="font-size:13px;line-height:1.6;color:#374151;margin:0;">${action.why}</p>
+    </div>
 
-    <div class="drawer-section-title">Expected Impact</div>
-    <div class="grid-3" style="gap:10px;margin-top:8px">
-      <div style="background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:var(--r-md);padding:10px;text-align:center">
-        <div class="text-xs text-muted" style="font-weight:600;text-transform:uppercase">Cost</div>
-        <div style="font-size:16px;font-weight:800;color:var(--green);margin-top:2px">${action.expectedImpact.cost}</div>
-      </div>
-      <div style="background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:var(--r-md);padding:10px;text-align:center">
-        <div class="text-xs text-muted" style="font-weight:600;text-transform:uppercase">SLA</div>
-        <div style="font-size:16px;font-weight:800;color:var(--green);margin-top:2px">${action.expectedImpact.sla}</div>
-      </div>
-      <div style="background:var(--bg-elevated);border:1px solid var(--border-light);border-radius:var(--r-md);padding:10px;text-align:center">
-        <div class="text-xs text-muted" style="font-weight:600;text-transform:uppercase">Capacity Risk</div>
-        <div style="font-size:16px;font-weight:800;color:var(--green);margin-top:2px">${action.expectedImpact.risk}</div>
+    <div style="margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:8px;letter-spacing:0.05em;">Root Cause & Network Telemetry</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${action.rootCause ? action.rootCause.map(r => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#ffffff;border:1px solid #eef0f3;border-radius:8px;">
+            <span style="font-size:12.5px;color:#6b7280;">${r.label}</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:13px;font-weight:700;color:#111827;">${r.value}</span>
+              <span class="provenance-badge ${r.provenance.toLowerCase().replace(/ /g, '-')}" style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f3f4f6;color:#6b7280;">${r.provenance}</span>
+            </div>
+          </div>
+        `).join('') : ''}
       </div>
     </div>
 
-    <div class="drawer-section-title">What I Tested</div>
-    <ul style="font-size:13px;color:var(--text-2);padding-left:20px;line-height:2">
-      ${action.whatITested.map(t => `<li>${t}</li>`).join('')}
-    </ul>
+    ${action.expectedImpact ? `
+      <div style="margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:8px;letter-spacing:0.05em;">Expected Impact</div>
+        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
+          <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:12px 10px;text-align:center">
+            <div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase">Cost</div>
+            <div style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px">${action.expectedImpact.cost}</div>
+          </div>
+          <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:12px 10px;text-align:center">
+            <div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase">SLA</div>
+            <div style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px">${action.expectedImpact.sla}</div>
+          </div>
+          <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:12px 10px;text-align:center">
+            <div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase">Capacity Risk</div>
+            <div style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px">${action.expectedImpact.risk}</div>
+          </div>
+        </div>
+      </div>
+    ` : ''}
 
-    <div class="drawer-section-title">Next Step</div>
-    <button class="btn btn-primary mt-sm" id="action-drawer-scenario-btn" style="width:100%">
-      Review Scenario in Scenario Planning →
-    </button>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:auto;padding-top:16px;">
+      <button class="btn-primary" onclick="window.navigateToTab && window.navigateToTab('scenarios'); window.closeActionDrawer && window.closeActionDrawer();" style="width:100%;padding:12px;border-radius:8px;background:#9218EA;color:#fff;border:none;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(146,24,234,0.25);">
+        Simulate in Scenario Planner →
+      </button>
+      <button onclick="window.navigateToTab && window.navigateToTab('recommendations'); window.closeActionDrawer && window.closeActionDrawer();" style="width:100%;padding:9px;border-radius:8px;background:#f9fafb;color:#374151;border:1px solid #e5e7eb;font-weight:600;font-size:12.5px;cursor:pointer;">
+        View All Recommendations →
+      </button>
+    </div>
   `;
 
+  overlay.classList.add('active');
   overlay.classList.add('visible');
-
-  // Wire CTA button to navigate directly to Scenario Planning
-  document.getElementById('action-drawer-scenario-btn')?.addEventListener('click', () => {
-    closeActionDrawer();
-    navigateToTab('scenarios');
-  });
+  overlay.style.display = 'flex';
 }
 
 function closeActionDrawer() {
-  document.getElementById('action-drawer-overlay')?.classList.remove('visible');
+  const overlay = document.getElementById('action-drawer-overlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    overlay.classList.remove('visible');
+    overlay.style.display = 'none';
+  }
 }
-
-// ─── Insight Drawer ─────────────────────────────────────────
-function openInsightDrawer(insight) {
-  const overlay = document.getElementById('insight-drawer-overlay');
-  const content = document.getElementById('insight-drawer-content');
-  if (!overlay || !content) return;
-
-  const d = insight.detail;
-
-  content.innerHTML = `
-    <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">${insight.title}</h2>
-    <span class="insight-impact-tag" style="background:${insight.impactColor}">${insight.impact}</span>
-
-    <div class="drawer-section-title">What I Found</div>
-    <p class="drawer-text">${d.whatIFound}</p>
-
-    <div class="drawer-section-title">Why It Matters</div>
-    <p class="drawer-text">${d.whyItMatters}</p>
-
-    <div class="drawer-section-title">Evidence</div>
-    ${d.evidence.map(e => `
-      <div class="evidence-row">
-        <span class="evidence-label">${e.label}</span>
-        <span>
-          <span class="evidence-value">${e.value}</span>
-          <span class="provenance-badge ${e.provenance.toLowerCase().replace(/ /g, '-')}">${e.provenance}</span>
-        </span>
-      </div>
-    `).join('')}
-
-    ${d.whatITested.length > 0 ? `
-      <div class="drawer-section-title">What I Tested</div>
-      <ul style="font-size:13px;color:var(--text-2);padding-left:20px;line-height:2">
-        ${d.whatITested.map(t => `<li>${t}</li>`).join('')}
-      </ul>
-    ` : ''}
-
-    <div class="drawer-section-title">Recommendation</div>
-    <p class="drawer-text" style="font-weight:600;color:var(--primary)">${d.recommendation}</p>
-
-    <div class="drawer-section-title">Next Action</div>
-    <button class="btn btn-primary mt-sm" id="drawer-next-action">${d.nextAction} →</button>
-  `;
-
-  overlay.classList.add('visible');
-
-  // Wire next action button
-  document.getElementById('drawer-next-action')?.addEventListener('click', () => {
-    closeInsightDrawer();
-    navigateToTab('scenarios');
-  });
-}
-
-function closeInsightDrawer() {
-  document.getElementById('insight-drawer-overlay')?.classList.remove('visible');
-}
-
 // ─── Contextual Home Chatbot ────────────────────────────────
 function handleHomeChat() {
   const input = document.getElementById('home-chat-input');
@@ -11264,7 +14493,7 @@ window.openFacilityPanel = function(facilityId) {
   const isBaddi = facilityId === 'DC_DELHI';
   const forecastSection = isBaddi ? `
     <div class="fp-stat" style="border-bottom:2px solid var(--red)">
-      <span class="fp-stat-label">Forecast Dec'26</span>
+      <span class="fp-stat-label">Forecast Dec 2026</span>
       <span class="fp-stat-value" style="color:var(--red)">10,800 units/day</span>
     </div>
     <div class="fp-stat">
