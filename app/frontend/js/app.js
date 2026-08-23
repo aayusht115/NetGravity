@@ -18,6 +18,7 @@ import { initAgent } from './agent.js';
 import { initLandingPage } from './landing.js';
 import { initInsightsPage } from './insights.js';
 import { initAuth } from './auth.js';
+import { initChatbot } from './chatbot.js';
 
 // ─── State ──────────────────────────────────────────────────
 const state = {
@@ -41,7 +42,8 @@ if (typeof window !== 'undefined') {
 
 // ─── Boot ───────────────────────────────────────────────────
 function bootApp() {
-  try { initAuth(); } catch (e) { console.error('initAuth error:', e); }
+  try { initAuth();
+  initChatbot(); } catch (e) { console.error('initAuth error:', e); }
   try { initLandingPage(); } catch (e) { console.error('initLandingPage error:', e); }
   try { initTabs(); } catch (e) { console.error('initTabs error:', e); }
   try { initHomeSelectors(); } catch (e) { console.error('initHomeSelectors error:', e); }
@@ -470,11 +472,7 @@ function initHomeSelectors() {
   });
 
   // Chatbot Send Button & Enter Key
-  document.getElementById('home-chat-send')?.addEventListener('click', handleHomeChat);
-  document.getElementById('home-chat-input')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleHomeChat();
-  });
-}
+  }
 
 function populateFacilitySelector() {
   const selFacilityPicker = document.getElementById('home-facility-picker');
@@ -914,41 +912,6 @@ export function closeActionDrawer() {
     overlay.classList.remove('active');
     overlay.classList.remove('visible');
     overlay.style.display = 'none';
-  }
-}
-// ─── Contextual Home Chatbot ────────────────────────────────
-function handleHomeChat() {
-  const input = document.getElementById('home-chat-input');
-  const messages = document.getElementById('home-chat-messages');
-  if (!input || !input.value.trim()) return;
-
-  const query = input.value.trim();
-  input.value = '';
-
-  if (messages) {
-    messages.style.display = 'block';
-    messages.innerHTML += `<div class="home-chat-msg user">You: ${query}</div>`;
-
-    // Contextual intelligent responses based on active facility and query
-    let responseText = '';
-    const qLower = query.toLowerCase();
-
-    if (qLower.includes('delhi') || qLower.includes('risk') || qLower.includes('capacity')) {
-      responseText = `Delhi NCR DC is operating at 94% utilisation. With demand projected to surge +14.2% by December (108% peak utilisation), NetGravity recommends flow rebalancing to Kolkata DC to avoid bottlenecks. You can explore this intervention under <strong>Scenario Planning</strong>.`;
-    } else if (qLower.includes('kolkata') || qLower.includes('spare') || qLower.includes('underutilised')) {
-      responseText = `Kolkata DC has 41% spare capacity (2,800 units/day) with the lowest handling cost in the network (₹3.5/unit). It can absorb 800–1,200 units/day from Baddi manufacturing to alleviate Northern corridor pressure.`;
-    } else if (qLower.includes('forecast') || qLower.includes('demand') || qLower.includes('surge')) {
-      responseText = `North India regional demand is forecast to grow 14% over the next 3 months, crossing the 10,000 units/day DC ceiling by October. View complete confidence bands in the <strong>Forecasting</strong> tab.`;
-    } else if (qLower.includes('cost') || qLower.includes('save') || qLower.includes('rebalance')) {
-      responseText = `The recommended flow rebalancing scenario reduces total operating cost by <strong>7.8% (₹8.4L/month)</strong> while preserving on-time delivery SLA at <strong>96.7%</strong>. Review the scenario comparison under <strong>Scenario Planning</strong>.`;
-    } else {
-      responseText = `Based on current network telemetry for ${state.selectedPeriod}, Delhi NCR is operating near capacity ceiling while Kolkata has significant headroom. Would you like to review the flow rebalancing scenario in <strong>Scenario Planning</strong>?`;
-    }
-
-    setTimeout(() => {
-      messages.innerHTML += `<div class="home-chat-msg bot">🤖 NetGravity: ${responseText}</div>`;
-      messages.scrollTop = messages.scrollHeight;
-    }, 250);
   }
 }
 
