@@ -17,6 +17,7 @@ import { initScenarios } from './scenarios.js';
 import { initAgent } from './agent.js';
 import { initLandingPage } from './landing.js';
 import { initInsightsPage } from './insights.js';
+import { initRecommendationsPage } from './recommendations.js';
 import { initAuth } from './auth.js';
 import { initChatbot } from './chatbot.js';
 
@@ -51,7 +52,8 @@ function bootApp() {
   try { renderTwinTables(); } catch (e) { console.error('renderTwinTables error:', e); }
   try { initScenarios(); } catch (e) { console.error('initScenarios error:', e); }
   try { initAgent(); } catch (e) { console.error('initAgent error:', e); }
-  try { initInsightsPage(); } catch (e) { console.error('initInsightsPage error:', e); }
+  try { initInsightsPage();
+  initRecommendationsPage(); } catch (e) { console.error('initInsightsPage error:', e); }
 }
 
 if (document.readyState === 'loading') {
@@ -126,7 +128,8 @@ export function navigateToTab(tab) {
     if (panel) panel.classList.add('active');
 
     state.activeTab = 'insights';
-    try { initInsightsPage(); } catch (e) { console.error(e); }
+    try { initInsightsPage();
+  initRecommendationsPage(); } catch (e) { console.error(e); }
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }

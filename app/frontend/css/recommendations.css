@@ -1,0 +1,595 @@
+/* ═════════════════════════════════════════════════════════════════════
+   NETGRAVITY RECOMMENDATIONS PAGE STYLES
+   Consulting-grade SaaS layout matching Insights page design language:
+   - Filter bar with category pills & priority dropdown
+   - 4 Top KPI summary cards
+   - Left feed column with interactive recommendation cards
+   - Right detail panel with impact grid, evidence telemetry, and CTAs
+   ═════════════════════════════════════════════════════════════════════ */
+
+.recommendations-page-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+/* ─── Filter Bar ──────────────────────────────────────────────────── */
+.recs-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 2px;
+  flex-wrap: wrap;
+}
+
+.recs-filter-pills-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.recs-filter-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.recs-filter-pill:hover {
+  border-color: #d8b4fe;
+  color: #9218EA;
+  background: #faf5ff;
+}
+
+.recs-filter-pill.active {
+  background: #9218EA;
+  border-color: #9218EA;
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(146, 24, 234, 0.25);
+}
+
+.recs-filter-priority-select {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #374151;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.recs-filter-priority-select:focus {
+  border-color: #9218EA;
+}
+
+/* ─── 4 Top Summary Cards Grid ────────────────────────────────────── */
+.recs-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.recs-summary-card {
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.recs-summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.recs-summary-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.recs-summary-card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+
+.recs-summary-card-icon.purple { background: #f5f3ff; color: #9218EA; }
+.recs-summary-card-icon.green  { background: #f0fdf4; color: #16a34a; }
+.recs-summary-card-icon.amber  { background: #fffbeb; color: #d97706; }
+.recs-summary-card-icon.blue   { background: #eff6ff; color: #2563eb; }
+
+.recs-summary-card-tag {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.recs-summary-card-tag.purple { background: #faf5ff; color: #9218EA; border: 1px solid #ede9fe; }
+.recs-summary-card-tag.green  { background: #f0fdf4; color: #15803d; border: 1px solid #dcfce7; }
+.recs-summary-card-tag.amber  { background: #fffbeb; color: #b45309; border: 1px solid #fef3c7; }
+.recs-summary-card-tag.blue   { background: #eff6ff; color: #1d4ed8; border: 1px solid #dbeafe; }
+
+.recs-summary-card-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.02em;
+  margin-top: 4px;
+}
+
+.recs-summary-card-label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* ─── Split Layout: Feed (Left) & Detail (Right) ─────────────────── */
+.recs-content-split {
+  display: grid;
+  grid-template-columns: 1.15fr 1.85fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .recs-content-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Left Recommendations Feed ──────────────────────────────────── */
+.recs-feed-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rec-card-item {
+  background: #ffffff;
+  border: 1.5px solid #eef0f3;
+  border-radius: 14px;
+  padding: 18px 20px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.rec-card-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(146, 24, 234, 0.08);
+  border-color: #d8b4fe;
+}
+
+.rec-card-item.selected {
+  border-color: #9218EA;
+  background: #ffffff;
+  box-shadow: 0 0 0 1.5px #9218EA, 0 8px 24px rgba(146, 24, 234, 0.12);
+}
+
+.rec-card-item.selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4.5px;
+  background: #9218EA;
+}
+
+.rec-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.rec-category-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rec-category-badge.purple { color: #9218EA; }
+.rec-category-badge.green  { color: #16a34a; }
+.rec-category-badge.amber  { color: #d97706; }
+.rec-category-badge.blue   { color: #2563eb; }
+
+.rec-priority-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.rec-priority-pill.high-impact { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
+.rec-priority-pill.high-value  { background: #faf5ff; color: #9218EA; border: 1px solid #ede9fe; }
+.rec-priority-pill.strategic   { background: #eff6ff; color: #2563eb; border: 1px solid #dbeafe; }
+.rec-priority-pill.opportunity { background: #f0fdf4; color: #16a34a; border: 1px solid #dcfce7; }
+.rec-priority-pill.low-risk    { background: #fffbeb; color: #d97706; border: 1px solid #fef3c7; }
+
+.rec-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.35;
+  margin-bottom: 6px;
+}
+
+.rec-card-desc {
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.rec-card-metrics-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.rec-metric-chip {
+  display: flex;
+  flex-direction: column;
+}
+
+.rec-metric-chip-label {
+  font-size: 10.5px;
+  color: #6b7280;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.rec-metric-chip-value {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.rec-metric-chip-value.positive { color: #16a34a; }
+.rec-metric-chip-value.purple   { color: #9218EA; }
+
+.rec-card-explore-link {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9218EA;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ─── Right Recommendation Detail Panel ───────────────────────────── */
+.rec-detail-panel-card {
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 16px;
+  padding: 24px 26px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.rec-detail-top-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rec-detail-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.02em;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.rec-detail-box-highlight {
+  background: #fafafc;
+  border: 1px solid #ede9fe;
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+
+.rec-detail-box-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #9218EA;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.rec-detail-box-text {
+  font-size: 13.5px;
+  color: #374151;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Expected Impact Grid */
+.rec-impact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.rec-impact-card {
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: 10px;
+  padding: 12px 10px;
+  text-align: center;
+}
+
+.rec-impact-card.purple {
+  background: #faf5ff;
+  border-color: #ede9fe;
+}
+
+.rec-impact-card-label {
+  font-size: 10.5px;
+  color: #166534;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.rec-impact-card.purple .rec-impact-card-label {
+  color: #9218EA;
+}
+
+.rec-impact-card-val {
+  font-size: 17px;
+  font-weight: 800;
+  color: #15803d;
+  margin-top: 2px;
+}
+
+.rec-impact-card.purple .rec-impact-card-val {
+  color: #790fc7;
+}
+
+/* Root cause telemetry table */
+.rec-section-subtitle {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #6b7280;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.rec-telemetry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rec-telemetry-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 8px;
+}
+
+.rec-telemetry-label {
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.rec-telemetry-val-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rec-telemetry-value {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* Rejected Alternatives */
+.rec-rejected-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rec-rejected-item {
+  padding: 10px 14px;
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-radius: 8px;
+}
+
+.rec-rejected-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #991b1b;
+}
+
+.rec-rejected-reason {
+  font-size: 12px;
+  color: #b91c1c;
+  margin-top: 2px;
+}
+
+/* Execution Steps */
+.rec-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rec-step-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #fafafc;
+  border: 1px solid #f0f0f5;
+  border-radius: 8px;
+}
+
+.rec-step-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #9218EA;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.rec-step-content {
+  flex: 1;
+}
+
+.rec-step-action {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.rec-step-owner {
+  font-size: 11.5px;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+/* Action CTA Buttons */
+.rec-action-buttons-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.rec-btn-approve {
+  padding: 10px 20px;
+  border-radius: 8px;
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.25);
+}
+
+.rec-btn-approve:hover {
+  background: #15803d;
+  transform: translateY(-1px);
+}
+
+.rec-btn-simulate {
+  padding: 10px 20px;
+  border-radius: 8px;
+  background: #9218EA;
+  color: #ffffff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  box-shadow: 0 2px 6px rgba(146, 24, 234, 0.25);
+}
+
+.rec-btn-simulate:hover {
+  background: #7e12cc;
+  transform: translateY(-1px);
+}
+
+.rec-btn-email {
+  padding: 10px 18px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rec-btn-email:hover {
+  border-color: #9218EA;
+  color: #9218EA;
+  background: #faf5ff;
+}
+
+.rec-btn-reject {
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.rec-btn-reject:hover {
+  background: #fef2f2;
+}
+
+/* Email Preview Box */
+.rec-email-preview-box {
+  background: #1f2937;
+  color: #f3f4f6;
+  padding: 16px 18px;
+  border-radius: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  display: none;
+}
+
+.rec-email-preview-box.visible {
+  display: block;
+}
