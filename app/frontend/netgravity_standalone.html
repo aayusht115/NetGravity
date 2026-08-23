@@ -42,6 +42,7 @@
   
   
   
+  
   <style>
 /* ═══════════════════════════════════════════════════════════
    NetGravity — Design System
@@ -689,7 +690,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 .sub-topbar-main-title,
 .greeting-text {
-  font-size: 16.5px;
+  font-size: 21px;
   color: #111827;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -3791,8 +3792,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .insights-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 14px;
+  margin-bottom: 14px;
 }
 
 .summary-card {
@@ -6139,6 +6140,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 
 
+
   <!-- ═══════════════════════════════════════ NETGRAVITY LANDING PAGE -->
   <div id="landing-page">
     <!-- Header / Brand -->
@@ -7472,13 +7474,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
         <!-- ─────────────────── TAB: FACILITY DASHBOARD / ANALYTICS ─────────────────── -->
         <section class="tab-panel" id="tab-facility-dashboard">
-          <div class="dash-header mb-lg" style="margin-top: 4px;">
-            <div>
-              <h1 class="home-greeting" id="dash-title">Facility Performance & Analytics Dashboard</h1>
-              <p class="home-subtitle" id="dash-subtitle">Complete operational telemetry, capacity utilisation, cost
-                breakdown, and corridor flows.</p>
-            </div>
-          </div>
 
           <!-- 6 Executive Data Cards -->
           <div class="grid-3 mb-lg" id="dash-metrics-grid">
@@ -7662,11 +7657,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
         <!-- ─────────────────── TAB: FORECAST -->
         <section class="tab-panel" id="tab-forecast">
-          <div class="section-header">Demand Forecast & External Signals</div>
-          <div class="section-intro">
-            I forecast North India demand to increase 14% over the next 3 months. Delhi NCR DC is projected to exceed
-            capacity in December.
-          </div>
 
           <div class="card mb-lg">
             <div class="card-header">
@@ -7825,11 +7815,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
           <!-- VIEW 2: Scenario Comparison / Multi-Scenario Trade-off Analysis -->
           <div class="scn-view-pane hidden" id="view-comparison">
-            <!-- Header Row -->
-            <div class="scn-header-row">
-              <div>
-                <h1 class="scn-header-title">Multi-Scenario Trade-off Analysis</h1>
-              </div>
+            <!-- Controls Row -->
+            <div class="scn-header-row" style="margin-bottom: 12px; justify-content: flex-end;">
               <div class="scn-table-controls">
                 <div class="control-group" style="margin:0">
                   <span class="control-label" style="font-size:11.5px">Metric View</span>
@@ -8716,6 +8703,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     </footer>
   </div>
 
+  
   
   
   

@@ -644,7 +644,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 .sub-topbar-main-title,
 .greeting-text {
-  font-size: 16.5px;
+  font-size: 21px;
   color: #111827;
   font-weight: 700;
   letter-spacing: -0.02em;
