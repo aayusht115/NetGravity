@@ -286,7 +286,22 @@ class OrchestratorRequest(BaseModel):
     # and for running without the LLM).
     explicit_intent: Optional[Intent] = None
     explicit_scenarios: List[ScenarioIntentSpec] = Field(default_factory=list)
+    #: A discrete hazard with a STATED likelihood. Feeds the RF pathway only.
     external_signal: Optional[ExternalSignal] = None
+
+    #: Structured `MarketIntelligenceSignal` objects from the Extraction Agent,
+    #: offered to the control plane for routing.
+    #:
+    #: Offered, not applied. The orchestrator decides which of these may reach
+    #: the Forecasting Agent (see `routing/signal_router.py`); supplying one
+    #: here does not mean it will influence anything.
+    #:
+    #: Kept separate from `external_signal` above because the two are different
+    #: kinds of evidence with different destinations. These carry no
+    #: probability and can never reach RF; that one carries a probability and
+    #: can never reach a forecast. Typed `Any` so the orchestrator schema need
+    #: not import the ingestion package.
+    market_signals: List[Any] = Field(default_factory=list)
 
     # Opt out of all model calls for this run. Deterministic results are
     # unaffected; only interpretation and narrative degrade to rule-based.

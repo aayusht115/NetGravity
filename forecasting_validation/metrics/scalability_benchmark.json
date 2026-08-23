@@ -1,0 +1,42 @@
+[
+  {
+    "num_series": 10,
+    "pattern_runtime_sec": 0.1518,
+    "pattern_throughput_series_per_sec": 65.86,
+    "pattern_peak_memory_mb": 0.36,
+    "backtest_runtime_sec": 0.7895,
+    "backtest_throughput_series_per_sec": 12.67,
+    "backtest_peak_memory_mb": 0.35,
+    "backtest_slowdown_factor": 5.2
+  },
+  {
+    "num_series": 100,
+    "pattern_runtime_sec": 1.553,
+    "pattern_throughput_series_per_sec": 64.39,
+    "pattern_peak_memory_mb": 1.82,
+    "backtest_runtime_sec": 8.2396,
+    "backtest_throughput_series_per_sec": 12.14,
+    "backtest_peak_memory_mb": 1.83,
+    "backtest_slowdown_factor": 5.31
+  },
+  {
+    "num_series": 500,
+    "pattern_runtime_sec": 7.7392,
+    "pattern_throughput_series_per_sec": 64.61,
+    "pattern_peak_memory_mb": 8.31,
+    "backtest_runtime_sec": 40.5472,
+    "backtest_throughput_series_per_sec": 12.33,
+    "backtest_peak_memory_mb": 8.41,
+    "backtest_slowdown_factor": 5.24
+  },
+  {
+    "num_series": 1000,
+    "pattern_runtime_sec": 15.1648,
+    "pattern_throughput_series_per_sec": 65.94,
+    "pattern_peak_memory_mb": 16.41,
+    "backtest_runtime_sec": 80.7317,
+    "backtest_throughput_series_per_sec": 12.39,
+    "backtest_peak_memory_mb": 16.62,
+    "backtest_slowdown_factor": 5.32
+  }
+]

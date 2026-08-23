@@ -79,7 +79,17 @@ class ExecutionContext:
     raw_input: str = ""
     intent: Intent = Intent.UNKNOWN
     intent_resolution: Optional[IntentResolution] = None
+    # The RF-eligible signal: a discrete hazard with a stated likelihood. Feeds
+    # `RF = P + REI - P*REI` and nothing else.
     external_signal: Optional[ExternalSignal] = None
+    # Structured market-intelligence signals from the Extraction Agent, awaiting
+    # a routing decision. Deliberately a SEPARATE field from `external_signal`
+    # above: these carry no probability and can never reach RF, and that one
+    # carries a probability and can never reach a forecast. One field holding
+    # both would be the first step to conflating them.
+    market_signals: List[Any] = field(default_factory=list)
+    # What the orchestrator decided about each of them, for the audit trail.
+    signal_routing: Optional[Any] = None
 
     # --- immutable data references ---
     # The observed network snapshot this run is pinned to. Never changes once
@@ -127,6 +137,11 @@ class ExecutionContext:
     network_states: Dict[str, Any] = field(default_factory=dict)
     # Handles to Digital Twin states published for this run.
     twin_refs: List[Any] = field(default_factory=list)
+    # The AUTHORITATIVE typed `ForecastResult`. Same rationale as `rei_registry`
+    # above: `engine_results` holds a flattened projection for transport, and
+    # rebuilding a result from it would lose per-series calculation status —
+    # making a series that FAILED indistinguishable from one nobody asked for.
+    forecast_result: Optional[Any] = None
     risk_results: Optional[RiskAssessment] = None
     reasoning: Optional[ReasoningResult] = None
     governance_result: Optional[GovernanceDecision] = None
@@ -317,6 +332,7 @@ class ExecutionContext:
             actor=request.actor,
             raw_input=request.input,
             external_signal=request.external_signal,
+            market_signals=list(request.market_signals),
             baseline_snapshot_id=request.network_snapshot_id or current_snapshot_id,
             llm_enabled=not request.disable_llm,
         )

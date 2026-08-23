@@ -17,6 +17,7 @@ import { renderForecastChart,
          renderFacilityThroughputChart, renderFacilityCostBreakdownChart, renderFacilityLaneFlowsChart } from './charts.js';
 import { initScenarios } from './scenarios.js';
 import { initAgent } from './agent.js';
+import { initLandingPage } from './landing.js';
 
 // ─── State ──────────────────────────────────────────────────
 const state = {
@@ -30,8 +31,15 @@ const state = {
   selectedPeriod: 'AUG_2026',
 };
 
+// Expose globally on window
+if (typeof window !== 'undefined') {
+  window.navigateToTab = navigateToTab;
+  window.renderHome = renderHome;
+}
+
 // ─── Boot ───────────────────────────────────────────────────
 function bootApp() {
+  try { initLandingPage(); } catch (e) { console.error('initLandingPage error:', e); }
   try { initTabs(); } catch (e) { console.error('initTabs error:', e); }
   try { initHomeSelectors(); } catch (e) { console.error('initHomeSelectors error:', e); }
   try { renderHome(); } catch (e) { console.error('renderHome error:', e); }

@@ -21,12 +21,14 @@ from netgravity.orchestrator.agents.external_signal_agent import ExternalSignalA
 from netgravity.orchestrator.agents.intent_agent import IntentAgent
 from netgravity.orchestrator.agents.llm_gateway import LLMGateway
 from netgravity.orchestrator.agents.reasoning_agent import ReasoningAgent
+from netgravity.forecasting.service import ForecastingService
 from netgravity.orchestrator.audit import events
 from netgravity.orchestrator.audit.audit_logger import AuditLogger
 from netgravity.orchestrator.core.execution_context import ExecutionContext
 from netgravity.orchestrator.core.orchestrator import Orchestrator
 from netgravity.orchestrator.core.planner import (
     CAP_CREATE_SCEN,
+    CAP_FORECAST,
     CAP_GOVERN,
     CAP_INTERPRET_SIG,
     CAP_KPI,
@@ -42,6 +44,7 @@ from netgravity.orchestrator.engines.deterministic import (
     KPIClient,
     OptimizationClient,
     REIClient,
+    flatten_forecast_result,
     flatten_network_state,
     flatten_rei_registry,
     flatten_scenario_result,
@@ -55,6 +58,7 @@ from netgravity.orchestrator.governance.action_classifier import GovernancePolic
 from netgravity.orchestrator.risk.risk_assessment import assess_event_risk
 from netgravity.orchestrator.risk.risk_factor import assess_network_risk, not_computable
 from netgravity.orchestrator.routing.capability_registry import CapabilityRegistry
+from netgravity.orchestrator.routing.signal_router import ExternalSignalRouter
 from netgravity.orchestrator.schemas.plans import ExecutionMode, ToolRequest
 from netgravity.orchestrator.schemas.risk import RFNotComputableReason, RiskAssessment
 from netgravity.orchestrator.state.stores import ExecutionStateStore, ScenarioStore, SnapshotManager
@@ -76,6 +80,8 @@ def build_orchestrator(
     gateway: Optional[LLMGateway] = None,
     governance_policy: Optional[GovernancePolicy] = None,
     enable_llm: bool = True,
+    history_provider: Optional[Any] = None,
+    signal_provider: Optional[Any] = None,
 ) -> Orchestrator:
     """
     Construct a fully wired orchestrator.
@@ -87,6 +93,16 @@ def build_orchestrator(
                   orchestrator runs deterministically.
         governance_policy: Threshold overrides.
         enable_llm: False disables model calls entirely for this instance.
+        history_provider: `snapshot -> (List[DemandTimeSeries], warnings)`.
+            Supplies observed demand history to the forecasting capability.
+            Defaults to None, in which case forecasting reports that no history
+            is available rather than inventing one — a deployment that has not
+            ingested transactional history genuinely cannot forecast, and
+            saying so is the correct behaviour.
+        signal_provider: `snapshot -> (List[MarketIntelligenceSignal], warnings)`.
+            Supplies structured external signals from the Extraction Agent to
+            the control plane. Supplying a signal OFFERS it for routing; the
+            orchestrator still decides whether it may reach the forecaster.
 
     Returns:
         A ready Orchestrator.
@@ -132,6 +148,12 @@ def build_orchestrator(
         "intent_agent": intent_agent,
         "reasoning_agent": reasoning_agent,
         "signal_agent": signal_agent,
+        "forecasting": ForecastingService(),
+        "history_provider": history_provider,
+        # The routing decision layer. Lives on the orchestrator, never on
+        # the Forecasting Agent.
+        "signal_router": ExternalSignalRouter(),
+        "signal_provider": signal_provider,
     })
 
     _register_defaults(orchestrator, registry)
@@ -369,6 +391,131 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
                 nodes_failed=registry_obj.n_failed,
             )
         return output
+
+    # ---- forecast.demand -------------------------------------------------
+    async def forecast_demand(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
+        """
+        Estimate future demand for the markets in the observed network.
+
+        The Orchestrator decides WHEN this runs — the capability is reachable
+        only from a plan step, and the forecast workflow contains no solver, so
+        a demand question cannot trigger an optimisation.
+
+        History comes from the `history_provider` service, which reads what the
+        ingestion pipeline wrote to its staging zone. With no provider and no
+        history supplied on the request there is nothing to forecast, and the
+        step reports that rather than inventing a series.
+        """
+        from netgravity.forecasting.history import series_for_network
+        from netgravity.forecasting.schemas import ForecastRequest, SelectionMode
+
+        snapshot = orch.snapshots.get(ctx.baseline_snapshot_id or "")
+        horizon = int(req.params.get("horizon", 1))
+
+        pairs = {(d.market_id, d.product_id) for d in snapshot.network.demands}
+
+        provider = svc.get("history_provider")
+        history: List[Any] = []
+        provider_warnings: List[str] = []
+        if provider is not None:
+            history, provider_warnings = provider(snapshot)
+        for warning in provider_warnings:
+            ctx.add_warning(f"forecast history: {warning}")
+
+        matched, missing = series_for_network(history, pairs)
+        if missing:
+            ctx.add_warning(
+                f"no observed history for {len(missing)} market-product pair(s): "
+                f"{', '.join(missing[:5])}{'...' if len(missing) > 5 else ''}. "
+                f"They are reported unforecastable rather than defaulted."
+            )
+
+        if not matched:
+            raise MissingDataError(
+                "No observed demand history is available for this network, so no "
+                "forecast can be produced. History reaches the forecaster through "
+                "the ingestion staging zone; none was found for any market in the "
+                "current snapshot.",
+                context={"snapshot_id": snapshot.snapshot_id,
+                         "markets_without_history": missing[:20]},
+            )
+
+        # ---- ROUTE external signals -------------------------------------
+        # The orchestrator decides which extracted signals may inform this
+        # forecast, and passes only those. The Forecasting Agent never reaches
+        # for a signal itself; whatever is not handed to it here cannot
+        # influence anything.
+        #
+        # Signals reach the context from the Extraction Agent, either supplied
+        # on the request or fetched by the `signal_provider` service. Extraction
+        # structures them; it does not decide they will be used.
+        offered = list(ctx.market_signals)
+        provider = svc.get("signal_provider")
+        if provider is not None:
+            provided, provider_signal_warnings = provider(snapshot)
+            offered.extend(provided)
+            for warning in provider_signal_warnings:
+                ctx.add_warning(f"external signals: {warning}")
+
+        routing = svc["signal_router"].route_for_forecast(
+            offered,
+            known_entity_ids={f.id for f in snapshot.network.facilities},
+        )
+        ctx.signal_routing = routing
+        for record in routing.rejected:
+            ctx.add_warning(
+                f"external signal '{record.signal_id}' not routed to forecasting "
+                f"({record.outcome.value}): {record.reason}"
+            )
+
+        routing_trace = orch.audit.get(ctx.execution_id)
+        if routing.records and routing_trace is not None:
+            routing_trace.record(
+                events.SIGNALS_ROUTED, step_id=req.capability,
+                accepted=len(routing.accepted),
+                considered=len(routing.records),
+                outcomes=routing.outcome_counts(),
+                decisions=routing.audit_rows(),
+            )
+
+        result = await asyncio.get_running_loop().run_in_executor(
+            None,
+            lambda: svc["forecasting"].forecast(ForecastRequest(
+                series=matched,
+                horizon=horizon,
+                snapshot_id=snapshot.snapshot_id,
+                data_version=snapshot.data_version,
+                network_id=snapshot.network_id,
+                execution_id=ctx.execution_id,
+                request_id=ctx.request_id,
+                # ONLY what the orchestrator routed.
+                signals=routing.accepted,
+                enable_signal_enrichment=bool(routing.accepted),
+                run_backtest=bool(req.params.get("run_backtest", True)),
+                selection_mode=SelectionMode(
+                    req.params.get("selection_mode", SelectionMode.PATTERN.value)
+                ),
+            )),
+        )
+
+        # The TYPED result is authoritative; the dict below is a transport
+        # projection. Anything needing per-series status reads the former.
+        ctx.forecast_result = result
+        for warning in result.warnings:
+            ctx.add_warning(f"forecast: {warning}")
+
+        trace = orch.audit.get(ctx.execution_id)
+        if trace is not None:
+            trace.record(
+                events.FORECAST_COMPLETED, step_id=req.capability,
+                status=result.status.value, horizon=horizon,
+                series=len(result.series),
+                status_counts=result.status_counts(),
+                engines=result.provenance.engines_used,
+                signals_applied=result.provenance.signal_ids,
+                model_version=result.provenance.model_version,
+            )
+        return flatten_forecast_result(result)
 
     # ---- external.interpret_signal --------------------------------------
     async def interpret_signal(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
@@ -668,6 +815,16 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             execution_mode=ExecutionMode.DETERMINISTIC,
             dependencies=(CAP_REI, CAP_INTERPRET_SIG),
             timeout_seconds=15.0, retry_policy=NO_RETRY,
+        ),
+        Capability(
+            name=CAP_FORECAST, handler=forecast_demand,
+            description="Estimate future demand from observed history (deterministic).",
+            # DETERMINISTIC: the engines are numerical and reproducible. No
+            # model call happens anywhere in the forecasting package — the
+            # source repository's LLM signal path was not integrated.
+            execution_mode=ExecutionMode.DETERMINISTIC,
+            dependencies=(CAP_LOAD_NETWORK,),
+            timeout_seconds=300.0, retry_policy=NO_RETRY,
         ),
         Capability(
             name=CAP_REASON, handler=synthesise,

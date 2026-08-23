@@ -1,0 +1,610 @@
+/* ═══════════════════════════════════════════════════════════
+   Netgravity — Landing Page Design System
+   Kearney Purple (#9218EA) · Minimal · Modern Consulting SaaS
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --brand-purple: #9218EA;
+  --brand-purple-dark: #7c14c7;
+  --brand-purple-light: #f5edfc;
+  --brand-purple-subtle: #faf5ff;
+  --brand-purple-border: #e9d5ff;
+  --brand-purple-glow: rgba(146, 24, 234, 0.18);
+  
+  --landing-bg: #ffffff;
+  --landing-text-primary: #111827;
+  --landing-text-secondary: #4b5563;
+  --landing-text-muted: #6b7280;
+  
+  --card-bg: rgba(255, 255, 255, 0.96);
+  --card-border: #edf0f7;
+  --card-shadow: 0 16px 36px -4px rgba(17, 24, 39, 0.08), 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+
+/* ─── Top-level Container ─────────────────────────────────── */
+#landing-page {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: var(--landing-bg);
+  background-image: 
+    radial-gradient(circle at 85% 15%, rgba(245, 237, 252, 0.8) 0%, rgba(255, 255, 255, 0) 50%),
+    radial-gradient(circle at 10% 85%, rgba(250, 245, 255, 0.6) 0%, rgba(255, 255, 255, 0) 40%);
+  display: flex;
+  flex-direction: column;
+  z-index: 10000;
+  overflow-x: hidden;
+  overflow-y: auto;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--landing-text-primary);
+  opacity: 1;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+#landing-page.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.985);
+  display: none;
+}
+
+/* ─── Header / Brand Lockup ───────────────────────────────── */
+.landing-header {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 40px 72px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.landing-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-decoration: none;
+  cursor: default;
+}
+
+.landing-logo-svg {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.landing-brand-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.landing-brand-title {
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--landing-text-primary);
+  line-height: 1.1;
+}
+
+.landing-brand-sub {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--brand-purple);
+  letter-spacing: -0.01em;
+  margin-top: 2px;
+}
+
+.landing-header-right {
+  min-width: 40px;
+}
+
+/* ─── Hero Section ────────────────────────────────────────── */
+.landing-hero {
+  flex: 1;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 10px 72px 48px;
+  display: grid;
+  grid-template-columns: 1.05fr 1.2fr;
+  align-items: center;
+  gap: 48px;
+}
+
+/* ─── Left Column (Hero Content) ──────────────────── */
+.landing-hero-left {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 600px;
+}
+
+.landing-headline {
+  font-size: 42px;
+  font-weight: 800;
+  line-height: 1.18;
+  letter-spacing: -0.03em;
+  color: var(--landing-text-primary);
+  margin-bottom: 22px;
+  white-space: normal;
+}
+
+.landing-headline .highlight-purple {
+  color: var(--brand-purple);
+  display: inline;
+}
+
+.landing-subtext {
+  font-size: 17px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--landing-text-secondary);
+  letter-spacing: -0.01em;
+  margin-bottom: 20px;
+  max-width: 520px;
+}
+
+.landing-accent-bar {
+  width: 38px;
+  height: 3.5px;
+  background: var(--brand-purple);
+  border-radius: 2px;
+  margin-bottom: 34px;
+}
+
+.landing-cta-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.btn-landing-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: var(--brand-purple);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 14px 34px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(146, 24, 234, 0.28);
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: -0.01em;
+}
+
+.btn-landing-primary .btn-arrow {
+  font-size: 16px;
+  transition: transform 0.2s ease;
+}
+
+.btn-landing-primary:hover {
+  background: var(--brand-purple-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(146, 24, 234, 0.38);
+}
+
+.btn-landing-primary:hover .btn-arrow {
+  transform: translateX(3px);
+}
+
+.btn-landing-primary:active {
+  transform: translateY(0);
+}
+
+.btn-landing-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  color: var(--brand-purple);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 13px 36px;
+  border-radius: 10px;
+  border: 1.5px solid var(--brand-purple-border);
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  letter-spacing: -0.01em;
+}
+
+.btn-landing-secondary:hover {
+  border-color: var(--brand-purple);
+  background: var(--brand-purple-subtle);
+  transform: translateY(-2px);
+}
+
+.btn-landing-secondary:active {
+  transform: translateY(0);
+}
+
+/* ─── Right Column (Network Visualization) ────────────────── */
+.landing-hero-right {
+  position: relative;
+  width: 100%;
+  height: 560px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.network-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: 720px;
+  max-height: 560px;
+}
+
+.network-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+/* ─── Map Background Dots ─────────────────────────────────── */
+.map-dot {
+  fill: #c4b5fd;
+  opacity: 0.62;
+  transition: opacity 0.3s ease;
+}
+
+.map-dot.core {
+  opacity: 0.80;
+  fill: #a855f7;
+}
+
+/* ─── Network Routes ──────────────────────────────────────── */
+.route-mesh {
+  stroke: #cbd5e1;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  opacity: 0.85;
+  transition: all 0.3s ease;
+}
+
+.route-active-glow {
+  stroke: var(--brand-purple);
+  stroke-width: 5.5;
+  stroke-linecap: round;
+  fill: none;
+  opacity: 0.35;
+  filter: drop-shadow(0 0 8px var(--brand-purple));
+}
+
+.route-active {
+  stroke: var(--brand-purple);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  fill: none;
+  transition: all 0.3s ease;
+}
+
+.route-dashed {
+  stroke: var(--brand-purple);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-dasharray: 5 4;
+  fill: none;
+  opacity: 0.9;
+}
+
+/* Animated flow particles along routes */
+.flow-particle {
+  fill: var(--brand-purple);
+  filter: drop-shadow(0 0 4px var(--brand-purple));
+}
+
+/* ─── Network Nodes ───────────────────────────────────────── */
+.network-node-group {
+  cursor: pointer;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+}
+
+.node-halo {
+  fill: #ffffff;
+  filter: drop-shadow(0 6px 18px rgba(146, 24, 234, 0.32));
+  transition: all 0.25s ease;
+}
+
+.node-inner-badge {
+  fill: var(--brand-purple);
+  transition: all 0.25s ease;
+}
+
+.node-icon-svg {
+  fill: #ffffff;
+}
+
+.node-label {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  fill: #475569;
+  pointer-events: none;
+  transition: all 0.25s ease;
+}
+
+/* Node subtle ambient pulse */
+@keyframes nodeAmbientGlow {
+  0%, 100% {
+    filter: drop-shadow(0 4px 14px rgba(146, 24, 234, 0.25));
+  }
+  50% {
+    filter: drop-shadow(0 6px 22px rgba(146, 24, 234, 0.42));
+  }
+}
+
+.node-ambient {
+  animation: nodeAmbientGlow 4s ease-in-out infinite;
+}
+
+/* Hover Interaction States */
+.network-node-group:hover .node-halo {
+  filter: drop-shadow(0 8px 24px rgba(146, 24, 234, 0.45));
+}
+
+.network-node-group:hover .node-label {
+  font-weight: 700;
+  fill: var(--landing-text-primary);
+  font-size: 11.5px;
+}
+
+.dimmed-node {
+  opacity: 0.35 !important;
+}
+
+.highlighted-node {
+  opacity: 1 !important;
+}
+
+.dimmed-route {
+  opacity: 0.15 !important;
+}
+
+.highlighted-route {
+  stroke: var(--brand-purple) !important;
+  stroke-width: 2.2px !important;
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 6px rgba(146, 24, 234, 0.5));
+}
+
+/* ─── Floating Cards ──────────────────────────────────────── */
+.floating-card {
+  position: absolute;
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  box-shadow: var(--card-shadow);
+  z-index: 10;
+  pointer-events: auto;
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.floating-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 40px -4px rgba(17, 24, 39, 0.12), 0 6px 16px rgba(0, 0, 0, 0.04);
+}
+
+/* Performance Card (Top Right) */
+.perf-card {
+  top: 16px;
+  right: 0px;
+  width: 240px;
+  padding: 16px 18px;
+}
+
+.perf-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--landing-text-primary);
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
+}
+
+.perf-metrics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.perf-metric-row {
+  display: flex;
+  align-items: center;
+  font-size: 11.5px;
+}
+
+.perf-icon-box {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--brand-purple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  margin-right: 9px;
+  flex-shrink: 0;
+}
+
+.perf-icon-svg {
+  width: 12px;
+  height: 12px;
+  fill: #ffffff;
+}
+
+.perf-metric-name {
+  color: #4b5563;
+  font-weight: 500;
+  flex: 1;
+  white-space: nowrap;
+}
+
+.perf-metric-value {
+  font-weight: 700;
+  color: var(--landing-text-primary);
+  margin-right: 8px;
+  white-space: nowrap;
+}
+
+.perf-metric-trend {
+  font-weight: 600;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.perf-metric-trend.green {
+  color: #16a34a;
+}
+
+/* AI Recommendation Card (Bottom Right) */
+.ai-rec-card {
+  bottom: 20px;
+  right: 8px;
+  width: 246px;
+  padding: 16px 18px;
+}
+
+.rec-tag-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--brand-purple);
+  letter-spacing: 0.01em;
+  margin-bottom: 6px;
+}
+
+.rec-sparkle {
+  font-size: 12px;
+}
+
+.rec-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--landing-text-primary);
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+
+.rec-subtext {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--landing-text-muted);
+  margin-bottom: 12px;
+}
+
+.rec-action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--brand-purple);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 2px 0;
+}
+
+.rec-action-link:hover {
+  color: var(--brand-purple-dark);
+}
+
+.rec-action-link .rec-arrow {
+  transition: transform 0.2s ease;
+}
+
+.rec-action-link:hover .rec-arrow {
+  transform: translateX(3px);
+}
+
+/* ─── Responsive Styles ───────────────────────────────────── */
+@media (max-width: 1200px) {
+  .landing-header {
+    padding: 28px 40px 16px;
+  }
+  .landing-hero {
+    padding: 16px 40px 36px;
+    gap: 32px;
+  }
+  .landing-headline {
+    font-size: 44px;
+  }
+  .perf-card {
+    right: 0;
+    width: 230px;
+  }
+  .ai-rec-card {
+    right: 0;
+    width: 230px;
+  }
+}
+
+@media (max-width: 960px) {
+  #landing-page {
+    position: relative;
+    height: auto;
+    min-height: 100vh;
+  }
+  .landing-hero {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    padding: 16px 32px 48px;
+  }
+  .landing-hero-left {
+    max-width: 100%;
+    text-align: center;
+    align-items: center;
+  }
+  .landing-accent-bar {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .landing-cta-group {
+    justify-content: center;
+  }
+  .landing-hero-right {
+    height: 500px;
+  }
+}
+
+@media (max-width: 600px) {
+  .landing-header {
+    padding: 20px 24px 12px;
+  }
+  .landing-headline {
+    font-size: 34px;
+  }
+  .landing-subtext {
+    font-size: 15px;
+  }
+  .landing-cta-group {
+    flex-direction: column;
+    width: 100%;
+  }
+  .btn-landing-primary,
+  .btn-landing-secondary {
+    width: 100%;
+  }
+  .perf-card,
+  .ai-rec-card {
+    position: static;
+    width: 100%;
+    margin-top: 16px;
+  }
+  .network-stage {
+    display: flex;
+    flex-direction: column;
+  }
+}

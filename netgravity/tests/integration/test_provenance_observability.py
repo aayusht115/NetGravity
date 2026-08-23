@@ -208,6 +208,51 @@ class TestObservability:
             explicit_intent=Intent.NETWORK_STATE_QUERY, disable_llm=True,
         )))
 
+        # FORECAST_COMPLETED is only reachable from the forecast workflow, and
+        # only when observed history exists to forecast from — a deployment
+        # with no ingested history genuinely cannot emit it.
+        from netgravity.forecasting import DemandPoint, DemandTimeSeries
+
+        def _history(_snapshot):
+            return [
+                DemandTimeSeries(
+                    market_id=market, product_id="P1",
+                    history=[DemandPoint(period=t + 1, quantity=100.0 + t * 2)
+                             for t in range(12)],
+                )
+                for market in ("MKT_NORTH", "MKT_WEST", "MKT_EAST")
+            ], []
+
+        forecasting = build_orchestrator(
+            network=build_delhi_network(), enable_llm=False,
+            history_provider=_history,
+        )
+        # SIGNALS_ROUTED needs at least one signal OFFERED to the control
+        # plane. One accepted and one refused, so the event carries a real
+        # decision rather than an empty one.
+        from netgravity.ingestion.schemas.signal import (
+            GuardrailVerdict, MarketIntelligenceSignal, ScenarioUse,
+            SignalBucket, SignalConfidence, SignalDirection,
+        )
+
+        def _signal(signal_id: str, *, use: ScenarioUse) -> MarketIntelligenceSignal:
+            return MarketIntelligenceSignal(
+                signal_id=signal_id, title=signal_id, published_date="2026-01-01",
+                bucket=SignalBucket.CUSTOMER, direction=SignalDirection.UP,
+                confidence=SignalConfidence.HIGH, scenario_use=use,
+                affected_entities=["MKT_NORTH"],
+                verdict=GuardrailVerdict(passed=True, bucket=SignalBucket.CUSTOMER),
+            )
+
+        collect(forecasting, forecasting.run_sync(OrchestratorRequest(
+            input="What will demand look like next quarter?",
+            explicit_intent=Intent.FORECAST, disable_llm=True,
+            market_signals=[
+                _signal("routed", use=ScenarioUse.FORECAST_ENRICHMENT),
+                _signal("refused", use=ScenarioUse.LOGGED_ONLY),
+            ],
+        )))
+
         # STEP_EXCEPTION covers a raise from OUTSIDE the tool wrapper, which the
         # engine-error paths above never reach because `CapabilityTool` converts
         # engine failures into a failed ToolResult. Capability-level

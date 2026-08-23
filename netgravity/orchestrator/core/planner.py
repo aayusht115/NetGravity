@@ -37,6 +37,7 @@ CAP_KPI            = "kpi.summarise"
 CAP_REI            = "resilience.assess"
 CAP_RISK           = "risk.compute_rf"
 CAP_INTERPRET_SIG  = "external.interpret_signal"
+CAP_FORECAST       = "forecast.demand"
 CAP_REASON         = "reasoning.synthesise"
 CAP_GOVERN         = "governance.classify"
 
@@ -268,17 +269,27 @@ def _build_status(_: IntentResolution) -> List[PlanStep]:
 
 def _build_forecast(_: IntentResolution) -> List[PlanStep]:
     """
-    Forecast requests are RECOGNISED but not served.
+    "What will demand look like next quarter?" — estimate, and stop there.
 
-    There is no forecasting engine in NetGravity. Rather than route the request
-    somewhere plausible-looking or invent a projection, the workflow loads the
-    snapshot and reports honestly that the capability is unavailable. Registering
-    a real forecasting capability later needs no change to the NLU layer.
+    Contains NO solver step, by construction. A demand estimate is not an
+    optimisation, and running the MILP to answer a forecast question would burn
+    solver time and imply a network decision nobody asked for. Optimising
+    against a forecast is a separate act with its own entry point — see
+    `Orchestrator.build_forecast_scenario`, which materialises the forecast as
+    a hypothetical scenario and lets the ordinary scenario machinery solve it.
+
+    The forecast step is `optional`, so an environment with no forecasting
+    capability registered still runs and reports the absence rather than
+    failing. That is the same degradation the rest of the plan uses, and it is
+    how this workflow behaved before a forecaster existed at all.
     """
     return [
         PlanStep(step_id="load", capability=CAP_LOAD_NETWORK,
                  description="Read the observed network snapshot."),
-        *_reason_and_govern(["load"]),
+        PlanStep(step_id="forecast", capability=CAP_FORECAST,
+                 description="Estimate future demand from observed history.",
+                 depends_on=["load"], optional=True),
+        *_reason_and_govern(["forecast"]),
     ]
 
 
@@ -327,7 +338,7 @@ WORKFLOW_TEMPLATES: Dict[Intent, WorkflowTemplate] = {
         _build_status),
     Intent.FORECAST: WorkflowTemplate(
         "wf_forecast", Intent.FORECAST,
-        "Recognise a forecast request; no forecasting capability is registered.",
+        "Estimate future demand from observed history; no solve.",
         _build_forecast),
 }
 

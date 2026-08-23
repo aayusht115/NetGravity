@@ -53,6 +53,16 @@ SOLVER_INFEASIBLE    = "solver_infeasible"
 # --- reasoning and governance ---------------------------------------------
 REASONING_COMPLETED  = "reasoning_completed"
 GROUNDING_COMPLETED  = "grounding_completed"
+#: The orchestrator's routing decision over extracted external signals:
+#: which may inform a forecast, and why the rest may not. Emitted before
+#: the forecast itself, so the decision is auditable independently of what
+#: the forecast then did with it.
+SIGNALS_ROUTED       = "signals_routed"
+
+#: One forecast produced. Carries per-status counts so a run where most
+#: series failed is visible without reading the payload.
+FORECAST_COMPLETED   = "forecast_completed"
+
 GOVERNANCE_DECISION  = "governance_decision"
 GOVERNANCE_APPLIED   = "governance_applied"
 
@@ -89,7 +99,7 @@ CANONICAL_EVENTS: Set[str] = {
     REI_LOOKUP, RF_CALCULATED, RF_NOT_COMPUTABLE, SOLVER_INFEASIBLE,
     REASONING_COMPLETED, GROUNDING_COMPLETED,
     GOVERNANCE_DECISION, GOVERNANCE_APPLIED,
-    TWIN_STATE_PUBLISHED,
+    SIGNALS_ROUTED, FORECAST_COMPLETED, TWIN_STATE_PUBLISHED,
 }
 
 #: Conversational events. Kept as a separate set because most of them fire

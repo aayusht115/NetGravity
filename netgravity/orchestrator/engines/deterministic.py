@@ -439,6 +439,125 @@ def flatten_rei_registry(registry: "FacilityResilienceRegistry") -> Dict[str, An
 
 
 # ---------------------------------------------------------------------------
+# Forecasting
+# ---------------------------------------------------------------------------
+
+def flatten_forecast_result(result: Any) -> Dict[str, Any]:
+    """
+    Project a typed `ForecastResult` into control-plane primitives.
+
+    A PROJECTION, one-way, exactly like `flatten_rei_registry`. Every series is
+    carried through INCLUDING the failed ones — a series omitted because it
+    could not be forecast would be indistinguishable from one nobody asked
+    about, and the point of the status is that those are different.
+
+    No quantity appears anywhere for a failed series. `points` is empty and
+    `status` says why.
+    """
+    series_rows: List[Dict[str, Any]] = [
+        {
+            "market_id": s.market_id,
+            "product_id": s.product_id,
+            "status": s.status.value,
+            "reason": s.reason,
+            "engine": s.engine,
+            "pattern": s.pattern.value if s.pattern else None,
+            "n_history_periods": s.n_history_periods,
+            # Empty for anything that did not succeed.
+            "points": [
+                {
+                    "period": p.period, "mean": p.mean, "std_dev": p.std_dev,
+                    "p10": p.p10, "p50": p.p50, "p90": p.p90,
+                    "baseline_mean": p.baseline_mean,
+                }
+                for p in s.points
+            ],
+            # None when unmeasured — never a default that reads as accuracy.
+            "accuracy": (
+                {
+                    "mae": s.accuracy.mae, "rmse": s.accuracy.rmse,
+                    "wape": s.accuracy.wape, "mase": s.accuracy.mase,
+                    "n_folds": s.accuracy.n_folds,
+                    "beat_naive": s.accuracy.beat_naive,
+                }
+                if s.accuracy else None
+            ),
+            "signal_adjustments": [
+                {
+                    "signal_id": a.signal_id, "rule_id": a.rule_id,
+                    "effect": a.effect.value,
+                    "mean_multiplier": a.mean_multiplier,
+                    "std_multiplier": a.std_multiplier,
+                    "is_assumption": a.is_assumption,
+                }
+                for a in s.signal_adjustments
+            ],
+            # Why this forecast is what it is when a regime change moved it.
+            # Projected so a control-plane consumer can answer "the forecast
+            # changed because a structural break was detected" without
+            # reaching back into the typed result. None when detection did
+            # not run; present-and-not-detected when it ran and found nothing,
+            # which is a different and equally reportable fact.
+            "structural_break": (
+                {
+                    "detected": s.structural_break.detected,
+                    "status": s.structural_break.status.value,
+                    "change_period": s.structural_break.change_period,
+                    "pre_break_level": s.structural_break.pre_break_level,
+                    "post_break_level": s.structural_break.post_break_level,
+                    "magnitude": s.structural_break.magnitude,
+                    "sup_f": s.structural_break.sup_f,
+                    "threshold": s.structural_break.threshold,
+                    "detection_method": s.structural_break.detection_method,
+                    "reason": s.structural_break.reason,
+                }
+                if s.structural_break is not None else None
+            ),
+            "regime": (
+                {
+                    "strategy": s.regime.strategy.value,
+                    "basis": s.regime.basis.value,
+                    "window_start": s.regime.window_start,
+                    "n_periods_used": s.regime.n_periods_used,
+                    "full_history_mae": s.regime.full_history_mae,
+                    "recent_regime_mae": s.regime.recent_regime_mae,
+                    "n_folds": s.regime.n_folds,
+                    "reason": s.regime.reason,
+                }
+                if s.regime is not None else None
+            ),
+            "warnings": list(s.warnings),
+        }
+        for s in result.series
+    ]
+
+    return {
+        "status": result.status.value,
+        "target": result.provenance.target.value,
+        "horizon": result.provenance.horizon,
+        "frequency": result.provenance.frequency.value,
+        "snapshot_id": result.provenance.snapshot_id,
+        "data_version": result.provenance.data_version,
+        "model_version": result.provenance.model_version,
+        "engines_used": list(result.provenance.engines_used),
+        "selection_mode": result.provenance.selection_mode.value,
+        "signal_ids": list(result.provenance.signal_ids),
+        #: Non-empty only when a structural break changed which history a
+        #: forecast was built from — the one-line answer for a consumer that
+        #: does not want to walk every series.
+        "adapted_series": list(result.provenance.adapted_series),
+        "generated_at": result.provenance.generated_at,
+        "n_series": len(result.series),
+        "n_successful": len(result.successful),
+        "n_failed": len(result.failed),
+        "status_counts": result.status_counts(),
+        "series": series_rows,
+        "warnings": list(result.warnings),
+        "errors": list(result.errors),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Business cost
 # ---------------------------------------------------------------------------
 

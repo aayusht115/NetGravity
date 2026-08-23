@@ -1,0 +1,152 @@
+{
+  "case_a_no_signal": {
+    "forecast": [
+      174.56700124708578,
+      183.549105646869,
+      188.71663830058213,
+      187.5767486501063,
+      179.0398351359718,
+      166.52032746353413,
+      154.6074159587743,
+      146.83133598180314,
+      144.97262864603456,
+      149.6498716353973,
+      160.084594708883,
+      173.93039953101416
+    ],
+    "metrics": {
+      "mase": 2.2178,
+      "mae": 19.6988,
+      "rmse": 25.3489,
+      "wape": 0.1074,
+      "bias": -15.9552,
+      "naive_mase": 3.5899,
+      "beats_naive": true
+    }
+  },
+  "case_b_irrelevant_signal": {
+    "routing_record": [
+      {
+        "signal_id": "sig_irrel_202",
+        "outcome": "ROUTED_TO_FORECASTING",
+        "reason": "eligible market intelligence within network scope",
+        "bucket": "CARRIER",
+        "matched_entities": [
+          "MKT_SOUTH"
+        ]
+      }
+    ],
+    "accepted_count": 1,
+    "forecast": [
+      174.56700124708578,
+      183.549105646869,
+      188.71663830058213,
+      187.5767486501063,
+      179.0398351359718,
+      166.52032746353413,
+      154.6074159587743,
+      146.83133598180314,
+      144.97262864603456,
+      149.6498716353973,
+      160.084594708883,
+      173.93039953101416
+    ],
+    "metrics": {
+      "mase": 2.2178,
+      "mae": 19.6988,
+      "rmse": 25.3489,
+      "wape": 0.1074,
+      "bias": -15.9552,
+      "naive_mase": 3.5899,
+      "beats_naive": true
+    },
+    "identical_to_baseline": true
+  },
+  "case_c_relevant_signal": {
+    "routing_record": [
+      {
+        "signal_id": "sig_rel_101",
+        "outcome": "ROUTED_TO_FORECASTING",
+        "reason": "eligible market intelligence within network scope",
+        "bucket": "CUSTOMER",
+        "matched_entities": [
+          "MKT_NORTH"
+        ]
+      }
+    ],
+    "accepted_count": 1,
+    "forecast": [
+      192.02370137179437,
+      201.90401621155593,
+      207.58830213064036,
+      206.33442351511695,
+      196.94381864956898,
+      183.17236020988756,
+      170.06815755465175,
+      161.51446957998346,
+      159.46989151063804,
+      164.61485879893704,
+      176.09305417977131,
+      191.3234394841156
+    ],
+    "metrics": {
+      "mase": 2.0149,
+      "mae": 17.8968,
+      "rmse": 18.5703,
+      "wape": 0.0976,
+      "bias": 0.7952,
+      "naive_mase": 3.5899,
+      "beats_naive": true
+    },
+    "adjustments": [
+      {
+        "signal_id": "sig_rel_101",
+        "bucket": "CUSTOMER",
+        "direction": "UP",
+        "effect": "INCREASE",
+        "mean_multiplier": 1.1,
+        "std_multiplier": 1.15,
+        "rule_id": "CUSTOMER_EXPANSION",
+        "basis": "customer expansion raises demand; magnitude is a declared assumption",
+        "signal_confidence": "HIGH",
+        "is_assumption": true
+      }
+    ],
+    "forecast_delta": [
+      17.4567,
+      18.3549,
+      18.8717,
+      18.7577,
+      17.904,
+      16.652,
+      15.4607,
+      14.6831,
+      14.4973,
+      14.965,
+      16.0085,
+      17.393
+    ],
+    "pct_delta": [
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0,
+      10.0
+    ],
+    "true_synthetic_effect_pct": 20.0,
+    "model_implied_effect_pct": 10.0
+  },
+  "safety_tests": {
+    "low_confidence_outcome": "LOW_CONFIDENCE",
+    "out_of_scope_outcome": "OUT_OF_SCOPE",
+    "risk_signal_outcome": "REFUSED_RISK_SIGNAL",
+    "risk_signal_refused": true
+  }
+}

@@ -1045,6 +1045,114 @@ class Orchestrator:
         """Register an observed network and return its snapshot id."""
         return self.snapshots.register(network, label=label).snapshot_id
 
+    # ==================================================================
+    # Forecast → MILP
+    # ==================================================================
+
+    def build_forecast_scenario(
+        self,
+        forecast_result: Any,
+        *,
+        snapshot_id: Optional[str] = None,
+        period: int = 1,
+        quantile_mode: Any = None,
+        unforecast_policy: Any = None,
+        label: str = "",
+        created_by: str = "system",
+    ) -> Any:
+        """
+        Materialise a forecast as a hypothetical scenario, ready to solve.
+
+            ForecastResult → validate → CanonicalNetwork → ScenarioStore → MILP
+
+        The Orchestrator's half of the forecast-to-optimisation path, and the
+        only way a forecast reaches the solver. The Forecasting Agent has no
+        equivalent entry point: it never receives a network, so it cannot build
+        one.
+
+        A forecast-derived network is registered as a SCENARIO rather than as a
+        snapshot, and that is the substantive decision here. A forecast is
+        hypothetical by definition — it describes a period that has not
+        happened. `ScenarioStore` already guarantees exactly what such a network
+        needs: it is tagged `is_hypothetical`, it names its parent snapshot, it
+        is isolated from siblings, and there is deliberately no API that writes
+        it back over observed state. Reusing it means forecast-driven
+        optimisation inherits scenario isolation, Digital Twin representation
+        and governance treatment without any of them being taught about
+        forecasts.
+
+        Returns:
+            `(ScenarioRecord, ForecastApplication)` on success, or
+            `(None, ForecastApplication)` when the forecast was refused — with
+            `.reasons` saying why. Never raises for a rejected forecast: an
+            unusable estimate is an outcome, not a fault.
+        """
+        from netgravity.orchestrator.engines.forecast_bridge import (
+            QuantileMode,
+            UnforecastPolicy,
+            apply_forecast_to_network,
+        )
+
+        mode = quantile_mode if quantile_mode is not None else QuantileMode.P50
+        policy = unforecast_policy if unforecast_policy is not None else UnforecastPolicy.REJECT
+        target_snapshot = snapshot_id or self.snapshots.current_id or ""
+        snapshot = self.snapshots.get(target_snapshot)
+
+        application = apply_forecast_to_network(
+            forecast_result, snapshot.network,
+            snapshot_id=snapshot.snapshot_id,
+            period=period, quantile_mode=mode, unforecast_policy=policy,
+        )
+
+        if not application.ok or application.network is None:
+            logger.warning(
+                "orchestrator.forecast_scenario.rejected snapshot=%s reasons=%s",
+                snapshot.snapshot_id, application.reasons,
+            )
+            return None, application
+
+        # ASCII only: overrides are echoed into logs and console output, and a
+        # cp1252 terminal cannot encode an arrow.
+        overrides = [
+            f"demand set from FORECAST {mode.value} period {period} "
+            f"({application.n_forecast} of {len(application.provenance)} records)"
+        ]
+        if application.substituted_observed:
+            overrides.append(
+                f"{len(application.substituted_observed)} record(s) retained OBSERVED "
+                f"demand: {', '.join(application.substituted_observed[:5])}"
+                f"{'...' if len(application.substituted_observed) > 5 else ''}"
+            )
+
+        record = self.scenarios.create(
+            parent_snapshot_id=snapshot.snapshot_id,
+            network=application.network,
+            label=label or f"Forecast {mode.value} period {period}",
+            overrides=overrides,
+            created_by=created_by,
+            source="forecast",
+        )
+        self.scenarios.attach_results(record.scenario_id, "forecast", {
+            "model_version": forecast_result.provenance.model_version,
+            "engines_used": list(forecast_result.provenance.engines_used),
+            "signal_ids": list(forecast_result.provenance.signal_ids),
+            "horizon": forecast_result.provenance.horizon,
+            "period": period,
+            "quantile_mode": mode.value,
+            "forecast_data_version": application.data_version,
+            "n_forecast": application.n_forecast,
+            "n_observed": application.n_observed,
+            "is_mixed": application.is_mixed,
+        })
+
+        logger.info(
+            "orchestrator.forecast_scenario.created scenario=%s parent=%s mode=%s "
+            "forecast=%d observed=%d",
+            record.scenario_id, snapshot.snapshot_id, mode.value,
+            application.n_forecast, application.n_observed,
+        )
+        return record, application
+
     def capabilities(self) -> List[Dict[str, Any]]:
         return self.registry.describe()
 
