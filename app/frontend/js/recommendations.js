@@ -479,7 +479,7 @@ export function renderRecDetail(recId) {
   });
 
   document.getElementById('btn-rec-simulate')?.addEventListener('click', () => {
-    if (window.navigateToTab) window.navigateToTab('scenarios');
+    if (window.triggerAgentReasoning) { window.triggerAgentReasoning('Simulating Prescriptive Decision in Scenario Planner', 'scenarios'); } else if (window.navigateToTab) { window.navigateToTab('scenarios'); }
   });
 
   document.getElementById('btn-rec-email')?.addEventListener('click', () => {

@@ -389,6 +389,8 @@ export function renderInsightDetail(insightId) {
   const panel = document.getElementById('insight-detail-panel');
   if (!panel) return;
 
+  panel.style.display = 'flex';
+
   const item = INSIGHTS_FEED_DATA.find(i => i.id === insightId) || INSIGHTS_FEED_DATA[0];
   const d = item.detail;
 

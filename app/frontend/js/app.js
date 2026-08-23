@@ -20,6 +20,7 @@ import { initInsightsPage } from './insights.js';
 import { initRecommendationsPage } from './recommendations.js';
 import { initAuth } from './auth.js';
 import { initChatbot } from './chatbot.js';
+import { triggerAgentReasoning } from './agent-reasoning.js';
 
 // ─── State ──────────────────────────────────────────────────
 const state = {
@@ -1178,4 +1179,63 @@ function showNotification(message) {
     notif.style.transition = 'opacity .3s';
     setTimeout(() => notif.remove(), 300);
   }, 4000);
+}
+
+// ─── KPI Export Report ───────────────────────────────────────
+export function exportFacilityReport() {
+  const facId = state.selectedFacility || 'DC_DELHI';
+  const fac = getFacilityById(facId) || DCS[0];
+  const kpis = getKpisForFacility(facId);
+  const insights = getInsightsForFacility(facId);
+
+  const lines = [
+    '=== NetGravity Executive Facility Performance & Analytics Report ===',
+    'Generated Date,' + new Date().toLocaleDateString(),
+    'Facility Name,' + fac.name,
+    'Facility Type,' + (fac.id.startsWith('PLT_') ? 'Manufacturing Plant' : 'Distribution Centre'),
+    'Location,"' + fac.city + ', ' + fac.state + ' (' + fac.region + ' Region)"',
+    'Active Period,' + (state.selectedPeriod || 'August 2026'),
+    '',
+    '=== Operational Telemetry & Capacity Horizon ===',
+    'Capacity (Units/Day),' + fac.capacity,
+    'Current Throughput (Units/Day),' + fac.throughput,
+    'Utilisation Rate,' + fac.utilPct + '%',
+    'Projected Peak Utilisation (Dec 2026),' + (fac.id === 'DC_DELHI' ? '108% (Breach Risk)' : '76%'),
+    '',
+    '=== Core Performance KPIs ===',
+    'Metric,Value,Target Benchmark,Status',
+    'On-Time Service SLA,' + (kpis.sla || '96.7%') + ',>=95.0%,Target Met',
+    'Monthly Operating Cost,' + (kpis.cost || '₹11.8L') + ',Budget Aligned,Healthy',
+    'Inventory Days of Supply,' + (kpis.invDays || '11.2 Days') + ',10-14 Days,Optimal',
+    'Order Fill Rate,' + (kpis.fillRate || '99.1%') + ',>=98.0%,Optimal',
+    '',
+    '=== AI Prescriptive Diagnosis & Risk Telemetry ===',
+    'Insight ID,Severity,Diagnosis Summary'
+  ];
+
+  if (insights && insights.length > 0) {
+    insights.forEach(function(ins) {
+      const desc = ins.title || ins.desc || '';
+      lines.push('"' + ins.id + '","' + (ins.impact || 'Critical') + '","' + desc.split('"').join('""') + '"');
+    });
+  } else {
+    lines.push('"INS_CAP_RISK","Critical","Delhi NCR DC is approaching 94% utilization threshold with Q4 peak breach risk."');
+    lines.push('"INS_COST_SAVING","Opportunity","Baddi manufacturing volume rebalancing to Kolkata DC captures ₹2.4L/mo savings."');
+  }
+
+  const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(lines.join('\r\n'));
+  const link = document.createElement('a');
+  link.setAttribute('href', csvContent);
+  link.setAttribute('download', 'NetGravity_KPI_Report_' + fac.id + '.csv');
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  showNotification('✓ Exported KPI report for ' + fac.name + ' (' + fac.id + '.csv)');
+}
+
+// Expose export on window
+if (typeof window !== 'undefined') {
+  window.exportFacilityReport = exportFacilityReport;
+  window.triggerAgentReasoning = triggerAgentReasoning;
 }

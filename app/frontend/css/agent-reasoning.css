@@ -1,0 +1,366 @@
+/* ═════════════════════════════════════════════════════════════════════
+   NETGRAVITY AUTONOMOUS AGENT REASONING ENGINE STYLES
+   Live multi-stage backend decision pipeline mockup:
+   - Deep glassmorphism backdrop blur
+   - Animated execution stages with glowing pulse indicators
+   - Real-time terminal log streaming
+   - Progress bar and completion transitions
+   ═════════════════════════════════════════════════════════════════════ */
+
+.agent-modal-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(11, 15, 25, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  z-index: 100005;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+  opacity: 0;
+  transition: opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.agent-modal-overlay.active {
+  display: flex !important;
+  opacity: 1;
+}
+
+.agent-modal-dialog {
+  width: 760px;
+  max-width: 95vw;
+  max-height: 90vh;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 30px 70px -15px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(146, 24, 234, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+  box-sizing: border-box;
+  transform: scale(0.95) translateY(12px);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.agent-modal-overlay.active .agent-modal-dialog {
+  transform: scale(1) translateY(0);
+}
+
+/* ─── Header ──────────────────────────────────────────────────────── */
+.agent-modal-header {
+  padding: 20px 24px 18px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.agent-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.agent-header-icon-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #9218EA 0%, #790fc7 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(146, 24, 234, 0.4);
+  font-size: 20px;
+  animation: pulseAIBadge 2.5s infinite ease-in-out;
+}
+
+@keyframes pulseAIBadge {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(146, 24, 234, 0.5); }
+  50% { box-shadow: 0 0 0 8px rgba(146, 24, 234, 0); }
+}
+
+.agent-header-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.agent-header-title {
+  font-size: 17px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-live-tag {
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(146, 24, 234, 0.3);
+  color: #c084fc;
+  border: 1px solid rgba(192, 132, 252, 0.4);
+  padding: 2px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.agent-header-subtitle {
+  font-size: 12.5px;
+  color: #94a3b8;
+  margin: 3px 0 0;
+}
+
+.agent-modal-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.agent-modal-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+/* ─── Scrollable Modal Body ───────────────────────────────────────── */
+.agent-modal-body {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+/* ─── Reasoning Pipeline Stages ───────────────────────────────────── */
+.agent-stages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.agent-stage-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.agent-stage-card.active {
+  background: #faf5ff;
+  border-color: #d8b4fe;
+  box-shadow: 0 4px 14px rgba(146, 24, 234, 0.08);
+}
+
+.agent-stage-card.completed {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.agent-stage-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: all 0.3s;
+}
+
+.agent-stage-card.active .agent-stage-icon-box {
+  background: #9218EA;
+  color: #ffffff;
+  animation: pulseActiveStage 1.5s infinite;
+}
+
+.agent-stage-card.completed .agent-stage-icon-box {
+  background: #16a34a;
+  color: #ffffff;
+}
+
+@keyframes pulseActiveStage {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+.agent-stage-content {
+  flex: 1;
+}
+
+.agent-stage-top-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.agent-stage-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.agent-stage-card.active .agent-stage-name {
+  color: #790fc7;
+}
+
+.agent-stage-card.completed .agent-stage-name {
+  color: #15803d;
+}
+
+.agent-stage-status-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.badge-pending   { background: #e2e8f0; color: #64748b; }
+.badge-running   { background: #faf5ff; color: #9218EA; border: 1px solid #d8b4fe; }
+.badge-completed { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+
+.agent-stage-desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ─── Real-Time Log Terminal ──────────────────────────────────────── */
+.agent-terminal-box {
+  background: #0b0f19;
+  border: 1px solid #1e293b;
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11.5px;
+  color: #94a3b8;
+  height: 90px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.agent-terminal-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.agent-terminal-line .timestamp {
+  color: #64748b;
+}
+
+.agent-terminal-line .prefix-info  { color: #38bdf8; font-weight: 700; }
+.agent-terminal-line .prefix-solver{ color: #c084fc; font-weight: 700; }
+.agent-terminal-line .prefix-agent { color: #4ade80; font-weight: 700; }
+
+.agent-terminal-cursor {
+  display: inline-block;
+  width: 6px;
+  height: 12px;
+  background: #9218EA;
+  animation: blinkCursor 0.8s infinite;
+  vertical-align: middle;
+}
+
+@keyframes blinkCursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ─── Footer with Progress Bar & CTA ──────────────────────────────── */
+.agent-modal-footer {
+  padding: 14px 24px 18px;
+  border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.agent-progress-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-progress-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.agent-progress-track {
+  height: 7px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.agent-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #9218EA 0%, #38bdf8 100%);
+  border-radius: 4px;
+  transition: width 0.25s linear;
+}
+
+.agent-btn-complete {
+  padding: 9px 20px;
+  border-radius: 8px;
+  background: #9218EA;
+  color: #ffffff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(146, 24, 234, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agent-btn-complete:hover {
+  background: #7e12cc;
+  transform: translateY(-1px);
+}

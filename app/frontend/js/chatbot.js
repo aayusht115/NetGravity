@@ -300,7 +300,7 @@ function renderChatMessages() {
               ${msg.topic ? `<div class="ai-badge-chip">✦ ${msg.topic}</div>` : ''}
               <div>${msg.text}</div>
               ${msg.actionText && msg.actionTab ? `
-                <button class="action-link-btn" onclick="window.navigateToTab && window.navigateToTab('${msg.actionTab}'); window.closeChatbotModal && window.closeChatbotModal();">
+                <button class="action-link-btn" onclick="window.navigateToTab && window.closeChatbotModal && window.closeChatbotModal(); if (window.triggerAgentReasoning) { window.triggerAgentReasoning('Executing AI Recommended Action: ${msg.topic || 'Network Optimization'}', '${msg.actionTab}'); } else if (window.navigateToTab) { window.navigateToTab('${msg.actionTab}'); }">
                   ${msg.actionText}
                 </button>
               ` : ''}
