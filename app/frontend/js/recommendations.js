@@ -304,31 +304,40 @@ export function renderRecsFeed() {
   container.innerHTML = filtered.map(rec => {
     const isSelected = rec.id === selectedRecId;
     return `
-      <div class="rec-card-item ${isSelected ? 'selected' : ''}" data-rec-id="${rec.id}">
-        <div class="rec-card-header">
-          <span class="rec-category-badge ${rec.accentColor}">${rec.category}</span>
-          <span class="rec-priority-pill ${rec.priorityClass}">${rec.priority}</span>
+      <div class="rec-card-item rec-card-${rec.accentColor} ${isSelected ? 'selected' : ''}" data-rec-id="${rec.id}">
+        <div class="rec-card-icon-wrap rec-icon-${rec.accentColor}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/>
+          </svg>
         </div>
-        <div class="rec-card-title">${rec.title}</div>
-        <div class="rec-card-desc">${rec.desc}</div>
-        <div class="rec-card-metrics-row">
-          <div class="rec-metric-chip">
-            <span class="rec-metric-chip-label">Cost Impact</span>
-            <span class="rec-metric-chip-value positive">${rec.impact.cost}</span>
+        <div class="rec-card-body">
+          <div class="rec-card-top-meta">
+            <span class="rec-category-label rec-category-${rec.accentColor}">${rec.category}</span>
+            <span class="rec-priority-tag rec-tag-${rec.priorityClass}">${rec.priority}</span>
           </div>
-          <div class="rec-metric-chip">
-            <span class="rec-metric-chip-label">Target SLA</span>
-            <span class="rec-metric-chip-value">${rec.impact.sla}</span>
-          </div>
-          <div class="rec-metric-chip">
-            <span class="rec-metric-chip-label">Peak Util</span>
-            <span class="rec-metric-chip-value purple">${rec.impact.peakUtil}</span>
-          </div>
-          <div class="rec-card-explore-link">
-            <span>Explore Action</span>
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="M5 10h10M11 6l4 4-4 4"/>
-            </svg>
+          <div class="rec-card-title">${rec.title}</div>
+          <div class="rec-card-desc">${rec.desc}</div>
+          <div class="rec-card-footer">
+            <div class="rec-card-metrics">
+              <div class="rec-metric-item">
+                <span class="rec-metric-item-label">Cost Impact</span>
+                <span class="rec-metric-item-value val-green">${rec.impact.cost}</span>
+              </div>
+              <div class="rec-metric-item">
+                <span class="rec-metric-item-label">Target SLA</span>
+                <span class="rec-metric-item-value">${rec.impact.sla}</span>
+              </div>
+              <div class="rec-metric-item">
+                <span class="rec-metric-item-label">Peak Util</span>
+                <span class="rec-metric-item-value val-purple">${rec.impact.peakUtil}</span>
+              </div>
+            </div>
+            <div class="rec-card-action">
+              <span>Explore Action</span>
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M5 10h10M11 6l4 4-4 4"/>
+              </svg>
+            </div>
           </div>
         </div>
       </div>

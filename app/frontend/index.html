@@ -43,6 +43,7 @@
   
   
   
+  
   <style>
 /* ═══════════════════════════════════════════════════════════
    NetGravity — Design System
@@ -4292,11 +4293,9 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 /* ═════════════════════════════════════════════════════════════════════
    NETGRAVITY RECOMMENDATIONS PAGE STYLES
-   Consulting-grade SaaS layout matching Insights page design language:
-   - Filter bar with category pills & priority dropdown
-   - 4 Top KPI summary cards
-   - Left feed column with interactive recommendation cards
-   - Right detail panel with impact grid, evidence telemetry, and CTAs
+   Consulting-grade SaaS layout aligned with Insights design language:
+   - Top 4 KPI Summary Cards matching Recommendations style
+   - Split-screen workspace (Main feed flex:1 + Right detail panel 380px) matching Insights
    ═════════════════════════════════════════════════════════════════════ */
 
 .recommendations-page-wrapper {
@@ -4366,14 +4365,17 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   border-color: #9218EA;
 }
 
-/* ─── 4 Top Summary Cards Grid ────────────────────────────────────── */
-.recs-summary-grid {
+/* ─── 4 Top Summary Cards Grid (Recommendations Style) ────────────── */
+.recs-summary-grid,
+.insights-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 14px;
+  margin-bottom: 2px;
 }
 
-.recs-summary-card {
+.recs-summary-card,
+.insights-summary-card {
   background: #ffffff;
   border: 1px solid #eef0f3;
   border-radius: 12px;
@@ -4385,7 +4387,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   transition: transform 0.2s, box-shadow 0.2s;
 }
 
-.recs-summary-card:hover {
+.recs-summary-card:hover,
+.insights-summary-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
 }
@@ -4439,210 +4442,255 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   font-weight: 500;
 }
 
-/* ─── Split Layout: Feed (Left) & Detail (Right) ─────────────────── */
-.recs-content-split {
-  display: grid;
-  grid-template-columns: 1.15fr 1.85fr;
-  gap: 16px;
-  align-items: start;
+/* ─── Split Layout: Feed (Left) & Detail (Right) (Insights Style) ─── */
+.recs-content-split,
+.insights-content-split {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  position: relative;
 }
 
-@media (max-width: 1100px) {
-  .recs-content-split {
-    grid-template-columns: 1fr;
+.recs-feed-column,
+.insights-feed-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.rec-detail-panel-wrapper,
+.insight-detail-panel {
+  width: 380px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 20px;
+}
+
+@media (max-width: 1024px) {
+  .recs-content-split,
+  .insights-content-split {
+    flex-direction: column;
+  }
+  .rec-detail-panel-wrapper,
+  .insight-detail-panel {
+    width: 100%;
+    position: static;
   }
 }
 
-/* ─── Left Recommendations Feed ──────────────────────────────────── */
-.recs-feed-column {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
+/* ─── Left Recommendations Feed Cards (Matching Insights Page) ──── */
 .rec-card-item {
   background: #ffffff;
-  border: 1.5px solid #eef0f3;
-  border-radius: 14px;
-  padding: 18px 20px;
+  border: 1px solid #eef0f3;
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 18px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   position: relative;
-  overflow: hidden;
 }
 
 .rec-card-item:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(146, 24, 234, 0.08);
-  border-color: #d8b4fe;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
 }
 
 .rec-card-item.selected {
-  border-color: #9218EA;
-  background: #ffffff;
-  box-shadow: 0 0 0 1.5px #9218EA, 0 8px 24px rgba(146, 24, 234, 0.12);
+  box-shadow: 0 0 0 2px rgba(146, 24, 234, 0.25), 0 6px 16px rgba(146, 24, 234, 0.08);
+  border-color: #eef0f3;
 }
 
-.rec-card-item.selected::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 4.5px;
-  background: #9218EA;
+.rec-card-purple { border-left-color: #9218EA; }
+.rec-card-green  { border-left-color: #10b981; }
+.rec-card-amber  { border-left-color: #f59e0b; }
+.rec-card-blue   { border-left-color: #3b82f6; }
+
+.rec-card-icon-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
 }
 
-.rec-card-header {
+.rec-icon-purple { background: rgba(146, 24, 234, 0.1); color: #9218EA; }
+.rec-icon-green  { background: #d1fae5; color: #10b981; }
+.rec-icon-amber  { background: #fef3c7; color: #f59e0b; }
+.rec-icon-blue   { background: #dbeafe; color: #2563eb; }
+
+.rec-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rec-card-top-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
 }
 
-.rec-category-badge {
+.rec-category-label {
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
-.rec-category-badge.purple { color: #9218EA; }
-.rec-category-badge.green  { color: #16a34a; }
-.rec-category-badge.amber  { color: #d97706; }
-.rec-category-badge.blue   { color: #2563eb; }
+.rec-category-purple { color: #9218EA; }
+.rec-category-green  { color: #10b981; }
+.rec-category-amber  { color: #f59e0b; }
+.rec-category-blue   { color: #2563eb; }
 
-.rec-priority-pill {
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 6px;
+.rec-priority-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
 }
 
-.rec-priority-pill.high-impact { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
-.rec-priority-pill.high-value  { background: #faf5ff; color: #9218EA; border: 1px solid #ede9fe; }
-.rec-priority-pill.strategic   { background: #eff6ff; color: #2563eb; border: 1px solid #dbeafe; }
-.rec-priority-pill.opportunity { background: #f0fdf4; color: #16a34a; border: 1px solid #dcfce7; }
-.rec-priority-pill.low-risk    { background: #fffbeb; color: #d97706; border: 1px solid #fef3c7; }
+.rec-tag-high-impact { background: #fee2e2; color: #ef4444; }
+.rec-tag-opportunity { background: #d1fae5; color: #10b981; }
+.rec-tag-low-risk    { background: #fef3c7; color: #d97706; }
+.rec-tag-strategic   { background: #dbeafe; color: #2563eb; }
 
 .rec-card-title {
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #111827;
   line-height: 1.35;
-  margin-bottom: 6px;
 }
 
 .rec-card-desc {
-  font-size: 13px;
-  color: #4b5563;
-  line-height: 1.5;
-  margin-bottom: 12px;
+  font-size: 12.5px;
+  color: #6b7280;
+  line-height: 1.45;
 }
 
-.rec-card-metrics-row {
+.rec-card-footer {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding-top: 10px;
-  border-top: 1px solid #f3f4f6;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid #f9fafb;
 }
 
-.rec-metric-chip {
+.rec-card-metrics {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rec-metric-item {
   display: flex;
   flex-direction: column;
 }
 
-.rec-metric-chip-label {
-  font-size: 10.5px;
-  color: #6b7280;
+.rec-metric-item-label {
+  font-size: 10px;
+  color: #9ca3af;
   font-weight: 500;
   text-transform: uppercase;
 }
 
-.rec-metric-chip-value {
-  font-size: 13.5px;
-  font-weight: 800;
+.rec-metric-item-value {
+  font-size: 13px;
+  font-weight: 700;
   color: #111827;
 }
 
-.rec-metric-chip-value.positive { color: #16a34a; }
-.rec-metric-chip-value.purple   { color: #9218EA; }
+.rec-metric-item-value.val-green  { color: #10b981; }
+.rec-metric-item-value.val-purple { color: #9218EA; }
 
-.rec-card-explore-link {
-  margin-left: auto;
+.rec-card-action {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   font-weight: 600;
   color: #9218EA;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  transition: gap 0.15s ease;
 }
 
-/* ─── Right Recommendation Detail Panel ───────────────────────────── */
+.rec-card-item:hover .rec-card-action {
+  gap: 9px;
+}
+
+/* ─── Right Recommendation Detail Panel (Matching Insights Page) ──── */
 .rec-detail-panel-card {
   background: #ffffff;
   border: 1px solid #eef0f3;
-  border-radius: 16px;
-  padding: 24px 26px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border-radius: 14px;
+  padding: 24px 22px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  box-sizing: border-box;
 }
 
-.rec-detail-top-meta {
+.rec-detail-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .rec-detail-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
   color: #111827;
+  line-height: 1.3;
   letter-spacing: -0.02em;
   margin: 0;
-  line-height: 1.3;
 }
 
 .rec-detail-box-highlight {
   background: #fafafc;
   border: 1px solid #ede9fe;
-  border-radius: 12px;
-  padding: 16px 18px;
+  border-radius: 10px;
+  padding: 14px 16px;
 }
 
 .rec-detail-box-title {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   color: #9218EA;
   letter-spacing: 0.05em;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .rec-detail-box-text {
-  font-size: 13.5px;
+  font-size: 13px;
   color: #374151;
-  line-height: 1.6;
+  line-height: 1.55;
   margin: 0;
 }
 
-/* Expected Impact Grid */
 .rec-impact-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
 }
 
 .rec-impact-card {
   background: #f0fdf4;
   border: 1px solid #dcfce7;
-  border-radius: 10px;
-  padding: 12px 10px;
-  text-align: center;
+  border-radius: 8px;
+  padding: 10px 12px;
+  text-align: left;
 }
 
 .rec-impact-card.purple {
@@ -4651,7 +4699,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 .rec-impact-card-label {
-  font-size: 10.5px;
+  font-size: 10px;
   color: #166534;
   font-weight: 600;
   text-transform: uppercase;
@@ -4662,7 +4710,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 .rec-impact-card-val {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 800;
   color: #15803d;
   margin-top: 2px;
@@ -4672,135 +4720,53 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   color: #790fc7;
 }
 
-/* Root cause telemetry table */
 .rec-section-subtitle {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   color: #6b7280;
   letter-spacing: 0.05em;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .rec-telemetry-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .rec-telemetry-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 14px;
+  padding: 8px 12px;
   background: #ffffff;
   border: 1px solid #eef0f3;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .rec-telemetry-label {
-  font-size: 13px;
+  font-size: 12px;
   color: #4b5563;
 }
 
-.rec-telemetry-val-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .rec-telemetry-value {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #111827;
-}
-
-/* Rejected Alternatives */
-.rec-rejected-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.rec-rejected-item {
-  padding: 10px 14px;
-  background: #fef2f2;
-  border: 1px solid #fee2e2;
-  border-radius: 8px;
-}
-
-.rec-rejected-name {
   font-size: 12.5px;
   font-weight: 700;
-  color: #991b1b;
-}
-
-.rec-rejected-reason {
-  font-size: 12px;
-  color: #b91c1c;
-  margin-top: 2px;
-}
-
-/* Execution Steps */
-.rec-steps-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.rec-step-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px 14px;
-  background: #fafafc;
-  border: 1px solid #f0f0f5;
-  border-radius: 8px;
-}
-
-.rec-step-badge {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #9218EA;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.rec-step-content {
-  flex: 1;
-}
-
-.rec-step-action {
-  font-size: 13px;
-  font-weight: 600;
   color: #111827;
 }
 
-.rec-step-owner {
-  font-size: 11.5px;
-  color: #6b7280;
-  margin-top: 2px;
-}
-
-/* Action CTA Buttons */
 .rec-action-buttons-group {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 8px;
   padding-top: 10px;
   border-top: 1px solid #f3f4f6;
 }
 
 .rec-btn-approve {
-  padding: 10px 20px;
+  width: 100%;
+  padding: 10px 16px;
   border-radius: 8px;
   background: #16a34a;
   color: #ffffff;
@@ -4808,17 +4774,17 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, transform 0.2s;
-  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.25);
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.2);
 }
 
 .rec-btn-approve:hover {
   background: #15803d;
-  transform: translateY(-1px);
 }
 
 .rec-btn-simulate {
-  padding: 10px 20px;
+  width: 100%;
+  padding: 10px 16px;
   border-radius: 8px;
   background: #9218EA;
   color: #ffffff;
@@ -4826,22 +4792,22 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s, transform 0.2s;
-  box-shadow: 0 2px 6px rgba(146, 24, 234, 0.25);
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(146, 24, 234, 0.2);
 }
 
 .rec-btn-simulate:hover {
   background: #7e12cc;
-  transform: translateY(-1px);
 }
 
 .rec-btn-email {
-  padding: 10px 18px;
+  width: 100%;
+  padding: 8px 14px;
   border-radius: 8px;
   background: #ffffff;
   color: #374151;
   border: 1px solid #e5e7eb;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
@@ -4853,31 +4819,14 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   background: #faf5ff;
 }
 
-.rec-btn-reject {
-  padding: 10px 16px;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #dc2626;
-  border: 1px solid #fecaca;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.rec-btn-reject:hover {
-  background: #fef2f2;
-}
-
-/* Email Preview Box */
 .rec-email-preview-box {
   background: #1f2937;
   color: #f3f4f6;
-  padding: 16px 18px;
-  border-radius: 10px;
+  padding: 14px 16px;
+  border-radius: 8px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 11.5px;
+  line-height: 1.55;
   white-space: pre-wrap;
   display: none;
 }
@@ -6118,6 +6067,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 </head>
 <body style="margin:0;padding:0;">
+
 
 
 
@@ -8703,6 +8653,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     </footer>
   </div>
 
+  
   
   
   
@@ -14602,31 +14553,40 @@ function renderRecsFeed() {
   container.innerHTML = filtered.map(rec => {
     const isSelected = rec.id === selectedRecId;
     return `
-      <div class="rec-card-item ${isSelected ? 'selected' : ''}" data-rec-id="${rec.id}">
-        <div class="rec-card-header">
-          <span class="rec-category-badge ${rec.accentColor}">${rec.category}</span>
-          <span class="rec-priority-pill ${rec.priorityClass}">${rec.priority}</span>
+      <div class="rec-card-item rec-card-${rec.accentColor} ${isSelected ? 'selected' : ''}" data-rec-id="${rec.id}">
+        <div class="rec-card-icon-wrap rec-icon-${rec.accentColor}">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/>
+          </svg>
         </div>
-        <div class="rec-card-title">${rec.title}</div>
-        <div class="rec-card-desc">${rec.desc}</div>
-        <div class="rec-card-metrics-row">
-          <div class="rec-metric-chip">
-            <span class="rec-metric-chip-label">Cost Impact</span>
-            <span class="rec-metric-chip-value positive">${rec.impact.cost}</span>
+        <div class="rec-card-body">
+          <div class="rec-card-top-meta">
+            <span class="rec-category-label rec-category-${rec.accentColor}">${rec.category}</span>
+            <span class="rec-priority-tag rec-tag-${rec.priorityClass}">${rec.priority}</span>
           </div>
-          <div class="rec-metric-chip">
-            <span class="rec-metric-chip-label">Target SLA</span>
-            <span class="rec-metric-chip-value">${rec.impact.sla}</span>
-          </div>
-          <div class="rec-metric-chip">
-            <span class="rec-metric-chip-label">Peak Util</span>
-            <span class="rec-metric-chip-value purple">${rec.impact.peakUtil}</span>
-          </div>
-          <div class="rec-card-explore-link">
-            <span>Explore Action</span>
-            <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
-              <path d="M5 10h10M11 6l4 4-4 4"/>
-            </svg>
+          <div class="rec-card-title">${rec.title}</div>
+          <div class="rec-card-desc">${rec.desc}</div>
+          <div class="rec-card-footer">
+            <div class="rec-card-metrics">
+              <div class="rec-metric-item">
+                <span class="rec-metric-item-label">Cost Impact</span>
+                <span class="rec-metric-item-value val-green">${rec.impact.cost}</span>
+              </div>
+              <div class="rec-metric-item">
+                <span class="rec-metric-item-label">Target SLA</span>
+                <span class="rec-metric-item-value">${rec.impact.sla}</span>
+              </div>
+              <div class="rec-metric-item">
+                <span class="rec-metric-item-label">Peak Util</span>
+                <span class="rec-metric-item-value val-purple">${rec.impact.peakUtil}</span>
+              </div>
+            </div>
+            <div class="rec-card-action">
+              <span>Explore Action</span>
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
+                <path d="M5 10h10M11 6l4 4-4 4"/>
+              </svg>
+            </div>
           </div>
         </div>
       </div>
