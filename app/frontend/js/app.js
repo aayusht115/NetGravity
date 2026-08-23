@@ -5,10 +5,8 @@
  * KPI rendering, insight list, insight drawer, and all sub-views.
  */
 
-import { PLANTS, DCS, MARKETS, LANES, DATA_QUALITY, SCHEMA_MAPPING,
-         CONTRACT_DEMO, SYSTEM_STATUS, GOVERNANCE_TIERS, EXTERNAL_SIGNALS,
-         AGENT_STATE, SCENARIOS, RECOMMENDATION, FORECAST, DEMAND_HISTORY,
-         PERIODS, FACILITY_KPIS, HOME_INSIGHTS, HOME_ACTION_ITEMS,
+import { PLANTS, DCS, MARKETS, LANES, EXTERNAL_SIGNALS,
+         RECOMMENDATION, PERIODS, HOME_ACTION_ITEMS,
          formatCurrency, formatNumber, getUtilColor, getUtilLabel,
          getFacilityById, getInsightsForFacility, getKpisForFacility } from './data.js';
 import { initMap, setNetworkState, invalidateMapSize } from './map.js';

@@ -11,7 +11,6 @@
 
 import {
   SCENARIOS,
-  formatCurrency,
   formatNumber,
   SCENARIO_COMPARISON_INSIGHTS,
   SCENARIO_COMPARISON_ACTIONS,

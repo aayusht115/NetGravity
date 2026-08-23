@@ -6,7 +6,7 @@
 
 /* global Chart */
 
-import { DEMAND_HISTORY, FORECAST, SCENARIOS, formatCurrency } from './data.js';
+import { DEMAND_HISTORY, FORECAST, SCENARIOS } from './data.js';
 
 const chartInstances = {};
 
