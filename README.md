@@ -36,6 +36,9 @@ A fourth principle runs through everything: **missing is not zero.** When exposu
 | Deterministic MILP core (multi-echelon, capacitated) | Mature — 100% cost reconciliation, benchmark-anchored |
 | Facility Resilience Assessment + Risk Exposure Index (REI) | Complete, cached and persisted |
 | Risk Factor (RF) calculation from external event probability | Complete, with explicit refusal semantics |
+| Multi-format client-data ingestion and provisional network draft | Complete — CSV/TSV, Excel, PDF, text and Markdown |
+| AI-assisted unfamiliar-column clarification | Backend/API complete; ingestion-console UI is WIP |
+| External market-intelligence intake | Complete for user-supplied spreadsheets, documents and chat; automated feeds deferred |
 | Orchestrator control plane (planning, dependencies, governance, audit) | Complete |
 | Orchestrator ↔ deterministic core integration | Complete — see [§6](#6-integration-phases) |
 | Conversational layer (chatbot → NLU → orchestrator) | Complete — see [§6](#6-integration-phases) |
@@ -157,6 +160,56 @@ P = 0.70   REI = 0.80   ⇒   RF = 0.7 + 0.8 − 0.56 = 0.94
 
 ---
 
+## 4a. Governed Data Ingestion
+
+```
+CLIENT FILES → CLASSIFY → EXTRACT / PROFILE → MAP → PROVISIONAL DRAFT
+                                                        │
+                                             unfamiliar or ambiguous fields
+                                                        ▼
+                                              REVIEW → AI SUGGESTION
+                                                        │
+                                               explicit user confirmation
+                                                        ▼
+                                              CANONICAL NETWORK → MILP
+```
+
+The ingestion layer accepts the logistics material a client actually has — CSV/TSV, XLSX/XLSM, PDF, text and Markdown — even when filenames, layouts and column names vary. It produces a first draft of the operational network, contractual state, data-quality gaps and unfamiliar fields before anything is admitted to optimization.
+
+Every discovered column is preserved and receives an explicit disposition:
+
+| Disposition | Meaning |
+|---|---|
+| `CANONICAL` | Confirmed field eligible to enter the canonical network |
+| `SUPPLEMENTARY` | Useful consultant context, retained but excluded from engines |
+| `UNRESOLVED` | Meaning is not settled; visible and blocking where required |
+| `PROPOSED_NEW` | Candidate concept recorded for governed schema review |
+| `IGNORED` | Deliberately excluded while the raw upload remains intact |
+
+**The model recommends; it does not write the network.** For an unfamiliar column such as `Qty`, the backend profiles its values and may ask a short question such as “Is this monthly demand or shipment quantity?” Model output must match a small JSON schema, the proposed value must be allowed for that field type, and the displayed recommendation, reason and question are capped at **35 words total**. A user's free-text answer becomes a proposal only; a second, explicit review confirmation is required before it can become canonical.
+
+Unresolved and supplementary fields never enter `CanonicalNetwork` or the MILP. Model confidence is supporting evidence rather than proof, and machine-confirmed mappings are not generalized across client/sender boundaries. Review writes carry an expected session revision, so a stale UI submission receives HTTP `409` instead of overwriting a newer decision.
+
+### Ingestion API
+
+```
+POST /api/ingestions                              # upload and create a draft
+GET  /api/ingestions/<run_id>                     # session status and summary
+GET  /api/ingestions/<run_id>/draft               # provisional first-draft view
+GET  /api/ingestions/<run_id>/reviews             # unresolved review items
+POST /api/ingestions/<run_id>/reviews/analyse     # request a bounded AI suggestion
+POST /api/ingestions/<run_id>/reviews             # propose/confirm a decision
+POST /api/ingestions/<run_id>/finalize            # finalize when blockers are resolved
+```
+
+Sessions are persisted and resumable, so the UI can upload, show the draft, collect clarification and finalize through separate requests. Full flow and response contracts: [`docs/ingestion_clarification_flow.md`](docs/ingestion_clarification_flow.md).
+
+### External market intelligence
+
+External context such as a fuel-price change, port notice or duty update can enter through three governed routes: a spreadsheet row, a supplied document, or chat. All routes produce the same `MarketIntelligenceSignal` and pass through the same deterministic relevance guardrail. Signals are kept in staging or the audit trace as evidence; they **never change a solver rate, create an event probability or mutate the network automatically**. There is intentionally no scraper or live feed yet. Detailed rules: [`docs/ingestion_business_rules.md`](docs/ingestion_business_rules.md#15-market-intelligence--three-ways-in-one-schema-one-guardrail).
+
+---
+
 ## 4b. Conversational Layer
 
 ```
@@ -268,6 +321,8 @@ R7   settlement of the candidate       → AUTO_ACTION    ◄─┘
 | **Phase 3** | Conversational layer: chatbot → NLU → structured intent → orchestrator | Complete — [`docs/phase3_conversational_layer.md`](docs/phase3_conversational_layer.md) |
 | **Phase 3.1** | Evaluate and harden the NLU boundary against measured results | Complete, incl. live `gpt-5-mini` evaluation — [`docs/phase3_1_llm_evaluation.md`](docs/phase3_1_llm_evaluation.md) |
 | **Phase 3.2** | Deterministic entity validation and conversational context | Complete — [`docs/phase3_2_entity_and_context.md`](docs/phase3_2_entity_and_context.md) |
+| **External signals** | User-supplied market intelligence through spreadsheet, document and chat routes | Complete — [`docs/ingestion_business_rules.md`](docs/ingestion_business_rules.md#15-market-intelligence--three-ways-in-one-schema-one-guardrail) |
+| **Column clarification** | Provisional draft, unfamiliar-field review, bounded AI suggestions and explicit confirmation | Backend/API complete; UI WIP — [`docs/ingestion_clarification_flow.md`](docs/ingestion_clarification_flow.md) |
 
 Phase 2 added **no** new algorithms, agents, risk scores or optimization objectives. It connected what existed and proved the connections hold. The pre-implementation audit is preserved in [`docs/phase2_integration_gap_report.md`](docs/phase2_integration_gap_report.md).
 
@@ -304,9 +359,12 @@ NetGravity/
 │   ├── orchestrator_architecture.md    # Control-plane design
 │   ├── phase2_integration.md           # Integrated architecture & traces
 │   ├── phase2_integration_gap_report.md# Pre-implementation audit
+│   ├── ingestion_business_rules.md     # Ingestion rules, signals and trust boundaries
+│   ├── ingestion_clarification_flow.md # UI/API review and confirmation workflow
 │   └── v1_*.md                         # Validation reports & audit trails
 │
 ├── netgravity/                         # Engine + control plane
+│   ├── ingestion/                      # Classification, extraction, mapping, review, drafts & API
 │   ├── optimization/                   # Exact MILP (PuLP / HiGHS / CBC), modes
 │   ├── costs/                          # Cost accounting, business cost, reconciliation
 │   ├── resilience/                     # REI engine, service, cache, fingerprint, persistence
@@ -340,6 +398,7 @@ python smoke_test.py                    # 7-check verification (~2s)
 pytest -m "not slow"                    # ~1,308 tests, ~220s
 pytest                                  # includes large-scale benchmarks
 pytest netgravity/tests/integration/    # integration suites only
+pytest netgravity/ingestion/tests/      # ingestion + clarification suite (offline/stubbed)
 python scripts/run_nlu_eval.py          # 159-case NLU evaluation, offline, free
 ```
 
@@ -354,9 +413,12 @@ python scripts/run_nlu_eval.py          # 159-case NLU evaluation, offline, free
 | `test_hardening_v14.py` | 69 |
 | `test_rei_v1.py` | 65 |
 | `test_resilience_rei.py` | 53 |
+| `netgravity/ingestion/tests/` — ingestion, market signals, clarification and API | **368** |
 | MILP core, costs, inventory, service, carbon, scenarios, stress, validation | remainder |
 
 The integration suite exercises the **real** MILP, REI and RF services end to end. Only the LLM gateway and the external signal source are injected doubles — both are boundaries of the system, not parts of it. A test that passed against a faked solver would prove nothing about integration.
+
+The ingestion tests use deterministic model stubs. They verify the AI request/response boundary, word limits, schema validation, two-step confirmation, session revisions and MILP exclusion rules without making live paid API calls.
 
 ### Verified invariants
 
@@ -384,6 +446,8 @@ Stated plainly. **NetGravity is not production-ready**, and passing tests is not
 - No in-flight cache deduplication: simultaneous cold REI requests each compute a batch. Redundant work, not divergence.
 - Request idempotency returns a point-in-time view to a duplicate racing the original. Sequential retry is fully correct.
 - The web cockpit runs on a synthetic Case-16 fixture, not live data.
+- The ingestion upload/review API is wired into the backend, but its dedicated first-draft and clarification UI is still in progress.
+- Market intelligence is supplied by a user through files, documents or chat; there is no live external feed or scraper.
 
 **Performance**
 - Parallel speed-up decays with size (1.98× at 7 facilities → 1.14× at 50). Beyond ~50 facilities a process pool or distributed workers is needed; the `max_workers` / `solve_fn` seams accept either.
@@ -425,6 +489,7 @@ pip install -r requirements.txt
 
 python smoke_test.py                    # verify
 python run.py                           # http://localhost:5050
+python -m netgravity.ingestion --source <client-data-directory>
 ```
 
 **Zero-dependency demo:** open `app/standalone/netgravity_standalone.html` directly in a browser.
