@@ -35,5 +35,13 @@ _CREDENTIAL_ENV_VARS = (
 
 @pytest.fixture(autouse=True)
 def _no_ambient_llm_credentials(monkeypatch):
+    # Force the config module to consume `.env` before credentials are
+    # removed. Some integration paths import it lazily inside the test; if
+    # that first import happened after the deletions below, `_load_dotenv_once`
+    # would repopulate the environment and silently turn an offline test into
+    # a live, budget-consuming model call. Importing first makes isolation
+    # independent of test collection and execution order.
+    from netgravity.ingestion import config as _ingestion_config  # noqa: F401
+
     for var in _CREDENTIAL_ENV_VARS:
         monkeypatch.delenv(var, raising=False)

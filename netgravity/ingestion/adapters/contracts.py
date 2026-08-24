@@ -17,6 +17,7 @@ from typing import List, Optional, Tuple
 from netgravity.ingestion.ai.cache import load_cached_contract, save_contract
 from netgravity.ingestion.ai.client import LLM_FAILURE_MARKER, get_client
 from netgravity.ingestion.ai.contract_reader import extract_contract
+from netgravity.ingestion import document_text
 from netgravity.ingestion.memory.document_memory import DocumentMemory
 from netgravity.ingestion.pdf_quality import assess
 from netgravity.ingestion.config import IngestionConfig
@@ -27,99 +28,26 @@ from netgravity.ingestion.schemas.contract import (
 from netgravity.ingestion.schemas.ingest_result import FileResult, RowIssue, Severity
 from netgravity.ingestion.storage.base import StorageBackend
 
-SUPPORTED_SUFFIXES = {".pdf", ".txt", ".md"}
+#: File types this adapter accepts. Sourced from the shared reader so a new
+#: supported type is added in one place, not two.
+SUPPORTED_SUFFIXES = set(document_text.SUPPORTED_SUFFIXES)
 
-
-def read_text(path: Path) -> Tuple[str, Optional[str]]:
-    """
-    Extract text from a contract file.
-
-    Returns (text, warning). PDF support is optional: if pypdf is not
-    installed we say so plainly rather than failing the whole run.
-    """
-    suffix = path.suffix.lower()
-
-    if suffix in {".txt", ".md"}:
-        return path.read_text(encoding="utf-8", errors="replace"), None
-
-    if suffix == ".pdf":
-        try:
-            from pypdf import PdfReader
-        except ImportError:
-            return "", ("pypdf is not installed — cannot read PDF contracts. "
-                        "Run `pip install pypdf`.")
-        try:
-            reader = PdfReader(str(path))
-            pages = [(p.extract_text() or "") for p in reader.pages]
-            text = "\n".join(pages).strip()
-            if not text:
-                # PARKED, NOT BUILT (2026-08-21): a page with no text layer
-                # at all — a scan or a photo of a document — cannot be
-                # recovered by anything in this file. The only fix is OCR
-                # (reading the image and turning it into text), which is a
-                # separate, deliberately deferred piece of work — see
-                # docs/ingestion_business_rules.md §10. Do not attempt to
-                # send an empty string anywhere downstream; report the
-                # reason and reject the file honestly instead.
-                return "", ("PDF contains no extractable text (likely a scan "
-                            "or image-only page). OCR would be required to "
-                            "read it, and OCR is not implemented yet — "
-                            "parked for a future iteration.")
-            return text, None
-        except Exception as exc:
-            return "", f"failed to read PDF: {type(exc).__name__}: {exc}"
-
-    return "", f"unsupported contract file type '{suffix}'"
-
-
-def page_count(path: Path) -> int:
-    """Pages in a PDF, for scaling the emptiness check. 1 for plain text."""
-    if path.suffix.lower() != ".pdf":
-        return 1
-    try:
-        from pypdf import PdfReader
-        return max(1, len(PdfReader(str(path)).pages))
-    except Exception:
-        return 1
-
-
-def read_contract(path: Path) -> Tuple[str, Optional[str], bool]:
-    """
-    Read a contract and judge whether the extracted text can be TRUSTED.
-
-    Returns (text, warning, quality_failed).
-
-    ONE ROUTE ONLY (simplified 2026-08-21)
-        pypdf extracts the text; the text goes to the model. That is the
-        whole pipeline. There is no second route.
-
-        The previous design escalated unreadable documents by sending the
-        PDF file itself to the model. That was removed deliberately: the
-        configured provider (Gemini via its OpenAI-compatible endpoint)
-        rejects document parts outright, so the escalation could only ever
-        spend an API call to rediscover the same 400 error. A file this
-        pipeline cannot turn into text is now simply reported as unreadable.
-
-    The third value is NOT a routing decision any more — it is a CONFIDENCE
-    signal. pypdf fails quietly as well as loudly: a broken font encoding
-    returns text that looks like text and is not. That text is still sent to
-    the model (it is all we have, and it is often partially recoverable),
-    but everything extracted from it is forced to LOW confidence and
-    flagged, so nobody mistakes a salvage job for a clean read.
-    """
-    text, warning = read_text(path)
-
-    if warning or not text:
-        # Nothing usable came out. There is no second route to try, so the
-        # quality flag is meaningless here.
-        return text, warning, False
-
-    quality = assess(text, page_count=path.suffix.lower() == ".pdf"
-                     and page_count(path) or 1)
-    if quality.usable:
-        return text, None, False
-
-    return text, (f"extracted text failed quality checks — {quality.summary}"), True
+# ---------------------------------------------------------------------------
+# Reading is SHARED, not owned here.
+#
+# Pulling text out of a PDF, judging whether that text can be trusted, and
+# failing honestly when it cannot are identical problems for a freight
+# contract and for a market-intelligence article. They live in
+# `ingestion/document_text.py` and both adapters call the same functions.
+#
+# These three names stay exported from this module because callers and tests
+# already use them, and because "read a contract" reads better at the call
+# site than "read a document". They are thin aliases, not a second
+# implementation — there is exactly one behaviour to keep correct.
+# ---------------------------------------------------------------------------
+read_text = document_text.read_text
+page_count = document_text.page_count
+read_contract = document_text.read_document
 
 
 def ingest_file(path: Path, config: IngestionConfig,

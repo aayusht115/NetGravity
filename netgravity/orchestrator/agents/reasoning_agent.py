@@ -55,7 +55,8 @@ class ReasoningAgent:
 
         Args:
             payload:              Structured results (scenario, optimization,
-                                  kpis, rei, risk, external_evidence). Read-only.
+                                  kpis, rei, risk, external_evidence,
+                                  market_evidence). Read-only.
             unavailable_evidence: Capability → {status, reason} for evidence that
                                   was expected but is MISSING. Passed through so
                                   the narrative reports absence rather than
@@ -308,6 +309,7 @@ class ReasoningAgent:
         rei_block = payload.get("rei") or {}
         risk_block = payload.get("risk") or {}
         external = payload.get("external_evidence") or {}
+        market = payload.get("market_evidence") or {}
 
         infeasible = self._is_infeasible(payload)
 
@@ -397,6 +399,41 @@ class ReasoningAgent:
             parts.append(
                 f"External evidence: {ev_type} affecting {loc}{like_txt} "
                 f"(source: {external.get('source', 'unspecified')})."
+            )
+
+        if market:
+            # No number from this block reaches the summary — not the
+            # magnitude, not the guardrail's relevance score, not its
+            # threshold, and the title is not quoted either (it is very
+            # likely to CONTAIN the magnitude as a substring). None of those
+            # are values a deterministic engine computed or verified, and the
+            # numeric-claim validator polices every number in generated text
+            # regardless of where it came from — quoting the user does not
+            # exempt a figure from that check, and it should not: this
+            # narrative cannot tell "the user really said this" apart from
+            # "the model invented it while claiming the user said it".
+            #
+            # So this describes the signal only in terms nothing here
+            # computed: which category, which direction, whether it cleared
+            # the guardrail. The actual figure is not lost — it is on the
+            # recorded `MarketIntelligenceSignal` (see the audit trail) — it
+            # is simply never asserted as a checked number in prose.
+            verdict = market.get("verdict") or {}
+            bucket = market.get("bucket", "UNKNOWN")
+            direction = market.get("direction", "NEUTRAL")
+            trend = {"UP": "an increase", "DOWN": "a decrease"}.get(
+                direction, "a change")
+            if verdict.get("passed"):
+                standing = "cleared the relevance guardrail"
+            elif verdict:
+                standing = "did NOT clear the relevance guardrail"
+            else:
+                standing = "has not yet been scored against the guardrail"
+            parts.append(
+                f"A market signal was reported: {trend} in the "
+                f"{bucket} category, which {standing}. The reported figure is "
+                f"recorded with the signal, not restated here as a checked "
+                f"number."
             )
 
         if not parts:

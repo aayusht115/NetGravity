@@ -64,6 +64,8 @@ So the rule is: **reject only what cannot be interpreted at all; repair anything
 | R-025 | A column mapping is awaiting human confirmation | INFO | The column is NOT applied until confirmed — see §11 |
 | R-026 | A record set could not be classified | WARNING | Held for a human to label rather than routed on a guess |
 | R-027 | PDF text was unusable, or was used despite failing the quality checks | WARNING | Either the file was rejected, or its figures are LOW confidence — see §10 |
+| R-028 | A market-intelligence file is not a document type this adapter reads | WARNING | Rejected before any model call; the message names the route that would work |
+| R-029 | A candidate market signal was read but not ingested | WARNING | Most often no stated publication date — see §15 |
 
 ### Time periods — everything lands on MONTH
 
@@ -613,12 +615,101 @@ batch run.
 
 ---
 
-## 15. Open items
+## 15. Market intelligence — three ways in, one schema, one guardrail
+
+External information (a fuel price, a port notice, a duty change) arrives
+because **a person supplies it**. There is no fetching anywhere in this
+pipeline: no HTTP call, no feed reader, no scraper. That is a decision, not a
+gap — see "Why nothing fetches" below.
+
+### The three routes
+
+| Route | What arrives | What handles it |
+|---|---|---|
+| Spreadsheet | one row per signal | The ordinary tabular pipeline. `ContentType.MARKET_SIGNAL` — classification, column mapping, memory and review all apply unchanged |
+| Document | a news article, circular or notice (`.pdf`, `.txt`, `.md`) | `adapters/market_intelligence.py` — reads the text, the model structures it |
+| Chat | "diesel is up 6%" | `Intent.MARKET_INTELLIGENCE` → `wf_market_intelligence`, via the new `market.score_signal` capability |
+
+All three build the same `MarketIntelligenceSignal` and are scored by the same
+guardrail policy (§6). One policy scores everything, whatever door it came
+through — but the three routes do not persist it the same way, and chat
+carries one narrow, deliberate exception to the date rule below.
+
+### Everything lands in STAGING or the audit trace, never in the network
+
+A signal is context. It shifts an assumption and explains a result; it does
+not edit a rate. Routed to the network destination it would become an input
+the MILP treats as fact — a headline turned into a number nobody computed,
+which is the one thing the architecture forbids.
+
+So a signal never changes a solver input by itself. If one warrants a what-if,
+a person asks for the scenario, with the quantity they chose, through the
+workflow built to govern structural change.
+
+Spreadsheet and document signals are batches of records meant to be reviewed
+later, so they are written to the staging zone like any other tabular content.
+A chat-typed signal is not a batch — it is one fact volunteered inside one
+conversation turn. It is carried on the `OrchestratorRequest`/`ExecutionContext`
+for that turn, scored against the guardrail by `market.score_signal`, and
+captured durably in that turn's audit trace (`trace.engine_results
+["market.score_signal"]`), which is what the Reasoning Agent reads back as
+`market_evidence` when it writes the reply. It is not written to the staging
+zone. That reply itself never restates the signal's magnitude or the
+guardrail's score as a number — every number in a generated reply is checked
+against the MILP/KPI/REI/Risk/Scenario engines (§ numeric grounding), and a
+guardrail score or a reported percentage is not on that list, so the narrative
+is deliberately qualitative (category, direction, pass/fail) while the full
+record, numbers included, stays inspectable in the trace.
+
+### No probability, ever
+
+`MarketIntelligenceSignal` has no probability field, the spreadsheet aliases
+offer no column that becomes one, the document prompt never asks for one, and
+the chat spec has no field that could hold one. Four routes in, four closed
+doors.
+
+The reason is arithmetic. `RF = P + REI − P·REI`, and governance is decided
+from RF. Turning a signal's qualitative `confidence` into a `P` would
+manufacture the single number that most directly drives a governed decision,
+out of a judgement that was never a likelihood. A genuine event probability
+belongs to the orchestrator's own `ExternalSignal` path, and is extracted only
+when a source explicitly states one.
+
+If a document states a probability, that is recorded as a fact ABOUT the
+document (`states_probability`) and the number itself is not extracted.
+
+### A signal with no stated date is rejected (R-029) — except chat
+
+Not defaulted to today. Every downstream use is time-sensitive — the guardrail
+expires weather signals after 30 days — and stamping the ingest date onto an
+undated article would make a two-year-old story look like this morning's news.
+A signal whose age is unknown is more dangerous than one that is missing.
+
+Chat is the one narrow, documented exception. A typed sentence such as
+"diesel is up 6% this week" has no other candidate date to be wrong about —
+there is no article date to fail to notice, only the moment the person typed
+it. So `chat_service.py` stamps `published_date` as the moment the message
+was received (UTC, date-only) and leaves `effective_date` unset, and the
+signal defaults to `SignalConfidence.LOW` since nothing about the sentence
+was corroborated. This is a deliberate exception scoped to chat only; the
+document route still rejects an undated article outright.
+
+### Why nothing fetches
+
+Automated collection was designed and deliberately deferred. The seam for it
+already exists one layer up, in `sources/` — the same place an ERP or WMS
+connector plugs in — so adding a fetcher later needs no change to the adapter,
+the schema, or the guardrail. Nothing was stubbed in the meantime: a stub for
+a decision not yet taken is just code to delete.
+
+---
+
+## 16. Open items
 
 | Item | Owner | Blocking? |
 |---|---|---|
 | Confirm guardrail thresholds in §6 | Team member owning guardrail definition | No — defaults work |
 | Confirm LLM provider and supply API key | Team | No — stub mode runs everything |
-| Live external news feed | Unassigned | No — seeded signals work |
+| Live external news feed | Unassigned | No — file, document and chat routes cover intake (§16); the `sources/` seam is ready if automation is wanted |
 | Ingestion console UI for mapping confirmation | Deferred (Phase 6) | No — CLI covers it |
 | **Capacity period is unstated in the workbook.** `Capacity_Units` is described as "units/day or units/year" with a "units/month" example — three periods in one definition. Ingestion converts whatever the column NAME states and assumes MONTH when it states nothing; R-021 catches the mismatch numerically as a backstop. The workbook should state one period explicitly. | Team + mentor | Partly mitigated — R-021 blocks the silent failure, but the spec is still ambiguous |

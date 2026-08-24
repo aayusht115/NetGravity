@@ -80,6 +80,12 @@ class ExecutionContext:
     intent: Intent = Intent.UNKNOWN
     intent_resolution: Optional[IntentResolution] = None
     external_signal: Optional[ExternalSignal] = None
+    #: A MarketIntelligenceSignal reported through chat. Untyped for the same
+    #: reason as `OrchestratorRequest.market_signal` — see that field's
+    #: docstring. Mutated in place by `market.score_signal` (the guardrail
+    #: verdict is attached to the object, not replaced), the same pattern
+    #: `external_signal` already uses for `interpret_signal`.
+    market_signal: Optional[Any] = None
 
     # --- immutable data references ---
     # The observed network snapshot this run is pinned to. Never changes once
@@ -317,6 +323,7 @@ class ExecutionContext:
             actor=request.actor,
             raw_input=request.input,
             external_signal=request.external_signal,
+            market_signal=request.market_signal,
             baseline_snapshot_id=request.network_snapshot_id or current_snapshot_id,
             llm_enabled=not request.disable_llm,
         )

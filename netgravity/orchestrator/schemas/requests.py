@@ -62,6 +62,16 @@ class Intent(str, Enum):
     # "forecast demand for the next six months". Recognised so the system can
     # answer honestly; no forecasting capability is registered today.
     FORECAST              = "FORECAST"
+    # "diesel is up 6%" / "the port has added a congestion surcharge".
+    #
+    # A stated MARKET change, distinct from EXTERNAL_EVENT and deliberately so.
+    # EXTERNAL_EVENT describes a hazard whose probability feeds
+    # RF = P + REI - P*REI. A price rise has no probability — it has already
+    # happened — and routing it as a hazard would present a known cost change
+    # as a disruption of unknown likelihood, then report RF as NOT_COMPUTABLE
+    # for want of a P that never existed. Recorded as context; it never edits
+    # a solver input on its own.
+    MARKET_INTELLIGENCE   = "MARKET_INTELLIGENCE"
     UNKNOWN               = "UNKNOWN"
 
 
@@ -287,6 +297,20 @@ class OrchestratorRequest(BaseModel):
     explicit_intent: Optional[Intent] = None
     explicit_scenarios: List[ScenarioIntentSpec] = Field(default_factory=list)
     external_signal: Optional[ExternalSignal] = None
+    #: A `netgravity.ingestion.schemas.signal.MarketIntelligenceSignal`,
+    #: reported through chat. Typed `Any` deliberately — see
+    #: `ExtractionResult.market_intelligence` for the identical reasoning: this
+    #: keeps the orchestrator's core schema module free of an import from
+    #: `ingestion`, a dependency direction nothing else in `core/` or
+    #: `schemas/` takes today.
+    #:
+    #: Kept SEPARATE from `external_signal` for the same reason the two signal
+    #: classes are separate: one carries a probability that feeds
+    #: RF = P + REI - P*REI, and the other must never appear to. A single
+    #: field would force every reader to type-test its contents to tell them
+    #: apart, which is the exact mistake the Phase 4A rename was performed to
+    #: prevent.
+    market_signal: Optional[Any] = None
 
     # Opt out of all model calls for this run. Deterministic results are
     # unaffected; only interpretation and narrative degrade to rule-based.

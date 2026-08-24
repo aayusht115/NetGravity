@@ -300,6 +300,43 @@ def rename_rows(rows, lookup: Dict[str, str]):
     return [rename_row(r, lookup) for r in rows]
 
 
+#: A market-intelligence sheet: one row per signal, as a person would type it.
+#:
+#: Note what is absent — there is no `probability`, `likelihood` or `risk`
+#: column, and no alias for one. `MarketIntelligenceSignal` has no probability
+#: field by design: turning "high confidence" into "P = 0.8" would manufacture
+#: the single number that drives RF and governance out of a qualitative
+#: judgement that was never a likelihood. A genuine event probability belongs
+#: to the orchestrator's own ExternalSignal path, extracted only when a source
+#: explicitly states one.
+MARKET_SIGNAL_ALIASES: Dict[str, List[str]] = {
+    "signal_id":        ["Signal_ID", "signal_id", "ID", "Ref", "Reference"],
+    "title":            ["Title", "title", "Headline", "Summary", "Signal",
+                         "Description", "Event"],
+    "source_title":     ["Source", "source", "Source_Title", "Publication",
+                         "Publisher", "Outlet"],
+    "source_url":       ["URL", "url", "Source_URL", "Link", "Source_Link"],
+    "published_date":   ["Published_Date", "published_date", "Date",
+                         "Published", "Published_On", "Report_Date"],
+    "effective_date":   ["Effective_Date", "effective_date", "Effective_From",
+                         "Applies_From", "Valid_From", "Start_Date"],
+    "bucket":           ["Bucket", "bucket", "Category", "Type", "Signal_Type",
+                         "Class"],
+    "direction":        ["Direction", "direction", "Movement", "Trend",
+                         "Up_Down", "Impact_Direction"],
+    "magnitude":        ["Magnitude", "magnitude", "Change", "Impact", "Delta",
+                         "Size", "Pct_Change", "Percent_Change"],
+    "affected_entities": ["Affected_Entities", "affected_entities", "Entities",
+                          "Affected", "Facilities", "Lanes", "Nodes",
+                          "Affected_Nodes"],
+    "geography":        ["Geography", "geography", "Region", "Location",
+                         "Area", "Country", "State"],
+    "confidence":       ["Confidence", "confidence", "Certainty",
+                         "Confidence_Level", "Reliability"],
+    "rationale":        ["Rationale", "rationale", "Notes", "Comment",
+                         "Reasoning", "Remarks", "Why"],
+}
+
 # Pre-built lookups
 FACILITY_LOOKUP = build_lookup(FACILITY_ALIASES)
 MARKET_LOOKUP = build_lookup(MARKET_ALIASES)
@@ -307,3 +344,4 @@ DEMAND_LOOKUP = build_lookup(DEMAND_ALIASES)
 LANE_LOOKUP = build_lookup(LANE_ALIASES)
 PRODUCT_LOOKUP = build_lookup(PRODUCT_ALIASES)
 HISTORY_LOOKUP = build_lookup(HISTORY_ALIASES)
+MARKET_SIGNAL_LOOKUP = build_lookup(MARKET_SIGNAL_ALIASES)

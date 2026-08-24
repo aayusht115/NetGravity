@@ -150,10 +150,106 @@ _SIGNAL_STRUCTURE: Dict[str, Any] = {
 }
 
 
+#: Document-shaped market-intelligence replies, for offline runs.
+#:
+#: There are several, keyed by filename hint, because ONE canned answer would
+#: make every document look identical and hide the behaviours most worth
+#: seeing offline: an article that yields nothing, and one that is rejected
+#: for stating no date. A stub that only ever demonstrates the happy path
+#: teaches the wrong thing about the pipeline.
+#:
+#: Same mechanism the contract stubs already use — see `get()` below.
+_MARKET_SIGNAL_DIESEL: Dict[str, Any] = {
+    "signals": [
+        {
+            "title": "Bulk diesel price revised upward by 8%",
+            "source_title": "Petroleum Planning and Analysis Cell",
+            "source_url": None,
+            "published_date": "2026-07-14",
+            "effective_date": "2026-07-16",
+            "bucket": "MACRO",
+            "direction": "UP",
+            "magnitude": "+8%",
+            "affected_entities": [],
+            "geography": "India",
+            "confidence": "HIGH",
+            "rationale": "Structured offline without a live model.",
+            "states_probability": False,
+        }
+    ]
+}
+
+_MARKET_SIGNAL_PORT: Dict[str, Any] = {
+    "signals": [
+        {
+            "title": "Congestion surcharge of INR 2.00 per kg on containerised cargo",
+            "source_title": "Jawaharlal Nehru Port Authority",
+            "source_url": None,
+            "published_date": "2026-07-19",
+            "effective_date": "2026-08-01",
+            "bucket": "CARRIER",
+            "direction": "UP",
+            "magnitude": "INR 2.00 per kg",
+            "affected_entities": [],
+            "geography": "Nhava Sheva",
+            "confidence": "HIGH",
+            "rationale": "Structured offline without a live model.",
+            "states_probability": False,
+        },
+        {
+            "title": "Average vessel dwell time up from 1.8 to 3.1 days",
+            "source_title": "Jawaharlal Nehru Port Authority",
+            "source_url": None,
+            "published_date": "2026-07-19",
+            "effective_date": None,
+            "bucket": "CARRIER",
+            "direction": "UP",
+            "magnitude": "+1.3 days dwell",
+            "affected_entities": [],
+            "geography": "Nhava Sheva",
+            "confidence": "MEDIUM",
+            "rationale": "Structured offline without a live model.",
+            "states_probability": False,
+        },
+    ]
+}
+
+#: An article about nothing relevant. An EMPTY list is a correct answer, and
+#: the pipeline must be able to say so rather than inventing a signal to have
+#: something to return.
+_MARKET_SIGNAL_NONE: Dict[str, Any] = {"signals": []}
+
+#: Stated change, no stated date. Exercises the rejection path — the date is
+#: not defaulted to today, because a signal whose age is assumed is worse than
+#: one whose age is unknown.
+_MARKET_SIGNAL_UNDATED: Dict[str, Any] = {
+    "signals": [
+        {
+            "title": "Western corridor freight rates up around 5%",
+            "source_title": "",
+            "published_date": None,
+            "bucket": "CARRIER",
+            "direction": "UP",
+            "magnitude": "+5%",
+            "confidence": "LOW",
+            "rationale": "Structured offline without a live model.",
+            "states_probability": False,
+        }
+    ]
+}
+
+#: Default for any market-intelligence call with no filename hint.
+_MARKET_SIGNAL_DOC = _MARKET_SIGNAL_DIESEL
+
 _REGISTRY: Dict[str, Dict[str, Any]] = {
     "distributor_mapping": _DISTRIBUTOR_MAPPING,
     "contract_transcorp": _CONTRACT_TRANSCORP,
     "contract_speedfreight": _CONTRACT_SPEEDFREIGHT,
+    # NOTE: no "market_signal" entry. The exact-key lookup below runs
+    # before the filename hints, so registering it would make every
+    # document return the same canned answer and hide the cases most
+    # worth seeing offline — the article that yields nothing, and the one
+    # rejected for stating no date. Same reason "contract" is absent.
     "signal_structure": _SIGNAL_STRUCTURE,
 }
 
@@ -178,6 +274,14 @@ def get(stub_key: str, context: Dict[str, Any] | None = None) -> Dict[str, Any]:
 
     if stub_key.startswith("contract"):
         return dict(_CONTRACT_SPEEDFREIGHT)
+    if stub_key.startswith("market_signal"):
+        if "commentary" in hint or "analyst" in hint:
+            return dict(_MARKET_SIGNAL_NONE)
+        if "undated" in hint or "snippet" in hint:
+            return dict(_MARKET_SIGNAL_UNDATED)
+        if "port" in hint or "jnpa" in hint or "congestion" in hint:
+            return dict(_MARKET_SIGNAL_PORT)
+        return dict(_MARKET_SIGNAL_DOC)
     if stub_key.startswith("signal"):
         return dict(_SIGNAL_STRUCTURE)
 

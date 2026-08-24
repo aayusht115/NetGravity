@@ -31,6 +31,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from netgravity.orchestrator.audit import events
@@ -248,12 +249,15 @@ class ChatService:
                 affected_entity_ids=list(intent.resolved_entity_ids),
             )
 
+        market_signal = self._build_market_signal(intent, request)
+
         return OrchestratorRequest(
             request_id=request.request_id or str(uuid.uuid4()),
             input=request.message,
             explicit_intent=intent.intent,
             explicit_scenarios=list(intent.scenario_overrides),
             external_signal=external_signal,
+            market_signal=market_signal,
             network_snapshot_id=snapshot_id,
             disable_llm=request.disable_llm,
             metadata={
@@ -264,6 +268,79 @@ class ChatService:
                 "intent_confidence": intent.confidence,
                 "resolved_entity_ids": list(intent.resolved_entity_ids),
             },
+        )
+
+    @staticmethod
+    def _build_market_signal(intent: ConversationalIntent,
+                             request: ChatRequest) -> Optional[Any]:
+        """
+        Turn a chat-reported market change into a `MarketIntelligenceSignal`.
+
+        Left UNSCORED here on purpose — no guardrail call, no relevance
+        verdict. That happens later, in the `market.score_signal` capability,
+        against the actual network. The same separation `external_event`
+        already keeps between "the user reported this" (translate) and "the
+        system assessed it" (execute): this method only builds evidence, it
+        does not judge it.
+
+        `published_date` IS "right now" — the moment the message arrived —
+        and that is a deliberate, narrow exception to the rule the document
+        route enforces (an article with no stated date is REJECTED, R-029: see
+        `adapters/market_intelligence.py`). That rule exists because stamping
+        an UNKNOWN date with today's date would hide how stale the underlying
+        claim might be. Nothing is hidden here: a chat message has no other
+        candidate date to be wrong about, and "the user said this just now" is
+        an observed fact about the conversation, not a guess about the source.
+
+        Confidence is fixed at LOW — one notch more conservative than the
+        document and spreadsheet routes' MEDIUM default. Those name a source
+        that could, in principle, be checked; a typed sentence carries none.
+        The guardrail's confidence penalty (relevance.py) applies that caution
+        automatically, without anyone having to remember to distrust it.
+        """
+        spec = intent.market_signal
+        if spec is None:
+            return None
+
+        from netgravity.ingestion.schemas.signal import (
+            MarketIntelligenceSignal,
+            SignalBucket,
+            SignalConfidence,
+            SignalDirection,
+        )
+
+        def _enum(cls, value, default):
+            try:
+                return cls(str(value or "").strip().upper())
+            except ValueError:
+                return default
+
+        return MarketIntelligenceSignal(
+            signal_id=f"sig-chat-{uuid.uuid4().hex[:10]}",
+            # The user's own words, verbatim — same choice already made for
+            # `MarketSignalSpec.magnitude`: a title synthesised here would be
+            # one step removed from what was actually said.
+            title=(request.message or "").strip()[:300],
+            source_title="Reported in chat",
+            source_url=None,
+            published_date=datetime.now(timezone.utc).date().isoformat(),
+            effective_date=spec.effective_date,
+            bucket=_enum(SignalBucket, spec.bucket, SignalBucket.UNKNOWN),
+            direction=_enum(SignalDirection, spec.direction, SignalDirection.NEUTRAL),
+            magnitude=spec.magnitude,
+            # Already resolved against master data by the entity resolver
+            # earlier in THIS turn — more solid than the document route gets,
+            # which only ever sees identifiers the model happened to name.
+            affected_entities=list(intent.resolved_entity_ids),
+            geography=spec.geography,
+            confidence=SignalConfidence.LOW,
+            rationale=(
+                f"Reported by a user in conversation "
+                f"{intent.conversation_id or '(none)'}. published_date is the "
+                f"moment of the message; there is no source document to date "
+                f"it from."
+            ),
+            structured_by="chat",
         )
 
     # ==================================================================

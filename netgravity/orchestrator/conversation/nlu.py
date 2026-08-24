@@ -30,7 +30,12 @@ import logging
 import re
 from typing import List, Optional, Sequence, Tuple
 
-from netgravity.orchestrator.agents.intent_agent import IntentAgent
+from netgravity.orchestrator.agents.intent_agent import (
+    IntentAgent,
+    _MARKET_DOWN_WORDS,
+    _MARKET_SUBJECTS,
+    _MARKET_UP_WORDS,
+)
 from netgravity.orchestrator.agents.external_signal_agent import ExternalSignalAgent
 from netgravity.orchestrator.conversation.entity_resolver import EntityResolver
 from netgravity.orchestrator.exceptions import LLMFailureError
@@ -42,6 +47,7 @@ from netgravity.orchestrator.schemas.conversation import (
     ConversationContext,
     EntityMention,
     ExternalEventSpec,
+    MarketSignalSpec,
     IntentClarity,
 )
 from netgravity.orchestrator.schemas.requests import (
@@ -157,11 +163,55 @@ _EXPLICIT_SCENARIO_LANGUAGE = (
 #: skipped wholesale, and the system solved the MILP and answered about the
 #: whole network as though Chennai were part of it. Whether a named site exists
 #: is a question about master data, not about which workflow is running.
+#: The magnitude EXACTLY as typed — "6%", "INR 2 per kg", "12 percent". Kept
+#: as text on purpose; see `_extract_market_signal`.
+_MAGNITUDE_RE = re.compile(
+    r"(?:(?:INR|Rs\.?|₹|USD|\$)\s?\d[\d,]*(?:\.\d+)?(?:\s?(?:per|/)\s?\w+)?"
+    r"|\d+(?:\.\d+)?\s?(?:%|percent|per cent))",
+    re.IGNORECASE,
+)
+
+#: Which guardrail bucket a subject belongs to. The guardrail owns the
+#: THRESHOLDS; this only names the family, so a signal is scored under the
+#: right policy row.
+_MARKET_BUCKETS = {
+    "CARRIER": ("trucking rate", "transport rate", "shipping rate", "haulage",
+                "carrier capacity", "carrier rate", "ocean freight",
+                "air freight", "freight rate", "freight cost", "surcharge",
+                "port charge", "port handling", "terminal handling",
+                "handling charge", "handling fee", "handling rate",
+                "demurrage", "detention"),
+    "SUPPLIER": ("wage", "labour cost", "labor cost", "warehousing rate",
+                 "storage cost", "lease rate", "rent"),
+    "MACRO": ("diesel", "petrol", "fuel", "crude", "oil price", "toll",
+              "tariff", "duty", "customs", "gst", "excise", "levy",
+              "exchange rate", "currency", "rupee", "forex", "fx"),
+}
+
+
+def _bucket_for(subject: str) -> str:
+    """Name the guardrail family for a subject. UNKNOWN when unmatched."""
+    for bucket, subjects in _MARKET_BUCKETS.items():
+        if subject in subjects:
+            return bucket
+    return "UNKNOWN"
+
+
 _AMBIGUITY_FREE_INTENTS = frozenset({
     Intent.STATUS_QUERY,
     Intent.FORECAST,
     Intent.NETWORK_STATE_QUERY,
     Intent.OPTIMIZATION_REQUEST,
+    # A market change is about the outside world, not about one of our nodes.
+    # "Port charges at Mumbai went up" names a city, not a facility, and
+    # asking "which Mumbai did you mean?" would be nonsense. Whether the
+    # change actually touches DC_MUMBAI is a guardrail question, answered
+    # deterministically against master data when the signal is scored — not a
+    # clarification to interrupt the user with.
+    #
+    # As with the others, this does NOT skip unknown-entity detection: if the
+    # user names a site that does not exist, that is still caught.
+    Intent.MARKET_INTELLIGENCE,
 })
 
 
@@ -327,6 +377,7 @@ class ConversationalNLU:
             )
 
         external_event = self._extract_event(text, intent, network, resolved_ids)
+        market_signal = self._extract_market_signal(text, intent)
 
         return ConversationalIntent(
             schema_version=INTENT_SCHEMA_VERSION,
@@ -337,6 +388,7 @@ class ConversationalNLU:
             resolved_entity_ids=resolved_ids,
             scenario_overrides=scenarios,
             external_event=external_event,
+            market_signal=market_signal,
             confidence=confidence,
             source=source,
             rationale=rationale,
@@ -373,6 +425,25 @@ class ConversationalNLU:
         # while a hazard misread as a projection discards a stated probability
         # into a workflow that has no engine and declines.
         is_hazard = any(w in lowered for w in _HAZARD_WORDS)
+
+        # A stated MARKET change outranks projection language, and must be
+        # tested before it. "Fuel prices are expected to rise 8% next month"
+        # contains "expected" and "next month" — both projection vocabulary —
+        # but it is a reported market movement with a magnitude, not a request
+        # to forecast this network. Routed as FORECAST it would reach a
+        # workflow with no engine and be declined, and a real signal would be
+        # lost at the door.
+        #
+        # Safe to place first for the same reason the rule parser can: the test
+        # requires a market SUBJECT and a stated CHANGE together, so it cannot
+        # match a forecast request that merely mentions the future. A hazard
+        # still outranks it — "a strike has pushed rates up" is governed as an
+        # event, which is the more conservative of the two readings.
+        if not is_hazard and IntentAgent._is_market_report(text, lowered):
+            return (Intent.MARKET_INTELLIGENCE, [], "rules", 0.8,
+                    "A stated market change (subject and movement both "
+                    "present). Recorded as context; no probability inferred.",
+                    None, False)
 
         if not is_hazard and (any(w in lowered for w in _FORECAST_WORDS)
                               or _FUTURE_PERIOD_RE.search(lowered)):
@@ -679,6 +750,50 @@ class ConversationalNLU:
                 label=f"Close {', '.join(resolved_ids)}",
             )]
         return []
+
+    @staticmethod
+    def _extract_market_signal(text: str,
+                               intent: Intent) -> Optional[MarketSignalSpec]:
+        """
+        Pull a market change out of the message.
+
+        Deterministic and deliberately shallow. It records WHAT the user named
+        and WHICH WAY it moved, and copies the magnitude across as the words
+        they typed. It does not parse "6%" into 0.06, and it does not decide
+        what the change is worth.
+
+        Two reasons for that restraint. A number parsed here would be one
+        assignment away from a solver input, with no unit and nobody having
+        computed it. And relevance is not this layer's decision: the guardrail
+        scores a signal against a versioned policy, from master data, where the
+        reasoning is auditable.
+
+        No probability is produced, and `MarketSignalSpec` has no field that
+        could hold one.
+        """
+        if intent != Intent.MARKET_INTELLIGENCE:
+            return None
+
+        lowered = f" {(text or '').lower()} "
+        subject = next((s for s in _MARKET_SUBJECTS if s in lowered), "")
+        direction = "NEUTRAL"
+        if any(w in lowered for w in _MARKET_UP_WORDS):
+            direction = "UP"
+        elif any(w in lowered for w in _MARKET_DOWN_WORDS):
+            direction = "DOWN"
+
+        match = _MAGNITUDE_RE.search(text or "")
+        return MarketSignalSpec(
+            bucket=_bucket_for(subject),
+            direction=direction,
+            # The user's own words, verbatim. Not converted, not normalised.
+            magnitude=match.group(0).strip() if match else "",
+            subject=subject,
+            geography="",
+            # Never defaulted to today. A signal whose age is assumed is worse
+            # than one whose age is unknown.
+            effective_date=None,
+        )
 
     def _extract_event(
         self,

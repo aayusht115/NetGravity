@@ -189,6 +189,37 @@ class ExternalEventSpec(BaseModel):
         return v
 
 
+class MarketSignalSpec(BaseModel):
+    """
+    A market change the user stated in conversation.
+
+    Mirrors `ExternalEventSpec` in shape, and differs from it in exactly one
+    telling way: there is NO probability field, and no field that could be
+    coerced into one. A price rise the user is reporting has already happened;
+    it has a magnitude, not a likelihood. Deriving a `P` from `confidence`
+    here would manufacture the number that drives RF and governance out of a
+    qualitative judgement that was never a likelihood — which is precisely why
+    `MarketIntelligenceSignal` has no probability field either.
+
+    `magnitude` stays a STRING, deliberately. The user typed "up about 6%" or
+    "roughly two rupees a kilo"; storing that verbatim keeps what they said
+    reviewable. Converting it into a float here would produce a number nobody
+    computed, in units nobody specified, one field away from a solver input.
+    """
+    bucket: str = "UNKNOWN"          # CARRIER|SUPPLIER|CUSTOMER|MACRO|WEATHER|...
+    direction: str = "NEUTRAL"       # UP | DOWN | NEUTRAL
+    #: What the user said the change was, in their own words.
+    magnitude: str = ""
+    #: What the change concerns — "diesel", "port charges", "ocean freight".
+    subject: str = ""
+    geography: str = ""
+    #: ISO date the user gave, if any. Never defaulted to today: a signal
+    #: whose age is assumed is worse than one whose age is unknown.
+    effective_date: Optional[str] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ClarificationRequest(BaseModel):
     """
     A question back to the user, with the concrete options available.
@@ -247,6 +278,11 @@ class ConversationalIntent(BaseModel):
     #: Scenario proposals. Validated against the real network before use.
     scenario_overrides: List[ScenarioIntentSpec] = Field(default_factory=list)
     external_event: Optional[ExternalEventSpec] = None
+    #: A market change the user reported. Separate from `external_event` for
+    #: the same reason the two signal schemas are separate: one carries a
+    #: probability that feeds a governed risk calculation and the other must
+    #: never appear to.
+    market_signal: Optional[MarketSignalSpec] = None
     #: Quantities the USER supplied (e.g. a capacity delta). Never results.
     parameters: Dict[str, Any] = Field(default_factory=dict)
 

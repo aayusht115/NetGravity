@@ -42,6 +42,7 @@ from netgravity.ingestion.field_aliases import (
     HISTORY_LOOKUP,
     LANE_LOOKUP,
     MARKET_LOOKUP,
+    MARKET_SIGNAL_LOOKUP,
     PRODUCT_LOOKUP,
     normalise_name,
 )
@@ -64,6 +65,7 @@ _RULE_TABLES: Dict[ContentType, Dict[str, str]] = {
     ContentType.LANE: LANE_LOOKUP,
     ContentType.PRODUCT: PRODUCT_LOOKUP,
     ContentType.HISTORICAL_VOLUME: HISTORY_LOOKUP,
+    ContentType.MARKET_SIGNAL: MARKET_SIGNAL_LOOKUP,
 }
 
 #: SHIPMENT_LOG has no alias table — it is exactly the case nobody wrote a
@@ -100,6 +102,11 @@ WHAT EACH TYPE MEANS
                      typically with a date, a destination that repeats across rows,
                      and a document or vehicle reference
   HISTORICAL_VOLUME  volume measured over time periods, one row per node per period
+  MARKET_SIGNAL      dated EXTERNAL intelligence, one row per news item or
+                     announcement: a headline, a source, a date, and a stated
+                     change (fuel price, freight rate, port notice, duty). It
+                     describes the OUTSIDE WORLD, not this network's own
+                     facilities, lanes or shipments
   UNKNOWN            genuinely cannot tell, or the sheet mixes several kinds
 
 RULES
@@ -107,6 +114,9 @@ RULES
   matters most: a MASTER list has one row per distinct entity, a
   SHIPMENT_LOG/HISTORICAL_VOLUME has many rows repeating the same entities
   over time.
+- MARKET_SIGNAL is about events, not entities. If every row names one of
+  OUR sites or lanes and carries a rate or capacity for it, that is master
+  data, not a signal — however newsworthy the wording.
 - Set confidence honestly. If the sheet blends several kinds of data, or the
   sample is too thin to judge, return UNKNOWN with low confidence. A wrong
   confident answer is far worse than an admitted uncertainty.

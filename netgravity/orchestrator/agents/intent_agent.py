@@ -50,10 +50,68 @@ _CLOSE_WORDS = ("close", "closing", "closure", "shut", "shutdown", "shut down",
                 "halt", "suspend", "disable", "stop")
 _COMPARE_WORDS = ("compare", "versus", " vs ", "vs.", "against", "either")
 _RESILIENCE_WORDS = ("most exposed", "exposure", "resilien", "vulnerab", "riskiest",
-                     "most critical", "single point", "rei")
+                     "most critical", "single point")
+#: "REI" is matched on a WORD BOUNDARY, not as a substring like the phrases
+#: above. As a bare substring it appears inside "f-REI-ght", so every sentence
+#: about freight rates — "how much did freight rates increase" — was being
+#: classified as a resilience query and answered with an exposure ranking.
+#: Found while adding the market-intelligence rule, which is the area the
+#: defect most affects: freight is market vocabulary.
+_REI_TOKEN_RE = re.compile(r"\brei\b", re.IGNORECASE)
 _EXTERNAL_WORDS = ("flood", "storm", "cyclone", "hurricane", "earthquake", "strike",
                    "protest", "typhoon", "wildfire", "heatwave", "expected", "forecast",
                    "warning", "alert")
+#: Market-intelligence vocabulary, split into a SUBJECT and a CHANGE.
+#:
+#: Both halves must be present for the rule to fire, and that compound test is
+#: the whole design. `_EXTERNAL_WORDS` already claims "expected", "forecast",
+#: "warning" and "alert", so a single-word market rule checked first would
+#: swallow "flooding expected near Delhi" and route a hazard as a price story;
+#: checked last, it would never see "fuel prices are expected to rise 8%",
+#: because "expected" would have routed that to EXTERNAL_EVENT first. Requiring
+#: a market subject AND a change lets this rule run BEFORE the hazard rule
+#: without being able to steal from it: "flooding" is not a market subject, so
+#: the compound test cannot match it however the sentence is phrased.
+_MARKET_SUBJECTS = (
+    "diesel", "petrol", "fuel", "oil price", "crude",
+    "freight rate", "freight cost", "ocean freight", "air freight",
+    "surcharge", "haulage", "trucking rate", "transport rate", "shipping rate",
+    "toll", "tariff", "duty", "customs", "gst", "excise", "levy",
+    "port charge", "port handling", "terminal handling", "handling charge",
+    "handling fee", "handling rate", "demurrage", "detention",
+    "exchange rate", "currency", "rupee", "forex", "fx",
+    "carrier capacity", "carrier rate", "wage", "labour cost", "labor cost",
+    "warehousing rate", "storage cost", "lease rate", "rent",
+)
+#: Movement words, split by direction so one list serves both jobs: detecting
+#: that a change was stated, and describing which way it went. Kept in this
+#: module — the rule parser's — so the conversational layer imports them
+#: rather than keeping a second copy that can drift out of agreement with the
+#: rule that fires the intent in the first place.
+_MARKET_UP_WORDS = (
+    "up", "rise", "risen", "rising", "rose", "increase", "increased",
+    "increasing", "hike", "hiked", "surge", "surged", "jump", "jumped",
+    "climb", "climbed", "costlier", "dearer", "imposed", "levied", "added",
+    "upward", "uplift",
+)
+_MARKET_DOWN_WORDS = (
+    "down", "fall", "fallen", "falling", "fell", "drop", "dropped",
+    "decrease", "decreased", "decline", "declined", "cut", "reduced",
+    "cheaper", "downward",
+)
+#: Movement stated without a direction — "revised", "changed". Enough to say a
+#: change happened, not enough to say which way, and the spec records NEUTRAL.
+_MARKET_NEUTRAL_CHANGES = (
+    "revised", "revision", "announced", "introduced", "changed", "% ",
+    "percent", "per cent",
+)
+_MARKET_CHANGES = _MARKET_UP_WORDS + _MARKET_DOWN_WORDS + _MARKET_NEUTRAL_CHANGES
+#: Words that mean the sentence is a QUESTION about market data rather than a
+#: report of a change. "What has diesel done this year?" is not a signal to
+#: record — there is nothing stated to record — so the rule must not fire.
+_MARKET_QUESTION_STARTS = ("what", "how much", "how has", "why", "when", "is ",
+                           "are ", "did ", "has ", "have ", "show ", "tell ")
+
 _OPTIMIZE_WORDS = ("optimi", "best configuration", "cheapest", "minimise cost",
                    "minimize cost", "improve the network")
 _STATE_WORDS = ("current state", "how does the network", "what does the network",
@@ -205,6 +263,20 @@ class IntentAgent:
                 rationale="Capacity-change language with a named facility and a quantity.",
             )
 
+        # Market intelligence is checked BEFORE the hazard rule. Safe to do so
+        # only because it requires a market SUBJECT and a stated CHANGE
+        # together — see _MARKET_SUBJECTS. A hazard sentence contains neither.
+        if self._is_market_report(raw, lowered):
+            return IntentResolution(
+                intent=Intent.MARKET_INTELLIGENCE,
+                confidence=0.85 if mentioned else 0.8,
+                source="rules",
+                entities=mentioned,
+                rationale=("A stated market change (subject and movement both "
+                           "present). Recorded as context; no probability is "
+                           "inferred and no solver input is edited."),
+            )
+
         if has(_EXTERNAL_WORDS):
             return IntentResolution(
                 intent=Intent.EXTERNAL_EVENT,
@@ -226,7 +298,7 @@ class IntentAgent:
                 rationale="Explanation request; answered from existing evidence.",
             )
 
-        if has(_RESILIENCE_WORDS):
+        if has(_RESILIENCE_WORDS) or _REI_TOKEN_RE.search(lowered):
             return IntentResolution(
                 intent=Intent.RESILIENCE_QUERY,
                 confidence=0.9,
@@ -287,6 +359,32 @@ class IntentAgent:
             entities=mentioned,
             rationale="No rule matched the request.",
         )
+
+    @staticmethod
+    def _is_market_report(raw: str, lowered: str) -> bool:
+        """
+        True when the user REPORTED a market change, both halves stated.
+
+        Three conditions, all required:
+          - a market subject (diesel, freight rate, duty, port charge, ...)
+          - a movement (up, hiked, revised, a percentage, ...)
+          - the sentence is not a question ABOUT that subject
+
+        The question test matters as much as the other two. "What has diesel
+        done this year?" names a subject and a movement and states no change
+        at all; recording it as a signal would invent a fact from a query.
+        """
+        if not any(subject in lowered for subject in _MARKET_SUBJECTS):
+            return False
+        if not any(change in lowered for change in _MARKET_CHANGES):
+            return False
+
+        stripped = raw.strip().lower()
+        if stripped.endswith("?"):
+            return False
+        if stripped.startswith(_MARKET_QUESTION_STARTS):
+            return False
+        return True
 
     @staticmethod
     def _parse_capacity_change(
@@ -420,6 +518,12 @@ class IntentAgent:
             "- Never output a facility identifier that is not in the list above.\n"
             "- Use SCENARIO_COMPARISON when two or more alternatives are contrasted.\n"
             "- Use EXTERNAL_EVENT for weather, disaster, strike or other outside events.\n"
+            "- Use MARKET_INTELLIGENCE when the user REPORTS a market change that has\n"
+            "  happened or been announced — a fuel price, a freight rate, a surcharge,\n"
+            "  a duty, a port charge, an exchange rate. The difference from\n"
+            "  EXTERNAL_EVENT is likelihood: a hazard MIGHT happen and carries a\n"
+            "  probability; a price rise already has and carries a magnitude. Never\n"
+            "  output a probability for a market change.\n"
             "- Use EXPLANATION when the user asks WHY something is the case, rather than\n"
             "  asking for a new analysis.\n"
             "- For CHANGE_CAPACITY set capacity_delta_units for an absolute CHANGE\n"

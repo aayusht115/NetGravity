@@ -49,26 +49,25 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Protocol, runtime_checkable
 
+from netgravity.llm import gateway_contract
+from netgravity.telemetry import record_call
 from netgravity.orchestrator.exceptions import LLMFailureError, LLMNonRetryableError
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_BASE_URL = "https://rapidinsights-openai-gateway-dev.azurewebsites.net"
+# The gateway's own facts — endpoints, limits, retry policy — are shared with
+# the ingestion client rather than declared twice. The budget is cumulative
+# and shared across every holder of the token, so a limit corrected in one
+# file and not the other spends someone else's remaining capacity. See
+# netgravity/llm/gateway_contract.py for why the CONTRACT is shared and the
+# transports are not.
+DEFAULT_BASE_URL = gateway_contract.DEFAULT_BASE_URL
+DEFAULT_MODEL_NAME = gateway_contract.DEFAULT_MODEL_NAME
+MAX_PROMPT_CHARS = gateway_contract.MAX_PROMPT_CHARS
+RETRYABLE_STATUS = gateway_contract.RETRYABLE_STATUS
 
-#: The gateway pins one model and exposes no way to select or query it, so the
-#: name is configuration rather than a response field. Override with
-#: TEXT_API_MODEL if the gateway is repointed.
-DEFAULT_MODEL_NAME = "gpt-5-mini"
-
-#: Slightly above the gateway's 60s processing timeout, per the guide.
 CONNECT_TIMEOUT = 10.0
 READ_TIMEOUT = 90.0
-
-#: Gateway hard limit; we refuse locally rather than spend a request on a 413.
-MAX_PROMPT_CHARS = 100_000
-
-#: Only these are transient enough to retry.
-RETRYABLE_STATUS = {429, 500, 502}
 
 
 @dataclass
@@ -234,12 +233,10 @@ class LLMGateway:
         if not prompt or not prompt.strip():
             raise LLMNonRetryableError("Refusing to send an empty prompt.", context={"purpose": purpose})
 
-        if len(prompt) > MAX_PROMPT_CHARS:
+        oversized = gateway_contract.oversized_prompt_reason(len(prompt))
+        if oversized is not None:
             raise LLMNonRetryableError(
-                f"Prompt is {len(prompt):,} characters, above the gateway's "
-                f"{MAX_PROMPT_CHARS:,} limit. Reduce the payload rather than spending "
-                f"a shared request on a guaranteed 413.",
-                context={"purpose": purpose, "prompt_chars": len(prompt)},
+                oversized, context={"purpose": purpose, "prompt_chars": len(prompt)},
             )
 
         with self._lock:
@@ -253,7 +250,7 @@ class LLMGateway:
 
         import requests
 
-        url = f"{self.config.base_url}/v1/generate"
+        url = f"{self.config.base_url}{gateway_contract.GENERATE_PATH}"
         headers = {
             "Authorization": f"Bearer {self.config.token}",
             "Content-Type": "application/json",
@@ -305,11 +302,22 @@ class LLMGateway:
             )
             self._last_error = error_code
 
-            if resp.status_code in RETRYABLE_STATUS and attempt < self.config.max_attempts:
+            # A cumulative-budget or daily-quota refusal arrives AS a 429 and
+            # must not be retried: waiting does not restore spent budget, so a
+            # retry only burns attempts and delays an honest failure. The
+            # status alone cannot tell that apart from a rolling-minute rate
+            # limit; the error code can.
+            retryable = gateway_contract.should_retry(
+                resp.status_code, error_code,
+                attempts_left=attempt < self.config.max_attempts,
+            )
+            if retryable:
                 time.sleep(self._backoff(attempt))
                 continue
 
-            if resp.status_code in RETRYABLE_STATUS:
+            if (resp.status_code in RETRYABLE_STATUS
+                    and error_code.strip().lower()
+                    not in gateway_contract.TERMINAL_ERRORS):
                 raise LLMFailureError(
                     f"Text gateway returned {resp.status_code} ({error_code}) after "
                     f"{attempt} attempts: {message}",
@@ -363,6 +371,25 @@ class LLMGateway:
             self._request_count += 1
             self._total_tokens += usage.total_tokens
 
+        # Record into the SHARED token ledger, not only this object's private
+        # counter.
+        #
+        # This was a real accounting gap. The gateway's budget is cumulative
+        # and shared across every holder of the token, and until now the two
+        # clients that spend it kept separate tallies that did not know about
+        # each other — so neither view was ever complete, and "how much is
+        # left?" had no answer anywhere in the system. The private counter is
+        # kept as well: it is what `max_requests_per_execution` enforces, and
+        # that guard must not depend on a module whose recording is
+        # best-effort.
+        record_call(
+            task=f"orchestrator:{purpose}",
+            model=str(body.get("model") or self.config.model_name),
+            usage={"prompt_tokens": usage.input_tokens,
+                   "completion_tokens": usage.output_tokens,
+                   "total_tokens": usage.total_tokens},
+        )
+
         logger.info(
             "orchestrator.llm.success purpose=%s request_id=%s tokens=%d latency=%.3fs",
             purpose, body.get("request_id"), usage.total_tokens, latency,
@@ -405,7 +432,7 @@ class LLMGateway:
         import requests
         try:
             resp = requests.get(
-                f"{self.config.base_url}/v1/usage",
+                f"{self.config.base_url}{gateway_contract.USAGE_PATH}",
                 headers={"Authorization": f"Bearer {self.config.token}"},
                 timeout=(self.config.connect_timeout, 30.0),
             )
@@ -421,7 +448,7 @@ class LLMGateway:
             return False
         try:
             import requests
-            resp = requests.get(f"{self.config.base_url}/health", timeout=(5.0, 10.0))
+            resp = requests.get(f"{self.config.base_url}{gateway_contract.HEALTH_PATH}", timeout=(5.0, 10.0))
             return resp.status_code == 200
         except Exception:  # noqa: BLE001
             return False

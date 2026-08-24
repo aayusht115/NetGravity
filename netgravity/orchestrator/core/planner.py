@@ -37,6 +37,11 @@ CAP_KPI            = "kpi.summarise"
 CAP_REI            = "resilience.assess"
 CAP_RISK           = "risk.compute_rf"
 CAP_INTERPRET_SIG  = "external.interpret_signal"
+#: Scores a chat-reported market signal against the guardrail policy. Named
+#: apart from CAP_INTERPRET_SIG on purpose: the two never touch. One derives a
+#: probability that feeds RF; this one attaches a relevance verdict from
+#: `ingestion/guardrails/relevance.py` and produces nothing RF ever reads.
+CAP_SCORE_MARKET   = "market.score_signal"
 CAP_REASON         = "reasoning.synthesise"
 CAP_GOVERN         = "governance.classify"
 
@@ -282,6 +287,49 @@ def _build_forecast(_: IntentResolution) -> List[PlanStep]:
     ]
 
 
+def _build_market_intelligence(_: IntentResolution) -> List[PlanStep]:
+    """
+    Record a stated market change as context. No solve, and no scenario.
+
+    WHY THIS WORKFLOW DOES SO LITTLE
+        A market signal is evidence, not an instruction. It says diesel moved;
+        it does not say what this network should do about it. Turning "diesel
+        is up 6%" into a re-optimisation would answer a question nobody asked,
+        against inputs nobody changed — every lane rate in the snapshot is
+        still the contracted rate, so the solve would return the baseline and
+        present it as a response to the news.
+
+        Worse, editing the rates first would be a language model changing a
+        number the MILP treats as fact. The architecture's governing rule
+        forbids exactly that: the engines are the only sources of numeric
+        truth.
+
+        So the signal is loaded against the network (so a reader can see which
+        facilities and lanes it plausibly touches), SCORED against the
+        guardrail policy, explained, and governed. If it warrants a what-if, a
+        person asks for one — and that request arrives as SCENARIO_ANALYSIS,
+        with the quantity they chose, through the workflow built to govern
+        structural change.
+
+    "score_signal" is OPTIONAL and SOFT-depended-on by reason/govern, the same
+    treatment `interpret_signal` gets in `wf_external_event`: a message with no
+    signal to score (or a scoring failure) degrades the narrative, it does not
+    fail the run.
+
+    Governance still runs. Every response leaves with a verdict.
+    """
+    return [
+        PlanStep(step_id="load", capability=CAP_LOAD_NETWORK,
+                 description="Read the observed network snapshot, so the "
+                             "signal can be read against real facilities."),
+        PlanStep(step_id="score_signal", capability=CAP_SCORE_MARKET,
+                 description="Score the reported market change against the "
+                             "guardrail policy.",
+                 depends_on=["load"], optional=True),
+        *_reason_and_govern(["load", "score_signal"]),
+    ]
+
+
 def _build_optimization(_: IntentResolution) -> List[PlanStep]:
     return [
         PlanStep(step_id="load", capability=CAP_LOAD_NETWORK,
@@ -325,6 +373,10 @@ WORKFLOW_TEMPLATES: Dict[Intent, WorkflowTemplate] = {
         "wf_status", Intent.STATUS_QUERY,
         "Answer an inventory/count question from the digital twin; no solve.",
         _build_status),
+    Intent.MARKET_INTELLIGENCE: WorkflowTemplate(
+        "wf_market_intelligence", Intent.MARKET_INTELLIGENCE,
+        "Record a stated market change as context; no solve, no scenario.",
+        _build_market_intelligence),
     Intent.FORECAST: WorkflowTemplate(
         "wf_forecast", Intent.FORECAST,
         "Recognise a forecast request; no forecasting capability is registered.",

@@ -36,6 +36,7 @@ from netgravity.orchestrator.core.planner import (
     CAP_REASON,
     CAP_REI,
     CAP_RISK,
+    CAP_SCORE_MARKET,
     CAP_VALIDATE_SCEN,
 )
 from netgravity.orchestrator.engines.deterministic import (
@@ -402,6 +403,49 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             )
         return signal.model_dump(mode="json")
 
+    # ---- market.score_signal ----------------------------------------------
+    async def score_market_signal(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
+        """
+        Score a chat-reported market signal against the guardrail policy.
+
+        Deliberately not a peer of `interpret_signal` in what it produces:
+        that capability derives a probability that feeds RF; this one attaches
+        a relevance verdict from a versioned policy file
+        (`ingestion/guardrails/relevance.py`) and produces nothing RF ever
+        reads. The two signal concepts stay apart all the way through
+        execution, not just at the schema boundary.
+
+        The signal was already built by `ChatService` — unscored, evidence
+        only. Scoring happens here, against the ACTUAL pinned network, for the
+        same reason `interpret_signal` resolves entities against real master
+        data rather than trusting what the translate layer assumed: the
+        network at execution time is the one that matters, not whatever the
+        chat layer saw a moment earlier.
+        """
+        if ctx.market_signal is None:
+            return {}
+
+        from netgravity.ingestion.guardrails import apply as apply_guardrails
+        from netgravity.ingestion.guardrails import load_policy
+
+        snapshot = orch.snapshots.get(ctx.baseline_snapshot_id or "")
+        known = ({f.id for f in snapshot.network.facilities} if snapshot
+                 else set())
+
+        policy = load_policy()
+        scored = apply_guardrails([ctx.market_signal], known_entity_ids=known,
+                                  policy=policy)
+        ctx.market_signal = scored[0]
+
+        if not ctx.market_signal.passed_guardrail:
+            reason = (ctx.market_signal.verdict.reason
+                     if ctx.market_signal.verdict else "no verdict recorded")
+            ctx.add_warning(
+                f"Market signal did not clear the guardrail policy: {reason}. "
+                f"Recorded in the audit trail; not treated as material."
+            )
+        return ctx.market_signal.model_dump(mode="json")
+
     # ---- risk.compute_rf -------------------------------------------------
     async def compute_rf(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
         """
@@ -539,6 +583,8 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             payload["risk"] = ctx.risk_results.model_dump(mode="json")
         if ctx.external_signal is not None:
             payload["external_evidence"] = ctx.external_signal.model_dump(mode="json")
+        if ctx.market_signal is not None:
+            payload["market_evidence"] = ctx.market_signal.model_dump(mode="json")
 
         unavailable = {
             cap: {"status": ev.status.value, "reason": ev.reason}
@@ -661,6 +707,14 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             execution_mode=ExecutionMode.PROBABILISTIC,
             dependencies=(CAP_LOAD_NETWORK,),
             timeout_seconds=120.0, retry_policy=STANDARD_RETRY,
+        ),
+        Capability(
+            name=CAP_SCORE_MARKET, handler=score_market_signal,
+            description="Score a chat-reported market signal against the "
+                       "guardrail policy.",
+            execution_mode=ExecutionMode.DETERMINISTIC,
+            dependencies=(CAP_LOAD_NETWORK,),
+            timeout_seconds=15.0, retry_policy=NO_RETRY, optional=True,
         ),
         Capability(
             name=CAP_RISK, handler=compute_rf,

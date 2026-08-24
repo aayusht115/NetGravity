@@ -58,6 +58,8 @@ from netgravity.ingestion.field_aliases import (
     LANE_LOOKUP,
     MARKET_ALIASES,
     MARKET_LOOKUP,
+    MARKET_SIGNAL_ALIASES,
+    MARKET_SIGNAL_LOOKUP,
     PRODUCT_ALIASES,
     PRODUCT_LOOKUP,
     normalise_name,
@@ -110,6 +112,7 @@ _ALIAS_TABLES = {
     ContentType.LANE: (LANE_ALIASES, LANE_LOOKUP),
     ContentType.PRODUCT: (PRODUCT_ALIASES, PRODUCT_LOOKUP),
     ContentType.HISTORICAL_VOLUME: (HISTORY_ALIASES, HISTORY_LOOKUP),
+    ContentType.MARKET_SIGNAL: (MARKET_SIGNAL_ALIASES, MARKET_SIGNAL_LOOKUP),
 }
 
 #: A shipment log has no alias table — nobody wrote a schema for the shape
