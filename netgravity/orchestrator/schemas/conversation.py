@@ -44,6 +44,7 @@ from netgravity.orchestrator.schemas.requests import (
     Intent,
     ScenarioIntentSpec,
 )
+from netgravity.orchestrator.schemas.reasoning import ExecutiveBriefing
 
 #: Bumped when this schema changes shape. Recorded on every conversational
 #: execution so an old audit record can be read against the right contract.
@@ -518,6 +519,8 @@ class ChatResponse(BaseModel):
     risk: Optional[Dict[str, Any]] = None
     governance: Optional[Dict[str, Any]] = None
     grounding_status: Optional[str] = None
+    #: Narrative-first cards for the executive UI. Present when reasoning ran.
+    briefing: Optional[ExecutiveBriefing] = None
 
     warnings: List[str] = Field(default_factory=list)
     errors: List[Dict[str, Any]] = Field(default_factory=list)

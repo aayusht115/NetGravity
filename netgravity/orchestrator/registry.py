@@ -55,6 +55,10 @@ from netgravity.orchestrator.exceptions import (
 from netgravity.orchestrator.governance.action_classifier import GovernancePolicy
 from netgravity.orchestrator.risk.risk_assessment import assess_event_risk
 from netgravity.orchestrator.risk.risk_factor import assess_network_risk, not_computable
+from netgravity.orchestrator.reasoning.runtime import (
+    OpenAIAgentsReasoningRuntime,
+    ReasoningRuntime,
+)
 from netgravity.orchestrator.routing.capability_registry import CapabilityRegistry
 from netgravity.orchestrator.schemas.plans import ExecutionMode, ToolRequest
 from netgravity.orchestrator.schemas.risk import RFNotComputableReason, RiskAssessment
@@ -77,6 +81,7 @@ def build_orchestrator(
     gateway: Optional[LLMGateway] = None,
     governance_policy: Optional[GovernancePolicy] = None,
     enable_llm: bool = True,
+    reasoning_runtime: Optional[ReasoningRuntime] = None,
 ) -> Orchestrator:
     """
     Construct a fully wired orchestrator.
@@ -120,7 +125,10 @@ def build_orchestrator(
     scenario_validator = ScenarioValidator()
     result_validator = ResultValidator()
     intent_agent = IntentAgent(gateway)
-    reasoning_agent = ReasoningAgent(gateway)
+    if reasoning_runtime is None:
+        reasoning_runtime = OpenAIAgentsReasoningRuntime.from_environment(
+            enabled=enable_llm)
+    reasoning_agent = ReasoningAgent(gateway, runtime=reasoning_runtime)
     signal_agent = ExternalSignalAgent(gateway)
 
     orchestrator.services.update({

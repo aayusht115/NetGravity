@@ -42,6 +42,7 @@ A fourth principle runs through everything: **missing is not zero.** When exposu
 | Orchestrator control plane (planning, dependencies, governance, audit) | Complete |
 | Orchestrator ↔ deterministic core integration | Complete — see [§6](#6-integration-phases) |
 | Conversational layer (chatbot → NLU → orchestrator) | Complete — see [§6](#6-integration-phases) |
+| Executive Reasoning Agent (network, facility, lane and comparison insights) | Backend/API complete; OpenAI Agents SDK integrated; live evaluation pending |
 | Forecasting agent | **Not built** — requests are recognised and honestly declined |
 | Interactive web cockpit | Demonstration build on a synthetic Case-16 fixture |
 | Authentication / multi-process persistence | **Not built** — see [§9](#9-known-limitations) |
@@ -244,6 +245,45 @@ GET  /orchestrator/chat/<id>/history
 
 ---
 
+## 4c. Executive Reasoning Agent
+
+```
+PUBLISHED TWIN STATE → BOUNDED EVIDENCE CATALOGUE → REASONING AGENT
+                              ↑ read-only tools             │
+                                                           ▼
+                                              TYPED EXECUTIVE BRIEFING
+                                                           │
+                                              NUMERIC GROUNDING → UI / CHAT
+```
+
+The Reasoning Agent turns already-computed MILP, KPI, REI and RF results into a first-person business briefing. It does not run an optimization, calculate a KPI, change a network, choose a governance tier or execute a recommendation. The OpenAI Agents SDK integration is deliberately one focused agent: it receives a compact evidence catalogue, can retrieve exact facts through two read-only tools, and must return a Pydantic `ReasoningDraft` rather than unconstrained prose.
+
+The UI contract is narrative-first:
+
+1. A first-person opening leads with the most decision-relevant finding.
+2. Up to four network-level KPI insights explain what a figure means, what it is compared with, which recorded driver supports it and why it matters. Facility and lane views show at most three and may be more metric-led.
+3. One crisp, first-person recommendation remains advisory.
+4. The agent first gives the best answer supported by current data, then asks no more than two questions when missing information would materially improve or unblock the answer.
+5. Evidence references remain attached to each insight for UI drill-down and audit. Every displayed number is still checked by numeric grounding; invalid model structure or unavailable model access fails closed to the deterministic template.
+
+Map and chatbot surfaces can use the same structured briefing. A map click sends an exact facility id or `origin->destination` lane key; unknown entities are refused rather than fuzzily matched. Normal chat responses now carry the briefing alongside the existing grounded reply, while targeted follow-up questions use the read-only insight endpoint:
+
+```text
+POST /orchestrator/insights
+{
+  "state_id": "tws_...",
+  "scope": "NETWORK | FACILITY | LANE | COMPARISON",
+  "entity_id": "DC_DELHI | DC_DELHI->MKT_NORTH",
+  "comparison_state_id": "tws_...",
+  "question": "Why is this route important?",
+  "disable_llm": false
+}
+```
+
+The response includes the legacy `summary`, `key_drivers` and `recommendation` fields plus a UI-ready `briefing` containing the opening, narrative KPI cards, limitations, missing-information questions, suggested follow-ups and evidence completeness. This keeps existing consumers working while the WIP cockpit adopts the richer contract.
+
+---
+
 ## 5. Orchestrator Control Plane
 
 ```
@@ -323,6 +363,7 @@ R7   settlement of the candidate       → AUTO_ACTION    ◄─┘
 | **Phase 3.2** | Deterministic entity validation and conversational context | Complete — [`docs/phase3_2_entity_and_context.md`](docs/phase3_2_entity_and_context.md) |
 | **External signals** | User-supplied market intelligence through spreadsheet, document and chat routes | Complete — [`docs/ingestion_business_rules.md`](docs/ingestion_business_rules.md#15-market-intelligence--three-ways-in-one-schema-one-guardrail) |
 | **Column clarification** | Provisional draft, unfamiliar-field review, bounded AI suggestions and explicit confirmation | Backend/API complete; UI WIP — [`docs/ingestion_clarification_flow.md`](docs/ingestion_clarification_flow.md) |
+| **Reasoning Agent V2** | Typed executive briefings, evidence tools, first-person KPI interpretation, map-level insights and deterministic fallback | Backend/API complete; live model evaluation pending |
 
 Phase 2 added **no** new algorithms, agents, risk scores or optimization objectives. It connected what existed and proved the connections hold. The pre-implementation audit is preserved in [`docs/phase2_integration_gap_report.md`](docs/phase2_integration_gap_report.md).
 
@@ -372,6 +413,7 @@ NetGravity/
 │   │   ├── core/                       #    orchestrator, planner, execution context & state
 │   │   ├── engines/                    #    deterministic adapters, scenario builder
 │   │   ├── agents/                     #    intent, reasoning, external signal, LLM gateway
+│   │   ├── reasoning/                  #    evidence, prompt, validation, SDK runtime & tools
 │   │   ├── risk/                       #    RF calculator, event risk assessment
 │   │   ├── validation/                 #    numeric grounding, validators
 │   │   ├── governance/                 #    action classifier, approvals, authorization
@@ -420,6 +462,8 @@ The integration suite exercises the **real** MILP, REI and RF services end to en
 
 The ingestion tests use deterministic model stubs. They verify the AI request/response boundary, word limits, schema validation, two-step confirmation, session revisions and MILP exclusion rules without making live paid API calls.
 
+The Reasoning Agent tests also use deterministic stubs only. They verify typed output, first-person voice, evidence-reference validation, numeric grounding, fail-closed fallback, exact facility/lane selection and the `/orchestrator/insights` contract. The OpenAI Agents SDK path is integrated but is not called by the test suite.
+
 ### Verified invariants
 
 - The `PHASE2_DELHI` fixture is hand-calculable: `C0 = 1,200`, `PI(Delhi) = 400`, `max EI = 500` ⇒ `REI = 0.80`, and with `P = 0.70`, `RF = 0.94`.
@@ -448,6 +492,7 @@ Stated plainly. **NetGravity is not production-ready**, and passing tests is not
 - The web cockpit runs on a synthetic Case-16 fixture, not live data.
 - The ingestion upload/review API is wired into the backend, but its dedicated first-draft and clarification UI is still in progress.
 - Market intelligence is supplied by a user through files, documents or chat; there is no live external feed or scraper.
+- The Reasoning Agent backend and UI contract are complete, but its live-model quality, latency and cost have not yet been evaluated. Production remains on deterministic fallback unless the SDK runtime is explicitly enabled.
 
 **Performance**
 - Parallel speed-up decays with size (1.98× at 7 facilities → 1.14× at 50). Beyond ~50 facilities a process pool or distributed workers is needed; the `max_workers` / `solve_fn` seams accept either.
@@ -503,6 +548,17 @@ export TEXT_API_TOKEN="..."             # server-side secret manager in producti
 export TEXT_API_URL="..."
 export NETGRAVITY_DISABLE_LLM=1         # force offline
 ```
+
+The executive Reasoning Agent uses the OpenAI Agents SDK only when it is explicitly selected. Install the optional dependencies, then configure it server-side:
+
+```bash
+pip install -e '.[llm]'
+export NETGRAVITY_REASONING_RUNTIME=agents
+export NETGRAVITY_REASONING_MODEL=gpt-5
+export OPENAI_API_KEY="..."
+```
+
+If the runtime selector, SDK or key is missing—or `NETGRAVITY_DISABLE_LLM=1`—the same request uses the grounded deterministic template. Enabling the agent changes only the explanation; MILP, KPI, REI and RF values remain identical.
 
 Credentials are read from the environment only. They are never placed in prompts, URLs, source or logs, and never recorded in the audit trail. The gateway is called from backend code only.
 

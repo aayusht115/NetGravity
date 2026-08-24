@@ -30,6 +30,11 @@ _CREDENTIAL_ENV_VARS = (
     "NETGRAVITY_GATEWAY_TOKEN",
     "NETGRAVITY_LLM_BASE_URL",
     "NETGRAVITY_LLM_MODEL",
+    # OpenAI Agents SDK reasoning. Removing the runtime selector as well as the
+    # key makes a live call structurally impossible in the default suite.
+    "OPENAI_API_KEY",
+    "NETGRAVITY_REASONING_RUNTIME",
+    "NETGRAVITY_REASONING_MODEL",
 )
 
 

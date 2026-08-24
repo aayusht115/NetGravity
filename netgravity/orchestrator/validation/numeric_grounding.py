@@ -194,6 +194,7 @@ _FACT_SPEC: Dict[str, Tuple[ClaimKind, str]] = {
     "pct_demand_in_sla":         (ClaimKind.PERCENTAGE, "kpi_engine"),
     "avg_utilization_pct":       (ClaimKind.PERCENTAGE, "kpi_engine"),
     "max_utilization_pct":       (ClaimKind.PERCENTAGE, "kpi_engine"),
+    "utilization_pct":           (ClaimKind.PERCENTAGE, "kpi_engine"),
     # REI engine
     "max_rei":                   (ClaimKind.RATIO, "rei_engine"),
     "rei":                       (ClaimKind.RATIO, "rei_engine"),
@@ -209,7 +210,20 @@ _FACT_SPEC: Dict[str, Tuple[ClaimKind, str]] = {
     "confidence":                (ClaimKind.RATIO, "risk_engine"),
     # Counts
     "n_open_facilities":         (ClaimKind.COUNT, "optimization_result"),
+    "n_facilities_open":         (ClaimKind.COUNT, "optimization_result"),
+    "n_facilities_closed":       (ClaimKind.COUNT, "optimization_result"),
     "n_facilities_assessed":     (ClaimKind.COUNT, "rei_engine"),
+    # Facility and lane-level Digital Twin values, copied from MILP/KPI output.
+    "throughput_units":          (ClaimKind.UNITS, "optimization_result"),
+    "capacity_units":            (ClaimKind.UNITS, "optimization_result"),
+    "flow_units":                (ClaimKind.UNITS, "optimization_result"),
+    "baseline_units":            (ClaimKind.UNITS, "digital_twin_comparison"),
+    "comparison_units":          (ClaimKind.UNITS, "digital_twin_comparison"),
+    "units_delta":               (ClaimKind.UNITS, "digital_twin_comparison"),
+    "distance_km":               (ClaimKind.UNITS, "optimization_result"),
+    "carbon_kg":                 (ClaimKind.UNITS, "optimization_result"),
+    "share_of_total_units":      (ClaimKind.RATIO, "optimization_result"),
+    "closure_cost_charged":      (ClaimKind.CURRENCY, "optimization_result"),
 }
 
 
@@ -227,6 +241,18 @@ def build_authoritative_facts(payload: Dict[str, Any]) -> Dict[str, Authoritativ
         if isinstance(node, dict):
             for key, value in node.items():
                 spec = _FACT_SPEC.get(key)
+                # Digital Twin KPI comparisons use generic value keys and name
+                # the actual metric beside them. Inherit that metric's kind so
+                # a cost delta cannot accidentally ground against a unit delta.
+                if spec is None and key in {
+                    "baseline_value", "comparison_value", "abs_delta"
+                }:
+                    metric_name = str(node.get("metric", ""))
+                    metric_spec = _FACT_SPEC.get(metric_name)
+                    if metric_spec is not None:
+                        spec = (metric_spec[0], "digital_twin_comparison")
+                elif spec is None and key == "pct_delta":
+                    spec = (ClaimKind.PERCENTAGE, "digital_twin_comparison")
                 if spec is not None and isinstance(value, (int, float)) and not isinstance(value, bool):
                     kind, source = spec
                     fact_key = f"{path}.{key}" if path else key

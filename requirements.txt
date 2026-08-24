@@ -30,4 +30,5 @@ python-dotenv>=1.0.0     # local .env loading
 # required for development, tests or a demo, and the suite makes zero live
 # calls. Install and set NETGRAVITY_LLM_API_KEY only to enable live extraction.
 openai>=1.40.0
+openai-agents>=0.2.0     # structured, read-only Reasoning Agent runtime
 anthropic>=0.40.0

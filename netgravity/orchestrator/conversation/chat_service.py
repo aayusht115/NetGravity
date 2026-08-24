@@ -383,6 +383,7 @@ class ChatService:
                         if final.governance else None),
             grounding_status=(final.reasoning.grounding_status
                               if final.reasoning else None),
+            briefing=(final.reasoning.briefing if final.reasoning else None),
             warnings=list(final.warnings),
             errors=list(final.errors),
             duration_seconds=round(time.perf_counter() - started, 4),
