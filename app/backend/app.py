@@ -57,6 +57,7 @@ def api_status():
         "engine": "netgravity MILP (PuLP/HiGHS)",
         "mode": "interactive",
         "orchestrator": _ORCHESTRATOR_STATUS,
+        "ingestion": _INGESTION_STATUS,
     })
 
 
@@ -90,6 +91,25 @@ try:
     }
 except Exception as exc:  # noqa: BLE001 - never block the existing app
     _ORCHESTRATOR_STATUS = {"mounted": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Data-ingestion console API
+# ---------------------------------------------------------------------------
+# Separate from the orchestrator control plane: uploads and unresolved client
+# fields have their own lifecycle before a trusted snapshot exists.
+
+_INGESTION_STATUS = {"mounted": False, "reason": "not initialised"}
+try:
+    from netgravity.ingestion.api import create_ingestion_blueprint
+
+    app.register_blueprint(create_ingestion_blueprint())
+    _INGESTION_STATUS = {
+        "mounted": True,
+        "url_prefix": "/api/ingestions",
+    }
+except Exception as exc:  # noqa: BLE001 - static demo must remain available
+    _INGESTION_STATUS = {"mounted": False, "reason": f"{type(exc).__name__}: {exc}"}
 
 
 if __name__ == "__main__":

@@ -263,8 +263,12 @@ class ExtractionParsingAgent:
             return ExtractionStatus.REJECTED
         if getattr(report, "engine_validation_passed", None) is False:
             return ExtractionStatus.REJECTED
-        if review_items:
+        if any(bool(item.get("blocking", True)) for item in review_items):
             return ExtractionStatus.HUMAN_REVIEW_REQUIRED
+        if review_items:
+            # Unfamiliar fields are preserved and visible, but do not prevent
+            # an otherwise valid canonical network from being used.
+            return ExtractionStatus.WARNING
         if any(f.severity == ValidationSeverity.WARNING for f in findings):
             return ExtractionStatus.WARNING
         return ExtractionStatus.ACCEPTED

@@ -71,6 +71,8 @@ from netgravity.ingestion.memory.field_memory import (
     SCOPE_SUGGESTED,
     FieldMemory,
 )
+from netgravity.ingestion.memory.field_catalog import FieldCatalog
+from netgravity.ingestion.profiling import profile_column
 from netgravity.ingestion.schemas.content import ContentClassification, ContentType
 from netgravity.ingestion.schemas.field_mapping import (
     BY_AI,
@@ -80,6 +82,7 @@ from netgravity.ingestion.schemas.field_mapping import (
     BY_MEMORY_GENERALISED,
     BY_NONE,
     ColumnDecision,
+    FieldDisposition,
     MappingOption,
     SheetMapping,
 )
@@ -318,6 +321,7 @@ def _render_precedents(record_set: RecordSet, content_type: ContentType,
 def build_mapping(client: Optional[LLMClient], record_set: RecordSet,
                   classification: ContentClassification,
                   *, memory: Optional[FieldMemory] = None,
+                  catalog: Optional[FieldCatalog] = None,
                   known_ids: Optional[Sequence[str]] = None,
                   sample_limit: int = 5) -> SheetMapping:
     """Produce a decision for every column in `record_set`."""
@@ -335,15 +339,21 @@ def build_mapping(client: Optional[LLMClient], record_set: RecordSet,
 
     # --- 1. What is already settled? --------------------------------------
     memory_resolutions = {}
+    catalog_entries = {}
     if memory is not None:
         for column in record_set.columns:
             memory_resolutions[column] = memory.resolve(
                 source_column=column, content_type=content_type.value,
                 source_id=source_id)
+    if catalog is not None:
+        for column in record_set.columns:
+            catalog_entries[column] = catalog.resolve(content_type.value, column)
 
     unresolved = [
         c for c in record_set.columns
         if not (memory_resolutions.get(c) and memory_resolutions[c].is_known)
+        and not (catalog_entries.get(c)
+                 and catalog_entries[c].disposition != FieldDisposition.UNRESOLVED)
     ]
 
     # --- 2. Ask the model about what is not ------------------------------
@@ -400,6 +410,7 @@ def build_mapping(client: Optional[LLMClient], record_set: RecordSet,
             record_set=record_set,
             content_type=content_type,
             resolution=memory_resolutions.get(column),
+            catalog_entry=catalog_entries.get(column),
             ai_raw=ai_by_column.get(column),
             ai_said_unmapped=column in ai_unmapped,
             known_ids=known_ids,
@@ -412,27 +423,48 @@ def build_mapping(client: Optional[LLMClient], record_set: RecordSet,
 
 
 def _decide(*, column: str, record_set: RecordSet, content_type: ContentType,
-            resolution, ai_raw: Optional[Dict[str, Any]],
+            resolution, catalog_entry, ai_raw: Optional[Dict[str, Any]],
             ai_said_unmapped: bool,
             known_ids: Sequence[str]) -> ColumnDecision:
     """Combine the three opinions for one column into a single decision."""
     decision = ColumnDecision(
         source_column=column,
         sample_values=_sample_values(record_set, column),
+        profile=profile_column(record_set, column, known_ids),
     )
+
+    # A consultant previously decided that this client-specific field belongs
+    # outside the canonical schema. Preserve and surface that treatment without
+    # spending another model call or asking the same question again.
+    if catalog_entry is not None and \
+            catalog_entry.disposition != FieldDisposition.UNRESOLVED:
+        decision.disposition = catalog_entry.disposition
+        decision.user_definition = catalog_entry.definition
+        decision.source_unit = catalog_entry.unit
+        decision.target_unit = catalog_entry.unit
+        decision.needs_review = False
+        decision.decided_by = f"catalog:{catalog_entry.confirmed_by}"
+        return decision
 
     dictionary_target = dictionary_opinion(column, content_type)
     decision.dictionary_target = dictionary_target
 
     if ai_raw:
         target = ai_raw.get("target_field")
-        decision.ai_target = str(target) if target else None
+        proposed_target = str(target) if target else None
+        allowed_targets = canonical_fields_for(content_type)
+        decision.ai_target = proposed_target
+        decision.ai_target_valid = not proposed_target or proposed_target in allowed_targets
+        if proposed_target and not decision.ai_target_valid:
+            decision.ai_reasoning = (
+                f"Model proposed unsupported field '{proposed_target}'; ignored by schema check")
         try:
             decision.ai_confidence = max(0.0, min(1.0, float(
                 ai_raw.get("confidence") or 0.0)))
         except (TypeError, ValueError):
             decision.ai_confidence = 0.0
-        decision.ai_reasoning = str(ai_raw.get("reasoning") or "")
+        if not decision.ai_reasoning:
+            decision.ai_reasoning = str(ai_raw.get("reasoning") or "")
         decision.source_unit = ai_raw.get("source_unit") or None
         decision.target_unit = ai_raw.get("target_unit") or None
         try:
@@ -452,7 +484,7 @@ def _decide(*, column: str, record_set: RecordSet, content_type: ContentType,
                 rationale=f"confirmed by {', '.join(alternative.source_ids)}",
                 support=alternative.support,
             ))
-    if decision.ai_target:
+    if decision.ai_target and decision.ai_target_valid:
         options.append(MappingOption(
             target_field=decision.ai_target, suggested_by="ai",
             rationale=decision.ai_reasoning or "read from the file's context"))
@@ -469,6 +501,11 @@ def _decide(*, column: str, record_set: RecordSet, content_type: ContentType,
         decision.decided_by = (BY_MEMORY_EXACT if resolution.scope == SCOPE_EXACT
                                else BY_MEMORY_GENERALISED)
         decision.needs_review = False
+        decision.disposition = FieldDisposition.CANONICAL
+        decision.source_unit = resolution.unit
+        decision.target_unit = resolution.unit
+        decision.confirmed_period = resolution.period
+        decision.user_definition = resolution.definition
         return decision
 
     reasons: List[str] = []
@@ -480,7 +517,16 @@ def _decide(*, column: str, record_set: RecordSet, content_type: ContentType,
         reasons.append(resolution.rationale)
 
     # --- combine model and dictionary -------------------------------------
-    if decision.ai_target and dictionary_target:
+    if decision.ai_target and not decision.ai_target_valid:
+        decision.target_field = dictionary_target
+        decision.decided_by = BY_DICTIONARY if dictionary_target else BY_NONE
+        decision.confidence = 0.60 if dictionary_target else 0.0
+        reasons.append(
+            f"the model read this as '{decision.ai_target}' but that field is not "
+            f"approved for {content_type.value}; the alias table says "
+            f"'{dictionary_target}' — two independent methods disagreed, so the "
+            "model answer was blocked and the column needs a check")
+    elif decision.ai_target and dictionary_target:
         if decision.ai_target == dictionary_target:
             decision.target_field = decision.ai_target
             decision.decided_by = BY_AI_AND_DICTIONARY
@@ -512,6 +558,7 @@ def _decide(*, column: str, record_set: RecordSet, content_type: ContentType,
 
     # --- the bar ----------------------------------------------------------
     if decision.target_field:
+        decision.disposition = FieldDisposition.CANONICAL
         if content_type.feeds_optimizer and NETWORK_REQUIRES_CONFIRMATION:
             reasons.append(
                 f"{content_type.value} data feeds the optimiser directly, so a "
@@ -530,8 +577,9 @@ def _decide(*, column: str, record_set: RecordSet, content_type: ContentType,
                 f"confidence {decision.confidence:.0%} is below the "
                 f"{REVIEW_BELOW:.0%} bar")
 
-    # An unmapped column is not a problem to escalate — it is simply data we
-    # do not need. Only say something when a mapping was actually proposed.
+    # Unknown columns do not block the optimiser, but they are no longer
+    # discarded: UNRESOLVED makes them appear in the unfamiliar-fields review
+    # section while raw data remains untouched.
     decision.review_reasons = reasons
     decision.needs_review = bool(reasons) and decision.is_mapped
     if not decision.is_mapped:

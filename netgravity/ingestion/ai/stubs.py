@@ -263,6 +263,15 @@ def get(stub_key: str, context: Dict[str, Any] | None = None) -> Dict[str, Any]:
     """
     context = context or {}
 
+    if stub_key == "field_clarification":
+        proposed = context.get("proposed_value") or "__unresolved__"
+        return {
+            "recommendation": proposed,
+            "reason": "The suggestion uses the mapped schema and visible column evidence.",
+            "question": "Can you confirm its meaning?",
+            "missing_information": [],
+        }
+
     if stub_key in _REGISTRY:
         return dict(_REGISTRY[stub_key])
 
