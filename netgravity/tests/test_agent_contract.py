@@ -378,9 +378,13 @@ class TestCapabilityRegistry:
         assert registry.resolve_capability(CapabilityDomain.FORECAST) is None
 
     def test_a_service_capability_is_never_offered_as_schedulable(self, registry):
+        # Phase 8.3 made the distinction explicit: a SERVICE capability must
+        # also declare planner_selectable=False, and the contract now refuses
+        # the inconsistent combination this test used to construct.
         registry.register_contract(CapabilityContract(
             capability_id="extraction.parse", domain=CapabilityDomain.EXTRACTION,
-            provider="ExtractionParsingAgent", invocation=InvocationMode.SERVICE))
+            provider="ExtractionParsingAgent", invocation=InvocationMode.SERVICE,
+            planner_selectable=False))
         assert registry.resolve(CapabilityDomain.EXTRACTION)          # declared
         assert registry.resolve_capability(CapabilityDomain.EXTRACTION) is None
         assert registry.resolve_capability(

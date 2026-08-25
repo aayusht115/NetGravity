@@ -10,8 +10,8 @@ Date: 2026-08-25 · Work performed locally · **No Git/GitHub operations**
 | | |
 |---|---|
 | Regression before (Phase 8.1 final) | 2,203 passed · 4 skipped · 0 failed |
-| Regression after | *(§9)* |
-| Tests added | 56 (one new module) |
+| Regression after | **2,260 passed · 4 skipped · 0 failed** |
+| Tests added | 57 (56 new module + 1 net from the strengthened test) |
 | Tests deleted / skipped / weakened | **0** — one Phase 8.1 test *strengthened*, see §8 |
 | Files created | 1 source + 1 test + 2 docs |
 | Files modified | 5 |
@@ -264,8 +264,35 @@ contracts  : 16
 schedulable: 13 of 16
 ```
 
-Full suite: *(filled from the final run — see the console record at the end of
-this section)*
+Full suite, after all Phase 8.2 changes:
+
+```
+2260 passed, 4 skipped, 577445 warnings in 312.38s (0:05:12)
+```
+
+**2,203 → 2,260 is exactly +57**: the 56 tests of the new executor module, plus
+one net addition from replacing a single Phase 8.1 test with the two stronger
+assertions described in §8. No pre-existing test changed status.
+
+Phase 8.0 capability harness, re-run on the final code
+(`validation/phase_8_2/capability_harness_rerun.txt`):
+
+```
+14 of 15 sections PASS · checks: 219/222 · live model calls: 0/20 (blocked 3)
+shared gateway spend: 0.44984745 -> 0.44984745 (unchanged)
+```
+
+Identical to Phase 8.0 and Phase 8.1. The one NOT_TESTED section is
+`extraction_llm`, refused by the shared gateway with `daily_limit_exceeded` —
+**0 API calls charged**, unrelated to this phase. The Phase 8.0 artifacts were
+backed up before the run and restored after; `git status` on
+`validation/capability_validation/` is empty, confirming a byte-identical
+restore.
+
+**A first run was discarded, not reported.** Two orphaned pytest processes from a
+regression I had cancelled were still holding CPU, so that run exceeded ten
+minutes without completing. The strays were cleared and the suite re-run on an
+idle machine; the figures above are from that clean run.
 
 ---
 
@@ -366,7 +393,7 @@ carried through, never re-derived.
 | No rerouting / escalation | ✅ AST |
 | No OpenAI Agents SDK / Agno | ✅ |
 | No frontend changes | ✅ `app/` byte-identical |
-| Full regression passes | *(§9)* |
+| Full regression passes | ✅ 2,260 passed · 4 skipped · 0 failed |
 | Documentation + validation report | ✅ |
 | No Git/GitHub operations | ✅ none performed |
 

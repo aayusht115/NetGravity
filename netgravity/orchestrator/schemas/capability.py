@@ -150,6 +150,22 @@ class CapabilityContract(BaseModel):
     #: Declared so a caller can tell "unvalidated" from "validated and clean".
     validations: Tuple[str, ...] = ()
 
+    #: Ordering rank for a capability that must run AFTER the analytic work,
+    #: whatever that work turned out to be. 0 means "not terminal".
+    #:
+    #: Needed because "runs last" and "depends on everything" are different
+    #: claims, and only the first is true of reasoning and governance. Both
+    #: declare NO hard dependencies on purpose — a missing input must not
+    #: suppress the narrative, and governance must always return a verdict — so
+    #: a dependency graph has no edge to place them at the end. Deriving order
+    #: from dependencies alone put them FIRST, which is how this field came to
+    #: exist.
+    #:
+    #: Higher runs later: reasoning explains, then governance rules on the
+    #: explanation. Terminal capabilities take SOFT edges to everything before
+    #: them, so an absent input degrades them rather than blocking them.
+    terminal_rank: int = 0
+
     execution_mode: ExecutionMode = ExecutionMode.DETERMINISTIC
     invocation: InvocationMode = InvocationMode.ORCHESTRATED
     #: For EMBEDDED capabilities, the capability whose handler contains this
@@ -157,6 +173,23 @@ class CapabilityContract(BaseModel):
     host_capability: Optional[str] = None
     #: True when the provider makes a model call on any path.
     llm_backed: bool = False
+
+    #: Whether a planner may choose this capability as an independent GOAL.
+    #:
+    #: Separate from being executable, and the distinction is the one Phase 8.2
+    #: had to discover the hard way. Every declared capability is executable —
+    #: the executor can invoke all sixteen. Being *plannable* is a different
+    #: question: extraction runs before an execution exists, the twin projection
+    #: runs after the plan settles, and signal routing is a stage inside the
+    #: forecast handler. A planner that scheduled any of them would be wrong.
+    #:
+    #: Forced False for SERVICE and EMBEDDED capabilities by the validator
+    #: below, so the two facts cannot disagree. Kept as its own field rather
+    #: than derived so that an ORCHESTRATED capability can be withheld from
+    #: independent selection later without changing how it is invoked. No
+    #: capability currently needs that, and none is marked so speculatively.
+    planner_selectable: bool = True
+
     notes: str = ""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -191,6 +224,14 @@ class CapabilityContract(BaseModel):
         if self.capability_id in self.dependencies:
             raise ValueError(
                 f"Capability '{self.capability_id}' lists itself as a dependency."
+            )
+        if (self.invocation != InvocationMode.ORCHESTRATED
+                and self.planner_selectable):
+            raise ValueError(
+                f"Capability '{self.capability_id}' is {self.invocation.value} "
+                f"but marked planner_selectable. A capability reached through "
+                f"something that owns it cannot also be an independent planner "
+                f"goal — declare planner_selectable=False."
             )
         stray = [d for d in self.optional_dependencies if d not in self.dependencies]
         if stray:
@@ -227,8 +268,21 @@ class CapabilityContract(BaseModel):
 
     @property
     def is_plan_schedulable(self) -> bool:
-        """Whether a planner may place this in an `ExecutionPlan`."""
-        return self.invocation == InvocationMode.ORCHESTRATED
+        """
+        Whether a planner may place this in an `ExecutionPlan`.
+
+        Two conditions, and both matter. `invocation` says the capability has a
+        place in a plan at all; `planner_selectable` says a planner may choose
+        it as a goal of its own. A capability failing either is reachable only
+        through whatever owns it.
+        """
+        return (self.invocation == InvocationMode.ORCHESTRATED
+                and self.planner_selectable)
+
+    @property
+    def is_plannable(self) -> bool:
+        """Alias for `is_plan_schedulable`, reading the way callers speak."""
+        return self.is_plan_schedulable
 
     def missing_inputs(self, available: object) -> Tuple[str, ...]:
         """

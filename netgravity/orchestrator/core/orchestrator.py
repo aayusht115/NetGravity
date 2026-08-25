@@ -255,7 +255,9 @@ class Orchestrator:
             return
 
         # ---- PLAN --------------------------------------------------------
-        plan = self.planner.plan(resolution)
+        # The planner sees the context, so it can record what is already
+        # satisfied. It still does not decide to skip work on a template.
+        plan = self.planner.plan(resolution, context)
         context.plan = plan
         context.workflow_id = plan.workflow_id
         context.required_capabilities = [s.capability for s in plan.steps]

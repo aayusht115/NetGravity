@@ -14,10 +14,18 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional, Sequence
 
+if TYPE_CHECKING:  # pragma: no cover
+    from netgravity.orchestrator.core.execution_context import ExecutionContext
+
+from netgravity.orchestrator.core.plan_graph import (
+    CapabilityGraphPlanner,
+    PlanValidator,
+)
 from netgravity.orchestrator.exceptions import PlanningFailureError
 from netgravity.orchestrator.routing.capability_registry import CapabilityRegistry
+from netgravity.orchestrator.schemas.plan_validation import PlanOrigin
 from netgravity.orchestrator.schemas.plans import ExecutionPlan, PlanStep
 from netgravity.orchestrator.schemas.requests import Intent, IntentResolution
 
@@ -421,18 +429,48 @@ WORKFLOW_TEMPLATES: Dict[Intent, WorkflowTemplate] = {
 
 
 class WorkflowPlanner:
-    """Builds and validates execution plans from resolved intents."""
+    """
+    Builds and validates execution plans from resolved intents.
+
+    Two ways in, one contract out.
+
+    `plan(resolution)` uses the hand-written `WORKFLOW_TEMPLATES` for the intents
+    they cover. Those templates encode deliberate EXCLUSIONS — a forecast
+    question runs no solver, a market-intelligence message runs no forecast, an
+    explanation launches no fresh optimisation — and that judgement is not
+    recoverable from a dependency graph. They stay authoritative.
+
+    `derive(goals)` builds a plan from the capability contracts for a request
+    that names what it needs rather than matching a known intent.
+
+    Both produce a typed `ExecutionPlan`, and BOTH are validated before they can
+    reach the executor. Neither executes anything.
+    """
 
     def __init__(self, registry: CapabilityRegistry) -> None:
         self.registry = registry
+        self.validator = PlanValidator(registry)
+        self.graph = CapabilityGraphPlanner(registry)
 
-    def plan(self, resolution: IntentResolution) -> ExecutionPlan:
+    def plan(
+        self,
+        resolution: IntentResolution,
+        context: Optional["ExecutionContext"] = None,
+    ) -> ExecutionPlan:
         """
         Build a validated plan for an intent.
+
+        Args:
+            resolution: The resolved intent.
+            context: The run this plan is for, when it exists. Used to stamp
+                identity and to record what is already satisfied. Optional so
+                every existing caller keeps working unchanged.
 
         Raises:
             PlanningFailureError: no template for the intent, the graph is
                 malformed, or it references an unregistered capability.
+            PlanRefused: the plan failed validation. A subclass of the above, so
+                existing handlers still catch it, carrying the typed reasons.
         """
         template = WORKFLOW_TEMPLATES.get(resolution.intent)
         if template is None:
@@ -471,12 +509,63 @@ class WorkflowPlanner:
             plan.steps = retained
             plan.validate_dag()
 
+        plan.origin = PlanOrigin.TEMPLATE
+        if context is not None:
+            plan.request_id = context.request_id
+            plan.execution_id = context.execution_id
+            # Context-aware, without becoming a failure manager: note what is
+            # already done so a reader can see it was considered, but do NOT
+            # prune a template. A template's shape is a deliberate design, and
+            # removing a step from one because an earlier run produced something
+            # similar would execute a workflow nobody wrote.
+            for capability in sorted(context.completed_capabilities()):
+                if capability in plan.capabilities:
+                    plan.rationale.append(
+                        f"'{capability}' is already satisfied in this execution; "
+                        f"the template still schedules it, and the executor will "
+                        f"record a fresh result"
+                    )
+
+        # The gate. Nothing reaches the executor without passing this.
+        self.validator.assert_valid(plan, context=context)
+
         logger.info(
-            "orchestrator.plan.built workflow=%s intent=%s steps=%d layers=%s",
+            "orchestrator.plan.built workflow=%s intent=%s steps=%d layers=%s valid=%s",
             plan.workflow_id, plan.intent, len(plan.steps),
             [len(layer) for layer in plan.execution_layers()],
+            plan.is_validated,
         )
         return plan
+
+    def derive(
+        self,
+        goals: Sequence[str],
+        *,
+        intent: str = "DERIVED",
+        context: Optional["ExecutionContext"] = None,
+        **kw,
+    ) -> ExecutionPlan:
+        """
+        Build a validated plan from capability goals rather than an intent.
+
+        Delegates to `CapabilityGraphPlanner`. Exposed here so the orchestrator
+        has ONE planning surface, rather than callers reaching for the graph
+        planner directly and bypassing the validation this class guarantees.
+        """
+        return self.graph.derive(goals, intent=intent, context=context, **kw)
+
+    def capability_goals_for(self, intent: Intent) -> List[str]:
+        """
+        The capability set a known intent resolves to.
+
+        Read off the template, not duplicated beside it — so this cannot drift
+        from what the workflow actually runs. Useful for a caller that wants to
+        derive a variant of a known workflow.
+        """
+        template = WORKFLOW_TEMPLATES.get(intent)
+        if template is None:
+            return []
+        return sorted({s.capability for s in template.build(IntentResolution(intent=intent))})
 
     @staticmethod
     def available_workflows() -> List[Dict[str, str]]:

@@ -1,0 +1,107 @@
+resilience.facility.negative_pi facility_id=PLANT_PUNE pi=-741759.5064 unserved=0.0000
+resilience.facility.negative_pi facility_id=PLANT_CHENNAI pi=-741468.7658 unserved=0.0000
+resilience.facility.negative_pi facility_id=PLANT_DELHI pi=-747565.2039 unserved=0.0000
+resilience.facility.negative_pi facility_id=PLANT_PUNE pi=-733097.0008 unserved=0.0000
+resilience.facility.negative_pi facility_id=PLANT_CHENNAI pi=-737890.1062 unserved=0.0000
+resilience.facility.negative_pi facility_id=PLANT_DELHI pi=-742172.3505 unserved=0.0000
+resilience.facility.completed facility_id=DC_DELHI status=INFEASIBLE feasible=False service_diagnostic=True unserved_rate=0.153325 risk=CRITICAL runtime_s=0.0333
+resilience.facility.completed facility_id=DC_MUMBAI status=INFEASIBLE feasible=False service_diagnostic=True unserved_rate=0.027243 risk=CRITICAL runtime_s=0.0380
+resilience.facility.completed facility_id=DC_KOLKATA status=INFEASIBLE feasible=False service_diagnostic=True unserved_rate=0.150246 risk=CRITICAL runtime_s=0.0355
+resilience.facility.negative_pi facility_id=PLANT_PUNE pi=-741759.5064 unserved=0.0000
+resilience.facility.negative_pi facility_id=PLANT_CHENNAI pi=-741468.7658 unserved=0.0000
+resilience.facility.negative_pi facility_id=PLANT_DELHI pi=-747565.2039 unserved=0.0000
+orchestrator.llm.error purpose=reasoning status=429 code=daily_limit_exceeded request_id=e961bd59-ddb3-4fd3-83f6-1486615ef266 attempt=1
+orchestrator.reasoning.llm_failed code=LLM_FAILURE
+chat.entity_gate_refused conversation_id=conv_ac08d60f0cec unresolved=['DC_ATLANTIS'] intent=UNKNOWN
+orchestrator.llm.error purpose=intent status=429 code=daily_limit_exceeded request_id=1da8e196-430b-4b9e-bc9c-f547d97ce51d attempt=1
+orchestrator.intent.llm_failed error=Text gateway returned 429 (daily_limit_exceeded): The shared daily request limit has been reached.
+orchestrator.llm.error purpose=intent status=429 code=daily_limit_exceeded request_id=f6b3ccdf-3ee3-47ef-bb5e-2f82809384d6 attempt=1
+orchestrator.intent.llm_failed error=Text gateway returned 429 (daily_limit_exceeded): The shared daily request limit has been reached.
+==============================================================================
+  PHASE 8.0 — INDIVIDUAL CAPABILITY VALIDATION
+==============================================================================
+
+synthetic dataset: 15 facilities, 41 lanes, 14 demand records, data_version fcaff26d4f4b11c8
+gateway configured: True | shared usage before: {'budget_usd': '10.00', 'max_requests_per_day': 100, 'remaining_usd': '9.55015255', 'requests_today': 100, 'reserved_usd': '0.00', 'spent_usd': '0.44984745'}
+
+[ingestion]
+    -> PASS  (21/21 checks)
+
+[extraction]
+    -> PASS  (14/14 checks)
+
+[signal_routing]
+    -> PASS  (10/10 checks)
+
+[milp]
+    -> PASS  (11/11 checks)
+
+[rei]
+    -> PASS  (10/10 checks)
+
+[rf]
+    -> PASS  (13/13 checks)
+
+[governance]
+    -> PASS  (9/9 checks)
+
+[forecasting]
+    -> PASS  (39/39 checks)
+
+[signal_enriched_forecasting]
+    -> PASS  (11/11 checks)
+
+[digital_twin]
+    -> PASS  (13/13 checks)
+
+[snapshot_scenario_isolation]
+    -> PASS  (9/9 checks)
+
+[provenance]
+    -> PASS  (14/14 checks)
+
+[reasoning]
+    API_CALL 1/20  reasoning — executive narrative over authoritative evidence
+    -> PASS  (9/9 checks)
+
+[nlu_chatbot]
+    API_CALL (via NLU) budget 0/20 -> ambiguous_followup
+    API_CALL (via NLU) budget 0/20 -> prompt_injection
+    API_CALL (via NLU) budget 0/20 -> forecast
+    -> PASS  (36/36 checks)
+
+[extraction_llm]
+    API_CALL 1/20  extraction_llm — prose->signal (clean_prose)
+    API_CALL REFUSED by gateway (daily_limit_exceeded); budget not charged, now 0/20
+    API_CALL 1/20  extraction_llm — prose->signal (ambiguous_prose)
+    API_CALL REFUSED by gateway (daily_limit_exceeded); budget not charged, now 0/20
+    API_CALL 1/20  extraction_llm — prose->signal (structured_information)
+    API_CALL REFUSED by gateway (daily_limit_exceeded); budget not charged, now 0/20
+    -> NOT_TESTED  (0/3 checks)
+       FAILED: clean_prose: live call returned output
+       FAILED: ambiguous_prose: live call returned output
+       FAILED: structured_information: live call returned output
+
+==============================================================================
+  SUMMARY
+==============================================================================
+  PASS        ingestion                        21/21 checks
+  PASS        extraction                       14/14 checks
+  PASS        signal_routing                   10/10 checks
+  PASS        milp                             11/11 checks
+  PASS        rei                              10/10 checks
+  PASS        rf                               13/13 checks
+  PASS        governance                       9/9 checks
+  PASS        forecasting                      39/39 checks
+  PASS        signal_enriched_forecasting      11/11 checks
+  PASS        digital_twin                     13/13 checks
+  PASS        snapshot_scenario_isolation      9/9 checks
+  PASS        provenance                       14/14 checks
+  PASS        reasoning                        9/9 checks
+  PASS        nlu_chatbot                      36/36 checks
+  NOT_TESTED  extraction_llm                   0/3 checks
+
+  checks: 219/222 passed
+  live model calls: 0/20 (blocked 3)
+  shared gateway spend: 0.44984745 -> 0.44984745
+  duration: 27.04s

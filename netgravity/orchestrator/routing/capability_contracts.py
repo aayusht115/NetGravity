@@ -78,6 +78,7 @@ CAPABILITY_CONTRACTS: Tuple[CapabilityContract, ...] = (
         validations=("row_rules", "referential_integrity", "adjudication"),
         execution_mode=DET,
         invocation=M.SERVICE,
+        planner_selectable=False,
         notes="Runs before any execution exists — it produces the network a run "
               "is later pinned to, so it cannot be a step inside that run. "
               "Reached through the ingestion API.",
@@ -143,6 +144,7 @@ CAPABILITY_CONTRACTS: Tuple[CapabilityContract, ...] = (
         execution_mode=DET,
         invocation=M.EMBEDDED,
         host_capability=CAP_FORECAST,
+        planner_selectable=False,
         notes="A gate inside the forecast handler with no independent entry "
               "point. Declared so its authority is on the record: its "
               "confidence score decides forecast eligibility only, and is not "
@@ -290,6 +292,9 @@ CAPABILITY_CONTRACTS: Tuple[CapabilityContract, ...] = (
         # here would suggest a missing input should suppress the narrative,
         # when the requirement is the opposite: say what is missing.
         dependencies=(),
+        # Terminal: explains whatever the analytic work produced. Rank 1 so it
+        # runs before governance, which then rules on the explanation.
+        terminal_rank=1,
         validations=("numeric_grounding",),
         execution_mode=PROB,
         llm_backed=True,
@@ -309,6 +314,9 @@ CAPABILITY_CONTRACTS: Tuple[CapabilityContract, ...] = (
         # verdict. Missing evidence makes it more conservative, never absent, so
         # nothing it reads can be a precondition that blocks it.
         dependencies=(),
+        # Terminal, and LAST: every response leaves with a verdict, and the
+        # verdict is passed on the narrative as well as the numbers.
+        terminal_rank=2,
         execution_mode=DET,
         notes="Runs both as a plan step and as a post-run safety net, so a run "
               "that failed before reaching the step is still governed.",
@@ -332,6 +340,7 @@ CAPABILITY_CONTRACTS: Tuple[CapabilityContract, ...] = (
         optional_dependencies=(CAP_OPTIMIZE, CAP_REI, CAP_RISK),
         execution_mode=DET,
         invocation=M.SERVICE,
+        planner_selectable=False,
         notes="The ONLY path into the twin, invoked by the orchestrator after "
               "the plan settles. It composes results that are already "
               "authoritative and computes nothing itself — which is why it is "

@@ -14,6 +14,11 @@ from typing import Any, Dict, List, Optional, Set
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from netgravity.orchestrator.schemas.plan_validation import (
+    PlanOrigin,
+    PlanValidation,
+)
+
 
 class ExecutionMode(str, Enum):
     """Whether a capability's output is reproducible from its inputs."""
@@ -127,6 +132,26 @@ class PlanStep(BaseModel):
 
     status: StepStatus = StepStatus.PENDING
 
+    # --- declared contract, copied from the capability at plan time --------
+    # Informational: a plan should be inspectable without a reader having to
+    # cross-reference the registry to see what each step needs. Copied rather
+    # than looked up so the plan is a self-contained record of what was
+    # intended, even if the catalogue later changes.
+    #
+    # All default empty, so the hand-written templates construct unchanged.
+    #: Contract `required_inputs` for this capability.
+    required_inputs: List[str] = Field(default_factory=list)
+    #: Contract `optional_dependencies` — absences this provider handles itself.
+    optional_inputs: List[str] = Field(default_factory=list)
+    #: Declared `output_type`.
+    expected_output: str = ""
+    #: Declared `domain`, which is what a planner resolves on.
+    domain: str = ""
+    #: Timeout and mode as declared, so plan inspection shows the cost profile
+    #: without executing anything.
+    timeout_seconds: Optional[float] = None
+    execution_mode: Optional[ExecutionMode] = None
+
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
@@ -154,7 +179,50 @@ class ExecutionPlan(BaseModel):
     steps: List[PlanStep] = Field(default_factory=list)
     description: str = ""
 
+    # --- which run this plan belongs to ----------------------------------
+    # Empty on a plan built before a run exists (the planner is called during
+    # UNDERSTANDING, and the orchestrator stamps these once it has them).
+    request_id: str = ""
+    execution_id: str = ""
+
+    #: TEMPLATE or CAPABILITY_GRAPH. Changes how much the plan's exclusions can
+    #: be trusted to be deliberate — a template author decided what to leave
+    #: out; a derived plan only knows what was asked for.
+    origin: PlanOrigin = PlanOrigin.TEMPLATE
+
+    #: The verdict. `PlanValidation.checked` is False until a validator has run,
+    #: so an unvalidated plan is distinguishable from a valid one rather than
+    #: being assumed fine.
+    validation: PlanValidation = Field(default_factory=PlanValidation)
+
+    #: Why the plan looks the way it does — including what was deliberately NOT
+    #: scheduled. A plan that silently omits a capability is indistinguishable
+    #: from one that never considered it, and the difference matters when
+    #: reading a trace after the fact.
+    rationale: List[str] = Field(default_factory=list)
+
     model_config = ConfigDict(extra="forbid")
+
+    @property
+    def capabilities(self) -> Set[str]:
+        """Every capability this plan will invoke."""
+        return {s.capability for s in self.steps}
+
+    @property
+    def is_validated(self) -> bool:
+        """True only when a validator ran and found nothing wrong."""
+        return self.validation.valid
+
+    def ordered_step_ids(self) -> List[str]:
+        """
+        Steps in a single deterministic execution order.
+
+        Flattens `execution_layers()`, which is already sorted within each
+        layer, so the same plan always yields the same sequence. Phase 8.3 runs
+        strictly in this order; the layering that permits concurrency is
+        preserved for a later phase but not acted on.
+        """
+        return [step_id for layer in self.execution_layers() for step_id in layer]
 
     def step(self, step_id: str) -> Optional[PlanStep]:
         for s in self.steps:
