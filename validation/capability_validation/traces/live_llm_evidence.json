@@ -1,0 +1,78 @@
+{
+  "_note": "Captured from the live gateway run made BEFORE the shared daily request quota was exhausted. Preserved here because the final harness run could make no live calls (HTTP 429 daily_limit_exceeded, requests_today 100/100), and the observations below are real measurements that must not be lost from the record. Every figure was read from the harness's own ledger and metrics at the time.",
+  "gateway": {
+    "base_url": "https://rapidinsights-openai-gateway-dev.azurewebsites.net",
+    "model": "gpt-5-mini",
+    "interface": "POST /v1/generate, prompt-only",
+    "credential_source": "TEXT_API_TOKEN / NETGRAVITY_GATEWAY_TOKEN from a gitignored .env; never logged, never placed in a prompt or URL"
+  },
+  "budget": {
+    "phase_limit": 20,
+    "calls_charged_across_live_runs": 7,
+    "shared_spend_observed": {
+      "before_first_live_run": 0.40218405,
+      "after_final_live_run": 0.44984745,
+      "delta_usd": 0.0476634
+    },
+    "shared_quota_at_exhaustion": {"requests_today": 100, "max_requests_per_day": 100}
+  },
+  "reasoning": {
+    "capability": "Reasoning Agent, live gateway path",
+    "call": {"status": "gateway call SUCCEEDED", "latency_seconds": 22.762, "total_tokens": 2602},
+    "outcome": "source=template",
+    "validation_warnings": ["LLM reasoning output could not be parsed; deterministic template used."],
+    "grounding_status": "GROUNDED",
+    "finding": "The gateway returned a response and the tokens were spent, but ReasoningAgent could not parse it into its expected structure, so it fell back to the deterministic template. The fallback behaved exactly as designed - grounded output, an explicit warning, and source labelled 'template' rather than 'llm' - so no fabricated narrative reached the caller. But the LIVE reasoning path did not produce a model narrative on this gateway, and that is a genuine integration gap rather than a safety failure.",
+    "classification": "integration issue"
+  },
+  "extraction_llm": {
+    "capability": "Extraction Agent, prose -> MarketIntelligenceSignal, live gateway path",
+    "cases": {
+      "clean_prose": {
+        "latency_seconds": 10.081,
+        "raw_output": "[\n  {\n    \"title\": \"Customer expansion in North India increasing demand around MKT_DELHI\",\n    \"bucket\": \"CUSTOMER\",\n    \"direction\": \"UP\",\n    \"magnitude\": \"20%\",\n    \"affected_entities\": [\n      \"North India\",\n      \"MKT_DELHI\"\n    ]\n  }\n]",
+        "parsed": "well-formed JSON array, 1 item",
+        "bucket_correct": true,
+        "direction_correct": true,
+        "magnitude_extracted": "20%",
+        "entities_returned": ["North India", "MKT_DELHI"],
+        "entities_outside_master_data": ["North India"],
+        "verdict": "PARTIAL - the signal is classified correctly and MKT_DELHI is identified, but a geography string is also returned in affected_entities. The prompt asked only for identifiers appearing verbatim, and 'North India' does appear verbatim, so the model followed the instruction literally. The downstream guardrail filters it (only ids present in the master data are kept), so nothing invalid reaches a typed signal - but the raw extraction is not entity-clean and must not be trusted unfiltered."
+      },
+      "ambiguous_prose": {
+        "latency_seconds": 3.525,
+        "raw_output": "[]",
+        "parsed": "well-formed empty JSON array",
+        "verdict": "PASS - deliberately vague text ('Things may pick up a bit in the west, or they may not') produced no signal and no invented entity. The model declined rather than manufacturing a reading."
+      },
+      "structured_information": {
+        "latency_seconds": null,
+        "raw_output": "[\n  {\n    \"title\": \"DC_KOLKATA haulage rate +8% (effective 2026-07-01)\",\n    \"bucket\": \"CARRIER\",\n    \"direction\": \"UP\",\n    \"magnitude\": \"+8% haulage rate\",\n    \"affected_entities\": [\n      \"DC_KOLKATA\"\n    ]\n  }\n]",
+        "parsed": "well-formed JSON array, 1 item",
+        "entities_returned": ["DC_KOLKATA"],
+        "entities_outside_master_data": [],
+        "verdict": "PASS - correct entity, correct CARRIER bucket, correct direction, magnitude preserved verbatim. Observed on the first live run; the repeat attempt was refused by the shared daily quota."
+      }
+    },
+    "helper_defect": {
+      "symbol": "netgravity.orchestrator.agents.llm_gateway.extract_json",
+      "behaviour": "returns None for a top-level JSON ARRAY",
+      "verified_offline": {
+        "extract_json('{\"a\": 1}')": "{'a': 1}",
+        "extract_json('[{\"a\": 1}]')": "None",
+        "extract_json('[]')": "None"
+      },
+      "impact": "Any caller extracting a LIST of signals through this helper sees a parse failure even when the model returned clean JSON. The harness used json.loads to score the model, and reports the helper gap separately rather than blaming the model for it.",
+      "classification": "implementation defect, minor",
+      "fixed": false,
+      "reason_not_fixed": "Phase 8.0 is validation only; no implementation was modified."
+    }
+  },
+  "nlu": {
+    "capability": "Conversation / NLU, live gateway path",
+    "calls_consumed": 0,
+    "finding": "Three turns were run with allow_llm=True and consumed ZERO gateway calls. Root cause: ConversationalNLU() constructs IntentAgent(None) - a null client - so a default instance is rules-only however allow_llm is set. The harness spent three apparently-live turns on the rule path before the ledger's 'gateway_calls_spent: 0' exposed it. The harness now injects IntentAgent(gateway) explicitly, but the shared quota was exhausted before that corrected path could be exercised.",
+    "classification": "architectural observation plus external API limit",
+    "status": "NOT TESTED - the corrected wiring is in place and unexercised"
+  }
+}

@@ -1,0 +1,180 @@
+{
+  "gateway_available": true,
+  "shared_quota_before": {
+    "budget_usd": "10.00",
+    "max_requests_per_day": 100,
+    "remaining_usd": "9.55015255",
+    "requests_today": 100,
+    "reserved_usd": "0.00",
+    "spent_usd": "0.44984745"
+  },
+  "reasoning": {
+    "network briefing": {
+      "source": "template",
+      "model_reasoning_used": false,
+      "confidence": "MEDIUM",
+      "grounding_status": "GROUNDED",
+      "summary": "I see a business network cost of 3,036,843.42 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see a combined risk factor of 0.940 for the network.",
+      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "n_grounded_claims": 6,
+      "validation_warnings": [
+        "LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
+      ],
+      "evidence_payload_unmutated": true,
+      "entities_named": [],
+      "entities_all_real": true,
+      "latency_seconds": 0.697
+    },
+    "facility briefing": {
+      "source": "template",
+      "model_reasoning_used": false,
+      "confidence": "MEDIUM",
+      "grounding_status": "GROUNDED",
+      "summary": "I see a business network cost of 3,036,843.42 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see a combined risk factor of 0.940 for the network.",
+      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "n_grounded_claims": 6,
+      "validation_warnings": [
+        "LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
+      ],
+      "evidence_payload_unmutated": true,
+      "entities_named": [],
+      "entities_all_real": true,
+      "latency_seconds": 0.729
+    },
+    "briefing with evidence missing": {
+      "source": "template",
+      "model_reasoning_used": false,
+      "confidence": "MEDIUM",
+      "grounding_status": "GROUNDED",
+      "summary": "I see a business network cost of 3,036,843.42 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see a combined risk factor of 0.940 for the network. I could not use the following analyses; their values are UNKNOWN (not zero): forecast.demand (MISSING).",
+      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "n_grounded_claims": 6,
+      "validation_warnings": [
+        "LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
+      ],
+      "evidence_payload_unmutated": true,
+      "entities_named": [],
+      "entities_all_real": true,
+      "latency_seconds": 0.737
+    }
+  },
+  "nlu": {
+    "intent_agent_has_gateway": true,
+    "turns": {
+      "ambiguous \u2014 needs the model tier": {
+        "message": "And what about the other one?",
+        "expected_model_tier": true,
+        "gateway_calls_used": 0,
+        "workflow_id": null,
+        "intent": null,
+        "intent_source": null,
+        "intent_confidence": null,
+        "reply": "I could not work out what you would like me to do. I can report the current network state, run what-if scenarios (closing a facility, changing capacity), assess resilience exposure, or combine an external event probability with exposure into a risk factor. Known distribution centres: DC_BANGALORE, D",
+        "latency_seconds": 0.718
+      },
+      "vague \u2014 needs the model tier": {
+        "message": "Where are we most likely to get hurt if things go wrong?",
+        "expected_model_tier": true,
+        "gateway_calls_used": 0,
+        "workflow_id": null,
+        "intent": null,
+        "intent_source": null,
+        "intent_confidence": null,
+        "reply": "I could not work out what you would like me to do. I can report the current network state, run what-if scenarios (closing a facility, changing capacity), assess resilience exposure, or combine an external event probability with exposure into a risk factor. Known distribution centres: DC_BANGALORE, D",
+        "latency_seconds": 0.718
+      },
+      "deterministic \u2014 rules must answer alone": {
+        "message": "What is the current status of the network?",
+        "expected_model_tier": false,
+        "gateway_calls_used": 0,
+        "workflow_id": "wf_network_state",
+        "intent": "NETWORK_STATE_QUERY",
+        "intent_source": "explicit",
+        "intent_confidence": 1.0,
+        "reply": "I see a business network cost of 3,036,843.42 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. Suggested next step: I recommend reviewing the quantified impact above before moving to a formal option appraisal. No action is proposed; thi",
+        "latency_seconds": 0.796
+      }
+    }
+  },
+  "security": {
+    "source": "template",
+    "grounding_status": "GROUNDED",
+    "confidence": "MEDIUM",
+    "authoritative_rei_unchanged": true,
+    "evidence_payload_unmutated": true,
+    "fabricated_0_95_present": false,
+    "fabricated_facility_present": false,
+    "summary": "I see a business network cost of 3,036,843.42 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see a combined risk factor of 0.940 for the network.",
+    "validation_warnings": [
+      "LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
+    ]
+  },
+  "shared_quota_after": {
+    "budget_usd": "10.00",
+    "max_requests_per_day": 100,
+    "remaining_usd": "9.55015255",
+    "requests_today": 100,
+    "reserved_usd": "0.00",
+    "spent_usd": "0.44984745"
+  },
+  "calls": {
+    "limit": 6,
+    "spent": 0,
+    "records": [
+      {
+        "call": null,
+        "capability": "reasoning",
+        "purpose": "network briefing",
+        "status": "EXTERNAL_LIMIT",
+        "gateway_calls_used": 0,
+        "last_error": "daily_limit_exceeded",
+        "validation": "source=template, grounding=GROUNDED, claims=6"
+      },
+      {
+        "call": null,
+        "capability": "reasoning",
+        "purpose": "facility briefing",
+        "status": "EXTERNAL_LIMIT",
+        "gateway_calls_used": 0,
+        "last_error": "daily_limit_exceeded",
+        "validation": "source=template, grounding=GROUNDED, claims=6"
+      },
+      {
+        "call": null,
+        "capability": "reasoning",
+        "purpose": "briefing with evidence missing",
+        "status": "EXTERNAL_LIMIT",
+        "gateway_calls_used": 0,
+        "last_error": "daily_limit_exceeded",
+        "validation": "source=template, grounding=GROUNDED, claims=6"
+      },
+      {
+        "call": null,
+        "capability": "nlu",
+        "purpose": "ambiguous \u2014 needs the model tier",
+        "status": "EXTERNAL_LIMIT",
+        "gateway_calls_used": 0,
+        "last_error": "daily_limit_exceeded"
+      },
+      {
+        "call": null,
+        "capability": "nlu",
+        "purpose": "vague \u2014 needs the model tier",
+        "status": "EXTERNAL_LIMIT",
+        "gateway_calls_used": 0,
+        "last_error": "daily_limit_exceeded"
+      },
+      {
+        "call": null,
+        "capability": "security",
+        "purpose": "prompt injection over live model",
+        "status": "EXTERNAL_LIMIT",
+        "gateway_calls_used": 0,
+        "last_error": "daily_limit_exceeded",
+        "validation": "grounding=GROUNDED"
+      }
+    ]
+  },
+  "verdict": "NOT_TESTED",
+  "verdict_reason": "every live call was refused by the shared gateway quota; nothing about the live path was measured. NOT a capability failure."
+}

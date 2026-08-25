@@ -1,0 +1,116 @@
+{
+  "source_data": {
+    "network_id": "synthetic_india_v1",
+    "data_version": "fcaff26d4f4b11c8",
+    "manifest": "validation\\capability_validation\\synthetic_data\\dataset_manifest.json"
+  },
+  "snapshot": {
+    "snapshot_id": "snap_fcaff26d4f4b"
+  },
+  "milp": {
+    "run_id": "81eb93b5",
+    "network_id": "synthetic_india_v1",
+    "data_version": "fcaff26d4f4b11c8",
+    "scenario_id": null,
+    "solver": "HIGHS",
+    "status": "OPTIMAL",
+    "objective": 3036843.421765966
+  },
+  "rei": {
+    "batch_id": "rei_d33eaa3a3b75",
+    "snapshot_id": "snap_fcaff26d4f4b",
+    "model_version": "1.2.0",
+    "data_version": "fcaff26d4f4b11c8",
+    "baseline_business_cost": 3036843.4219
+  },
+  "forecast": {
+    "snapshot_id": "snap_fcaff26d4f4b",
+    "model_version": "1.0.0",
+    "engines_used": [
+      "QuantileRegression_HiGHS"
+    ],
+    "signal_ids": [
+      "sig_prov_check"
+    ],
+    "selection_mode": "PATTERN",
+    "generated_at": "2026-08-25T10:02:27.620854+00:00",
+    "source": "forecasting_service",
+    "reproducibility": {
+      "model_version": "1.0.0",
+      "engine_override": null,
+      "selection_mode": "PATTERN",
+      "signal_enrichment": true,
+      "backtest": false,
+      "backtest_folds": 0,
+      "min_history": 2,
+      "max_horizon": 12,
+      "change_point_detection": true,
+      "change_point_method": "SUP_F_LEVEL_SHIFT",
+      "change_point_threshold": 8.85
+    }
+  },
+  "reasoning": {
+    "source": "template",
+    "grounding_status": "GROUNDED",
+    "grounded_claims": [
+      {
+        "claim": "3,036,843.42",
+        "value": 3036843.42,
+        "kind": "UNKNOWN",
+        "verdict": "GROUNDED",
+        "matched_fact": "network_state.business_network_cost",
+        "authoritative_value": 3036843.42,
+        "source": "optimization_result",
+        "detail": "",
+        "provenance": {
+          "business_network_cost": "milp",
+          "source": "optimization_result",
+          "fact": "network_state.business_network_cost"
+        }
+      },
+      {
+        "claim": "3,036,843.42",
+        "value": 3036843.42,
+        "kind": "UNKNOWN",
+        "verdict": "GROUNDED",
+        "matched_fact": "network_state.business_network_cost",
+        "authoritative_value": 3036843.42,
+        "source": "optimization_result",
+        "detail": "",
+        "provenance": {
+          "business_network_cost": "milp",
+          "source": "optimization_result",
+          "fact": "network_state.business_network_cost"
+        }
+      },
+      {
+        "claim": "3,036,843.42",
+        "value": 3036843.42,
+        "kind": "UNKNOWN",
+        "verdict": "GROUNDED",
+        "matched_fact": "network_state.business_network_cost",
+        "authoritative_value": 3036843.42,
+        "source": "optimization_result",
+        "detail": "",
+        "provenance": {
+          "business_network_cost": "milp",
+          "source": "optimization_result",
+          "fact": "network_state.business_network_cost"
+        }
+      }
+    ]
+  },
+  "audit": {
+    "execution_id": "daf1d81f-b44",
+    "workflow_id": "wf_explanation",
+    "snapshot_id": "snap_fcaff26d4f4b",
+    "engine_results": [
+      "governance.classify",
+      "network.load_snapshot",
+      "reasoning.synthesise",
+      "resilience.assess",
+      "risk.compute_rf"
+    ],
+    "n_events": 30
+  }
+}

@@ -1,0 +1,780 @@
+{
+  "capability": "forecasting",
+  "verdict": "PASS",
+  "n_checks": 39,
+  "n_failed": 0,
+  "duration_seconds": 6.47,
+  "checks": [
+    {
+      "check": "MKT_DELHI (stable_seasonal): forecast produced",
+      "ok": true,
+      "detail": "QuantileRegression_HiGHS"
+    },
+    {
+      "check": "MKT_DELHI: horizon matches request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_DELHI: prediction interval ordered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_DELHI: provenance carries snapshot and engine",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_DELHI: detection ran and reported a verdict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_MUMBAI (growth): forecast produced",
+      "ok": true,
+      "detail": "QuantileRegression_HiGHS"
+    },
+    {
+      "check": "MKT_MUMBAI: horizon matches request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_MUMBAI: prediction interval ordered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_MUMBAI: provenance carries snapshot and engine",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_MUMBAI: detection ran and reported a verdict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_KOLKATA (seasonal): forecast produced",
+      "ok": true,
+      "detail": "QuantileRegression_HiGHS"
+    },
+    {
+      "check": "MKT_KOLKATA: horizon matches request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_KOLKATA: prediction interval ordered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_KOLKATA: provenance carries snapshot and engine",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_KOLKATA: detection ran and reported a verdict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_CHENNAI (intermittent): forecast produced",
+      "ok": true,
+      "detail": "SBA_Intermittent"
+    },
+    {
+      "check": "MKT_CHENNAI: horizon matches request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_CHENNAI: prediction interval ordered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_CHENNAI: provenance carries snapshot and engine",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_CHENNAI: detection ran and reported a verdict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_BANGALORE (structural_break): forecast produced",
+      "ok": true,
+      "detail": "ColdStart_WeightedPrior"
+    },
+    {
+      "check": "MKT_BANGALORE: horizon matches request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_BANGALORE: prediction interval ordered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_BANGALORE: provenance carries snapshot and engine",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_BANGALORE: detection ran and reported a verdict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_HYDERABAD (decline): forecast produced",
+      "ok": true,
+      "detail": "QuantileRegression_HiGHS"
+    },
+    {
+      "check": "MKT_HYDERABAD: horizon matches request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_HYDERABAD: prediction interval ordered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_HYDERABAD: provenance carries snapshot and engine",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_HYDERABAD: detection ran and reported a verdict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_PUNE (noisy): forecast produced",
+      "ok": true,
+      "detail": "QuantileRegression_HiGHS"
+    },
+    {
+      "check": "MKT_PUNE: horizon matches request",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_PUNE: prediction interval ordered",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_PUNE: provenance carries snapshot and engine",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "MKT_PUNE: detection ran and reported a verdict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "structural-break market: break detected",
+      "ok": true,
+      "detail": {
+        "detected": true,
+        "status": "DETECTED",
+        "change_period": 28,
+        "sup_f": 137.795101,
+        "method": "SUP_F_LEVEL_SHIFT"
+      }
+    },
+    {
+      "check": "structural-break market: adaptation actually engaged",
+      "ok": true,
+      "detail": {
+        "strategy": "RECENT_REGIME",
+        "basis": "MEASURED",
+        "n_periods_used": 9,
+        "selected_engine": "ColdStart_WeightedPrior"
+      }
+    },
+    {
+      "check": "no break detected on the stable market",
+      "ok": true,
+      "detail": {
+        "detected": false,
+        "status": "NO_BREAK",
+        "change_period": 28,
+        "sup_f": 3.029376,
+        "method": "SUP_F_LEVEL_SHIFT"
+      }
+    },
+    {
+      "check": "no false-positive break on stable/seasonal/growth/noisy",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "evidence": {
+    "per_market": {
+      "MKT_DELHI": {
+        "pattern": "stable_seasonal",
+        "engine": "QuantileRegression_HiGHS",
+        "detected_pattern": "SMOOTH",
+        "forecast": [
+          900.73,
+          960.53,
+          1027.68,
+          1031.0,
+          1009.61,
+          966.27
+        ],
+        "p10": [
+          847.32,
+          925.0,
+          968.15,
+          989.65,
+          952.06,
+          914.84
+        ],
+        "p90": [
+          907.01,
+          987.55,
+          1061.21,
+          1068.45,
+          1052.31,
+          1000.22
+        ],
+        "actual_held_out": [
+          940.03,
+          945.59,
+          1076.28,
+          1028.95,
+          1032.64,
+          977.84
+        ],
+        "metrics": {
+          "mae": 23.248,
+          "rmse": 28.28,
+          "mase": 0.4366,
+          "wape": 0.0232,
+          "bias": -17.586,
+          "naive_mae": 129.562,
+          "beats_naive": true
+        },
+        "backtest_accuracy": {
+          "mae": 44.502325,
+          "rmse": 50.050729,
+          "wape": 0.052656,
+          "mase": 0.710672,
+          "n_folds": 3,
+          "n_observations": 36,
+          "method": "ROLLING_ORIGIN"
+        },
+        "structural_break": {
+          "detected": false,
+          "status": "NO_BREAK",
+          "change_period": 28,
+          "sup_f": 3.029376,
+          "method": "SUP_F_LEVEL_SHIFT"
+        },
+        "regime": {
+          "strategy": "FULL_HISTORY",
+          "basis": "NO_BREAK",
+          "n_periods_used": 36,
+          "selected_engine": ""
+        },
+        "provenance": {
+          "snapshot_id": "snap_fcaff26d4f4b",
+          "model_version": "1.0.0",
+          "engines_used": [
+            "QuantileRegression_HiGHS"
+          ],
+          "adapted_series": [],
+          "generated_at": "2026-08-25T10:02:19.039651+00:00"
+        }
+      },
+      "MKT_MUMBAI": {
+        "pattern": "growth",
+        "engine": "QuantileRegression_HiGHS",
+        "detected_pattern": "SMOOTH",
+        "forecast": [
+          1125.47,
+          1175.39,
+          1175.65,
+          1181.93,
+          1196.54,
+          1216.19
+        ],
+        "p10": [
+          1075.62,
+          1097.48,
+          1050.55,
+          1150.99,
+          1184.07,
+          1201.41
+        ],
+        "p90": [
+          1128.25,
+          1229.74,
+          1222.43,
+          1222.73,
+          1207.38,
+          1233.59
+        ],
+        "actual_held_out": [
+          1124.27,
+          1110.61,
+          1174.6,
+          1156.41,
+          1188.54,
+          1152.3
+        ],
+        "metrics": {
+          "mae": 27.406,
+          "rmse": 38.722,
+          "mase": 0.6634,
+          "wape": 0.0238,
+          "bias": 27.406,
+          "naive_mae": 58.479,
+          "beats_naive": true
+        },
+        "backtest_accuracy": {
+          "mae": 58.370772,
+          "rmse": 93.761431,
+          "wape": 0.055219,
+          "mase": 0.611953,
+          "n_folds": 3,
+          "n_observations": 36,
+          "method": "ROLLING_ORIGIN"
+        },
+        "structural_break": {
+          "detected": false,
+          "status": "NO_BREAK",
+          "change_period": 27,
+          "sup_f": 8.744993,
+          "method": "SUP_F_LEVEL_SHIFT"
+        },
+        "regime": {
+          "strategy": "FULL_HISTORY",
+          "basis": "NO_BREAK",
+          "n_periods_used": 36,
+          "selected_engine": ""
+        },
+        "provenance": {
+          "snapshot_id": "snap_fcaff26d4f4b",
+          "model_version": "1.0.0",
+          "engines_used": [
+            "QuantileRegression_HiGHS"
+          ],
+          "adapted_series": [],
+          "generated_at": "2026-08-25T10:02:19.152441+00:00"
+        }
+      },
+      "MKT_KOLKATA": {
+        "pattern": "seasonal",
+        "engine": "QuantileRegression_HiGHS",
+        "detected_pattern": "SMOOTH",
+        "forecast": [
+          931.27,
+          944.66,
+          928.42,
+          843.83,
+          736.53,
+          632.83
+        ],
+        "p10": [
+          906.74,
+          888.2,
+          875.07,
+          789.17,
+          672.32,
+          571.86
+        ],
+        "p90": [
+          1006.55,
+          963.78,
+          950.83,
+          866.44,
+          747.29,
+          652.17
+        ],
+        "actual_held_out": [
+          964.03,
+          953.82,
+          950.18,
+          804.35,
+          750.26,
+          636.08
+        ],
+        "metrics": {
+          "mae": 20.022,
+          "rmse": 23.764,
+          "mase": 0.2717,
+          "wape": 0.0237,
+          "bias": -6.859,
+          "naive_mae": 112.89,
+          "beats_naive": true
+        },
+        "backtest_accuracy": {
+          "mae": 39.489424,
+          "rmse": 45.028493,
+          "wape": 0.051731,
+          "mase": 0.351932,
+          "n_folds": 3,
+          "n_observations": 36,
+          "method": "ROLLING_ORIGIN"
+        },
+        "structural_break": {
+          "detected": false,
+          "status": "NO_BREAK",
+          "change_period": 10,
+          "sup_f": 4.302437,
+          "method": "SUP_F_LEVEL_SHIFT"
+        },
+        "regime": {
+          "strategy": "FULL_HISTORY",
+          "basis": "NO_BREAK",
+          "n_periods_used": 36,
+          "selected_engine": ""
+        },
+        "provenance": {
+          "snapshot_id": "snap_fcaff26d4f4b",
+          "model_version": "1.0.0",
+          "engines_used": [
+            "QuantileRegression_HiGHS"
+          ],
+          "adapted_series": [],
+          "generated_at": "2026-08-25T10:02:19.243067+00:00"
+        }
+      },
+      "MKT_CHENNAI": {
+        "pattern": "intermittent",
+        "engine": "SBA_Intermittent",
+        "detected_pattern": "INTERMITTENT",
+        "forecast": [
+          85.48,
+          85.48,
+          85.48,
+          85.48,
+          85.48,
+          85.48
+        ],
+        "p10": [
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ],
+        "p90": [
+          388.81,
+          388.81,
+          388.81,
+          388.81,
+          388.81,
+          388.81
+        ],
+        "actual_held_out": [
+          86.11,
+          0.0,
+          180.47,
+          347.39,
+          0.0,
+          0.0
+        ],
+        "metrics": {
+          "mae": 102.328,
+          "rmse": 128.804,
+          "mase": 0.9488,
+          "wape": 1.0,
+          "bias": -16.848,
+          "naive_mae": 214.866,
+          "beats_naive": true
+        },
+        "backtest_accuracy": {
+          "mae": 96.384377,
+          "rmse": 135.739778,
+          "wape": 0.573446,
+          "mase": 0.577877,
+          "n_folds": 3,
+          "n_observations": 36,
+          "method": "ROLLING_ORIGIN"
+        },
+        "structural_break": {
+          "detected": false,
+          "status": "PATTERN_NOT_APPLICABLE",
+          "change_period": null,
+          "sup_f": null,
+          "method": "SUP_F_LEVEL_SHIFT"
+        },
+        "regime": {
+          "strategy": "FULL_HISTORY",
+          "basis": "NO_BREAK",
+          "n_periods_used": 36,
+          "selected_engine": ""
+        },
+        "provenance": {
+          "snapshot_id": "snap_fcaff26d4f4b",
+          "model_version": "1.0.0",
+          "engines_used": [
+            "SBA_Intermittent"
+          ],
+          "adapted_series": [],
+          "generated_at": "2026-08-25T10:02:19.247349+00:00"
+        }
+      },
+      "MKT_BANGALORE": {
+        "pattern": "structural_break",
+        "engine": "ColdStart_WeightedPrior",
+        "detected_pattern": "SMOOTH",
+        "forecast": [
+          1029.06,
+          1029.06,
+          1029.06,
+          1029.06,
+          1029.06,
+          1029.06
+        ],
+        "p10": [
+          649.77,
+          629.28,
+          613.56,
+          600.3,
+          588.62,
+          578.06
+        ],
+        "p90": [
+          1408.34,
+          1428.83,
+          1444.56,
+          1457.81,
+          1469.49,
+          1480.05
+        ],
+        "actual_held_out": [
+          1020.07,
+          1038.61,
+          997.9,
+          1149.64,
+          1057.39,
+          1090.51
+        ],
+        "metrics": {
+          "mae": 43.344,
+          "rmse": 58.113,
+          "mase": 0.6648,
+          "wape": 0.0409,
+          "bias": -29.967,
+          "naive_mae": 48.84,
+          "beats_naive": true
+        },
+        "backtest_accuracy": {
+          "mae": 30.052828,
+          "rmse": 35.095317,
+          "wape": 0.029092,
+          "mase": 0.590515,
+          "n_folds": 3,
+          "n_observations": 9,
+          "method": "ROLLING_ORIGIN"
+        },
+        "structural_break": {
+          "detected": true,
+          "status": "DETECTED",
+          "change_period": 28,
+          "sup_f": 137.795101,
+          "method": "SUP_F_LEVEL_SHIFT"
+        },
+        "regime": {
+          "strategy": "RECENT_REGIME",
+          "basis": "MEASURED",
+          "n_periods_used": 9,
+          "selected_engine": "ColdStart_WeightedPrior"
+        },
+        "provenance": {
+          "snapshot_id": "snap_fcaff26d4f4b",
+          "model_version": "1.0.0",
+          "engines_used": [
+            "ColdStart_WeightedPrior"
+          ],
+          "adapted_series": [
+            "MKT_BANGALORE/PROD_STD"
+          ],
+          "generated_at": "2026-08-25T10:02:19.319396+00:00"
+        }
+      },
+      "MKT_HYDERABAD": {
+        "pattern": "decline",
+        "engine": "QuantileRegression_HiGHS",
+        "detected_pattern": "SMOOTH",
+        "forecast": [
+          538.42,
+          483.61,
+          504.53,
+          452.72,
+          461.83,
+          454.68
+        ],
+        "p10": [
+          454.64,
+          439.96,
+          446.36,
+          416.8,
+          423.17,
+          407.43
+        ],
+        "p90": [
+          540.3,
+          507.41,
+          511.0,
+          475.22,
+          467.63,
+          480.14
+        ],
+        "actual_held_out": [
+          522.8,
+          534.06,
+          540.37,
+          525.94,
+          439.27,
+          407.33
+        ],
+        "metrics": {
+          "mae": 40.84,
+          "rmse": 45.065,
+          "mase": 0.9103,
+          "wape": 0.0825,
+          "bias": -12.33,
+          "naive_mae": 61.994,
+          "beats_naive": true
+        },
+        "backtest_accuracy": {
+          "mae": 47.59434,
+          "rmse": 61.183147,
+          "wape": 0.085052,
+          "mase": 0.562744,
+          "n_folds": 3,
+          "n_observations": 36,
+          "method": "ROLLING_ORIGIN"
+        },
+        "structural_break": {
+          "detected": false,
+          "status": "NO_BREAK",
+          "change_period": 24,
+          "sup_f": 1.804207,
+          "method": "SUP_F_LEVEL_SHIFT"
+        },
+        "regime": {
+          "strategy": "FULL_HISTORY",
+          "basis": "NO_BREAK",
+          "n_periods_used": 36,
+          "selected_engine": ""
+        },
+        "provenance": {
+          "snapshot_id": "snap_fcaff26d4f4b",
+          "model_version": "1.0.0",
+          "engines_used": [
+            "QuantileRegression_HiGHS"
+          ],
+          "adapted_series": [],
+          "generated_at": "2026-08-25T10:02:19.465600+00:00"
+        }
+      },
+      "MKT_PUNE": {
+        "pattern": "noisy",
+        "engine": "QuantileRegression_HiGHS",
+        "detected_pattern": "SMOOTH",
+        "forecast": [
+          775.11,
+          842.33,
+          828.71,
+          764.51,
+          741.23,
+          679.15
+        ],
+        "p10": [
+          305.62,
+          347.7,
+          288.43,
+          297.12,
+          333.69,
+          316.34
+        ],
+        "p90": [
+          1024.85,
+          1221.68,
+          1157.54,
+          1290.41,
+          1170.2,
+          1127.83
+        ],
+        "actual_held_out": [
+          1166.82,
+          469.45,
+          335.74,
+          402.04,
+          521.86,
+          576.74
+        ],
+        "metrics": {
+          "mae": 323.638,
+          "rmse": 347.731,
+          "mase": 0.9986,
+          "wape": 0.5592,
+          "bias": 193.066,
+          "naive_mae": 467.951,
+          "beats_naive": true
+        },
+        "backtest_accuracy": {
+          "mae": 159.825306,
+          "rmse": 234.384108,
+          "wape": 0.206566,
+          "mase": 0.847382,
+          "n_folds": 3,
+          "n_observations": 36,
+          "method": "ROLLING_ORIGIN"
+        },
+        "structural_break": {
+          "detected": false,
+          "status": "NO_BREAK",
+          "change_period": 31,
+          "sup_f": 3.524547,
+          "method": "SUP_F_LEVEL_SHIFT"
+        },
+        "regime": {
+          "strategy": "FULL_HISTORY",
+          "basis": "NO_BREAK",
+          "n_periods_used": 36,
+          "selected_engine": ""
+        },
+        "provenance": {
+          "snapshot_id": "snap_fcaff26d4f4b",
+          "model_version": "1.0.0",
+          "engines_used": [
+            "QuantileRegression_HiGHS"
+          ],
+          "adapted_series": [],
+          "generated_at": "2026-08-25T10:02:19.579269+00:00"
+        }
+      }
+    },
+    "beats_naive": [
+      "MKT_DELHI",
+      "MKT_MUMBAI",
+      "MKT_KOLKATA",
+      "MKT_CHENNAI",
+      "MKT_BANGALORE",
+      "MKT_HYDERABAD",
+      "MKT_PUNE"
+    ]
+  },
+  "notes": [
+    "beat naive-1 on 7/7 markets: ['MKT_DELHI', 'MKT_MUMBAI', 'MKT_KOLKATA', 'MKT_CHENNAI', 'MKT_BANGALORE', 'MKT_HYDERABAD', 'MKT_PUNE']"
+  ],
+  "forced_verdict_reason": null,
+  "error": null
+}

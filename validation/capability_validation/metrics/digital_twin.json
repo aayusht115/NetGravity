@@ -1,0 +1,195 @@
+{
+  "capability": "digital_twin",
+  "verdict": "PASS",
+  "n_checks": 13,
+  "n_failed": 0,
+  "duration_seconds": 0.261,
+  "checks": [
+    {
+      "check": "an incomplete run does not publish a healthy-looking state",
+      "ok": true,
+      "detail": {
+        "status": "PARTIAL",
+        "facilities": 0
+      }
+    },
+    {
+      "check": "the optimisation run actually solved",
+      "ok": true,
+      "detail": [
+        "governance.classify",
+        "kpi.summarise",
+        "network.load_snapshot",
+        "optimization.solve",
+        "reasoning.synthesise"
+      ]
+    },
+    {
+      "check": "at least one twin state is published for the snapshot",
+      "ok": true,
+      "detail": "1 states"
+    },
+    {
+      "check": "a COMPLETE state exists after a solving run",
+      "ok": true,
+      "detail": [
+        [
+          "tws_snap_fcaff26d4f4b_optimized",
+          "COMPLETE"
+        ]
+      ]
+    },
+    {
+      "check": "baseline state carries the snapshot it was built from",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "facilities are represented",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "flows are represented",
+      "ok": true,
+      "detail": {
+        "total": 14,
+        "returned": 14
+      }
+    },
+    {
+      "check": "flows are paginated rather than returned unbounded",
+      "ok": true,
+      "detail": 500
+    },
+    {
+      "check": "costs are represented",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "unavailable values are explicit, not zero-filled",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "service.py calls no engine",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "check": "builder.py calls no engine",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "check": "store.py calls no engine",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "evidence": {
+    "unsolved_run": {
+      "execution_id": "e8e405d2-e92",
+      "states_after": [
+        {
+          "state_id": "tws_snap_fcaff26d4f4b_optimized",
+          "snapshot_id": "snap_fcaff26d4f4b",
+          "scenario_id": null,
+          "state_type": "OPTIMIZED",
+          "calculation_status": "PARTIAL",
+          "n_facilities": 0,
+          "n_flows": 0,
+          "generated_at": "2026-08-25T10:02:26.404261+00:00"
+        }
+      ]
+    },
+    "incomplete_state": {
+      "state_id": "tws_snap_fcaff26d4f4b_optimized",
+      "calculation_status": "PARTIAL",
+      "n_facilities": 0,
+      "n_flows": 0,
+      "kpis": null
+    },
+    "baseline_run": {
+      "execution_id": "ea9e252a-5d7",
+      "workflow_id": "wf_optimization",
+      "engines": [
+        "governance.classify",
+        "kpi.summarise",
+        "network.load_snapshot",
+        "optimization.solve",
+        "reasoning.synthesise"
+      ],
+      "twin_states": [
+        {
+          "state_id": "tws_snap_fcaff26d4f4b_optimized",
+          "snapshot_id": "snap_fcaff26d4f4b",
+          "scenario_id": null,
+          "state_type": "OPTIMIZED",
+          "calculation_status": "COMPLETE",
+          "n_facilities": 8,
+          "n_flows": 14,
+          "generated_at": "2026-08-25T10:02:26.603131+00:00"
+        }
+      ]
+    },
+    "states": [
+      {
+        "state_id": "tws_snap_fcaff26d4f4b_optimized",
+        "snapshot_id": "snap_fcaff26d4f4b",
+        "scenario_id": null,
+        "state_type": "OPTIMIZED",
+        "calculation_status": "COMPLETE",
+        "n_facilities": 8,
+        "n_flows": 14,
+        "generated_at": "2026-08-25T10:02:26.603131+00:00"
+      }
+    ],
+    "baseline_state": {
+      "state_id": "tws_snap_fcaff26d4f4b_optimized",
+      "state_type": "OPTIMIZED",
+      "calculation_status": "COMPLETE",
+      "snapshot_id": "snap_fcaff26d4f4b",
+      "scenario_id": null,
+      "n_facilities": 8,
+      "n_flows": 14,
+      "flow_page": {
+        "offset": 0,
+        "limit": 500,
+        "returned": 14
+      },
+      "kpis": {
+        "business_network_cost": 3036843.4219,
+        "solver_objective": 3036843.4218,
+        "shortage_penalty_cost": 0.0,
+        "cost_components": {
+          "facility_cost": 2850000.0,
+          "opening_cost": 0.0,
+          "closure_cost": 0.0,
+          "transport_cost": 64475.9294,
+          "handling_cost": 99374.45,
+          "inventory_cost": 22993.0424,
+          "carbon_cost": 0.0
+        },
+        "reconciliation_is_closed": true,
+        "total_demand": 5678.54,
+        "served_demand": 5678.54,
+        "unserved_demand": 0.0,
+        "demand_fill_rate": 1.0,
+        "n_facilities_open": 6,
+        "n_facilities_closed": 2,
+        "avg_utilization_pct": 71.1,
+        "max_utilization_pct": 100.0,
+        "total_carbon_kg": 2992.7261,
+        "pct_demand_in_sla": 100.0
+      },
+      "risk": null,
+      "unavailable": [],
+      "decisions": []
+    }
+  },
+  "notes": [],
+  "forced_verdict_reason": null,
+  "error": null
+}

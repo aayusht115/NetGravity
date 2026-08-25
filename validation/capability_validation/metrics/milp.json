@@ -1,0 +1,147 @@
+{
+  "capability": "milp",
+  "verdict": "PASS",
+  "n_checks": 11,
+  "n_failed": 0,
+  "duration_seconds": 3.312,
+  "checks": [
+    {
+      "check": "solver reaches a feasible solution",
+      "ok": true,
+      "detail": "OPTIMAL"
+    },
+    {
+      "check": "objective value is finite and positive",
+      "ok": true,
+      "detail": 3036843.421765966
+    },
+    {
+      "check": "a facility decision exists for every candidate",
+      "ok": true,
+      "detail": "8 decisions"
+    },
+    {
+      "check": "lane flows are produced",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "all mandatory plants stay open",
+      "ok": true,
+      "detail": [
+        "PLANT_PUNE",
+        "PLANT_CHENNAI",
+        "PLANT_DELHI",
+        "DC_DELHI",
+        "DC_MUMBAI",
+        "DC_HYDERABAD"
+      ]
+    },
+    {
+      "check": "market inbound flow equals total demand (fill rate 1.0)",
+      "ok": true,
+      "detail": {
+        "inbound": 5678.54,
+        "demand": 5678.54
+      }
+    },
+    {
+      "check": "reported fill rate agrees with the flow arithmetic",
+      "ok": true,
+      "detail": 1.0
+    },
+    {
+      "check": "no facility throughput exceeds its capacity",
+      "ok": true,
+      "detail": {}
+    },
+    {
+      "check": "objective equals the sum of its cost components",
+      "ok": true,
+      "detail": {
+        "component_sum": 3036843.42,
+        "objective": 3036843.421765966,
+        "gap": 0.0
+      }
+    },
+    {
+      "check": "transport cost reproduces from rate x units",
+      "ok": true,
+      "detail": {
+        "recomputed": 64475.93,
+        "reported": 64475.93
+      }
+    },
+    {
+      "check": "determinism: the same network solves to the same objective",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence": {
+    "solver": {
+      "name": "HIGHS",
+      "status": "OPTIMAL",
+      "objective_value": 3036843.421765966,
+      "optimality_label": "Best feasible solution within 0.10% of optimal."
+    },
+    "decisions": {
+      "open": [
+        "PLANT_PUNE",
+        "PLANT_CHENNAI",
+        "PLANT_DELHI",
+        "DC_DELHI",
+        "DC_MUMBAI",
+        "DC_HYDERABAD"
+      ],
+      "closed": [
+        "DC_KOLKATA",
+        "DC_BANGALORE"
+      ],
+      "n_flows": 23
+    },
+    "objective_components": {
+      "facility_cost": 2850000.0,
+      "opening_cost": 0.0,
+      "closure_cost": 0.0,
+      "transport_cost": 64475.93,
+      "handling_cost": 99374.45,
+      "inventory_cost": 22993.04,
+      "shortage_cost": 0.0,
+      "carbon_cost": 0.0,
+      "carbon_kg": 2992.73
+    },
+    "kpis": {
+      "total_cost": 3036843.42,
+      "facility_cost": 2850000.0,
+      "transport_cost": 64475.93,
+      "handling_cost": 99374.45,
+      "inventory_cost": 22993.04,
+      "production_cost": 0.0,
+      "shortage_cost": 0.0,
+      "total_demand": 5678.54,
+      "total_served": 5678.54,
+      "unmet_demand": 0.0,
+      "demand_fill_rate": 1.0,
+      "n_facilities_open": 6,
+      "n_facilities_closed": 2,
+      "avg_distance_km": 431.09,
+      "weighted_avg_distance_km": 332.79,
+      "inbound_avg_distance_km": 234.49,
+      "outbound_avg_distance_km": 431.09,
+      "max_distance_km": 1250.7,
+      "min_distance_km": 4.9,
+      "pct_demand_in_sla": 100.0,
+      "avg_utilization_pct": 71.1,
+      "max_utilization_pct": 100.0,
+      "min_utilization_pct": 37.5,
+      "overutilized_count": 3,
+      "underutilized_count": 0,
+      "total_carbon_kg": 2992.7261,
+      "carbon_per_unit": 0.527024
+    }
+  },
+  "notes": [],
+  "forced_verdict_reason": null,
+  "error": null
+}

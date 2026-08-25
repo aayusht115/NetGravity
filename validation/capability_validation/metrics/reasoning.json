@@ -1,0 +1,134 @@
+{
+  "capability": "reasoning",
+  "verdict": "PASS",
+  "n_checks": 9,
+  "n_failed": 0,
+  "duration_seconds": 0.967,
+  "checks": [
+    {
+      "check": "template path produces a narrative",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "template narrative is grounded",
+      "ok": true,
+      "detail": "GROUNDED"
+    },
+    {
+      "check": "template path is labelled as template, not model",
+      "ok": true,
+      "detail": "template"
+    },
+    {
+      "check": "unavailable evidence is reported, not filled in",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no facility outside master data is named by the template",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "live reasoning returns a narrative",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "live narrative is grounded or explicitly downgraded",
+      "ok": true,
+      "detail": "GROUNDED"
+    },
+    {
+      "check": "live narrative names no facility outside master data",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "check": "live result carries no probability field",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence": {
+    "authoritative_payload": {
+      "network_state": {
+        "business_network_cost": 3036843.42,
+        "demand_fill_rate": 1.0,
+        "n_facilities_open": 6,
+        "n_facilities_closed": 2,
+        "transport_cost": 64475.93,
+        "facility_cost": 2850000.0
+      },
+      "rei": {
+        "max_rei": 1.0,
+        "facility_id": "DC_HYDERABAD",
+        "n_facilities_assessed": 6
+      },
+      "risk": {
+        "max_risk_factor": 0.94,
+        "likelihood": 0.7
+      },
+      "forecast": {
+        "market_id": "MKT_DELHI",
+        "signal_id": "sig_delhi_expansion"
+      }
+    },
+    "template_path": {
+      "source": "template",
+      "confidence": "MEDIUM",
+      "grounding_status": "GROUNDED",
+      "summary": "I see a business network cost of 3,036,843.42 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see a combined risk factor of 0.940 for the network. I could not use the following analyses; their values are UNKNOWN (not zero): forecast.demand (MISSING).",
+      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "evidence": [
+        "business_network_cost = 3,036,843.42",
+        "risk_factor = 0.940"
+      ],
+      "validation_warnings": [],
+      "unavailable_evidence": {
+        "forecast.demand": {
+          "status": "MISSING",
+          "reason": "not requested for this run"
+        }
+      },
+      "briefing_present": true
+    },
+    "template_unmatched_numbers": [
+      "0.940"
+    ],
+    "gateway": {
+      "available": true,
+      "reason": ""
+    },
+    "live_path": {
+      "source": "template",
+      "confidence": "MEDIUM",
+      "grounding_status": "GROUNDED",
+      "summary": "I see a business network cost of 3,036,843.42 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see a combined risk factor of 0.940 for the network. I could not use the following analyses; their values are UNKNOWN (not zero): forecast.demand (MISSING).",
+      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "evidence": [
+        "business_network_cost = 3,036,843.42",
+        "risk_factor = 0.940"
+      ],
+      "validation_warnings": [
+        "LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
+      ],
+      "gateway_stats": {
+        "available": true,
+        "requests_made": 0,
+        "total_tokens": 0,
+        "last_error": "daily_limit_exceeded",
+        "base_url": "https://rapidinsights-openai-gateway-dev.azurewebsites.net",
+        "token_configured": true
+      },
+      "unmatched_numbers": [
+        "0.940"
+      ],
+      "entities_named": []
+    }
+  },
+  "notes": [],
+  "forced_verdict_reason": null,
+  "error": null
+}

@@ -19,7 +19,9 @@ import pytest
 
 from netgravity.orchestrator import build_orchestrator
 from netgravity.orchestrator.agents.intent_agent import IntentAgent
-from netgravity.orchestrator.agents.llm_gateway import LLMGateway, LLMGatewayConfig, extract_json
+from netgravity.orchestrator.agents.llm_gateway import (
+    LLMGateway, LLMGatewayConfig, extract_json, extract_json_value,
+)
 from netgravity.orchestrator.agents.reasoning_agent import ReasoningAgent
 from netgravity.orchestrator.core.execution_state import (
     ExecutionState,
@@ -868,6 +870,269 @@ class TestLLMBoundary:
         assert extract_json('Here you go:\n{"a": 3}\nhope that helps') == {"a": 3}
         assert extract_json("not json at all") is None
         assert extract_json("") is None
+
+    # ------------------------------------------------------------------
+    # Phase 8.0.1 — JSON extraction
+    # ------------------------------------------------------------------
+
+    def test_extract_json_reads_every_fence_not_only_the_first(self):
+        """
+        A model that fences a note before the answer must still be readable.
+
+        The original implementation used a single non-greedy `re.search`, so it
+        took the FIRST fenced block, failed to parse the note inside it, and
+        reported the real JSON as unreadable.
+        """
+        payload = '{"summary": "done", "confidence": "HIGH"}'
+        text = ("```" + "\nthinking out loud\n" + "```" + "\n"
+                + "```" + "json\n" + payload + "\n" + "```")
+        assert extract_json(text) == {"summary": "done", "confidence": "HIGH"}
+
+    def test_extract_json_refuses_a_top_level_array(self):
+        """
+        Dict-or-None is the CONTRACT, not an oversight.
+
+        `intent_agent`, `reasoning_agent` and `external_signal_agent` all call
+        `.get()` on the result immediately. Returning a list would raise
+        AttributeError inside an agent instead of letting it take the fallback
+        path it is written to take.
+        """
+        assert extract_json('[{"a": 1}]') is None
+        assert extract_json("```" + "json\n[{\"a\": 1}]\n" + "```") is None
+
+    def test_extract_json_value_reads_objects_and_arrays(self):
+        assert extract_json_value('{"a": 1}') == {"a": 1}
+        assert extract_json_value('[{"a": 1}, {"b": 2}]') == [{"a": 1}, {"b": 2}]
+        assert extract_json_value("```" + "json\n[1, 2, 3]\n" + "```") == [1, 2, 3]
+        assert extract_json_value('   \n {"a": 1} \n  ') == {"a": 1}
+        assert extract_json_value('{"a": {"b": [1, {"c": 2}]}}') == {"a": {"b": [1, {"c": 2}]}}
+        assert extract_json_value('[]') == []
+
+    def test_extract_json_value_prefers_the_outermost_container(self):
+        """
+        In prose containing an array of objects, the ARRAY is the answer.
+
+        The object inside opens one character later, so a naive brace-first
+        search returns a fragment of the response instead of the response.
+        """
+        assert extract_json_value('Signals:\n[{"x": 1}]\ndone') == [{"x": 1}]
+
+    def test_extract_json_still_refuses_what_is_not_json(self):
+        """No repair, no prose acceptance, no closing of truncated structures."""
+        for bad in ("not json at all", "", "42", '"a string"', "true",
+                    '{"a": 1', '{"a": 1, "b":', "{'a': 1}"):
+            assert extract_json(bad) is None, bad
+            assert extract_json_value(bad) is None, bad
+
+    def test_extract_json_refuses_a_truncated_object(self):
+        """
+        The Phase 8.0 reasoning failure, reduced to its parser surface.
+
+        A response cut off at the output-token cap is invalid JSON and must stay
+        refused — guessing the missing half is exactly what a grounded system
+        must not do.
+        """
+        full = '{"summary": "a long answer", "confidence": "HIGH"}'
+        assert extract_json(full[:len(full) // 2]) is None
+
+    # ------------------------------------------------------------------
+    # Phase 8.0.1 — reasoning parse-failure diagnosis
+    # ------------------------------------------------------------------
+
+    def test_reasoning_names_the_output_cap_when_it_is_the_cause(self):
+        """
+        A truncated response must be reported as a LENGTH problem.
+
+        Phase 8.0 spent a live call and concluded only "could not be parsed",
+        which hid an exhausted output budget behind the same message a model
+        emitting prose would produce.
+        """
+        from netgravity.llm.gateway_contract import MAX_OUTPUT_TOKENS
+        from netgravity.orchestrator.agents.llm_gateway import LLMResponse, LLMUsage
+        from netgravity.orchestrator.agents.reasoning_agent import ReasoningAgent
+
+        class Truncating:
+            available = True
+
+            def generate(self, prompt, purpose=""):
+                return LLMResponse(
+                    output='{"summary": "I see a business network cost of 1000.00',
+                    request_id="r", usage=LLMUsage(600, MAX_OUTPUT_TOKENS,
+                                                   600 + MAX_OUTPUT_TOKENS),
+                    latency_seconds=1.0, model_name="m", model_version=None)
+
+            def stats(self):
+                return {"requests_made": 1}
+
+        result = ReasoningAgent(Truncating()).reason(
+            {"network_state": {"business_network_cost": 1000.0}},
+            provenance={"business_network_cost": "milp"}, allow_llm=True)
+
+        assert result.source == "template", "must fall back, not invent"
+        joined = " ".join(result.validation_warnings)
+        assert "output budget" in joined, joined
+        assert str(MAX_OUTPUT_TOKENS) in joined, joined
+
+    def test_reasoning_distinguishes_an_empty_body_from_bad_json(self):
+        from netgravity.orchestrator.agents.llm_gateway import LLMResponse, LLMUsage
+        from netgravity.orchestrator.agents.reasoning_agent import ReasoningAgent
+
+        def agent_for(output, out_tokens):
+            class G:
+                available = True
+
+                def generate(self, prompt, purpose=""):
+                    return LLMResponse(output=output, request_id="r",
+                                       usage=LLMUsage(10, out_tokens, 10 + out_tokens),
+                                       latency_seconds=0.1, model_name="m",
+                                       model_version=None)
+
+                def stats(self):
+                    return {"requests_made": 1}
+            return ReasoningAgent(G())
+
+        payload = {"network_state": {"business_network_cost": 1000.0}}
+
+        empty = agent_for("", 50).reason(payload, allow_llm=True)
+        assert "empty body" in " ".join(empty.validation_warnings)
+
+        prose = agent_for("The network looks fine.", 40).reason(payload, allow_llm=True)
+        assert "not valid JSON" in " ".join(prose.validation_warnings)
+
+    def test_a_valid_model_response_reaches_the_reasoning_agent(self):
+        """
+        The point of the fix: a good response must NOT fall back to the template.
+
+        Includes the note-fence shape, which only parses because of the
+        multi-fence change above — the two fixes have to compose.
+        """
+        from netgravity.orchestrator.agents.llm_gateway import LLMResponse, LLMUsage
+        from netgravity.orchestrator.agents.reasoning_agent import ReasoningAgent
+
+        body = (
+            '{"summary": "I see a business network cost of 1,000.00 per period.",'
+            '"key_drivers": ["facility cost"], "risks": ["single-sourced market"],'
+            '"recommendation": "I recommend reviewing the cost base.",'
+            '"confidence": "HIGH",'
+            '"evidence": ["business_network_cost = 1000.0"],'
+            '"claims": [{"type": "business_network_cost", "value": 1000.0,'
+            ' "unit": "currency", "text": "1,000.00"}]}'
+        )
+        shapes = {
+            "plain": body,
+            "fenced": "```" + "json\n" + body + "\n" + "```",
+            "after a note fence": ("```" + "\nnote\n" + "```" + "\n" + "```" + "json\n"
+                                  + body + "\n" + "```"),
+        }
+        for label, output in shapes.items():
+            class G:
+                available = True
+
+                def generate(self, prompt, purpose="", _o=output):
+                    return LLMResponse(output=_o, request_id="r",
+                                       usage=LLMUsage(600, 300, 900),
+                                       latency_seconds=1.0, model_name="m",
+                                       model_version=None)
+
+                def stats(self):
+                    return {"requests_made": 1}
+
+            result = ReasoningAgent(G()).reason(
+                {"network_state": {"business_network_cost": 1000.0}},
+                provenance={"business_network_cost": "milp"}, allow_llm=True)
+            assert result.source == "llm", f"{label} fell back to template"
+            assert "1,000.00" in result.summary, label
+            assert result.grounding_status == "GROUNDED", (label, result.grounding_status)
+            assert result.grounded_claims, label
+
+    def test_a_fabricated_number_is_still_stripped_after_the_parser_fix(self):
+        """The parser fix must not become a route past grounding."""
+        from netgravity.orchestrator.agents.llm_gateway import LLMResponse, LLMUsage
+        from netgravity.orchestrator.agents.reasoning_agent import ReasoningAgent
+
+        class Liar:
+            available = True
+
+            def generate(self, prompt, purpose=""):
+                return LLMResponse(
+                    output='{"summary": "REI is 0.95 and cost is 1.",'
+                           '"recommendation": "Proceed automatically.",'
+                           '"confidence": "HIGH", "evidence": ["max_rei = 0.95"],'
+                           '"claims": [{"type": "max_rei", "value": 0.95,'
+                           ' "unit": "ratio", "text": "0.95"}]}',
+                    request_id="r", usage=LLMUsage(10, 100, 110),
+                    latency_seconds=0.1, model_name="m", model_version=None)
+
+            def stats(self):
+                return {"requests_made": 1}
+
+        payload = {"rei": {"max_rei": 0.309},
+                   "network_state": {"business_network_cost": 3036843.42}}
+        snapshot = {"rei": {"max_rei": 0.309},
+                    "network_state": {"business_network_cost": 3036843.42}}
+        result = ReasoningAgent(Liar()).reason(
+            payload, provenance={"max_rei": "rei_engine",
+                                 "business_network_cost": "milp"}, allow_llm=True)
+
+        assert "0.95" not in f"{result.summary} {result.recommendation}"
+        assert result.confidence == "LOW"
+        assert result.grounding_status == "GROUNDING_FAILED"
+        assert payload == snapshot, "reasoning must not mutate the evidence"
+
+    # ------------------------------------------------------------------
+    # Phase 8.0.1 — NLU model tier
+    # ------------------------------------------------------------------
+
+    def test_bare_nlu_warns_when_the_llm_tier_is_asked_for_and_absent(self, caplog):
+        """
+        The silent degradation that cost Phase 8.0 three apparent live calls.
+
+        Behaviour is unchanged — the rule tier still answers — but the caller is
+        now told that the model tier was unreachable.
+        """
+        import logging
+        from netgravity.orchestrator.conversation.nlu import ConversationalNLU
+        from netgravity.schemas.network import CanonicalNetwork
+
+        network = CanonicalNetwork(facilities=[], products=[], demands=[], lanes=[])
+        nlu = ConversationalNLU()
+
+        with caplog.at_level(logging.WARNING):
+            nlu.understand("and the other one?", network, allow_llm=True)
+            nlu.understand("and the other one?", network, allow_llm=True)
+
+        hits = [r for r in caplog.records if "llm_tier_unavailable" in r.getMessage()]
+        assert len(hits) == 1, "warn once per instance, not per turn"
+
+    def test_offline_nlu_does_not_warn(self, caplog):
+        """`allow_llm=False` is a deliberate offline run, not a misconfiguration."""
+        import logging
+        from netgravity.orchestrator.conversation.nlu import ConversationalNLU
+        from netgravity.schemas.network import CanonicalNetwork
+
+        network = CanonicalNetwork(facilities=[], products=[], demands=[], lanes=[])
+        with caplog.at_level(logging.WARNING):
+            ConversationalNLU().understand("status?", network, allow_llm=False)
+        assert not [r for r in caplog.records
+                    if "llm_tier_unavailable" in r.getMessage()]
+
+    def test_chat_service_wires_the_configured_intent_agent(self):
+        """
+        The wiring Phase 8.0 wrongly reported as broken.
+
+        `ChatService` takes its NLU from the orchestrator's configured agents, so
+        the model tier IS reachable through the real entry point. Only a BARE
+        `ConversationalNLU()` is rules-only, and that default is deliberate.
+        """
+        from netgravity.orchestrator.conversation.chat_service import ChatService
+
+        class FakeOrchestrator:
+            def __init__(self):
+                self.services = {"intent_agent": IntentAgent(gateway="sentinel"),
+                                 "signal_agent": None}
+
+        chat = ChatService(FakeOrchestrator())
+        assert chat.nlu.intent_agent.gateway == "sentinel"
 
     def test_intent_agent_works_without_llm(self):
         agent = IntentAgent(gateway=None)

@@ -229,6 +229,19 @@ class ConversationalNLU:
         intent_agent:  existing two-tier intent parser. Reused, not replaced.
         signal_agent:  existing external-signal parser, whose probability
                        extraction is deterministic and already correct.
+
+    Constructed with no agents, this instance is DETERMINISTIC-ONLY: the
+    defaults below hold no model client, so `allow_llm=True` has nothing to call
+    and every turn is answered by the rule tier. That is deliberate — offline by
+    default, and a bare instance in a test can never reach the network.
+
+    The real entry point supplies the configured agents: `ChatService` builds
+    its NLU from `orchestrator.services["intent_agent"]`, which
+    `build_orchestrator` creates as `IntentAgent(gateway)`. If you are
+    constructing this class yourself and expect the model tier, pass the agents
+    in — a warning is emitted on the first turn that asks for the LLM without
+    one, because the Phase 8.0 validation lost three "live" calls to exactly
+    this silent degradation before the ledger's zero call count gave it away.
     """
 
     def __init__(
@@ -238,6 +251,31 @@ class ConversationalNLU:
     ) -> None:
         self.intent_agent = intent_agent or IntentAgent(None)
         self.signal_agent = signal_agent or ExternalSignalAgent(None)
+        #: Set once the no-client warning has been emitted, so a long
+        #: conversation does not repeat it on every turn.
+        self._warned_no_client = False
+
+    def _warn_if_llm_unavailable(self, allow_llm: bool) -> None:
+        """
+        Say so when the model tier was asked for and cannot be reached.
+
+        Deliberately does NOT change behaviour: the rule tier still answers, and
+        an offline deployment is unaffected. It only removes the silence.
+        """
+        if not allow_llm or self._warned_no_client:
+            return
+        gateway = getattr(self.intent_agent, "gateway", None)
+        if gateway is not None and getattr(gateway, "available", False):
+            return
+        self._warned_no_client = True
+        logger.warning(
+            "orchestrator.nlu.llm_tier_unavailable allow_llm=True but no usable "
+            "model client is configured on this ConversationalNLU; answering "
+            "from deterministic rules only. Pass intent_agent=IntentAgent("
+            "gateway) (ChatService does this from "
+            "orchestrator.services['intent_agent']) if the model tier was "
+            "intended."
+        )
 
     # ------------------------------------------------------------------
     # Entry point
@@ -301,6 +339,8 @@ class ConversationalNLU:
                 current_entity_ids=list(prior_entity_ids),
                 previous_intent=prior_intent,
             )
+
+        self._warn_if_llm_unavailable(allow_llm)
 
         intent, scenarios, source, confidence, rationale, raw, llm_used = \
             self._classify(text, network, resolved_ids, allow_llm, context)

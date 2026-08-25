@@ -1,0 +1,28 @@
+[
+  {
+    "signal_id": "sig_struct_001",
+    "title": "Customer expansion programme confirmed for North India",
+    "published_date": "2026-06-01",
+    "bucket": "CUSTOMER",
+    "direction": "UP",
+    "confidence": "HIGH",
+    "magnitude": "20%",
+    "affected_entities": [
+      "MKT_DELHI"
+    ],
+    "geography": "NORTH",
+    "source": "trade press"
+  },
+  {
+    "signal_id": "sig_struct_002",
+    "title": "Port congestion at eastern terminals",
+    "published_date": "2026-06-02",
+    "bucket": "CARRIER",
+    "direction": "UP",
+    "confidence": "MEDIUM",
+    "affected_entities": [
+      "DC_KOLKATA"
+    ],
+    "source": "carrier notice"
+  }
+]

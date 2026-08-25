@@ -1,0 +1,252 @@
+{
+  "capability": "rf",
+  "verdict": "PASS",
+  "n_checks": 13,
+  "n_failed": 0,
+  "duration_seconds": 0.021,
+  "checks": [
+    {
+      "check": "RF(0.70, 0.80) = 0.94 exactly",
+      "ok": true,
+      "detail": 0.94
+    },
+    {
+      "check": "the formula is stated on the result",
+      "ok": true,
+      "detail": "RF = P + REI - P*REI"
+    },
+    {
+      "check": "status is computable for a complete input",
+      "ok": true,
+      "detail": "COMPUTED"
+    },
+    {
+      "check": "RF matches P + REI - P*REI across the range",
+      "ok": true,
+      "detail": [
+        {
+          "P": 0.0,
+          "REI": 0.5,
+          "expected": 0.5,
+          "got": 0.5,
+          "ok": true
+        },
+        {
+          "P": 1.0,
+          "REI": 0.5,
+          "expected": 1.0,
+          "got": 1.0,
+          "ok": true
+        },
+        {
+          "P": 0.3,
+          "REI": 0.0,
+          "expected": 0.3,
+          "got": 0.3,
+          "ok": true
+        },
+        {
+          "P": 0.5,
+          "REI": 1.0,
+          "expected": 1.0,
+          "got": 1.0,
+          "ok": true
+        },
+        {
+          "P": 0.25,
+          "REI": 0.25,
+          "expected": 0.4375,
+          "got": 0.4375,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "check": "missing_probability -> NOT_COMPUTABLE with no number",
+      "ok": true,
+      "detail": {
+        "status": "NOT_COMPUTABLE",
+        "rf": null,
+        "reason": "NO_EVENT_PROBABILITY"
+      }
+    },
+    {
+      "check": "missing_rei -> NOT_COMPUTABLE with no number",
+      "ok": true,
+      "detail": {
+        "status": "NOT_COMPUTABLE",
+        "rf": null,
+        "reason": "NO_REI"
+      }
+    },
+    {
+      "check": "both_missing -> NOT_COMPUTABLE with no number",
+      "ok": true,
+      "detail": {
+        "status": "NOT_COMPUTABLE",
+        "rf": null,
+        "reason": "NO_INPUTS"
+      }
+    },
+    {
+      "check": "probability_above_one is refused, not clamped",
+      "ok": true,
+      "detail": "raised ValidationFailureError"
+    },
+    {
+      "check": "negative_probability is refused, not clamped",
+      "ok": true,
+      "detail": "raised ValidationFailureError"
+    },
+    {
+      "check": "rei_above_one is refused, not clamped",
+      "ok": true,
+      "detail": "raised ValidationFailureError"
+    },
+    {
+      "check": "a SEVERE signal with no probability carries none",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "critical severity without probability -> RF NOT COMPUTABLE",
+      "ok": true,
+      "detail": {
+        "status": "NOT_COMPUTABLE"
+      }
+    },
+    {
+      "check": "RF code never reads severity, confidence, materiality or direction",
+      "ok": true,
+      "detail": []
+    }
+  ],
+  "evidence": {
+    "worked_example": {
+      "status": "COMPUTED",
+      "not_computable_reason": null,
+      "likelihood": 0.7,
+      "rei": 0.8,
+      "risk_factor": 0.94,
+      "formula": "RF = P + REI - P*REI",
+      "provenance": {},
+      "facility_id": "DC_DELHI",
+      "notes": []
+    },
+    "algebra": [
+      {
+        "P": 0.0,
+        "REI": 0.5,
+        "expected": 0.5,
+        "got": 0.5,
+        "ok": true
+      },
+      {
+        "P": 1.0,
+        "REI": 0.5,
+        "expected": 1.0,
+        "got": 1.0,
+        "ok": true
+      },
+      {
+        "P": 0.3,
+        "REI": 0.0,
+        "expected": 0.3,
+        "got": 0.3,
+        "ok": true
+      },
+      {
+        "P": 0.5,
+        "REI": 1.0,
+        "expected": 1.0,
+        "got": 1.0,
+        "ok": true
+      },
+      {
+        "P": 0.25,
+        "REI": 0.25,
+        "expected": 0.4375,
+        "got": 0.4375,
+        "ok": true
+      }
+    ],
+    "refusals": {
+      "missing_probability": {
+        "status": "NOT_COMPUTABLE",
+        "not_computable_reason": "NO_EVENT_PROBABILITY",
+        "likelihood": null,
+        "rei": 0.8,
+        "risk_factor": null,
+        "formula": "RF = P + REI - P*REI",
+        "provenance": {},
+        "facility_id": null,
+        "notes": [
+          "No defensible event probability (P) was available. Severity, confidence and source quality are NOT probabilities and are never substituted for one."
+        ]
+      },
+      "missing_rei": {
+        "status": "NOT_COMPUTABLE",
+        "not_computable_reason": "NO_REI",
+        "likelihood": 0.7,
+        "rei": null,
+        "risk_factor": null,
+        "formula": "RF = P + REI - P*REI",
+        "provenance": {},
+        "facility_id": null,
+        "notes": [
+          "Network exposure (REI) was unavailable, so combined risk cannot be formed."
+        ]
+      },
+      "both_missing": {
+        "status": "NOT_COMPUTABLE",
+        "not_computable_reason": "NO_INPUTS",
+        "likelihood": null,
+        "rei": null,
+        "risk_factor": null,
+        "formula": "RF = P + REI - P*REI",
+        "provenance": {},
+        "facility_id": null,
+        "notes": [
+          "Neither an event probability nor a network exposure value was available."
+        ]
+      },
+      "probability_above_one": {
+        "raised": "ValidationFailureError",
+        "message": "likelihood (P) must lie in [0, 1], got 1.4. Out-of-range values are rejected rather than clamped, because they indicate an upstream defect."
+      },
+      "negative_probability": {
+        "raised": "ValidationFailureError",
+        "message": "likelihood (P) must lie in [0, 1], got -0.2. Out-of-range values are rejected rather than clamped, because they indicate an upstream defect."
+      },
+      "rei_above_one": {
+        "raised": "ValidationFailureError",
+        "message": "rei (REI) must not exceed 1.0, got 1.4. REI is normalised against the largest performance impact, so a value above 1.0 indicates a defect."
+      }
+    },
+    "critical_without_probability": {
+      "schema_version": 2,
+      "event_type": "DISRUPTION",
+      "location": "",
+      "severity": "SEVERE",
+      "event_probability": null,
+      "probability_basis": null,
+      "source": "unspecified",
+      "source_quality": null,
+      "timestamp": null,
+      "validity_period": null,
+      "confidence": 0.0,
+      "evidence": "",
+      "affected_entity_ids": [
+        "DC_DELHI"
+      ]
+    },
+    "rf_identifiers_checked": {
+      "leaked": []
+    }
+  },
+  "notes": [
+    "out-of-range inputs RAISE (ValidationFailureError) rather than returning NOT_COMPUTABLE: the engine treats an impossible probability as an upstream defect and refuses to clamp it. Missing inputs return a typed refusal instead. Two different situations, two different behaviours."
+  ],
+  "forced_verdict_reason": null,
+  "error": null
+}

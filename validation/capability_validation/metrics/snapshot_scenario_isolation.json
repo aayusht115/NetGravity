@@ -1,0 +1,94 @@
+{
+  "capability": "snapshot_scenario_isolation",
+  "verdict": "PASS",
+  "n_checks": 9,
+  "n_failed": 0,
+  "duration_seconds": 0.945,
+  "checks": [
+    {
+      "check": "both scenarios are created with distinct ids",
+      "ok": true,
+      "detail": {
+        "a": "scn_c7d35bd586",
+        "b": "scn_dd586dcf1c"
+      }
+    },
+    {
+      "check": "scenario A changed only its own market",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "scenario B did not contaminate scenario A",
+      "ok": true,
+      "detail": {
+        "A_mumbai": 1092.64,
+        "baseline_mumbai": 1092.64
+      }
+    },
+    {
+      "check": "scenario A did not contaminate scenario B",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "the observed baseline is unchanged after both scenarios",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "scenarios are flagged hypothetical",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "each scenario solve carries its own scenario_id",
+      "ok": true,
+      "detail": {
+        "a": "scn_c7d35bd586",
+        "b": "scn_dd586dcf1c"
+      }
+    },
+    {
+      "check": "scenario solves are marked hypothetical",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "a demand increase costs more than a decrease",
+      "ok": true,
+      "detail": {
+        "a": 3043196.7748909653,
+        "b": 3022265.010215991
+      }
+    }
+  ],
+  "evidence": {
+    "scenarios": {
+      "a": {
+        "id": "scn_c7d35bd586",
+        "delhi": 1131.8500000000001,
+        "mumbai": 1092.64
+      },
+      "b": {
+        "id": "scn_dd586dcf1c",
+        "delhi": 870.66,
+        "mumbai": 655.5799999999999
+      },
+      "baseline": {
+        "delhi": 870.66,
+        "mumbai": 1092.64
+      }
+    },
+    "scenario_objectives": {
+      "baseline": 3036843.421765966,
+      "a": 3043196.7748909653,
+      "b": 3022265.010215991
+    }
+  },
+  "notes": [
+    "only 1 twin state(s) for this snapshot; comparison needs two, so it was not exercised"
+  ],
+  "forced_verdict_reason": null,
+  "error": null
+}

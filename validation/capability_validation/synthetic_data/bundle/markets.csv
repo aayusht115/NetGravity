@@ -1,0 +1,8 @@
+Market_ID,Market_Name,Latitude,Longitude,Region,SLA_Days
+MKT_DELHI,Mkt Delhi,28.65,77.23,NORTH,3.0
+MKT_MUMBAI,Mkt Mumbai,19.2,72.98,WEST,3.0
+MKT_KOLKATA,Mkt Kolkata,22.6,88.4,EAST,3.0
+MKT_CHENNAI,Mkt Chennai,13.05,80.25,SOUTH,3.0
+MKT_BANGALORE,Mkt Bangalore,12.93,77.62,SOUTH,3.0
+MKT_HYDERABAD,Mkt Hyderabad,17.42,78.45,SOUTH,3.0
+MKT_PUNE,Mkt Pune,18.55,73.9,WEST,3.0

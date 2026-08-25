@@ -1,0 +1,190 @@
+{
+  "capability": "extraction",
+  "verdict": "PASS",
+  "n_checks": 14,
+  "n_failed": 0,
+  "duration_seconds": 0.743,
+  "checks": [
+    {
+      "check": "extraction imports no MILP/REI/RF/governance/forecasting",
+      "ok": true,
+      "detail": "clean"
+    },
+    {
+      "check": "structured signal file parses into typed signals",
+      "ok": true,
+      "detail": "2 signals"
+    },
+    {
+      "check": "signal type is MarketIntelligenceSignal",
+      "ok": true,
+      "detail": "MarketIntelligenceSignal"
+    },
+    {
+      "check": "affected entity preserved exactly",
+      "ok": true,
+      "detail": [
+        "MKT_DELHI"
+      ]
+    },
+    {
+      "check": "no probability field on a market signal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "guardrail verdict attached (provenance of the decision)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "every entity named is in the master data",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "prose adapter returns typed signals or an explicit empty result",
+      "ok": true,
+      "detail": "1 signals in stub mode"
+    },
+    {
+      "check": "prose adapter invents no entity outside master data",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "agent returns a typed result for valid directory",
+      "ok": true,
+      "detail": "REJECTED"
+    },
+    {
+      "check": "provenance retained for valid directory",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "agent returns a typed result for missing path",
+      "ok": true,
+      "detail": "REJECTED"
+    },
+    {
+      "check": "malformed input yields an explicit failure status, not a fake success",
+      "ok": true,
+      "detail": "REJECTED"
+    },
+    {
+      "check": "provenance retained for missing path",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence": {
+    "structured_signals": [
+      {
+        "signal_id": "sig_struct_001",
+        "title": "Customer expansion programme confirmed for North India",
+        "source_title": "trade press",
+        "source_url": null,
+        "published_date": "2026-06-01",
+        "effective_date": null,
+        "bucket": "CUSTOMER",
+        "direction": "UP",
+        "magnitude": "20%",
+        "affected_entities": [
+          "MKT_DELHI"
+        ],
+        "geography": "NORTH",
+        "confidence": "HIGH",
+        "rationale": "",
+        "scenario_use": "FORECAST_ENRICHMENT",
+        "verdict": {
+          "passed": true,
+          "bucket": "CUSTOMER",
+          "relevance_score": 1.0,
+          "threshold": 0.6,
+          "reason": "score 1.00 passes threshold 0.60 (base 0.70 for CUSTOMER; +0.25 names our nodes (MKT_DELHI); +0.15 source confidence HIGH).",
+          "matched_entities": [
+            "MKT_DELHI"
+          ]
+        },
+        "structured_by": "seed"
+      },
+      {
+        "signal_id": "sig_struct_002",
+        "title": "Port congestion at eastern terminals",
+        "source_title": "carrier notice",
+        "source_url": null,
+        "published_date": "2026-06-02",
+        "effective_date": null,
+        "bucket": "CARRIER",
+        "direction": "UP",
+        "magnitude": "",
+        "affected_entities": [
+          "DC_KOLKATA"
+        ],
+        "geography": "",
+        "confidence": "MEDIUM",
+        "rationale": "",
+        "scenario_use": "FORECAST_ENRICHMENT",
+        "verdict": {
+          "passed": true,
+          "bucket": "CARRIER",
+          "relevance_score": 1.0,
+          "threshold": 0.6,
+          "reason": "score 1.00 passes threshold 0.60 (base 0.70 for CARRIER; +0.25 names our nodes (DC_KOLKATA); +0.05 source confidence MEDIUM).",
+          "matched_entities": [
+            "DC_KOLKATA"
+          ]
+        },
+        "structured_by": "seed"
+      }
+    ],
+    "prose_article_path": "validation\\capability_validation\\synthetic_data\\signals\\market_article.txt",
+    "prose_signals_stub_mode": [
+      {
+        "signal_id": "sig-3e214591-1",
+        "title": "Bulk diesel price revised upward by 8%",
+        "source_title": "Petroleum Planning and Analysis Cell",
+        "source_url": null,
+        "published_date": "2026-07-14",
+        "effective_date": "2026-07-16",
+        "bucket": "MACRO",
+        "direction": "UP",
+        "magnitude": "+8%",
+        "affected_entities": [],
+        "geography": "India",
+        "confidence": "HIGH",
+        "rationale": "Structured offline without a live model.",
+        "scenario_use": "SEPARATE_WHATIF",
+        "verdict": {
+          "passed": true,
+          "bucket": "MACRO",
+          "relevance_score": 0.8,
+          "threshold": 0.6,
+          "reason": "score 0.80 passes threshold 0.60 (base 0.45 for MACRO; +0.15 source confidence HIGH; +0.20 magnitude 8.0% clears the 5.0% materiality bar).",
+          "matched_entities": []
+        },
+        "structured_by": "stub"
+      }
+    ],
+    "agent_valid_directory": {
+      "status": "REJECTED",
+      "errors": [
+        "Unsupported source 'D:\\Case Comp\\Kearney\\netgravity\\validation\\capability_validation\\synthetic_data\\ingest_root\\raw\\phase8'. Recognised formats are ['.csv', '.md', '.pdf', '.tsv', '.txt', '.xls', '.xlsx'] in a directory or as a single file."
+      ],
+      "warnings": [],
+      "has_provenance": true
+    },
+    "agent_missing_path": {
+      "status": "REJECTED",
+      "errors": [
+        "Unsupported source 'D:\\Case Comp\\Kearney\\netgravity\\validation\\capability_validation\\synthetic_data\\does_not_exist_xyz'. Recognised formats are ['.csv', '.md', '.pdf', '.tsv', '.txt', '.xls', '.xlsx'] in a directory or as a single file."
+      ],
+      "warnings": [],
+      "has_provenance": true
+    }
+  },
+  "notes": [],
+  "forced_verdict_reason": null,
+  "error": null
+}

@@ -23,6 +23,7 @@ import logging
 import re
 from typing import Any, Dict, List, Optional
 
+from netgravity.llm.gateway_contract import MAX_OUTPUT_TOKENS
 from netgravity.orchestrator.agents.llm_gateway import LLMGateway, extract_json
 from netgravity.orchestrator.exceptions import LLMFailureError
 from netgravity.orchestrator.reasoning.evidence import build_evidence_pack
@@ -58,6 +59,9 @@ class ReasoningAgent:
     ) -> None:
         self.gateway = gateway
         self.runtime = runtime
+        #: Why the most recent live response could not be parsed, if it could
+        #: not. Diagnostic only; never read as reasoning content.
+        self._last_parse_failure: str = ""
 
     def reason(
         self,
@@ -149,8 +153,11 @@ class ReasoningAgent:
         if result is None:
             fallback = self._template(payload, missing, scope, entity_id, evidence_pack)
             fallback.unavailable_evidence = missing
+            detail = getattr(self, "_last_parse_failure", "")
             fallback.validation_warnings.append(
-                "LLM reasoning output could not be parsed; deterministic template used."
+                "LLM reasoning output could not be parsed; deterministic "
+                "template used."
+                + (f" Cause: {detail}" if detail else "")
             )
             return self._ground(fallback, payload, provenance)
 
@@ -288,6 +295,16 @@ class ReasoningAgent:
             "- Write the summary and recommendation in first-person singular (I/my), "
             "never we/our. Lead with the decision-relevant finding and explain what "
             "the KPIs mean instead of dumping figures.\n\n"
+            # Length matters here, not just shape. The gateway caps OUTPUT at
+            # MAX_OUTPUT_TOKENS and gpt-5-mini spends part of that budget on
+            # internal reasoning, so a verbose answer is truncated mid-JSON and
+            # arrives unparseable. The caps below match what the parser keeps
+            # anyway (8 list items, 400 chars each), so asking for less discards
+            # nothing that would have survived.
+            "Be concise. Keep the whole reply under 250 words: at most 3 "
+            "key_drivers, 2 risks, 4 evidence entries and 6 claims, each a "
+            "single short sentence. A reply that runs long is truncated and "
+            "discarded entirely.\n"
             "Return ONLY a JSON object, no prose and no code fences:\n"
             "{\n"
             '  "summary": "2-4 sentences on what the analysis shows",\n'
@@ -313,6 +330,15 @@ class ReasoningAgent:
         response = self.gateway.generate(prompt, purpose="reasoning")
         parsed = extract_json(response.output)
         if not parsed:
+            # WHY it could not be parsed is operationally different in each
+            # case, and the generic message hid an output-cap problem for a
+            # whole validation phase. Recorded on the agent for the caller to
+            # attach; nothing is inferred from the unparseable text itself.
+            self._last_parse_failure = self._describe_parse_failure(response)
+            logger.warning(
+                "orchestrator.reasoning.llm_unparseable request_id=%s reason=%s",
+                response.request_id, self._last_parse_failure,
+            )
             return None
 
         confidence = str(parsed.get("confidence", "LOW")).strip().upper()
@@ -336,6 +362,40 @@ class ReasoningAgent:
             evidence=as_list("evidence"),
             source="llm",
             grounded_claims=structured,
+        )
+
+    @staticmethod
+    def _describe_parse_failure(response: Any) -> str:
+        """
+        Say why a successful gateway call produced no usable JSON.
+
+        Three distinguishable causes, and they call for different responses:
+        an exhausted output budget is a prompt-length problem, an empty body is
+        a gateway problem, and anything else is the model not following the
+        response contract. Guessing between them costs a live call each time.
+        """
+        usage = getattr(response, "usage", None)
+        output_tokens = getattr(usage, "output_tokens", None) or 0
+        text = (getattr(response, "output", "") or "")
+
+        if not text.strip():
+            return ("the gateway returned an empty body; no output to parse "
+                    f"(output_tokens={output_tokens})")
+
+        if output_tokens >= MAX_OUTPUT_TOKENS:
+            return (
+                f"the response exhausted the gateway's {MAX_OUTPUT_TOKENS}-token "
+                f"output budget (output_tokens={output_tokens}), so the JSON was "
+                f"truncated mid-structure. This is a response-length problem, "
+                f"not malformed model behaviour: a reasoning model spends part "
+                f"of that budget on internal reasoning before emitting text."
+            )
+
+        return (
+            f"the response was not valid JSON and no JSON object could be "
+            f"recovered from it (output_tokens={output_tokens}, "
+            f"{len(text)} chars). First 200 characters, for diagnosis: "
+            f"{text.strip()[:200]!r}"
         )
 
     # ------------------------------------------------------------------

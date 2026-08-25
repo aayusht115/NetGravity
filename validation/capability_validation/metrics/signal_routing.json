@@ -1,0 +1,155 @@
+{
+  "capability": "signal_routing",
+  "verdict": "PASS",
+  "n_checks": 10,
+  "n_failed": 0,
+  "duration_seconds": 0.023,
+  "checks": [
+    {
+      "check": "sig_rel -> ROUTED_TO_FORECASTING",
+      "ok": true,
+      "detail": {
+        "got": "ROUTED_TO_FORECASTING"
+      }
+    },
+    {
+      "check": "sig_low -> LOW_CONFIDENCE",
+      "ok": true,
+      "detail": {
+        "got": "LOW_CONFIDENCE"
+      }
+    },
+    {
+      "check": "sig_oos -> OUT_OF_SCOPE",
+      "ok": true,
+      "detail": {
+        "got": "OUT_OF_SCOPE"
+      }
+    },
+    {
+      "check": "sig_gr -> GUARDRAIL_NOT_PASSED",
+      "ok": true,
+      "detail": {
+        "got": "GUARDRAIL_NOT_PASSED"
+      }
+    },
+    {
+      "check": "sig_nfu -> NOT_FORECAST_USE",
+      "ok": true,
+      "detail": {
+        "got": "NOT_FORECAST_USE"
+      }
+    },
+    {
+      "check": "RF-eligible ExternalSignal -> REFUSED_RISK_SIGNAL",
+      "ok": true,
+      "detail": [
+        "carries 'event_probability' and is therefore a risk signal. Event likelihood belongs to the RF pathway (P + REI - P*REI) and is never a forecasting input."
+      ]
+    },
+    {
+      "check": "the risk signal never enters the accepted set",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "HIGH and MEDIUM confidence both route, with no numeric difference",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no routing record carries a probability",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "router source contains no float() conversion",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence": {
+    "outcomes": {
+      "sig_rel": "ROUTED_TO_FORECASTING",
+      "sig_irr": "ROUTED_TO_FORECASTING",
+      "sig_low": "LOW_CONFIDENCE",
+      "sig_oos": "OUT_OF_SCOPE",
+      "sig_gr": "GUARDRAIL_NOT_PASSED",
+      "sig_nfu": "NOT_FORECAST_USE",
+      "<unknown>": "REFUSED_RISK_SIGNAL"
+    },
+    "outcome_counts": {
+      "ROUTED_TO_FORECASTING": 2,
+      "LOW_CONFIDENCE": 1,
+      "OUT_OF_SCOPE": 1,
+      "GUARDRAIL_NOT_PASSED": 1,
+      "NOT_FORECAST_USE": 1,
+      "REFUSED_RISK_SIGNAL": 1
+    },
+    "accepted": [
+      "sig_rel",
+      "sig_irr"
+    ],
+    "audit_rows": [
+      {
+        "signal_id": "sig_rel",
+        "outcome": "ROUTED_TO_FORECASTING",
+        "bucket": "CUSTOMER",
+        "reason": "eligible market intelligence within network scope",
+        "matched_entities": [
+          "MKT_DELHI"
+        ]
+      },
+      {
+        "signal_id": "sig_irr",
+        "outcome": "ROUTED_TO_FORECASTING",
+        "bucket": "CARRIER",
+        "reason": "eligible market intelligence within network scope",
+        "matched_entities": [
+          "DC_KOLKATA"
+        ]
+      },
+      {
+        "signal_id": "sig_low",
+        "outcome": "LOW_CONFIDENCE",
+        "bucket": "CUSTOMER",
+        "reason": "confidence LOW is below the routing threshold ['HIGH', 'MEDIUM']",
+        "matched_entities": []
+      },
+      {
+        "signal_id": "sig_oos",
+        "outcome": "OUT_OF_SCOPE",
+        "bucket": "CUSTOMER",
+        "reason": "names no entity in the pinned network",
+        "matched_entities": []
+      },
+      {
+        "signal_id": "sig_gr",
+        "outcome": "GUARDRAIL_NOT_PASSED",
+        "bucket": "CUSTOMER",
+        "reason": "did not clear the ingestion relevance guardrail",
+        "matched_entities": []
+      },
+      {
+        "signal_id": "sig_nfu",
+        "outcome": "NOT_FORECAST_USE",
+        "bucket": "CUSTOMER",
+        "reason": "extraction classified this signal as LOGGED_ONLY, not FORECAST_ENRICHMENT",
+        "matched_entities": []
+      },
+      {
+        "signal_id": "<unknown>",
+        "outcome": "REFUSED_RISK_SIGNAL",
+        "bucket": "UNKNOWN",
+        "reason": "carries 'event_probability' and is therefore a risk signal. Event likelihood belongs to the RF pathway (P + REI - P*REI) and is never a forecasting input.",
+        "matched_entities": []
+      }
+    ],
+    "irrelevant_bucket_outcome": "ROUTED_TO_FORECASTING"
+  },
+  "notes": [
+    "a CARRIER signal naming a real DC is routed (it is in scope and permitted); it changes no demand because the enricher has no carrier rule. Case B in section 8 proves the no-change end to end."
+  ],
+  "forced_verdict_reason": null,
+  "error": null
+}

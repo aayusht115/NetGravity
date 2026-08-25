@@ -47,7 +47,7 @@ import re
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Protocol, runtime_checkable
+from typing import Any, Dict, List, Optional, Protocol, Union, runtime_checkable
 
 from netgravity.llm import gateway_contract
 from netgravity.telemetry import record_call
@@ -469,16 +469,111 @@ class LLMGateway:
 # Defensive JSON extraction
 # ---------------------------------------------------------------------------
 
-def extract_json(text: str) -> Optional[Dict[str, Any]]:
+#: Matches ONE fenced block. Applied with `findall`, so a response with
+#: several fences yields every candidate rather than only the first.
+_FENCE_PATTERN = r"```(?:json|JSON)?\s*(.+?)```"
+
+
+def _json_candidates(text: str) -> List[str]:
     """
-    Best-effort extraction of a JSON object from model output.
+    Substrings of model output that might be JSON, best candidate first.
+
+    Ordered deliberately: the whole text first, then each fenced block, then the
+    outermost balanced brace span and bracket span. EVERY fence is offered
+    rather than only the first, because a model that emits an explanatory fence
+    before the real answer is common and the previous implementation read only
+    the first one — so a response shaped like
+
+        ```note```
+        ```json {"summary": "..."} ```
+
+    parsed the note, failed, and reported the JSON as unreadable.
+    """
+    candidates: List[str] = []
+
+    def add(value: Optional[str]) -> None:
+        if not value:
+            return
+        stripped = value.strip()
+        if stripped and stripped not in candidates:
+            candidates.append(stripped)
+
+    whole = text.strip()
+    add(whole)
+
+    for block in re.findall(_FENCE_PATTERN, whole, re.DOTALL):
+        add(block)
+
+    # Outermost balanced span per container type, so JSON embedded in prose is
+    # still reachable. Collected with their start offsets and then offered
+    # EARLIEST FIRST, so the outermost value wins: given prose that reads
+    # 'Signals:' then an array then 'done', the array opens one character
+    # before the object inside it, and trying the object first would return
+    # a fragment of the answer instead of the answer itself.
+    spans: List[tuple] = []
+    for opener, closer in (("{", "}"), ("[", "]")):
+        begin = whole.find(opener)
+        if begin == -1:
+            continue
+        depth = 0
+        for idx in range(begin, len(whole)):
+            char = whole[idx]
+            if char == opener:
+                depth += 1
+            elif char == closer:
+                depth -= 1
+                if depth == 0:
+                    spans.append((begin, whole[begin:idx + 1]))
+                    break
+    for _, span in sorted(spans, key=lambda item: item[0]):
+        add(span)
+
+    return candidates
+
+
+def extract_json_value(text: str) -> Optional[Union[Dict[str, Any], List[Any]]]:
+    """
+    Best-effort extraction of a JSON OBJECT OR ARRAY from model output.
 
     The gateway offers no structured-output mode, so responses may arrive
     wrapped in prose or fenced code blocks. Returns None rather than raising —
     callers must always have a non-LLM fallback.
+
+    Strictly a JSON parser. Nothing here repairs malformed JSON, closes a
+    truncated structure, or infers a value from prose: output that is not valid
+    JSON returns None, because a half-read model answer is more dangerous than
+    no answer at all.
+
+    Use this where a LIST is a legitimate response shape — several signals
+    extracted from one document, say. Use `extract_json` where the contract is a
+    single object, which is what every orchestrator agent expects today.
     """
     if not text:
         return None
+    for candidate in _json_candidates(text):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, (dict, list)):
+            return parsed
+    return None
+
+
+def extract_json(text: str) -> Optional[Dict[str, Any]]:
+    """
+    Best-effort extraction of a JSON OBJECT from model output.
+
+    Returns None for anything that is not a top-level object, INCLUDING a valid
+    top-level array. That is the contract rather than an oversight: every caller
+    here (`intent_agent`, `reasoning_agent`, `external_signal_agent`) calls
+    `.get()` on the result immediately, so handing one a list would raise
+    AttributeError deep inside an agent instead of taking the fallback path it
+    is written to take. A caller that legitimately expects a list should use
+    `extract_json_value`.
+    """
+    parsed = extract_json_value(text)
+    return parsed if isinstance(parsed, dict) else None
 
     candidate = text.strip()
 

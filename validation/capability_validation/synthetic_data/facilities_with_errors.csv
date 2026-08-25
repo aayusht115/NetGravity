@@ -1,0 +1,6 @@
+Facility_ID,Facility_Name,Type,Capacity_Units,Fixed_Annual_Cost
+DC_DELHI,Dc Delhi,DC,2600.0,2400000.0
+DC_BROKEN,Dc Broken,DC,-500.0,2400000.0
+DC_NOCAP,Dc Nocap,DC,,2400000.0
+DC_BADROLE,Dc Badrole,TELEPORTER,900.0,2400000.0
+,Nameless,DC,900.0,2400000.0

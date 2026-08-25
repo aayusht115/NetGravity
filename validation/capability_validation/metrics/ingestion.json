@@ -1,0 +1,448 @@
+{
+  "capability": "ingestion",
+  "verdict": "PASS",
+  "n_checks": 21,
+  "n_failed": 0,
+  "duration_seconds": 12.124,
+  "checks": [
+    {
+      "check": "bundle: every row is accepted",
+      "ok": true,
+      "detail": "72/72 accepted"
+    },
+    {
+      "check": "bundle: facilities reconstructed",
+      "ok": true,
+      "detail": {
+        "got": 15,
+        "expected": 15
+      }
+    },
+    {
+      "check": "bundle: lanes reconstructed",
+      "ok": true,
+      "detail": {
+        "got": 41,
+        "expected": 41
+      }
+    },
+    {
+      "check": "bundle: demand reconstructed",
+      "ok": true,
+      "detail": {
+        "got": 14,
+        "expected": 14
+      }
+    },
+    {
+      "check": "bundle: products reconstructed",
+      "ok": true,
+      "detail": {
+        "got": 2,
+        "expected": 2
+      }
+    },
+    {
+      "check": "bundle: a repeat run gives identical canonical counts",
+      "ok": true,
+      "detail": {
+        "first": {
+          "facilities": 15,
+          "products": 2,
+          "demands": 14,
+          "lanes": 41
+        },
+        "second": {
+          "facilities": 15,
+          "products": 2,
+          "demands": 14,
+          "lanes": 41
+        }
+      }
+    },
+    {
+      "check": "client-style headers: rows are read",
+      "ok": true,
+      "detail": {
+        "per_file": [],
+        "rows_read": 0,
+        "rows_accepted": 0,
+        "rows_rejected": 0,
+        "issue_codes": [],
+        "issues": [],
+        "n_review_items": 9,
+        "review_questions": [
+          "\"Site Code\" is not in the current schema. How should it be kept?",
+          "\"Site Name\" is not in the current schema. How should it be kept?",
+          "\"Facility Category\" is not in the current schema. How should it be kept?",
+          "\"Monthly Capacity (cases)\" is not in the current schema. How should it be kept?",
+          "\"Annual Fixed Cost (INR)\" is not in the current schema. How should it be kept?",
+          "\"Handling Rate\" is not in the current schema. How should it be kept?"
+        ],
+        "canonical": {
+          "facilities": 0,
+          "products": 0,
+          "demands": 0,
+          "lanes": 0
+        }
+      }
+    },
+    {
+      "check": "client-style headers: unfamiliar columns raise clarification questions rather than being guessed",
+      "ok": true,
+      "detail": [
+        "\"Site Code\" is not in the current schema. How should it be kept?",
+        "\"Site Name\" is not in the current schema. How should it be kept?",
+        "\"Facility Category\" is not in the current schema. How should it be kept?",
+        "\"Monthly Capacity (cases)\" is not in the current schema. How should it be kept?",
+        "\"Annual Fixed Cost (INR)\" is not in the current schema. How should it be kept?",
+        "\"Handling Rate\" is not in the current schema. How should it be kept?"
+      ]
+    },
+    {
+      "check": "client-style headers: nothing unmapped reaches the canonical model",
+      "ok": true,
+      "detail": {
+        "facilities": 0,
+        "products": 0,
+        "demands": 0,
+        "lanes": 0
+      }
+    },
+    {
+      "check": "defective rows are reported as typed issues",
+      "ok": true,
+      "detail": [
+        "R-001",
+        "R-003",
+        "R-005"
+      ]
+    },
+    {
+      "check": "defective rows are rejected, not silently accepted",
+      "ok": true,
+      "detail": "3 rejected of 5"
+    },
+    {
+      "check": "the valid rows still come through",
+      "ok": true,
+      "detail": "2 accepted"
+    },
+    {
+      "check": "negative capacity, unknown role and missing id are each caught",
+      "ok": true,
+      "detail": [
+        "R-001",
+        "R-003",
+        "R-005"
+      ]
+    },
+    {
+      "check": "a lane naming an entity the bundle never declared is rejected",
+      "ok": true,
+      "detail": [
+        "R-006"
+      ]
+    },
+    {
+      "check": "canonical network is produced",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "entities preserved",
+      "ok": true,
+      "detail": "15 facilities"
+    },
+    {
+      "check": "lanes preserved",
+      "ok": true,
+      "detail": "41 lanes"
+    },
+    {
+      "check": "demand preserved",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "capacities preserved",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "snapshot is versioned",
+      "ok": true,
+      "detail": {
+        "snapshot_id": "snap_fcaff26d4f4b",
+        "data_version": "fcaff26d4f4b11c8"
+      }
+    },
+    {
+      "check": "re-registering the same network is idempotent",
+      "ok": true,
+      "detail": "snapshot id is keyed on data_version"
+    }
+  ],
+  "evidence": {
+    "bundle": {
+      "per_file": [
+        {
+          "file": "facilities.csv",
+          "adapter": "structured",
+          "read": 8,
+          "accepted": 8,
+          "rejected": 0,
+          "codes": []
+        },
+        {
+          "file": "markets.csv",
+          "adapter": "structured",
+          "read": 7,
+          "accepted": 7,
+          "rejected": 0,
+          "codes": []
+        },
+        {
+          "file": "products.csv",
+          "adapter": "structured",
+          "read": 2,
+          "accepted": 2,
+          "rejected": 0,
+          "codes": []
+        },
+        {
+          "file": "demand.csv",
+          "adapter": "structured",
+          "read": 14,
+          "accepted": 14,
+          "rejected": 0,
+          "codes": []
+        },
+        {
+          "file": "lanes.csv",
+          "adapter": "structured",
+          "read": 41,
+          "accepted": 41,
+          "rejected": 0,
+          "codes": []
+        }
+      ],
+      "rows_read": 72,
+      "rows_accepted": 72,
+      "rows_rejected": 0,
+      "issue_codes": [],
+      "issues": [],
+      "n_review_items": 0,
+      "review_questions": [],
+      "canonical": {
+        "facilities": 15,
+        "products": 2,
+        "demands": 14,
+        "lanes": 41
+      }
+    },
+    "bundle_repeat": {
+      "facilities": 15,
+      "products": 2,
+      "demands": 14,
+      "lanes": 41
+    },
+    "client_style_headers": {
+      "per_file": [],
+      "rows_read": 0,
+      "rows_accepted": 0,
+      "rows_rejected": 0,
+      "issue_codes": [],
+      "issues": [],
+      "n_review_items": 9,
+      "review_questions": [
+        "\"Site Code\" is not in the current schema. How should it be kept?",
+        "\"Site Name\" is not in the current schema. How should it be kept?",
+        "\"Facility Category\" is not in the current schema. How should it be kept?",
+        "\"Monthly Capacity (cases)\" is not in the current schema. How should it be kept?",
+        "\"Annual Fixed Cost (INR)\" is not in the current schema. How should it be kept?",
+        "\"Handling Rate\" is not in the current schema. How should it be kept?"
+      ],
+      "canonical": {
+        "facilities": 0,
+        "products": 0,
+        "demands": 0,
+        "lanes": 0
+      }
+    },
+    "defective_file": {
+      "per_file": [
+        {
+          "file": "facilities.csv",
+          "adapter": "structured",
+          "read": 5,
+          "accepted": 2,
+          "rejected": 3,
+          "codes": [
+            "R-001",
+            "R-003",
+            "R-005"
+          ]
+        }
+      ],
+      "rows_read": 5,
+      "rows_accepted": 2,
+      "rows_rejected": 3,
+      "issue_codes": [
+        "R-001",
+        "R-003",
+        "R-005"
+      ],
+      "issues": [
+        {
+          "severity": "ERROR",
+          "code": "R-003",
+          "message": "'capacity_units_per_period' must be >= 0",
+          "source_file": "facilities.csv",
+          "row_number": 3,
+          "column": "capacity_units_per_period",
+          "raw_value": "-500.0"
+        },
+        {
+          "severity": "ERROR",
+          "code": "R-005",
+          "message": "'role' value 'TELEPORTER' is not one of ['CROSS_DOCK', 'CUSTOMER', 'DARKSTORE', 'DC', 'DEPOT', 'MARKET', 'PLANT', 'SUPPLIER', 'WAREHOUSE']",
+          "source_file": "facilities.csv",
+          "row_number": 5,
+          "column": "role",
+          "raw_value": "TELEPORTER"
+        },
+        {
+          "severity": "ERROR",
+          "code": "R-001",
+          "message": "required field 'facility_id' is missing or blank",
+          "source_file": "facilities.csv",
+          "row_number": 6,
+          "column": "facility_id",
+          "raw_value": ""
+        }
+      ],
+      "n_review_items": 0,
+      "review_questions": [],
+      "canonical": {
+        "facilities": 2,
+        "products": 0,
+        "demands": 0,
+        "lanes": 0
+      }
+    },
+    "lanes_without_entities": {
+      "per_file": [
+        {
+          "file": "lanes.csv",
+          "adapter": "structured",
+          "read": 41,
+          "accepted": 0,
+          "rejected": 41,
+          "codes": [
+            "R-006"
+          ]
+        }
+      ],
+      "rows_read": 41,
+      "rows_accepted": 0,
+      "rows_rejected": 41,
+      "issue_codes": [
+        "R-006"
+      ],
+      "issues": [
+        {
+          "severity": "ERROR",
+          "code": "R-006",
+          "message": "'origin_id' references unknown ID 'PLANT_DELHI'",
+          "source_file": "lanes.csv",
+          "row_number": 2,
+          "column": "origin_id",
+          "raw_value": "PLANT_DELHI"
+        },
+        {
+          "severity": "ERROR",
+          "code": "R-006",
+          "message": "'destination_id' references unknown ID 'DC_DELHI'",
+          "source_file": "lanes.csv",
+          "row_number": 2,
+          "column": "destination_id",
+          "raw_value": "DC_DELHI"
+        },
+        {
+          "severity": "ERROR",
+          "code": "R-006",
+          "message": "'origin_id' references unknown ID 'PLANT_DELHI'",
+          "source_file": "lanes.csv",
+          "row_number": 3,
+          "column": "origin_id",
+          "raw_value": "PLANT_DELHI"
+        },
+        {
+          "severity": "ERROR",
+          "code": "R-006",
+          "message": "'destination_id' references unknown ID 'DC_KOLKATA'",
+          "source_file": "lanes.csv",
+          "row_number": 3,
+          "column": "destination_id",
+          "raw_value": "DC_KOLKATA"
+        },
+        {
+          "severity": "ERROR",
+          "code": "R-006",
+          "message": "'origin_id' references unknown ID 'PLANT_DELHI'",
+          "source_file": "lanes.csv",
+          "row_number": 4,
+          "column": "origin_id",
+          "raw_value": "PLANT_DELHI"
+        },
+        {
+          "severity": "ERROR",
+          "code": "R-006",
+          "message": "'destination_id' references unknown ID 'DC_MUMBAI'",
+          "source_file": "lanes.csv",
+          "row_number": 4,
+          "column": "destination_id",
+          "raw_value": "DC_MUMBAI"
+        },
+        {
+          "severity": "ERROR",
+          "code": "R-006",
+          "message": "'origin_id' references unknown ID 'PLANT_PUNE'",
+          "source_file": "lanes.csv",
+          "row_number": 5,
+          "column": "origin_id",
+          "raw_value": "PLANT_PUNE"
+        },
+        {
+          "severity": "ERROR",
+          "code": "R-006",
+          "message": "'destination_id' references unknown ID 'DC_MUMBAI'",
+          "source_file": "lanes.csv",
+          "row_number": 5,
+          "column": "destination_id",
+          "raw_value": "DC_MUMBAI"
+        }
+      ],
+      "n_review_items": 0,
+      "review_questions": [],
+      "canonical": {
+        "facilities": 0,
+        "products": 0,
+        "demands": 0,
+        "lanes": 0
+      }
+    },
+    "snapshot": {
+      "snapshot_id": "snap_fcaff26d4f4b",
+      "data_version": "fcaff26d4f4b11c8"
+    }
+  },
+  "notes": [
+    "the client-style file raised 9 clarification questions and produced no canonical facility. Site Code, Facility Category and Monthly Capacity (cases) are not in the alias table, and the deterministic mapper declines rather than guessing. Resolving them needs either the LLM field-mapper or a human answering the clarification \u2014 a real operational dependency, and the correct default.",
+    "a blank capacity is ACCEPTED and defaulted rather than rejected (row DC_NOCAP), which is why 2 of 5 rows survive. Negative capacity (R-003), an unknown role (R-005) and a missing id (R-001) are each refused with a typed code and a row number.",
+    "ingesting lanes.csv ALONE rejects all 41 rows R-006 ('references unknown ID'), and demand.csv alone likewise. Referential integrity is enforced against what the bundle actually declares, not against the known-id hint passed in \u2014 which is why the bundle above needs markets and products present, not just facilities."
+  ],
+  "forced_verdict_reason": null,
+  "error": null
+}

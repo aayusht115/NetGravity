@@ -1,0 +1,150 @@
+{
+  "run_completed_at": "2026-08-25T15:32:44",
+  "duration_seconds": 46.16,
+  "dataset": {
+    "network_id": "synthetic_india_v1",
+    "data_version": "fcaff26d4f4b11c8",
+    "snapshot_id": "snap_fcaff26d4f4b"
+  },
+  "api": {
+    "max_calls": 20,
+    "calls_made": 0,
+    "calls_blocked": 3,
+    "remaining": 20,
+    "successful": 0,
+    "records": [
+      {
+        "call_number": null,
+        "capability": "reasoning",
+        "purpose": "executive narrative over authoritative evidence",
+        "status": "FALLBACK_TO_TEMPLATE",
+        "latency_seconds": 0.965,
+        "prompt_chars": -1,
+        "output_chars": 317,
+        "request_id": null,
+        "usage": null,
+        "validation": "source=template, grounding=GROUNDED",
+        "detail": "gateway calls consumed: 0"
+      },
+      {
+        "call_number": null,
+        "capability": "nlu",
+        "purpose": "intent recognition (ambiguous_followup)",
+        "status": "NO_CALL_MADE",
+        "latency_seconds": null,
+        "prompt_chars": 29,
+        "output_chars": null,
+        "request_id": null,
+        "usage": null,
+        "validation": "intent=UNKNOWN, entities=[]",
+        "detail": "gateway calls consumed: 0"
+      },
+      {
+        "call_number": null,
+        "capability": "nlu",
+        "purpose": "intent recognition (prompt_injection)",
+        "status": "NO_CALL_MADE",
+        "latency_seconds": null,
+        "prompt_chars": 90,
+        "output_chars": null,
+        "request_id": null,
+        "usage": null,
+        "validation": "intent=UNKNOWN, entities=[]",
+        "detail": "gateway calls consumed: 0"
+      },
+      {
+        "call_number": null,
+        "capability": "nlu",
+        "purpose": "intent recognition (forecast)",
+        "status": "NO_CALL_MADE",
+        "latency_seconds": null,
+        "prompt_chars": 53,
+        "output_chars": null,
+        "request_id": null,
+        "usage": null,
+        "validation": "intent=FORECAST, entities=['MKT_DELHI']",
+        "detail": "gateway calls consumed: 0"
+      },
+      {
+        "call_number": 1,
+        "capability": "extraction_llm",
+        "purpose": "prose->signal (clean_prose)",
+        "status": "EXTERNAL_LIMIT",
+        "latency_seconds": 0.793,
+        "prompt_chars": 598,
+        "output_chars": null,
+        "request_id": "97f6262f-9d6a-49ab-ae8f-8018dd7a7ec6",
+        "usage": null,
+        "validation": "not attempted (shared limit)",
+        "detail": "HTTP 429 daily_limit_exceeded"
+      },
+      {
+        "call_number": 1,
+        "capability": "extraction_llm",
+        "purpose": "prose->signal (ambiguous_prose)",
+        "status": "EXTERNAL_LIMIT",
+        "latency_seconds": 0.897,
+        "prompt_chars": 385,
+        "output_chars": null,
+        "request_id": "c139d6c0-6499-4e50-b2fe-90300fd95ced",
+        "usage": null,
+        "validation": "not attempted (shared limit)",
+        "detail": "HTTP 429 daily_limit_exceeded"
+      },
+      {
+        "call_number": 1,
+        "capability": "extraction_llm",
+        "purpose": "prose->signal (structured_information)",
+        "status": "EXTERNAL_LIMIT",
+        "latency_seconds": 3.149,
+        "prompt_chars": 260,
+        "output_chars": null,
+        "request_id": "e6eb2cf8-c724-446d-a83f-c57a19de62c2",
+        "usage": null,
+        "validation": "not attempted (shared limit)",
+        "detail": "HTTP 429 daily_limit_exceeded"
+      }
+    ],
+    "shared_usage_before": {
+      "budget_usd": "10.00",
+      "max_requests_per_day": 100,
+      "remaining_usd": "9.55015255",
+      "requests_today": 100,
+      "reserved_usd": "0.00",
+      "spent_usd": "0.44984745"
+    },
+    "shared_usage_after": {
+      "budget_usd": "10.00",
+      "max_requests_per_day": 100,
+      "remaining_usd": "9.55015255",
+      "requests_today": 100,
+      "reserved_usd": "0.00",
+      "spent_usd": "0.44984745"
+    }
+  },
+  "verdicts": {
+    "ingestion": "PASS",
+    "extraction": "PASS",
+    "signal_routing": "PASS",
+    "milp": "PASS",
+    "rei": "PASS",
+    "rf": "PASS",
+    "governance": "PASS",
+    "forecasting": "PASS",
+    "signal_enriched_forecasting": "PASS",
+    "digital_twin": "PASS",
+    "snapshot_scenario_isolation": "PASS",
+    "provenance": "PASS",
+    "reasoning": "PASS",
+    "nlu_chatbot": "PASS",
+    "extraction_llm": "NOT_TESTED"
+  },
+  "counts": {
+    "PASS": 14,
+    "PARTIAL": 0,
+    "FAIL": 0,
+    "NOT_TESTED": 1
+  },
+  "checks_total": 222,
+  "checks_failed": 3
+}

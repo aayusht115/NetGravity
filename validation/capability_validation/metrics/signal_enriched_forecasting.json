@@ -1,0 +1,162 @@
+{
+  "capability": "signal_enriched_forecasting",
+  "verdict": "PASS",
+  "n_checks": 11,
+  "n_failed": 0,
+  "duration_seconds": 1.018,
+  "checks": [
+    {
+      "check": "A: baseline forecast produced with no adjustments",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "B: irrelevant signal leaves the forecast BIT-IDENTICAL",
+      "ok": true,
+      "detail": {
+        "max_abs_diff": 0.0
+      }
+    },
+    {
+      "check": "B: no adjustment recorded for the irrelevant signal",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "C: relevant signal changes the forecast",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "C: adjustment is recorded with its signal id",
+      "ok": true,
+      "detail": [
+        "sig_delhi_expansion"
+      ]
+    },
+    {
+      "check": "C: baseline forecast is retained alongside the adjusted one",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "C: baseline_mean equals the unenriched forecast",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "C: adjustment is marked as an assumption, not an estimate",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "C: signal id reaches result provenance",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "risk signal is refused rather than enriching the forecast",
+      "ok": true,
+      "detail": [
+        "REFUSED_RISK_SIGNAL"
+      ]
+    },
+    {
+      "check": "with the risk signal refused, the forecast equals the baseline",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "evidence": {
+    "case_a_no_signal": {
+      "forecast": [
+        900.73,
+        960.53,
+        1027.68,
+        1031.0,
+        1009.61,
+        966.27
+      ],
+      "metrics": {
+        "mae": 23.248,
+        "rmse": 28.28,
+        "mase": 0.4366,
+        "wape": 0.0232,
+        "bias": -17.586,
+        "naive_mae": 129.562,
+        "beats_naive": true
+      },
+      "adjustments": []
+    },
+    "case_b_irrelevant": {
+      "routed": [
+        "sig_south_carrier"
+      ],
+      "forecast": [
+        900.73,
+        960.53,
+        1027.68,
+        1031.0,
+        1009.61,
+        966.27
+      ],
+      "identical_to_baseline": true,
+      "adjustments": []
+    },
+    "case_c_relevant": {
+      "routed": [
+        "sig_delhi_expansion"
+      ],
+      "forecast": [
+        990.8,
+        1056.58,
+        1130.44,
+        1134.1,
+        1110.58,
+        1062.9
+      ],
+      "metrics": {
+        "mae": 80.677,
+        "rmse": 83.86,
+        "mase": 1.5152,
+        "wape": 0.0807,
+        "bias": 80.677,
+        "naive_mae": 129.562,
+        "beats_naive": true
+      },
+      "adjustments": [
+        {
+          "signal_id": "sig_delhi_expansion",
+          "bucket": "CUSTOMER",
+          "direction": "UP",
+          "effect": "INCREASE",
+          "mean_multiplier": 1.1,
+          "std_multiplier": 1.15,
+          "rule_id": "CUSTOMER_EXPANSION",
+          "basis": "customer expansion raises demand; magnitude is a declared assumption",
+          "signal_confidence": "HIGH",
+          "is_assumption": true
+        }
+      ],
+      "baseline_mean_retained": [
+        900.7314966017707,
+        960.5277437713892,
+        1027.6755735573058,
+        1030.9963959693637,
+        1009.6140733139974,
+        966.2723343262197
+      ],
+      "pct_change_vs_baseline": [
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0,
+        10.0
+      ]
+    }
+  },
+  "notes": [],
+  "forced_verdict_reason": null,
+  "error": null
+}

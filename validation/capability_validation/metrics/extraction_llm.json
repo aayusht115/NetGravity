@@ -1,0 +1,42 @@
+{
+  "capability": "extraction_llm",
+  "verdict": "NOT_TESTED",
+  "n_checks": 3,
+  "n_failed": 3,
+  "duration_seconds": 11.847,
+  "checks": [
+    {
+      "check": "clean_prose: live call returned output",
+      "ok": false,
+      "detail": "blocked/failed"
+    },
+    {
+      "check": "ambiguous_prose: live call returned output",
+      "ok": false,
+      "detail": "blocked/failed"
+    },
+    {
+      "check": "structured_information: live call returned output",
+      "ok": false,
+      "detail": "blocked/failed"
+    }
+  ],
+  "evidence": {
+    "live_extraction": {
+      "clean_prose": {
+        "status": "no output"
+      },
+      "ambiguous_prose": {
+        "status": "no output"
+      },
+      "structured_information": {
+        "status": "no output"
+      }
+    }
+  },
+  "notes": [
+    "VERDICT DOWNGRADED to NOT_TESTED: every live call was refused by the gateway (HTTP 429 daily_limit_exceeded). The shared daily request quota is consumed by every application holding this token, so it can be exhausted by someone else; nothing about the extraction LLM path was measured on this run."
+  ],
+  "forced_verdict_reason": "every live call was refused by the gateway (HTTP 429 daily_limit_exceeded). The shared daily request quota is consumed by every application holding this token, so it can be exhausted by someone else; nothing about the extraction LLM path was measured on this run.",
+  "error": null
+}

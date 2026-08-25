@@ -1,0 +1,264 @@
+{
+  "capability": "rei",
+  "verdict": "PASS",
+  "n_checks": 10,
+  "n_failed": 0,
+  "duration_seconds": 2.442,
+  "checks": [
+    {
+      "check": "resilience baseline computes on a feasible network",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "facility disruption produces per-facility results",
+      "ok": true,
+      "detail": "6 assessed"
+    },
+    {
+      "check": "REI values are produced where calculable",
+      "ok": true,
+      "detail": "6 with a numeric REI"
+    },
+    {
+      "check": "every REI is within [0, 1]",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "the most exposed facility scores REI = 1.0",
+      "ok": true,
+      "detail": [
+        "DC_HYDERABAD"
+      ]
+    },
+    {
+      "check": "provenance retained on every result",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no result carries a probability field",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "a facility whose removal REDUCES cost scores REI 0, not a negative",
+      "ok": true,
+      "detail": {
+        "negative_pi": [
+          "PLANT_CHENNAI",
+          "PLANT_PUNE",
+          "PLANT_DELHI"
+        ]
+      }
+    },
+    {
+      "check": "a fragile network yields infeasible disruptions",
+      "ok": true,
+      "detail": "3 infeasible"
+    },
+    {
+      "check": "infeasible disruption reports REI as unavailable, never as zero",
+      "ok": true,
+      "detail": [
+        {
+          "id": "DC_DELHI",
+          "rei": null,
+          "status": "NOT_COMPUTED"
+        },
+        {
+          "id": "DC_KOLKATA",
+          "rei": null,
+          "status": "NOT_COMPUTED"
+        },
+        {
+          "id": "DC_MUMBAI",
+          "rei": null,
+          "status": "NOT_COMPUTED"
+        }
+      ]
+    }
+  ],
+  "evidence": {
+    "baseline": {
+      "business_cost": "BusinessNetworkCost(total=3036843.4219, components={'facility_cost': 2850000.0, 'opening_cost': 0.0, 'closure_cost': 0.0, 'transport_cost': 64475.9295, 'handling_cost': 99374.45, 'inventory_cost': 22993.0424}, included_components=['facility_cost', 'opening_cost', 'closure_cost', 'transport_cost', 'handling_cost', 'inventory_cost'], excluded_components={'shortage_cost': 0.0}, solver_objective=3036843.4218, shortage_penalty_cost=0.0, unserved_demand=0.0, reconciliation_absolute_difference=0.0001, reconciliation_is_reconciled=True, notes=['carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.'])",
+      "snapshot_id": "snap_fcaff26d4f4b",
+      "model_version": "1.2.0"
+    },
+    "facility_disruption": [
+      {
+        "facility_id": "DC_HYDERABAD",
+        "role": "DC",
+        "rei": 1.0,
+        "rei_status": "COMPUTED",
+        "performance_impact": 7873.1474,
+        "cost_impact_pct": 0.259254,
+        "is_feasible": true,
+        "unserved_demand_rate": 0.0,
+        "risk": "NOT_CLASSIFIED",
+        "calculation_status": "OK",
+        "snapshot_id": "snap_fcaff26d4f4b",
+        "model_version": "1.2.0"
+      },
+      {
+        "facility_id": "DC_MUMBAI",
+        "role": "DC",
+        "rei": 0.841804,
+        "rei_status": "COMPUTED",
+        "performance_impact": 6627.6493,
+        "cost_impact_pct": 0.218241,
+        "is_feasible": true,
+        "unserved_demand_rate": 0.0,
+        "risk": "NOT_CLASSIFIED",
+        "calculation_status": "OK",
+        "snapshot_id": "snap_fcaff26d4f4b",
+        "model_version": "1.2.0"
+      },
+      {
+        "facility_id": "DC_DELHI",
+        "role": "DC",
+        "rei": 0.309253,
+        "rei_status": "COMPUTED",
+        "performance_impact": 2434.7961,
+        "cost_impact_pct": 0.080175,
+        "is_feasible": true,
+        "unserved_demand_rate": 0.0,
+        "risk": "NOT_CLASSIFIED",
+        "calculation_status": "OK",
+        "snapshot_id": "snap_fcaff26d4f4b",
+        "model_version": "1.2.0"
+      },
+      {
+        "facility_id": "PLANT_CHENNAI",
+        "role": "PLANT",
+        "rei": 0.0,
+        "rei_status": "COMPUTED",
+        "performance_impact": -741468.7658,
+        "cost_impact_pct": -24.415772,
+        "is_feasible": true,
+        "unserved_demand_rate": 0.0,
+        "risk": "NOT_CLASSIFIED",
+        "calculation_status": "OK",
+        "snapshot_id": "snap_fcaff26d4f4b",
+        "model_version": "1.2.0"
+      },
+      {
+        "facility_id": "PLANT_PUNE",
+        "role": "PLANT",
+        "rei": 0.0,
+        "rei_status": "COMPUTED",
+        "performance_impact": -741759.5064,
+        "cost_impact_pct": -24.425346,
+        "is_feasible": true,
+        "unserved_demand_rate": 0.0,
+        "risk": "NOT_CLASSIFIED",
+        "calculation_status": "OK",
+        "snapshot_id": "snap_fcaff26d4f4b",
+        "model_version": "1.2.0"
+      },
+      {
+        "facility_id": "PLANT_DELHI",
+        "role": "PLANT",
+        "rei": 0.0,
+        "rei_status": "COMPUTED",
+        "performance_impact": -747565.2039,
+        "cost_impact_pct": -24.616521,
+        "is_feasible": true,
+        "unserved_demand_rate": 0.0,
+        "risk": "NOT_CLASSIFIED",
+        "calculation_status": "OK",
+        "snapshot_id": "snap_fcaff26d4f4b",
+        "model_version": "1.2.0"
+      }
+    ],
+    "registry": {
+      "batch_status": "COMPLETED",
+      "rei_status": "COMPUTED",
+      "n_successful": 6,
+      "n_failed": 0,
+      "n_milp_solves": 7,
+      "baseline_business_cost": 3036843.4219,
+      "cost_basis_components": [
+        "facility_cost",
+        "opening_cost",
+        "closure_cost",
+        "transport_cost",
+        "handling_cost",
+        "inventory_cost"
+      ],
+      "excluded_components": [
+        "shortage_cost"
+      ]
+    },
+    "fragile_network": {
+      "n_results": 7,
+      "n_infeasible": 3,
+      "rows": [
+        {
+          "id": "DC_BANGALORE",
+          "rei": 1.0,
+          "rei_status": "COMPUTED",
+          "is_feasible": true,
+          "unserved_rate": 0.0,
+          "risk": "NOT_CLASSIFIED"
+        },
+        {
+          "id": "PLANT_PUNE",
+          "rei": 0.0,
+          "rei_status": "COMPUTED",
+          "is_feasible": true,
+          "unserved_rate": 0.0,
+          "risk": "NOT_CLASSIFIED"
+        },
+        {
+          "id": "PLANT_CHENNAI",
+          "rei": 0.0,
+          "rei_status": "COMPUTED",
+          "is_feasible": true,
+          "unserved_rate": 0.0,
+          "risk": "NOT_CLASSIFIED"
+        },
+        {
+          "id": "PLANT_DELHI",
+          "rei": 0.0,
+          "rei_status": "COMPUTED",
+          "is_feasible": true,
+          "unserved_rate": 0.0,
+          "risk": "NOT_CLASSIFIED"
+        },
+        {
+          "id": "DC_DELHI",
+          "rei": null,
+          "rei_status": "NOT_COMPUTED",
+          "is_feasible": false,
+          "unserved_rate": 0.153325,
+          "risk": "CRITICAL"
+        },
+        {
+          "id": "DC_KOLKATA",
+          "rei": null,
+          "rei_status": "NOT_COMPUTED",
+          "is_feasible": false,
+          "unserved_rate": 0.150246,
+          "risk": "CRITICAL"
+        },
+        {
+          "id": "DC_MUMBAI",
+          "rei": null,
+          "rei_status": "NOT_COMPUTED",
+          "is_feasible": false,
+          "unserved_rate": 0.027243,
+          "risk": "CRITICAL"
+        }
+      ]
+    }
+  },
+  "notes": [
+    "3 plants have negative performance impact (removing them lowers modelled cost, because their annual fixed cost dominates the per-period objective). EI = max(0, PI) sends these to REI 0 \u2014 correct per the formula, and a property of this synthetic cost structure rather than a defect.",
+    "lane disruption: DisruptionType has no LANE member (available: ['FACILITY_FAILURE']); not exercised rather than faked",
+    "capacity degradation: DisruptionType has no CAPACITY member (available: ['FACILITY_FAILURE']); not exercised rather than faked"
+  ],
+  "forced_verdict_reason": null,
+  "error": null
+}

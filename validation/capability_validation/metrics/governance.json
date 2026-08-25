@@ -1,0 +1,296 @@
+{
+  "capability": "governance",
+  "verdict": "PASS",
+  "n_checks": 9,
+  "n_failed": 0,
+  "duration_seconds": 0.018,
+  "checks": [
+    {
+      "check": "every case yields a classification",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "a low-impact report is not gated",
+      "ok": true,
+      "detail": "AUTO_ACTION"
+    },
+    {
+      "check": "a risky reroute is escalated",
+      "ok": true,
+      "detail": "HUMAN_ONLY"
+    },
+    {
+      "check": "an irreversible closure is not auto-approved",
+      "ok": true,
+      "detail": "HUMAN_ONLY"
+    },
+    {
+      "check": "missing evidence blocks rather than guesses",
+      "ok": true,
+      "detail": "Autonomous execution is not permitted because required risk evidence is unavailable: resilience.assess (MISSING). This i"
+    },
+    {
+      "check": "failed grounding is not treated as a clean run",
+      "ok": true,
+      "detail": "APPROVAL_REQUIRED"
+    },
+    {
+      "check": "an infeasible result cannot be actioned",
+      "ok": true,
+      "detail": "HUMAN_ONLY"
+    },
+    {
+      "check": "governance imports no LLM or network client",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "check": "stated confidence alone does not change the verdict",
+      "ok": true,
+      "detail": {
+        "MEDIUM": "HUMAN_ONLY",
+        "HIGH": "HUMAN_ONLY"
+      }
+    }
+  ],
+  "evidence": {
+    "cases": {
+      "normal_report": {
+        "classification": "AUTO_ACTION",
+        "requires_approval": false,
+        "blocked_by_missing_evidence": false,
+        "governing_rule": "R7_ANALYTICAL_ONLY",
+        "triggered_rules": [
+          "R7_ANALYTICAL_ONLY"
+        ],
+        "reason": "'REPORT' produces analysis only and does not modify observed network state.",
+        "eligible_approver_roles": [],
+        "evaluated": {
+          "action_type": "REPORT",
+          "is_feasible": true,
+          "cost_impact_pct": 0.4,
+          "unserved_demand_rate": 0.0,
+          "rei": 0.15,
+          "risk_factor": null,
+          "confidence": "HIGH",
+          "data_quality_ok": true,
+          "missing_evidence": {},
+          "missing_critical_evidence": [],
+          "unresolved_evidence": {},
+          "grounding_failed": false,
+          "action_requires_risk_evidence": true
+        }
+      },
+      "create_scenario": {
+        "classification": "AUTO_ACTION",
+        "requires_approval": false,
+        "blocked_by_missing_evidence": false,
+        "governing_rule": "R7_ANALYTICAL_ONLY",
+        "triggered_rules": [
+          "R7_ANALYTICAL_ONLY"
+        ],
+        "reason": "'CREATE_SCENARIO' produces analysis only and does not modify observed network state.",
+        "eligible_approver_roles": [],
+        "evaluated": {
+          "action_type": "CREATE_SCENARIO",
+          "is_feasible": true,
+          "cost_impact_pct": 2.0,
+          "unserved_demand_rate": null,
+          "rei": 0.3,
+          "risk_factor": null,
+          "confidence": "HIGH",
+          "data_quality_ok": true,
+          "missing_evidence": {},
+          "missing_critical_evidence": [],
+          "unresolved_evidence": {},
+          "grounding_failed": false,
+          "action_requires_risk_evidence": false
+        }
+      },
+      "risky_reroute": {
+        "classification": "HUMAN_ONLY",
+        "requires_approval": false,
+        "blocked_by_missing_evidence": false,
+        "governing_rule": "R4_UNSERVED_DEMAND",
+        "triggered_rules": [
+          "R4_UNSERVED_DEMAND"
+        ],
+        "reason": "Unserved demand 8.00% exceeds the 2.00% threshold; customer service impact requires human judgement.",
+        "eligible_approver_roles": [],
+        "evaluated": {
+          "action_type": "REROUTE_FLOW",
+          "is_feasible": true,
+          "cost_impact_pct": 18.0,
+          "unserved_demand_rate": 0.08,
+          "rei": 0.85,
+          "risk_factor": 0.94,
+          "confidence": "MEDIUM",
+          "data_quality_ok": true,
+          "missing_evidence": {},
+          "missing_critical_evidence": [],
+          "unresolved_evidence": {},
+          "grounding_failed": false,
+          "action_requires_risk_evidence": true
+        }
+      },
+      "close_facility_human_only": {
+        "classification": "HUMAN_ONLY",
+        "requires_approval": false,
+        "blocked_by_missing_evidence": false,
+        "governing_rule": "R2_STRUCTURAL_ACTION",
+        "triggered_rules": [
+          "R2_STRUCTURAL_ACTION"
+        ],
+        "reason": "'CLOSE_FACILITY' is a structurally significant, effectively irreversible network change. It requires human decision regardless of REI, risk factor or cost impact.",
+        "eligible_approver_roles": [],
+        "evaluated": {
+          "action_type": "CLOSE_FACILITY",
+          "is_feasible": true,
+          "cost_impact_pct": 12.0,
+          "unserved_demand_rate": null,
+          "rei": 0.9,
+          "risk_factor": 0.94,
+          "confidence": "HIGH",
+          "data_quality_ok": true,
+          "missing_evidence": {},
+          "missing_critical_evidence": [],
+          "unresolved_evidence": {},
+          "grounding_failed": false,
+          "action_requires_risk_evidence": true
+        }
+      },
+      "capacity_change_approval": {
+        "classification": "APPROVAL_REQUIRED",
+        "requires_approval": true,
+        "blocked_by_missing_evidence": false,
+        "governing_rule": "R9_COST_IMPACT_APPROVAL",
+        "triggered_rules": [
+          "R9_COST_IMPACT_APPROVAL"
+        ],
+        "reason": "Cost impact 6.00% meets the 5.00% approval threshold.",
+        "eligible_approver_roles": [
+          "APPROVER",
+          "ADMIN"
+        ],
+        "evaluated": {
+          "action_type": "CHANGE_CAPACITY",
+          "is_feasible": true,
+          "cost_impact_pct": 6.0,
+          "unserved_demand_rate": null,
+          "rei": 0.5,
+          "risk_factor": null,
+          "confidence": "HIGH",
+          "data_quality_ok": true,
+          "missing_evidence": {},
+          "missing_critical_evidence": [],
+          "unresolved_evidence": {},
+          "grounding_failed": false,
+          "action_requires_risk_evidence": true
+        }
+      },
+      "insufficient_evidence": {
+        "classification": "APPROVAL_REQUIRED",
+        "requires_approval": true,
+        "blocked_by_missing_evidence": true,
+        "governing_rule": "R7B_MISSING_CRITICAL_EVIDENCE",
+        "triggered_rules": [
+          "R7B_MISSING_CRITICAL_EVIDENCE"
+        ],
+        "reason": "Autonomous execution is not permitted because required risk evidence is unavailable: resilience.assess (MISSING). This is a statement about the EVIDENCE, not about the risk: exposure and risk factor remain UNKNOWN rather than zero, and no value has been substituted for them.",
+        "eligible_approver_roles": [
+          "APPROVER",
+          "ADMIN"
+        ],
+        "evaluated": {
+          "action_type": "REROUTE_FLOW",
+          "is_feasible": true,
+          "cost_impact_pct": null,
+          "unserved_demand_rate": null,
+          "rei": null,
+          "risk_factor": null,
+          "confidence": "LOW",
+          "data_quality_ok": true,
+          "missing_evidence": {
+            "resilience.assess": "MISSING"
+          },
+          "missing_critical_evidence": [
+            "resilience.assess"
+          ],
+          "unresolved_evidence": {},
+          "grounding_failed": false,
+          "action_requires_risk_evidence": true
+        }
+      },
+      "grounding_failed": {
+        "classification": "APPROVAL_REQUIRED",
+        "requires_approval": true,
+        "blocked_by_missing_evidence": true,
+        "governing_rule": "R7C_GROUNDING_FAILED",
+        "triggered_rules": [
+          "R7C_GROUNDING_FAILED"
+        ],
+        "reason": "Numeric claims in the generated narrative could not be grounded against authoritative deterministic values. The explanation cannot be relied upon, so automated action is withheld.",
+        "eligible_approver_roles": [
+          "APPROVER",
+          "ADMIN"
+        ],
+        "evaluated": {
+          "action_type": "REROUTE_FLOW",
+          "is_feasible": true,
+          "cost_impact_pct": 3.0,
+          "unserved_demand_rate": null,
+          "rei": null,
+          "risk_factor": null,
+          "confidence": "HIGH",
+          "data_quality_ok": true,
+          "missing_evidence": {},
+          "missing_critical_evidence": [],
+          "unresolved_evidence": {},
+          "grounding_failed": true,
+          "action_requires_risk_evidence": true
+        }
+      },
+      "infeasible": {
+        "classification": "HUMAN_ONLY",
+        "requires_approval": false,
+        "blocked_by_missing_evidence": false,
+        "governing_rule": "R1_INFEASIBLE",
+        "triggered_rules": [
+          "R1_INFEASIBLE"
+        ],
+        "reason": "The network is infeasible under this configuration, so no automated action can be authorised. A person must review the constraint conflict.",
+        "eligible_approver_roles": [],
+        "evaluated": {
+          "action_type": "REROUTE_FLOW",
+          "is_feasible": false,
+          "cost_impact_pct": null,
+          "unserved_demand_rate": null,
+          "rei": null,
+          "risk_factor": null,
+          "confidence": "HIGH",
+          "data_quality_ok": true,
+          "missing_evidence": {},
+          "missing_critical_evidence": [],
+          "unresolved_evidence": {},
+          "grounding_failed": false,
+          "action_requires_risk_evidence": true
+        }
+      }
+    },
+    "governance_imports": [
+      "__future__",
+      "dataclasses",
+      "datetime",
+      "enum",
+      "logging",
+      "netgravity.orchestrator.exceptions",
+      "netgravity.orchestrator.schemas.actions",
+      "netgravity.orchestrator.schemas.requests",
+      "typing"
+    ]
+  },
+  "notes": [],
+  "forced_verdict_reason": null,
+  "error": null
+}
