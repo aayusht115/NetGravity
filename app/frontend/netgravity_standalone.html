@@ -47,6 +47,11 @@
   
   
   
+  
+  
+  
+  
+  
   <style>
 /* ═══════════════════════════════════════════════════════════
    NetGravity — Design System
@@ -2891,6 +2896,524 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .facility-panel-overlay.active .facility-panel,
 .facility-panel-overlay.visible .facility-panel {
   transform: translateX(0) !important;
+}
+
+
+/* ═════════════════════════════════════════════════════════════════════
+   NETGRAVITY HOME OVERVIEW STYLES
+   - 1. Network Health (4 Full-Width KPI Cards at top)
+   - Middle Split:
+     * Left Column: 2. Where is it happening? (Digital Twin Map Card matching combined right height)
+     * Right Column:
+       - 3. Here is what I found (Insights Card)
+       - 4. Here are my recommendations (Recommendations Card matching Insights layout)
+   ═════════════════════════════════════════════════════════════════════ */
+
+.home-overview-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  padding-bottom: 24px;
+}
+
+/* ─── Shared Section Header ───────────────────────────────────────── */
+.home-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.home-section-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.home-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.home-section-subtitle {
+  font-size: 12.5px;
+  color: #6b7280;
+  font-weight: 400;
+  margin: 0;
+}
+
+.home-section-link {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #9218EA;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.home-section-link:hover {
+  color: #790fc7;
+  transform: translateX(2px);
+}
+
+/* ─── 1. Network Health (4 Top KPI Cards) ─────────────────────────── */
+.home-health-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  width: 100%;
+}
+
+.home-health-card {
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.home-health-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+}
+
+.home-health-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.health-icon-box {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.health-icon-purple { background: #faf5ff; color: #9218EA; }
+.health-icon-green  { background: #f0fdf4; color: #16a34a; }
+.health-icon-amber  { background: #fffbeb; color: #d97706; }
+.health-icon-blue   { background: #eff6ff; color: #2563eb; }
+
+.health-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.health-metric-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.health-metric-val {
+  font-size: 26px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+.health-status-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 12px;
+  line-height: 1.3;
+}
+
+.badge-high     { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+.badge-above    { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.badge-medium   { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+.badge-good     { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+
+.health-card-sub {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  margin-top: 1px;
+}
+
+.health-progress-track {
+  height: 5px;
+  background: #f1f5f9;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.health-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+}
+
+.fill-purple { background: #9218EA; }
+.fill-green  { background: #16a34a; }
+.fill-amber  { background: #f59e0b; }
+
+.health-card-threshold {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+  min-height: 14px;
+}
+
+/* ─── Middle Split Row (50% Digital Twin vs 50% Right Stack) ─────── */
+.home-middle-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  width: 100%;
+  align-items: stretch;
+}
+
+@media (max-width: 1024px) {
+  .home-middle-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Left Column: Digital Twin Card (Full Height) ────────────────── */
+.home-twin-preview-card {
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 14px;
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  box-sizing: border-box;
+  height: 100%;
+}
+
+.home-twin-map-container {
+  flex: 1;
+  min-height: 440px;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #eef4f9;
+  margin-bottom: 12px;
+  position: relative;
+  border: 1px solid #e5e7eb;
+}
+
+.home-map-legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+  margin-top: auto;
+}
+
+.legend-dot-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.dot-high   { background: #ef4444; }
+.dot-medium { background: #f59e0b; }
+.dot-low    { background: #10b981; }
+.dot-dc     { background: #9218EA; }
+.dot-plant  { background: #3b82f6; }
+
+/* ─── Right Column: Stacked Insights & Recommendations ───────────── */
+.home-right-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: 100%;
+}
+
+/* ─── Right Card 1: Insights Card ─────────────────────────────────── */
+.home-insights-preview-card {
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  box-sizing: border-box;
+}
+
+.home-insights-vlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-insight-item-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.home-insight-item-row:hover {
+  background: #faf5ff;
+  border-color: #d8b4fe;
+  transform: translateX(3px);
+  box-shadow: 0 3px 10px rgba(146, 24, 234, 0.06);
+}
+
+.home-insight-top-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-insight-icon-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.icon-red    { background: #fee2e2; color: #ef4444; }
+.icon-purple { background: #f3e8ff; color: #9218EA; }
+.icon-green  { background: #dcfce7; color: #16a34a; }
+.icon-amber  { background: #fef3c7; color: #d97706; }
+
+.home-insight-item-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+  flex: 1;
+}
+
+.home-insight-right-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.home-insight-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.badge-critical      { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
+.badge-informational { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
+.badge-opportunity   { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.badge-attention     { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
+
+.home-insight-arrow {
+  color: #9ca3af;
+  font-size: 15px;
+  font-weight: 700;
+  transition: transform 0.2s, color 0.2s;
+}
+
+.home-insight-item-row:hover .home-insight-arrow {
+  transform: translateX(2px);
+  color: #9218EA;
+}
+
+.home-insight-item-sub {
+  font-size: 11.5px;
+  color: #4b5563;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.home-insight-chips-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.insight-mini-chip {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.chip-red    { background: #fef2f2; border-color: #fee2e2; color: #b91c1c; }
+.chip-purple { background: #faf5ff; border-color: #ede9fe; color: #6b21a8; }
+.chip-green  { background: #f0fdf4; border-color: #dcfce7; color: #15803d; }
+.chip-amber  { background: #fffbeb; border-color: #fef3c7; color: #92400e; }
+
+/* ─── Right Card 2: Recommendations Card (Matching Insights Dimensions) */
+.home-recs-preview-card {
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  box-sizing: border-box;
+}
+
+.home-recs-vlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.home-rec-item-row {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-left-width: 3.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.home-rec-item-row.rec-border-purple { border-left-color: #9218EA; }
+.home-rec-item-row.rec-border-red    { border-left-color: #ef4444; }
+.home-rec-item-row.rec-border-green  { border-left-color: #16a34a; }
+
+.home-rec-item-row:hover {
+  background: #faf5ff;
+  border-color: #d8b4fe;
+  transform: translateX(3px);
+  box-shadow: 0 3px 10px rgba(146, 24, 234, 0.06);
+}
+
+.home-rec-top-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-rec-icon-box {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.home-rec-item-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+  flex: 1;
+}
+
+.home-rec-right-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.home-rec-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+}
+
+.pill-purple { background: #faf5ff; color: #7e22ce; border: 1px solid #ede9fe; }
+.pill-red    { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
+.pill-amber  { background: #fffbeb; color: #b45309; border: 1px solid #fef3c7; }
+.pill-green  { background: #f0fdf4; color: #15803d; border: 1px solid #dcfce7; }
+
+.home-rec-arrow {
+  color: #9ca3af;
+  font-size: 15px;
+  font-weight: 700;
+  transition: transform 0.2s, color 0.2s;
+}
+
+.home-rec-item-row:hover .home-rec-arrow {
+  transform: translateX(2px);
+  color: #9218EA;
+}
+
+.home-rec-item-sub {
+  font-size: 11.5px;
+  color: #4b5563;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.home-rec-chips-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ─── Footer / Disclaimer Note ────────────────────────────────────── */
+.home-footer-disclaimer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #6b7280;
+  padding: 8px 0 4px;
+  text-align: center;
 }
 
 
@@ -6465,6 +6988,11 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 
 
+
+
+
+
+
   <!-- ═══════════════════════════════════════ NETGRAVITY LANDING PAGE -->
   <div id="landing-page">
     <!-- Header / Brand -->
@@ -7491,212 +8019,120 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
           </div>
         </div>
 
+                <!-- ─────────────────── TAB: HOME (Network Decision Command Center) -->
+                <!-- ─────────────────── TAB: HOME (Network Decision Command Center) -->
         <section class="tab-panel active" id="tab-home">
-          <div class="home-2col-layout">
-            
-            <!-- 2/3 LEFT COLUMN -->
-            <div class="home-left-col">
-              
-              <!-- ROW 1: KPI Section (Left) & Forecast Section (Right) -->
-              <div class="home-top-row">
-                
-                <!-- KPI SECTION CARD -->
-                <div class="home-card kpi-card-section" id="home-kpi-block" style="cursor:pointer">
-                  <div class="home-card-header">
-                    <h2 class="home-card-title">KPI Section</h2>
-                    <div class="home-view-by-wrap" onclick="event.stopPropagation()">
-                      <span class="view-by-label">View by</span>
-                      <select class="control-select-sm" id="home-kpi-type-select">
-                        <option value="DC">🇮🇳 DC</option>
-                        <option value="Plant">🏭 Plant</option>
-                      </select>
-                      <select class="control-select-sm" id="home-facility-picker" style="display:none"></select>
-                    </div>
-                  </div>
+          <div class="home-overview-container" style="margin-top: 4px;">
 
-                  <!-- 4 KPI Items Grid (2x2) -->
-                  <div class="home-kpi-2x2-grid" id="home-kpi-grid">
-                    <!-- Card 1: Capacity Utilisation -->
-                    <div class="home-kpi-item">
-                      <div class="home-kpi-item-header">
-                        <div class="home-kpi-name">Capacity Utilisation</div>
-                        <div class="home-kpi-icon-badge" style="background:#f5f0fa;color:var(--primary)">📊</div>
-                      </div>
-                      <div class="home-kpi-val">94.0%</div>
-                      <div class="home-kpi-sub">of 10,000 units/day</div>
-                    </div>
-
-                    <!-- Card 2: On-time Service (SLA) -->
-                    <div class="home-kpi-item">
-                      <div class="home-kpi-item-header">
-                        <div class="home-kpi-name">On-time Service (SLA)</div>
-                        <div class="home-kpi-icon-badge" style="background:#f0fdf4;color:var(--green)">✅</div>
-                      </div>
-                      <div class="home-kpi-val">96.7%</div>
-                      <div class="home-kpi-sub">Target: ≥95%</div>
-                    </div>
-
-                    <!-- Card 3: Total Cost -->
-                    <div class="home-kpi-item">
-                      <div class="home-kpi-item-header">
-                        <div class="home-kpi-name">Total Cost</div>
-                        <div class="home-kpi-icon-badge" style="background:#f5f0fa;color:var(--primary);font-weight:700">₹</div>
-                      </div>
-                      <div class="home-kpi-val">₹11.8L</div>
-                      <div class="home-kpi-sub">Total cost for period</div>
-                    </div>
-
-                    <!-- Card 4: Inventory Days -->
-                    <div class="home-kpi-item">
-                      <div class="home-kpi-item-header">
-                        <div class="home-kpi-name">Inventory Days</div>
-                        <div class="home-kpi-icon-badge" style="background:#fffbeb;color:var(--amber)">📦</div>
-                      </div>
-                      <div class="home-kpi-val">11.2 days</div>
-                      <div class="home-kpi-sub">of supply</div>
-                    </div>
-                  </div>
-
-                  <div class="home-card-footer">
-                    <button class="link-btn" id="btn-view-more-kpis">View more KPIs →</button>
-                  </div>
+            <!-- 1. Network Health (Full-Width Top Grid) -->
+            <div class="home-health-section">
+              <div class="home-section-header">
+                <div class="home-section-title-group">
+                  <h2 class="home-section-title">1. Network Health</h2>
+                  <p class="home-section-subtitle">Here is how your network is performing.</p>
                 </div>
-
-                <!-- FORECAST SECTION CARD -->
-                <div class="home-card forecast-card-section" id="home-forecast-block" style="cursor:pointer">
-                  <div class="home-card-header">
-                    <h2 class="home-card-title">Forecast Section</h2>
-                    <div class="home-view-by-wrap" onclick="event.stopPropagation()">
-                      <span class="view-by-label">View by</span>
-                      <select class="control-select-sm" id="home-forecast-type-select">
-                        <option value="DC">🇮🇳 DC</option>
-                        <option value="Plant">🏭 Plant</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <!-- Sub-banner message -->
-                  <div class="home-forecast-insight-banner" id="home-forecast-banner">
-                    I forecast North India demand to increase 14% over the next 3 months.
-                  </div>
-
-                  <!-- Compact Chart Canvas -->
-                  <div class="home-forecast-chart-container">
-                    <canvas id="chart-forecast-home"></canvas>
-                  </div>
-
-                  <div class="home-card-footer">
-                    <button class="link-btn" id="btn-view-forecast-details">View more details (open Forecasting) →</button>
-                  </div>
-                </div>
-
+                <button class="home-section-link" id="btn-view-all-kpis" onclick="window.navigateToTab && window.navigateToTab('facility-dashboard')">
+                  <span>View all KPIs</span>
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M5 10h10M11 6l4 4-4 4"/>
+                  </svg>
+                </button>
               </div>
 
-              <!-- ROW 2: DIGITAL TWIN MAP CARD -->
-              <div class="home-card digital-twin-preview-card" id="home-twin-block" style="cursor:pointer">
-                <div class="home-card-header">
-                  <h2 class="home-card-title">Digital Twin — India Logistics Network</h2>
+              <!-- 4 Health KPI Cards Grid -->
+              <div class="home-health-grid" id="home-kpi-grid">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+
+            <!-- Middle Row: 50% Left (Digital Twin) vs 50% Right (Stacked Insights + Recommendations) -->
+            <div class="home-middle-split">
+
+              <!-- Left Column: 2. Where is it happening? (Digital Twin Full-Height Card) -->
+              <div class="home-twin-preview-card" id="home-twin-block">
+                <div class="home-section-header">
+                  <div class="home-section-title-group">
+                    <h2 class="home-section-title">2. Where is it happening?</h2>
+                    <p class="home-section-subtitle">Visual overview of your network.</p>
+                  </div>
+                  <button class="home-section-link" id="btn-open-digital-twin" onclick="window.navigateToTab && window.navigateToTab('twin')">
+                    <span>Open Digital Twin</span>
+                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
+                      <path d="M5 10h10M11 6l4 4-4 4"/>
+                    </svg>
+                  </button>
                 </div>
-                
-                <div class="home-map-wrap" id="home-map-twin">
-                  <!-- Leaflet Baseline Network Map populated by JS -->
+
+                <!-- Leaflet Network Map -->
+                <div class="home-twin-map-container" id="home-map-twin">
+                  <!-- Populated by map.js Leaflet -->
                 </div>
+
+                <!-- Map Legend -->
+                <div class="home-map-legend-row">
+                  <div class="legend-dot-item"><span class="legend-dot dot-high"></span><span>High Utilization</span></div>
+                  <div class="legend-dot-item"><span class="legend-dot dot-medium"></span><span>Medium</span></div>
+                  <div class="legend-dot-item"><span class="legend-dot dot-low"></span><span>Low</span></div>
+                  <div class="legend-dot-item"><span class="legend-dot dot-dc"></span><span>DC</span></div>
+                  <div class="legend-dot-item"><span class="legend-dot dot-plant"></span><span>Plant</span></div>
+                </div>
+              </div>
+
+              <!-- Right Column: Stacked Insights & Recommendations -->
+              <div class="home-right-stack">
+
+                <!-- 3. Here is what I found (Insights Card) -->
+                <div class="home-insights-preview-card">
+                  <div class="home-section-header">
+                    <div class="home-section-title-group">
+                      <h2 class="home-section-title">3. Here is what I found</h2>
+                      <p class="home-section-subtitle">Key observations from your network.</p>
+                    </div>
+                    <button class="home-section-link" id="btn-view-all-insights" onclick="window.navigateToTab && window.navigateToTab('insights')">
+                      <span>View all insights</span>
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <path d="M5 10h10M11 6l4 4-4 4"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <!-- Vertical Diagnostic Insights List -->
+                  <div class="home-insights-vlist" id="home-insights-list">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+
+                <!-- 4. Here are my recommendations (Recommendations Card) -->
+                <div class="home-recs-preview-card">
+                  <div class="home-section-header">
+                    <div class="home-section-title-group">
+                      <h2 class="home-section-title">4. Here are my recommendations</h2>
+                      <p class="home-section-subtitle">AI recommended actions to consider.</p>
+                    </div>
+                    <button class="home-section-link" id="btn-view-all-recommendations" onclick="window.navigateToTab && window.navigateToTab('recommendations')">
+                      <span>View all recommendations</span>
+                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
+                        <path d="M5 10h10M11 6l4 4-4 4"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  <!-- Vertical Recommendations List Matching Insights Layout -->
+                  <div class="home-recs-vlist" id="home-actions-list">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+
               </div>
 
             </div>
 
-            <!-- 1/3 RIGHT COLUMN -->
-            <div class="home-right-col">
-              
-                                                        <!-- BLOCK 1: INSIGHTS -->
-              <div class="home-card insights-card-section">
-                <div class="home-card-header">
-                  <h2 class="home-right-title">INSIGHTS</h2>
-                </div>
-
-                <div class="home-numbered-insights" id="home-insights-list">
-                  <div class="home-insight-row" data-insight-id="INS_CAP_RISK" onclick="window.openInsightDrawer && window.openInsightDrawer('INS_CAP_RISK')" style="cursor:pointer;" title="Click to view insight details">
-                    <div class="insight-row-left">
-                      <span class="insight-num-badge">1</span>
-                      <span>Capacity risk at Delhi NCR DC</span>
-                      <span class="insight-info-icon">ⓘ</span>
-                    </div>
-                    <span class="insight-overlay-hint">view details →</span>
-                  </div>
-                  <div class="home-insight-row" data-insight-id="INS_COST_SAVING" onclick="window.openInsightDrawer && window.openInsightDrawer('INS_COST_SAVING')" style="cursor:pointer;" title="Click to view insight details">
-                    <div class="insight-row-left">
-                      <span class="insight-num-badge">2</span>
-                      <span>Cost optimization opportunity</span>
-                      <span class="insight-info-icon">ⓘ</span>
-                    </div>
-                    <span class="insight-overlay-hint">view details →</span>
-                  </div>
-                  <div class="home-insight-row" data-insight-id="INS_SLA_IMPACT" onclick="window.openInsightDrawer && window.openInsightDrawer('INS_SLA_IMPACT')" style="cursor:pointer;" title="Click to view insight details">
-                    <div class="insight-row-left">
-                      <span class="insight-num-badge">3</span>
-                      <span>Service level buffer in West region</span>
-                      <span class="insight-info-icon">ⓘ</span>
-                    </div>
-                    <span class="insight-overlay-hint">view details →</span>
-                  </div>
-                  <div class="home-insight-row" data-insight-id="INS_SPARE_CAPACITY" onclick="window.openInsightDrawer && window.openInsightDrawer('INS_SPARE_CAPACITY')" style="cursor:pointer;" title="Click to view insight details">
-                    <div class="insight-row-left">
-                      <span class="insight-num-badge">4</span>
-                      <span>Underutilised capacity at Mumbai DC</span>
-                      <span class="insight-info-icon">ⓘ</span>
-                    </div>
-                    <span class="insight-overlay-hint">view details →</span>
-                  </div>
-                  <div class="home-insight-row" data-insight-id="INS_RECOMMENDATION" onclick="window.openInsightDrawer && window.openInsightDrawer('INS_RECOMMENDATION')" style="cursor:pointer;" title="Click to view insight details">
-                    <div class="insight-row-left">
-                      <span class="insight-num-badge">5</span>
-                      <span>Recommendation ready</span>
-                      <span class="insight-info-icon">ⓘ</span>
-                    </div>
-                    <span class="insight-overlay-hint">view details →</span>
-                  </div>
-                </div>
-
-                <div class="home-card-footer">
-                  <button class="link-btn" id="btn-view-more-insights">View more insights →</button>
-                </div>
-              </div>
-
-              <!-- BLOCK 2: RECOMMENDATIONS -->
-              <div class="home-card actions-card-section">
-                <div class="home-card-header">
-                  <h2 class="home-right-title">RECOMMENDATIONS</h2>
-                </div>
-
-                <div class="home-actions-list" id="home-actions-list">
-                  <div class="home-action-row" data-action-id="ACT_REBALANCE_BADDI" onclick="window.openActionDrawer && window.openActionDrawer('ACT_REBALANCE_BADDI')" style="cursor:pointer;" title="Click to view recommendation details">
-                    <div class="home-action-checkbox" style="color:#9218EA;font-weight:700">✦</div>
-                    <div class="home-action-text">
-                      Rebalance Baddi volume
-                      <span class="home-action-tag" style="color:#6B2FA0">(High Value)</span>
-                    </div>
-                  </div>
-                  <div class="home-action-row" data-action-id="ACT_INVESTIGATE_DELHI" onclick="window.openActionDrawer && window.openActionDrawer('ACT_INVESTIGATE_DELHI')" style="cursor:pointer;" title="Click to view recommendation details">
-                    <div class="home-action-checkbox" style="color:#9218EA;font-weight:700">✦</div>
-                    <div class="home-action-text">
-                      Investigate Delhi capacity risk
-                      <span class="home-action-tag" style="color:#dc2626">(High Impact)</span>
-                    </div>
-                  </div>
-                  <div class="home-action-row" data-action-id="ACT_EXPLORE_UNDERUTIL" onclick="window.openActionDrawer && window.openActionDrawer('ACT_EXPLORE_UNDERUTIL')" style="cursor:pointer;" title="Click to view recommendation details">
-                    <div class="home-action-checkbox" style="color:#9218EA;font-weight:700">✦</div>
-                    <div class="home-action-text">
-                      Explore underutilised capacity
-                      <span class="home-action-tag" style="color:#16a34a">(Opportunity)</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="home-card-footer">
-                  <button class="link-btn" id="btn-view-more-recommendations">View more recommendations →</button>
-                </div>
-              </div>
-
+            <!-- Footer / Disclaimer Note -->
+            <div class="home-footer-disclaimer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:#9218EA">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+              <span>All insights and recommendations are AI-generated and based on current data.</span>
             </div>
 
           </div>
@@ -9132,6 +9568,11 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     </footer>
   </div>
 
+  
+  
+  
+  
+  
   
   
   
