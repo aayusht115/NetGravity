@@ -25,6 +25,18 @@ from typing import Any, Dict, List, Optional
 
 from netgravity.orchestrator.agents.llm_gateway import LLMGateway, extract_json
 from netgravity.orchestrator.exceptions import LLMFailureError
+from netgravity.orchestrator.reasoning.evidence import build_evidence_pack
+from netgravity.orchestrator.reasoning.runtime import ReasoningRuntime
+from netgravity.orchestrator.reasoning.validation import validate_reasoning_draft
+from netgravity.orchestrator.schemas.reasoning import (
+    EvidenceCompleteness,
+    ExecutiveBriefing,
+    KPIInsight,
+    MissingInformation,
+    ReasoningDraft,
+    ReasoningEvidencePack,
+    ReasoningScope,
+)
 from netgravity.orchestrator.schemas.risk import ReasoningResult
 from netgravity.orchestrator.validation.numeric_grounding import (
     ground_narrative,
@@ -39,8 +51,13 @@ _VALID_CONFIDENCE = {"LOW", "MEDIUM", "HIGH"}
 class ReasoningAgent:
     """Produces narrative synthesis over deterministic evidence."""
 
-    def __init__(self, gateway: Optional[LLMGateway] = None) -> None:
+    def __init__(
+        self,
+        gateway: Optional[LLMGateway] = None,
+        runtime: Optional[ReasoningRuntime] = None,
+    ) -> None:
         self.gateway = gateway
+        self.runtime = runtime
 
     def reason(
         self,
@@ -49,13 +66,17 @@ class ReasoningAgent:
         unavailable_evidence: Optional[Dict[str, Any]] = None,
         provenance: Optional[Dict[str, str]] = None,
         allow_llm: bool = True,
+        scope: ReasoningScope = ReasoningScope.NETWORK,
+        entity_id: Optional[str] = None,
+        user_question: str = "",
     ) -> ReasoningResult:
         """
         Explain a set of deterministic results.
 
         Args:
             payload:              Structured results (scenario, optimization,
-                                  kpis, rei, risk, external_evidence). Read-only.
+                                  kpis, rei, risk, external_evidence,
+                                  market_evidence). Read-only.
             unavailable_evidence: Capability → {status, reason} for evidence that
                                   was expected but is MISSING. Passed through so
                                   the narrative reports absence rather than
@@ -69,9 +90,45 @@ class ReasoningAgent:
             failure must not invalidate deterministic truth.
         """
         missing = dict(unavailable_evidence or {})
+        evidence_pack = build_evidence_pack(
+            payload,
+            scope=scope,
+            entity_id=entity_id,
+            user_question=user_question,
+            unavailable=missing,
+            provenance=provenance,
+        )
+
+        # Preferred live path: one focused OpenAI Agent, typed output and only
+        # read-only evidence tools. Runtime availability is explicit, so an
+        # installed SDK alone can never trigger a paid call.
+        if allow_llm and self.runtime is not None and self.runtime.available:
+            try:
+                draft = self.runtime.run(evidence_pack)
+                violations = validate_reasoning_draft(draft, evidence_pack)
+                if violations:
+                    fallback = self._template(
+                        payload, missing, scope, entity_id, evidence_pack)
+                    fallback.validation_warnings.append(
+                        "Agent output failed the reasoning contract; deterministic "
+                        f"template used ({'; '.join(violations)})."
+                    )
+                    fallback.unavailable_evidence = missing
+                    return self._ground(fallback, payload, provenance)
+                result = self._from_draft(draft, evidence_pack)
+                result.unavailable_evidence = missing
+                return self._ground(self._validate(result, payload), payload, provenance)
+            except Exception as exc:  # noqa: BLE001 - advisory layer fails closed
+                logger.warning("orchestrator.reasoning.agent_failed error=%s", type(exc).__name__)
+                fallback = self._template(payload, missing, scope, entity_id, evidence_pack)
+                fallback.validation_warnings.append(
+                    "OpenAI Agents reasoning was unavailable; deterministic template used."
+                )
+                fallback.unavailable_evidence = missing
+                return self._ground(fallback, payload, provenance)
 
         if not allow_llm or self.gateway is None or not self.gateway.available:
-            result = self._template(payload, missing)
+            result = self._template(payload, missing, scope, entity_id, evidence_pack)
             result.unavailable_evidence = missing
             # The template only ever states values taken from the payload, so
             # it is grounded by construction — but it is checked anyway, because
@@ -82,7 +139,7 @@ class ReasoningAgent:
             result = self._llm(payload, missing)
         except LLMFailureError as exc:
             logger.warning("orchestrator.reasoning.llm_failed code=%s", exc.code.value)
-            fallback = self._template(payload, missing)
+            fallback = self._template(payload, missing, scope, entity_id, evidence_pack)
             fallback.unavailable_evidence = missing
             fallback.validation_warnings.append(
                 f"LLM reasoning unavailable ({exc.code.value}); deterministic template used."
@@ -90,7 +147,7 @@ class ReasoningAgent:
             return self._ground(fallback, payload, provenance)
 
         if result is None:
-            fallback = self._template(payload, missing)
+            fallback = self._template(payload, missing, scope, entity_id, evidence_pack)
             fallback.unavailable_evidence = missing
             fallback.validation_warnings.append(
                 "LLM reasoning output could not be parsed; deterministic template used."
@@ -119,8 +176,11 @@ class ReasoningAgent:
         summary would never see the warning. Confidence is downgraded and
         `grounding_status` is set so governance can withhold automation.
         """
+        visible = f"{result.summary} {result.recommendation}"
+        if result.briefing is not None:
+            visible = f"{visible} {result.briefing.visible_text()}"
         report = ground_narrative(
-            f"{result.summary} {result.recommendation}",
+            visible,
             payload,
             provenance=provenance,
             structured_claims=result.grounded_claims or None,
@@ -136,6 +196,19 @@ class ReasoningAgent:
             result.evidence = [
                 strip_ungrounded_claims(e, report) for e in result.evidence
             ]
+            if result.briefing is not None:
+                briefing = result.briefing
+                briefing.opening = strip_ungrounded_claims(briefing.opening, report)
+                briefing.context = strip_ungrounded_claims(briefing.context, report)
+                briefing.recommendation = strip_ungrounded_claims(
+                    briefing.recommendation, report)
+                briefing.limitation = strip_ungrounded_claims(briefing.limitation, report)
+                briefing.key_drivers = [
+                    strip_ungrounded_claims(item, report) for item in briefing.key_drivers
+                ]
+                for insight in briefing.kpi_insights:
+                    insight.headline = strip_ungrounded_claims(insight.headline, report)
+                    insight.narrative = strip_ungrounded_claims(insight.narrative, report)
             result.validation_warnings.extend(report.warnings())
             result.confidence = "LOW"
             logger.warning(
@@ -149,6 +222,39 @@ class ReasoningAgent:
     # ------------------------------------------------------------------
     # LLM path
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _from_draft(
+        draft: ReasoningDraft,
+        evidence_pack: ReasoningEvidencePack,
+    ) -> ReasoningResult:
+        briefing = ExecutiveBriefing.model_validate(
+            draft.model_dump(exclude={"confidence", "evidence_refs"})
+        )
+        summary_parts = [briefing.opening, briefing.context]
+        summary_parts.extend(item.narrative for item in briefing.kpi_insights)
+        cited_refs = list(draft.evidence_refs)
+        for insight in briefing.kpi_insights:
+            cited_refs.extend(insight.metric_refs)
+            cited_refs.extend(insight.comparison_refs)
+            cited_refs.extend(insight.driver_refs)
+        cited_refs = list(dict.fromkeys(cited_refs))
+        evidence = [
+            f"{evidence_pack.metrics[ref].label} = "
+            f"{evidence_pack.metrics[ref].display_value}"
+            for ref in cited_refs
+            if ref in evidence_pack.metrics
+        ]
+        return ReasoningResult(
+            summary=" ".join(item.strip() for item in summary_parts if item.strip()),
+            key_drivers=list(briefing.key_drivers),
+            risks=[briefing.limitation] if briefing.limitation else [],
+            recommendation=briefing.recommendation,
+            confidence=draft.confidence,
+            evidence=evidence,
+            briefing=briefing,
+            source="openai_agents",
+        )
 
     def _llm(
         self, payload: Dict[str, Any], missing: Dict[str, Any],
@@ -179,6 +285,9 @@ class ReasoningAgent:
             "does not match will be REMOVED from your answer.\n"
             "- If something is absent or null, say it is not available. Do not guess.\n"
             "- Do not claim feasibility, cost or service outcomes beyond what is stated.\n\n"
+            "- Write the summary and recommendation in first-person singular (I/my), "
+            "never we/our. Lead with the decision-relevant finding and explain what "
+            "the KPIs mean instead of dumping figures.\n\n"
             "Return ONLY a JSON object, no prose and no code fences:\n"
             "{\n"
             '  "summary": "2-4 sentences on what the analysis shows",\n'
@@ -288,7 +397,12 @@ class ReasoningAgent:
     # ------------------------------------------------------------------
 
     def _template(
-        self, payload: Dict[str, Any], missing: Optional[Dict[str, Any]] = None,
+        self,
+        payload: Dict[str, Any],
+        missing: Optional[Dict[str, Any]] = None,
+        scope: ReasoningScope = ReasoningScope.NETWORK,
+        entity_id: Optional[str] = None,
+        evidence_pack: Optional[ReasoningEvidencePack] = None,
     ) -> ReasoningResult:
         """
         Build a narrative purely from the deterministic figures.
@@ -302,18 +416,31 @@ class ReasoningAgent:
         risks: List[str] = []
         evidence: List[str] = []
         parts: List[str] = []
+        insights: List[KPIInsight] = []
+
+        def refs_for(field: str) -> List[str]:
+            if evidence_pack is None:
+                return []
+            return [ref for ref in evidence_pack.metrics
+                    if ref == field or ref.endswith(f".{field}")][:1]
 
         state = payload.get("network_state") or payload.get("optimization") or {}
         scenario = payload.get("scenario") or {}
         rei_block = payload.get("rei") or {}
         risk_block = payload.get("risk") or {}
         external = payload.get("external_evidence") or {}
+        # A LIST, because `OrchestratorRequest` carries one field for market
+        # signals whatever route they arrived by and a run may hold several. A
+        # single dict is still accepted so a caller assembling a payload by
+        # hand — as several tests do — is not silently ignored.
+        market_raw = payload.get("market_evidence") or []
+        market_signals = [market_raw] if isinstance(market_raw, dict) else list(market_raw)
 
         infeasible = self._is_infeasible(payload)
 
         if infeasible:
             parts.append(
-                "The network is INFEASIBLE under this configuration: no valid solution "
+                "I found the network INFEASIBLE under this configuration: no valid solution "
                 "exists within the current constraints."
             )
             risks.append("No feasible network configuration — constraints conflict.")
@@ -321,21 +448,49 @@ class ReasoningAgent:
         else:
             cost = state.get("business_network_cost")
             if cost is not None:
-                parts.append(f"Business network cost is {cost:,.2f} per period.")
+                parts.append(
+                    f"I see a business network cost of {cost:,.2f} per period; this is "
+                    "the operating-cost view from the optimizer, separate from any "
+                    "mathematical shortage penalty."
+                )
                 evidence.append(f"business_network_cost = {cost:,.2f}")
+                insights.append(KPIInsight(
+                    theme="Cost",
+                    headline="I see the current cost position clearly",
+                    narrative=(
+                        f"I see business network cost at {cost:,.2f} per period. I use "
+                        "this as the decision baseline for comparing any scenario."
+                    ),
+                    metric_refs=refs_for("business_network_cost"),
+                ))
 
             delta = scenario.get("business_cost_delta")
             delta_pct = scenario.get("business_cost_delta_pct")
             if delta is not None:
                 direction = "increases" if delta > 0 else "decreases"
                 pct = f" ({delta_pct:+.2f}%)" if delta_pct is not None else ""
-                parts.append(f"The scenario {direction} business cost by {abs(delta):,.2f}{pct}.")
+                parts.append(
+                    f"I see the scenario {direction} business cost by "
+                    f"{abs(delta):,.2f}{pct}; this is the incremental impact versus "
+                    "the baseline, not the full cost repeated."
+                )
                 evidence.append(f"business_cost_delta = {delta:,.2f}")
                 drivers.append(f"Cost {direction} of {abs(delta):,.2f} versus baseline")
+                insights.append(KPIInsight(
+                    theme="Scenario impact",
+                    headline=f"I see business cost {direction} versus baseline",
+                    narrative=(
+                        f"I see an incremental change of {abs(delta):,.2f}{pct}. "
+                        "This tells me the price of the tested network choice before "
+                        "a planner weighs the operational benefit."
+                    ),
+                    metric_refs=refs_for("business_cost_delta"),
+                    comparison_refs=refs_for("business_cost_delta_pct"),
+                ))
 
             unserved = state.get("unserved_demand")
             if unserved:
-                parts.append(f"{unserved:,.0f} units of demand cannot be served.")
+                parts.append(f"I see {unserved:,.0f} units of demand that cannot be served.")
                 risks.append(f"Unserved demand of {unserved:,.0f} units.")
                 evidence.append(f"unserved_demand = {unserved:,.0f}")
 
@@ -345,14 +500,14 @@ class ReasoningAgent:
         if top:
             rei_val = rei_block.get("max_rei")
             suffix = f" (REI {rei_val:.2f})" if isinstance(rei_val, (int, float)) else ""
-            parts.append(f"Highest relative economic exposure: {top}{suffix}.")
+            parts.append(f"I see the highest relative economic exposure at {top}{suffix}.")
             drivers.append(f"{top} carries the greatest disruption exposure")
             evidence.append(f"highest_exposure_facility = {top}")
 
         max_rf = risk_block.get("max_risk_factor")
         if isinstance(max_rf, (int, float)):
             entity = risk_block.get("highest_risk_entity", "the network")
-            parts.append(f"Combined risk factor for {entity} is {max_rf:.3f}.")
+            parts.append(f"I see a combined risk factor of {max_rf:.3f} for {entity}.")
             risks.append(f"Risk factor {max_rf:.3f} at {entity}.")
             evidence.append(f"risk_factor = {max_rf:.3f}")
         elif risk_block.get("not_computable"):
@@ -363,7 +518,7 @@ class ReasoningAgent:
                 for row in risk_block["not_computable"] if isinstance(row, dict)
             }
             parts.append(
-                "A combined risk factor was NOT calculated "
+                "I see that a combined risk factor was NOT calculated "
                 f"({', '.join(sorted(r for r in reasons if r and r != 'None'))}). "
                 "Severity and confidence are not probabilities and were not substituted."
             )
@@ -377,7 +532,7 @@ class ReasoningAgent:
                 for cap, info in sorted(missing.items())
             )
             parts.append(
-                f"The following analyses did not complete and their values are UNKNOWN "
+                f"I could not use the following analyses; their values are UNKNOWN "
                 f"(not zero): {described}."
             )
             risks.append(f"Incomplete evidence: {described}.")
@@ -395,26 +550,94 @@ class ReasoningAgent:
                     f", severity {severity}, with NO defensible probability available"
                 )
             parts.append(
-                f"External evidence: {ev_type} affecting {loc}{like_txt} "
+                f"I see external evidence for {ev_type} affecting {loc}{like_txt} "
                 f"(source: {external.get('source', 'unspecified')})."
             )
 
+        if market_signals:
+            # No number from this block reaches the summary — not the
+            # magnitude, not the guardrail's relevance score, not its
+            # threshold, and the title is not quoted either (it is very
+            # likely to CONTAIN the magnitude as a substring). None of those
+            # are values a deterministic engine computed or verified, and the
+            # numeric-claim validator polices every number in generated text
+            # regardless of where it came from — quoting the user does not
+            # exempt a figure from that check, and it should not: this
+            # narrative cannot tell "the user really said this" apart from
+            # "the model invented it while claiming the user said it".
+            #
+            # So this describes the signal only in terms nothing here
+            # computed: which category, which direction, whether it cleared
+            # the guardrail. The actual figure is not lost — it is on the
+            # recorded `MarketIntelligenceSignal` (see the audit trail) — it
+            # is simply never asserted as a checked number in prose.
+            for market in market_signals:
+                verdict = market.get("verdict") or {}
+                bucket = market.get("bucket", "UNKNOWN")
+                direction = market.get("direction", "NEUTRAL")
+                trend = {"UP": "an increase", "DOWN": "a decrease"}.get(
+                    direction, "a change")
+                if verdict.get("passed"):
+                    standing = "cleared the relevance guardrail"
+                elif verdict:
+                    standing = "did NOT clear the relevance guardrail"
+                else:
+                    standing = "has not yet been scored against the guardrail"
+                parts.append(
+                    f"I see a reported market signal: {trend} in the "
+                    f"{bucket} category, which {standing}. The reported figure is "
+                    f"recorded with the signal, not restated here as a checked "
+                    f"number."
+                )
+
         if not parts:
-            parts.append("No deterministic results were produced for this request.")
+            parts.append("I could not find a deterministic result to explain for this request.")
 
         recommendation = (
-            "Review the constraint conflict with a planner before proceeding."
+            "I recommend reviewing the constraint conflict with a planner before proceeding."
             if infeasible else
-            "Review the quantified impact above and decide whether to proceed to a "
+            "I recommend reviewing the quantified impact above before moving to a "
             "formal option appraisal."
         )
 
+        completeness = (
+            EvidenceCompleteness.BLOCKED if infeasible else
+            EvidenceCompleteness.PARTIAL if missing else
+            EvidenceCompleteness.COMPLETE
+        )
+        summary = " ".join(parts)
+        briefing = ExecutiveBriefing(
+            scope=scope,
+            entity_id=entity_id,
+            opening=parts[0],
+            context=" ".join(parts[1:]),
+            kpi_insights=insights[:3 if scope in {ReasoningScope.FACILITY, ReasoningScope.LANE} else 4],
+            key_drivers=drivers[:4],
+            recommendation=recommendation,
+            limitation=(risks[0] if risks else ""),
+            missing_information=[
+                MissingInformation(
+                    question_ref=capability,
+                    question=f"Can you provide the missing {capability} evidence?",
+                    impact="It would let me strengthen or complete this briefing.",
+                    blocking=(completeness is EvidenceCompleteness.BLOCKED),
+                )
+                for capability in list(sorted(missing))[:2]
+            ],
+            evidence_completeness=completeness,
+            suggested_questions=(
+                ["What is driving this result?", "Which node or lane should I examine?"]
+                if evidence else []
+            ),
+        )
+
         return ReasoningResult(
-            summary=" ".join(parts),
+            summary=summary,
             key_drivers=drivers,
             risks=risks,
             recommendation=recommendation,
             confidence=confidence,
             evidence=evidence,
+            briefing=briefing,
             source="template",
         )

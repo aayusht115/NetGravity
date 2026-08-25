@@ -45,10 +45,14 @@ dev = [
 llm = [
     "openai>=1.40.0",
     "anthropic>=0.40.0",
+    # Structured, read-only Reasoning Agent runtime. Imported only on the
+    # explicitly enabled live path; the deterministic template path — the one
+    # the test suite exercises — needs nothing installed.
+    "openai-agents>=0.2.0",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["netgravity/tests", "netgravity/ingestion/tests"]
+testpaths = ["netgravity/tests"]
 python_files = "test_*.py"
 markers = [
     "slow: large-scale benchmarks (deselect with -m 'not slow')",

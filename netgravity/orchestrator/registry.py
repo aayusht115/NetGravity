@@ -38,6 +38,7 @@ from netgravity.orchestrator.core.planner import (
     CAP_REASON,
     CAP_REI,
     CAP_RISK,
+    CAP_SCORE_MARKET,
     CAP_VALIDATE_SCEN,
 )
 from netgravity.orchestrator.engines.deterministic import (
@@ -56,6 +57,10 @@ from netgravity.orchestrator.exceptions import (
 )
 from netgravity.orchestrator.governance.action_classifier import GovernancePolicy
 from netgravity.orchestrator.risk.risk_assessment import assess_event_risk
+from netgravity.orchestrator.reasoning.runtime import (
+    OpenAIAgentsReasoningRuntime,
+    ReasoningRuntime,
+)
 from netgravity.orchestrator.risk.risk_factor import assess_network_risk, not_computable
 from netgravity.orchestrator.routing.capability_registry import CapabilityRegistry
 from netgravity.orchestrator.routing.signal_router import ExternalSignalRouter
@@ -80,6 +85,7 @@ def build_orchestrator(
     gateway: Optional[LLMGateway] = None,
     governance_policy: Optional[GovernancePolicy] = None,
     enable_llm: bool = True,
+    reasoning_runtime: Optional[ReasoningRuntime] = None,
     history_provider: Optional[Any] = None,
     signal_provider: Optional[Any] = None,
 ) -> Orchestrator:
@@ -135,7 +141,10 @@ def build_orchestrator(
     scenario_validator = ScenarioValidator()
     result_validator = ResultValidator()
     intent_agent = IntentAgent(gateway)
-    reasoning_agent = ReasoningAgent(gateway)
+    if reasoning_runtime is None:
+        reasoning_runtime = OpenAIAgentsReasoningRuntime.from_environment(
+            enabled=enable_llm)
+    reasoning_agent = ReasoningAgent(gateway, runtime=reasoning_runtime)
     signal_agent = ExternalSignalAgent(gateway)
 
     orchestrator.services.update({
@@ -549,6 +558,63 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             )
         return signal.model_dump(mode="json")
 
+    # ---- market.score_signal ----------------------------------------------
+    async def score_market_signal(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
+        """
+        Score reported market signals against the guardrail policy.
+
+        Deliberately not a peer of `interpret_signal` in what it produces: that
+        capability derives a probability that feeds RF; this one attaches a
+        relevance verdict from a versioned policy file
+        (`ingestion/guardrails/relevance.py`) and produces nothing RF ever
+        reads. The two signal concepts stay apart all the way through
+        execution, not just at the schema boundary.
+
+        The signals were already built upstream — by `ChatService` from an
+        utterance, or by the Extraction Agent from a document — unscored,
+        evidence only. Scoring happens here, against the ACTUAL pinned network,
+        for the same reason `interpret_signal` resolves entities against real
+        master data rather than trusting what the translate layer assumed: the
+        network at execution time is the one that matters, not whatever the
+        chat or extraction layer saw a moment earlier.
+
+        Scoring is NOT a routing decision. Whether a scored signal may reach
+        the Forecasting Agent is decided by `ExternalSignalRouter` on the
+        forecast workflow, which reads `passed_guardrail` among several other
+        conditions. A signal that clears the guardrail here has not thereby
+        been admitted anywhere.
+        """
+        if not ctx.market_signals:
+            return {}
+
+        from netgravity.ingestion.guardrails import apply as apply_guardrails
+        from netgravity.ingestion.guardrails import load_policy
+
+        snapshot = orch.snapshots.get(ctx.baseline_snapshot_id or "")
+        known = ({f.id for f in snapshot.network.facilities} if snapshot
+                 else set())
+
+        policy = load_policy()
+        scored = apply_guardrails(list(ctx.market_signals),
+                                  known_entity_ids=known, policy=policy)
+        ctx.market_signals = list(scored)
+
+        for signal in ctx.market_signals:
+            if not signal.passed_guardrail:
+                reason = (signal.verdict.reason if signal.verdict
+                          else "no verdict recorded")
+                ctx.add_warning(
+                    f"Market signal '{signal.signal_id}' did not clear the "
+                    f"guardrail policy: {reason}. Recorded in the audit trail; "
+                    f"not treated as material."
+                )
+
+        return {
+            "signals": [s.model_dump(mode="json") for s in ctx.market_signals],
+            "n_scored": len(ctx.market_signals),
+            "n_passed": sum(1 for s in ctx.market_signals if s.passed_guardrail),
+        }
+
     # ---- risk.compute_rf -------------------------------------------------
     async def compute_rf(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
         """
@@ -686,6 +752,10 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             payload["risk"] = ctx.risk_results.model_dump(mode="json")
         if ctx.external_signal is not None:
             payload["external_evidence"] = ctx.external_signal.model_dump(mode="json")
+        if ctx.market_signals:
+            payload["market_evidence"] = [
+                s.model_dump(mode="json") for s in ctx.market_signals
+            ]
 
         unavailable = {
             cap: {"status": ev.status.value, "reason": ev.reason}
@@ -808,6 +878,14 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             execution_mode=ExecutionMode.PROBABILISTIC,
             dependencies=(CAP_LOAD_NETWORK,),
             timeout_seconds=120.0, retry_policy=STANDARD_RETRY,
+        ),
+        Capability(
+            name=CAP_SCORE_MARKET, handler=score_market_signal,
+            description="Score reported market signals against the "
+                        "guardrail policy.",
+            execution_mode=ExecutionMode.DETERMINISTIC,
+            dependencies=(CAP_LOAD_NETWORK,),
+            timeout_seconds=15.0, retry_policy=NO_RETRY, optional=True,
         ),
         Capability(
             name=CAP_RISK, handler=compute_rf,

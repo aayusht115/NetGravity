@@ -158,3 +158,11 @@ data/mock/
 
 # Local transfer scratch — not part of the project
 _to_delete/
+
+# Validation-harness RAW per-seed dumps. Regenerable in minutes by running
+# `forecasting_validation/run_validation.py` or
+# `run_structural_break_validation.py`, and 74k lines of intermediate records
+# between them. The SUMMARIES, censuses, benchmarks, plots and reports beside
+# them ARE tracked — those are the evidence the docs cite; these are the
+# working data the summaries were computed from.
+forecasting_validation/**/*_raw.json

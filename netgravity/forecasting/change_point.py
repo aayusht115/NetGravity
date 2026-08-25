@@ -60,9 +60,12 @@ fixed fraction), so it is treated as a calibrated threshold rather than an exact
 is reported in the documentation instead of being asserted from theory.
 
 ── Materiality is judged on δ, not on segment means ───────────────────────────
-Two further gates keep statistically real but operationally meaningless breaks
-out: the shift must be large relative to the noise it sits in, and large
-relative to the level itself.
+Three further gates keep statistically real but operationally meaningless
+breaks out. The step must be large relative to the model noise it sits in
+(`MIN_SIGMA_SHIFT`), large relative to the level itself (`MIN_RELATIVE_SHIFT`),
+and large relative to how far the series routinely swings on its own
+(`MIN_SWING_SIGMA`). Each catches a different impostor, and each was added
+because something got through without it.
 
 Both are measured on **δ, the fitted step coefficient** — the jump net of trend
 and seasonality — rather than on the difference between segment means. The
@@ -146,6 +149,30 @@ MIN_SIGMA_SHIFT: float = 3.0
 #: worth discarding history for.
 MIN_RELATIVE_SHIFT: float = 0.15
 
+#: δ must ALSO exceed this many pooled WITHIN-SEGMENT standard deviations.
+#:
+#: A different question from `MIN_SIGMA_SHIFT`, and the two are both needed.
+#: That one asks whether the step is distinguishable from the model's residual
+#: noise; this one asks whether it is large compared with how much the series
+#: routinely moves on its own.
+#:
+#: The case that forced it: a seasonal series whose AMPLITUDE changes — swings
+#: of ±20 becoming swings of ±70, with the mean untouched. The null model
+#: carries a constant-amplitude harmonic, so it cannot represent that, and the
+#: residual it leaves is absorbed by a step placed near a seasonal trough. The
+#: detector reported a −61 unit "level shift" at period 56 on 100% of
+#: realisations, the adaptive layer then forecast a flat level from five
+#: observations of one seasonal phase, and MASE went from 1.42 to 4.98. It was
+#: the worst regression the feature produced.
+#:
+#: Measured against the series' own swing the step is only ~3σ, because a
+#: series that oscillates by ±70 moving 61 units is doing what it always does.
+#: At 3.5 that scenario is refused on 100% of realisations, every genuine level
+#: shift is still detected on 100%, and the residual false-positive rate on
+#: every non-break benchmark pattern reaches zero — 3.5 is the smallest
+#: threshold at which all of that holds simultaneously.
+MIN_SWING_SIGMA: float = 3.5
+
 #: Seasonal cycle assumed by the null model, matching `QuantileForecaster`.
 SEASONAL_PERIOD: int = 12
 
@@ -207,8 +234,14 @@ class ChangePointResult(BaseModel):
     magnitude: Optional[float] = None
     #: |δ| as a fraction of the pre-break level.
     relative_magnitude: Optional[float] = None
-    #: |δ| in residual standard deviations of the fitted break model.
+    #: |δ| in residual standard deviations of the fitted break model — is the
+    #: step distinguishable from noise?
     sigma_magnitude: Optional[float] = None
+    #: |δ| in pooled WITHIN-SEGMENT standard deviations — is the step large
+    #: compared with how far this series routinely swings on its own? Small
+    #: here and large above means a scale change dressed as a level change,
+    #: which is what a seasonal amplitude shift looks like to this test.
+    swing_magnitude: Optional[float] = None
 
     #: The test statistic at the selected break date, and the line it had to
     #: clear. Evidence, not confidence.
@@ -294,6 +327,7 @@ class ChangePointDetector:
         threshold: float = SUP_F_THRESHOLD,
         min_sigma_shift: float = MIN_SIGMA_SHIFT,
         min_relative_shift: float = MIN_RELATIVE_SHIFT,
+        min_swing_sigma: float = MIN_SWING_SIGMA,
         seasonal_period: int = SEASONAL_PERIOD,
     ) -> None:
         if min_segment < 2:
@@ -306,6 +340,7 @@ class ChangePointDetector:
         self.threshold = threshold
         self.min_sigma_shift = min_sigma_shift
         self.min_relative_shift = min_relative_shift
+        self.min_swing_sigma = min_swing_sigma
         self.seasonal_period = seasonal_period
 
     # ------------------------------------------------------------------
@@ -429,6 +464,15 @@ class ChangePointDetector:
         sigma_magnitude = abs(magnitude) / scale
         relative = abs(magnitude) / max(abs(pre_level), 1e-9)
 
+        # Pooled within-segment spread: how much this series moves anyway.
+        var_pre = float(np.var(pre, ddof=1)) if pre.size > 1 else 0.0
+        var_post = float(np.var(post, ddof=1)) if post.size > 1 else 0.0
+        pooled = math.sqrt(
+            ((pre.size - 1) * var_pre + (post.size - 1) * var_post)
+            / max(1, pre.size + post.size - 2)
+        )
+        swing_magnitude = abs(magnitude) / max(pooled, abs(pre_level) * 1e-3, 1e-9)
+
         common = dict(
             kind=BreakKind.LEVEL_SHIFT,
             change_index=best_tau,
@@ -438,6 +482,7 @@ class ChangePointDetector:
             magnitude=round(magnitude, 6),
             relative_magnitude=round(relative, 6),
             sigma_magnitude=round(sigma_magnitude, 6),
+            swing_magnitude=round(swing_magnitude, 6),
             sup_f=round(float(best_f), 6),
             threshold=self.threshold,
             strong_evidence=bool(best_f >= SUP_F_STRONG),
@@ -485,6 +530,26 @@ class ChangePointDetector:
                 **common,
             )
 
+        if swing_magnitude < self.min_swing_sigma:
+            # Large against the model's residual, ordinary against the series'
+            # own movement. That combination is the signature of a change in
+            # SCALE rather than in level — a seasonal amplitude shift being the
+            # case that motivated this gate — and a level-shift detector has no
+            # business claiming it.
+            return ChangePointResult(
+                detected=False, status=DetectionStatus.BELOW_MATERIALITY,
+                reason=(
+                    f"step of {magnitude:+.2f} at period {best_tau + 1} "
+                    f"(sup-F {best_f:.2f}) is only {swing_magnitude:.2f} "
+                    f"within-segment standard deviations, under the "
+                    f"{self.min_swing_sigma:.2f} required — this series "
+                    f"routinely moves that far on its own. Consistent with a "
+                    f"change in variability or seasonal amplitude rather than "
+                    f"in level, which this test does not measure."
+                ),
+                **common,
+            )
+
         logger.info(
             "forecasting.change_point.detected period=%d sup_f=%.2f "
             "level=%.2f->%.2f n_post=%d",
@@ -524,6 +589,7 @@ __all__ = [
     "MIN_RELATIVE_SHIFT",
     "MIN_SEGMENT",
     "MIN_SIGMA_SHIFT",
+    "MIN_SWING_SIGMA",
     "SEASONAL_PERIOD",
     "SUP_F_STRONG",
     "SUP_F_THRESHOLD",

@@ -27,9 +27,11 @@ from netgravity.ingestion.memory.field_memory import (
     FieldObservation,
     MemoryResolution,
 )
+from netgravity.ingestion.memory.field_catalog import CatalogEntry, FieldCatalog
 
 __all__ = [
     "FieldMemory", "FieldObservation", "MemoryResolution",
+    "CatalogEntry", "FieldCatalog",
     "GENERALISE_AFTER_SOURCES",
     "SCOPE_EXACT", "SCOPE_GENERALISED", "SCOPE_SUGGESTED",
     "SCOPE_CONFLICT", "SCOPE_NONE",

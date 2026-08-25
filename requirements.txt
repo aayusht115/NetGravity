@@ -31,3 +31,10 @@ python-dotenv>=1.0.0     # local .env loading
 # calls. Install and set NETGRAVITY_LLM_API_KEY only to enable live extraction.
 openai>=1.40.0
 anthropic>=0.40.0
+
+# Executive Reasoning Agent — OPTIONAL structured, read-only agent runtime.
+# Only imported on the explicitly enabled live path
+# (NETGRAVITY_REASONING_RUNTIME=agents + OPENAI_API_KEY). Without it the
+# reasoning agent uses its deterministic template path, which is what the test
+# suite exercises, so this is not needed for development, tests or a demo.
+openai-agents>=0.2.0

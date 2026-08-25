@@ -33,6 +33,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from netgravity.ingestion.config import IngestionConfig
+from netgravity.llm import gateway_contract
 from netgravity.telemetry import record_call
 
 # Providers that speak the OpenAI chat-completions API. "codex" is tolerated
@@ -71,15 +72,19 @@ LLM_FAILURE_MARKER = "LLM CALL FAILED"
 #     GET  {base}/health        no auth, no budget cost
 #
 # Limits it enforces, and why each one shows up in the code below:
-GATEWAY_MAX_PROMPT_CHARS = 100_000   # larger -> HTTP 413
-GATEWAY_MAX_OUTPUT_TOKENS = 2_000    # fixed server-side; max_tokens is ignored
-
-# Only these are worth retrying. Everything else is either a client mistake
-# (fix it, do not repeat it) or a spent budget (retrying cannot help).
-_GATEWAY_RETRYABLE_STATUS = {429, 500, 502}
-# ...but not every 429. A rolling-minute limit clears on its own; a daily
-# limit and an exhausted budget do not, so hammering them just burns time.
-_GATEWAY_TERMINAL_ERRORS = {"daily_limit_exceeded", "budget_exceeded"}
+# The gateway's facts come from `netgravity/llm/gateway_contract.py`, which the
+# orchestrator's own gateway client imports too. They used to be declared in
+# both files. That is a drift hazard with teeth here specifically: the budget
+# is CUMULATIVE and SHARED across everyone holding the token, so a limit
+# corrected in one file and not the other does not cause a local bug — it
+# spends someone else's remaining capacity.
+#
+# The two transports stay separate on purpose (different HTTP libraries,
+# different failure contracts). See that module for the reasoning.
+GATEWAY_MAX_PROMPT_CHARS = gateway_contract.MAX_PROMPT_CHARS
+GATEWAY_MAX_OUTPUT_TOKENS = gateway_contract.MAX_OUTPUT_TOKENS
+_GATEWAY_RETRYABLE_STATUS = gateway_contract.RETRYABLE_STATUS
+_GATEWAY_TERMINAL_ERRORS = gateway_contract.TERMINAL_ERRORS
 
 # The gateway offers no JSON mode, so "return JSON" has to be asked for in
 # the prompt itself and enforced by the parser. Appended to every gateway
@@ -165,6 +170,10 @@ class LLMClient:
         # _call_live() itself only returns text (changing that return shape
         # would touch every test that calls it directly).
         self._last_usage: Optional[Dict[str, int]] = None
+        # Calls made through the gateway by THIS client instance. Guards
+        # a shared, cumulative daily allowance against a runaway batch —
+        # see _call_gateway.
+        self._gateway_calls = 0
 
     @property
     def stub_mode(self) -> bool:
@@ -529,24 +538,41 @@ class LLMClient:
                 "provider is 'gateway' but NETGRAVITY_GATEWAY_TOKEN is not set."
             )
 
+        # A runaway-usage guard, adopted from the orchestrator's gateway
+        # client (which had it; this one did not). Daily capacity is shared
+        # and small, and ingestion is the side that batches: a directory of
+        # forty files makes forty-plus calls without anyone deciding to. This
+        # caps one client instance, so a runaway loop fails loudly here
+        # instead of quietly exhausting the allowance for everyone.
+        #
+        # Set NETGRAVITY_GATEWAY_MAX_CALLS to raise it for a deliberate batch.
+        if self._gateway_calls >= self.config.gateway_max_calls:
+            raise RuntimeError(
+                f"local gateway call budget ({self.config.gateway_max_calls}) "
+                f"is exhausted for this client. Daily capacity is shared with "
+                f"everyone holding the same token, so runaway usage is capped "
+                f"locally. Raise NETGRAVITY_GATEWAY_MAX_CALLS for a "
+                f"deliberate batch."
+            )
+        self._gateway_calls += 1
+
         if max_tokens > GATEWAY_MAX_OUTPUT_TOKENS:
             logger.debug(
                 "gateway ignores max_tokens=%d; its output is capped at %d",
                 max_tokens, GATEWAY_MAX_OUTPUT_TOKENS)
 
         body = prompt + _GATEWAY_JSON_INSTRUCTION
-        if len(body) > GATEWAY_MAX_PROMPT_CHARS:
-            # Caught here rather than as a 413, so the message names the real
-            # problem and no request (or budget) is spent discovering it.
-            raise ValueError(
-                f"prompt is {len(body):,} characters, above the gateway's "
-                f"{GATEWAY_MAX_PROMPT_CHARS:,} limit. Shorten the input "
-                f"before sending."
-            )
+        # Caught here rather than as a 413, so the message names the real
+        # problem and no request (or budget) is spent discovering it. Message
+        # text comes from the shared contract, same as the orchestrator's
+        # client — the two used to word this independently.
+        oversized = gateway_contract.oversized_prompt_reason(len(body))
+        if oversized is not None:
+            raise ValueError(oversized)
 
         payload = json.dumps({"prompt": body}).encode("utf-8")
         request = urllib.request.Request(
-            f"{base}/v1/generate", data=payload, method="POST",
+            f"{base}{gateway_contract.GENERATE_PATH}", data=payload, method="POST",
             headers={
                 "Authorization": f"Bearer {self.config.llm_api_key}",
                 "Content-Type": "application/json",
@@ -747,16 +773,11 @@ class LLMClient:
         )
 
 
-_VENDOR_HOST_MARKERS = (
-    "openai.com", "anthropic.com", "googleapis.com", "openrouter.ai",
-    "groq.com", "cerebras.ai", "inference.ai.azure.com",
-)
-
-
-def _looks_like_vendor_endpoint(url: str) -> bool:
-    """True when a URL belongs to a model vendor rather than our gateway."""
-    lowered = url.lower()
-    return any(marker in lowered for marker in _VENDOR_HOST_MARKERS)
+#: Shared with the orchestrator's gateway client. The guard catches a specific
+#: real mistake — reusing an existing base-URL variable, so the gateway URL is
+#: quietly a vendor endpoint — and a guard that only one of two clients applies
+#: is a guard that the other one's misconfiguration walks straight past.
+_looks_like_vendor_endpoint = gateway_contract.looks_like_vendor_endpoint
 
 
 def _read_gateway_error(exc: urllib.error.HTTPError) -> tuple:
@@ -823,7 +844,7 @@ def fetch_gateway_usage(config: IngestionConfig) -> Dict[str, Any]:
     if not base:
         raise RuntimeError("NETGRAVITY_GATEWAY_URL is not set.")
     request = urllib.request.Request(
-        f"{base}/v1/usage",
+        f"{base}{gateway_contract.USAGE_PATH}",
         headers={"Authorization": f"Bearer {config.llm_api_key or ''}"},
     )
     with urllib.request.urlopen(

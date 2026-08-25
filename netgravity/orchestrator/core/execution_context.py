@@ -82,11 +82,18 @@ class ExecutionContext:
     # The RF-eligible signal: a discrete hazard with a stated likelihood. Feeds
     # `RF = P + REI - P*REI` and nothing else.
     external_signal: Optional[ExternalSignal] = None
-    # Structured market-intelligence signals from the Extraction Agent, awaiting
-    # a routing decision. Deliberately a SEPARATE field from `external_signal`
-    # above: these carry no probability and can never reach RF, and that one
-    # carries a probability and can never reach a forecast. One field holding
-    # both would be the first step to conflating them.
+    # Structured market-intelligence signals awaiting a routing decision,
+    # whatever route they arrived by: document extraction, a structured feed, or
+    # a chat turn. Deliberately a SEPARATE field from `external_signal` above:
+    # these carry no probability and can never reach RF, and that one carries a
+    # probability and can never reach a forecast. One field holding both would
+    # be the first step to conflating them.
+    #
+    # MUTATED IN PLACE by `market.score_signal`, which attaches each signal's
+    # guardrail verdict — the same pattern `external_signal` already uses for
+    # `interpret_signal`. Readers downstream therefore see scored signals if
+    # that step ran and unscored ones if it did not; `passed_guardrail` is the
+    # field to check, never presence.
     market_signals: List[Any] = field(default_factory=list)
     # What the orchestrator decided about each of them, for the audit trail.
     signal_routing: Optional[Any] = None

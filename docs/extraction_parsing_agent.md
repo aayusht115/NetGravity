@@ -222,9 +222,38 @@ calls — complementary, not competing.
 
 ## 10. Known limitations
 
-1. **Two LLM clients exist** — `ingestion/ai/client.py` and
-   `orchestrator/agents/llm_gateway.py`. Both are credential-gated and neither
-   is authoritative, but they are duplicate infrastructure and should converge.
+1. **Two LLM clients exist, and now share a contract rather than a transport**
+   — `ingestion/ai/client.py` and `orchestrator/agents/llm_gateway.py`. Both
+   are credential-gated and neither is authoritative.
+
+   The gateway's *facts* — endpoints, limits, which errors are worth
+   retrying, the vendor-URL misconfiguration guard — moved to
+   `netgravity/llm/gateway_contract.py`, which both import. That is where the
+   damage actually was: the gateway's budget is cumulative and shared across
+   every holder of the token, so a limit corrected in one file and not the
+   other did not cause a local bug, it spent someone else's capacity.
+
+   The *transports* stay separate, deliberately. They use different HTTP
+   libraries (ingestion is hand-rolled on stdlib `urllib` to add no
+   dependency; the orchestrator uses `requests`, and its tests mock it), they
+   raise different exceptions that are part of their callers' contracts, and
+   the orchestrator's `LLMClient` Protocol is narrow on purpose — three
+   members, no tool-invocation mechanism, a documented security boundary.
+   Merging them would have to widen that wall to fit the ingestion client's
+   richer surface.
+
+   **One real defect was found and fixed while comparing them:** the
+   orchestrator's gateway kept a private token counter and never recorded to
+   `netgravity/telemetry/`. Two clients were spending one shared, cumulative
+   budget into two ledgers that did not know about each other, so neither
+   view was complete and "how much is left?" had no answer anywhere. It now
+   records to the shared ledger; the private counter is kept because
+   `max_requests_per_execution` is enforced from it, and that guard must not
+   depend on a module whose recording is best-effort by design.
+
+   Ingestion also adopted that per-instance call cap, which only the
+   orchestrator had. Ingestion is the side that batches — a folder of forty
+   files makes forty-plus calls without anyone deciding to.
 2. **Performance is measured only at small scale** — 1,632 rows in ~73 ms.
    That is not evidence about production files.
 3. **Good-to-have datasets are partly unproven.** Contracts and SKU are

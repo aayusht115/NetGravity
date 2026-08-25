@@ -126,6 +126,9 @@ class ExtractionParsingAgent:
         if source_type == SourceType.EXTERNAL_SIGNAL_TEXT:
             return self._extract_external_signal(request, started, started_at)
 
+        if source_type == SourceType.MARKET_INTELLIGENCE_DOC:
+            return self._extract_market_intelligence(request, started, started_at)
+
         return self._extract_client_data(request, started, started_at, source_type)
 
     # ------------------------------------------------------------------
@@ -260,8 +263,12 @@ class ExtractionParsingAgent:
             return ExtractionStatus.REJECTED
         if getattr(report, "engine_validation_passed", None) is False:
             return ExtractionStatus.REJECTED
-        if review_items:
+        if any(bool(item.get("blocking", True)) for item in review_items):
             return ExtractionStatus.HUMAN_REVIEW_REQUIRED
+        if review_items:
+            # Unfamiliar fields are preserved and visible, but do not prevent
+            # an otherwise valid canonical network from being used.
+            return ExtractionStatus.WARNING
         if any(f.severity == ValidationSeverity.WARNING for f in findings):
             return ExtractionStatus.WARNING
         return ExtractionStatus.ACCEPTED
@@ -464,6 +471,90 @@ class ExtractionParsingAgent:
                 completed_at=_utc_now(),
                 ai_assisted=False,
                 counts={"signals": 1},
+            ),
+            duration_seconds=round(time.perf_counter() - started, 4),
+        )
+
+    def _extract_market_intelligence(
+        self, request: ExtractionRequest, started: float, started_at: str,
+    ) -> ExtractionResult:
+        """
+        Read a market-intelligence DOCUMENT — a news article, circular or
+        notice — into guardrail-scored `MarketIntelligenceSignal` records.
+
+        Delegates to the ingestion adapter, which owns document reading, model
+        prompting and the guardrail policy. Nothing is re-implemented here;
+        this method routes, adjudicates a status and states provenance.
+
+        THREE THINGS THIS DELIBERATELY DOES NOT DO
+            - It does not fetch. The document is supplied; there is no HTTP
+              call anywhere beneath this method.
+            - It does not compute an event probability, and there is no field
+              on the result that could carry one. Market context is not a
+              hazard likelihood.
+            - It does not create or alter a scenario. Whether a signal is worth
+              a what-if is a question for a person, asked through the
+              orchestrator — not an inference drawn during parsing.
+
+        A guardrail-FILTERED signal is still returned, carrying its verdict.
+        Suppressing it would leave a reader unable to distinguish "the filter
+        rejected this" from "the filter never saw it".
+        """
+        from netgravity.ingestion.adapters import market_intelligence
+        from netgravity.ingestion.config import load_config
+
+        config = load_config()
+        known = set(request.options.get("known_facility_ids", []) or [])
+
+        signals, file_result = market_intelligence.ingest_file(
+            Path(request.source), config, known_entity_ids=known,
+        )
+
+        findings = self._findings_from(file_result)
+        errors = [f.message for f in findings
+                  if f.severity == ValidationSeverity.ERROR]
+        warnings = [f.message for f in findings
+                    if f.severity == ValidationSeverity.WARNING]
+
+        if errors:
+            status = ExtractionStatus.REJECTED
+        elif not signals:
+            # Nothing extracted is not an error — most articles say nothing
+            # that moves a cost. But it is not silent success either.
+            status = ExtractionStatus.WARNING
+            warnings.append(
+                f"No market signals were extracted from '{Path(request.source).name}'. "
+                f"The document states no change that would move a cost, a "
+                f"transit time, a capacity or a demand."
+            )
+        elif warnings:
+            status = ExtractionStatus.WARNING
+        else:
+            status = ExtractionStatus.ACCEPTED
+
+        passed = [s for s in signals if getattr(s, "passed_guardrail", False)]
+
+        return ExtractionResult(
+            status=status,
+            ingestion_id=request.ingestion_id,
+            canonical_data=None,
+            # Market intelligence NEVER lands in `external_signals`. See the
+            # schema: one mixed list would force consumers to type-test their
+            # way to the difference between a hazard and a price change.
+            market_intelligence=list(signals),
+            validation_results=findings,
+            warnings=warnings,
+            errors=errors,
+            provenance=ExtractionProvenance(
+                ingestion_id=request.ingestion_id,
+                source=request.source[:500],
+                source_type=SourceType.MARKET_INTELLIGENCE_DOC,
+                started_at=started_at,
+                completed_at=_utc_now(),
+                ai_assisted=bool(file_result.ai_used and not file_result.ai_stubbed),
+                counts={"signals": len(signals),
+                        "passed_guardrail": len(passed),
+                        "filtered": len(signals) - len(passed)},
             ),
             duration_seconds=round(time.perf_counter() - started, 4),
         )

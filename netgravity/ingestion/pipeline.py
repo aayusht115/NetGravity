@@ -82,6 +82,8 @@ def run_ingestion(
     label: str = "",
     unified: bool = False,
     auto_confirm: bool = False,
+    catalog_scope: str = "default",
+    content_type_overrides: Optional[dict] = None,
 ) -> IngestionResult:
     """
     Execute a full ingestion run against a source directory.
@@ -118,7 +120,9 @@ def run_ingestion(
         from netgravity.ingestion import tabular
 
         tabular_outcome = tabular.ingest_tabular(
-            source, cfg, storage, auto_confirm=auto_confirm)
+            source, cfg, storage, auto_confirm=auto_confirm,
+            catalog_scope=catalog_scope,
+            content_type_overrides=content_type_overrides)
         report.files.extend(tabular_outcome.results)
 
         parsed = tabular.parse_into_records(tabular_outcome)

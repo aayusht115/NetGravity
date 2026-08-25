@@ -22,6 +22,7 @@ low-confidence flag.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from netgravity.ingestion.schemas.content import ContentClassification, ContentType
@@ -33,6 +34,48 @@ BY_AI_AND_DICTIONARY = "ai+dictionary"
 BY_AI = "ai"
 BY_DICTIONARY = "dictionary"
 BY_NONE = "unmapped"
+
+
+class FieldDisposition(str, Enum):
+    """How an uploaded column is allowed to travel through the system."""
+
+    CANONICAL = "CANONICAL"
+    SUPPLEMENTARY = "SUPPLEMENTARY"
+    UNRESOLVED = "UNRESOLVED"
+    PROPOSED_NEW = "PROPOSED_NEW"
+    IGNORED = "IGNORED"
+
+
+@dataclass
+class ColumnProfile:
+    """Small, serialisable evidence bundle used by AI and review screens."""
+
+    data_type: str = "unknown"
+    non_empty_count: int = 0
+    null_count: int = 0
+    null_percentage: float = 0.0
+    unique_count: int = 0
+    minimum: Optional[float] = None
+    maximum: Optional[float] = None
+    adjacent_columns: List[str] = field(default_factory=list)
+    possible_unit: Optional[str] = None
+    possible_period: Optional[str] = None
+    known_id_matches: int = 0
+
+    def as_dict(self) -> Dict[str, Any]:
+        return {
+            "data_type": self.data_type,
+            "non_empty_count": self.non_empty_count,
+            "null_count": self.null_count,
+            "null_percentage": round(self.null_percentage, 3),
+            "unique_count": self.unique_count,
+            "minimum": self.minimum,
+            "maximum": self.maximum,
+            "adjacent_columns": list(self.adjacent_columns),
+            "possible_unit": self.possible_unit,
+            "possible_period": self.possible_period,
+            "known_id_matches": self.known_id_matches,
+        }
 
 
 @dataclass
@@ -65,8 +108,15 @@ class ColumnDecision:
     needs_review: bool = True
     review_reasons: List[str] = field(default_factory=list)
 
+    # A column can be useful without belonging to the optimiser schema.
+    disposition: FieldDisposition = FieldDisposition.UNRESOLVED
+    profile: ColumnProfile = field(default_factory=ColumnProfile)
+    user_definition: str = ""
+    confirmed_period: Optional[str] = None
+
     # Every opinion, kept apart rather than collapsed.
     ai_target: Optional[str] = None
+    ai_target_valid: bool = True
     ai_confidence: float = 0.0
     ai_reasoning: str = ""
     dictionary_target: Optional[str] = None
@@ -84,6 +134,10 @@ class ColumnDecision:
     @property
     def is_mapped(self) -> bool:
         return bool(self.target_field)
+
+    @property
+    def is_unfamiliar(self) -> bool:
+        return not self.target_field and self.disposition == FieldDisposition.UNRESOLVED
 
     @property
     def methods_agree(self) -> bool:
@@ -107,7 +161,12 @@ class ColumnDecision:
             "decided_by": self.decided_by,
             "needs_review": self.needs_review,
             "review_reasons": list(self.review_reasons),
+            "disposition": self.disposition.value,
+            "profile": self.profile.as_dict(),
+            "user_definition": self.user_definition,
+            "confirmed_period": self.confirmed_period,
             "ai_target": self.ai_target,
+            "ai_target_valid": self.ai_target_valid,
             "ai_confidence": round(self.ai_confidence, 3),
             "ai_reasoning": self.ai_reasoning,
             "dictionary_target": self.dictionary_target,
@@ -151,6 +210,11 @@ class SheetMapping:
         return self.classification.needs_review or bool(self.pending)
 
     @property
+    def unfamiliar(self) -> List[ColumnDecision]:
+        """Non-blocking unknown fields that a UI must still surface."""
+        return [d for d in self.decisions if d.is_unfamiliar]
+
+    @property
     def rename_map(self) -> Dict[str, str]:
         """Only settled columns. A column awaiting review is not applied."""
         return {
@@ -171,5 +235,6 @@ class SheetMapping:
             "proposed_by": self.proposed_by,
             "decisions": [d.as_dict() for d in self.decisions],
             "unmapped_columns": list(self.unmapped_columns),
+            "unfamiliar_columns": [d.source_column for d in self.unfamiliar],
             "notes": list(self.notes),
         }

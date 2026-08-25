@@ -62,6 +62,16 @@ class Intent(str, Enum):
     # "forecast demand for the next six months". Recognised so the system can
     # answer honestly; no forecasting capability is registered today.
     FORECAST              = "FORECAST"
+    # "diesel is up 6%" / "the port has added a congestion surcharge".
+    #
+    # A stated MARKET change, distinct from EXTERNAL_EVENT and deliberately so.
+    # EXTERNAL_EVENT describes a hazard whose probability feeds
+    # RF = P + REI - P*REI. A price rise has no probability — it has already
+    # happened — and routing it as a hazard would present a known cost change
+    # as a disruption of unknown likelihood, then report RF as NOT_COMPUTABLE
+    # for want of a P that never existed. Recorded as context; it never edits
+    # a solver input on its own.
+    MARKET_INTELLIGENCE   = "MARKET_INTELLIGENCE"
     UNKNOWN               = "UNKNOWN"
 
 
@@ -292,9 +302,20 @@ class OrchestratorRequest(BaseModel):
     #: Structured `MarketIntelligenceSignal` objects from the Extraction Agent,
     #: offered to the control plane for routing.
     #:
-    #: Offered, not applied. The orchestrator decides which of these may reach
-    #: the Forecasting Agent (see `routing/signal_router.py`); supplying one
-    #: here does not mean it will influence anything.
+    #: Offered, not applied. The orchestrator decides what happens to each of
+    #: these — scoring it against the guardrail policy for a
+    #: MARKET_INTELLIGENCE briefing, and/or routing it to the Forecasting Agent
+    #: (see `routing/signal_router.py`). Supplying one here does not mean it
+    #: will influence anything.
+    #:
+    #: ONE field for every arrival route, deliberately. Signals reach the
+    #: orchestrator from document extraction, from a structured feed, and from
+    #: a chat turn ("diesel is up 6%"), and the consolidated branch that
+    #: brought in the chat route originally added a second, singular
+    #: `market_signal` field for it. Two fields naming the same concept is the
+    #: duplication that forces every reader to check both and eventually miss
+    #: one; the arrival route is not a property the orchestrator needs to
+    #: branch on, so it is not encoded in the schema.
     #:
     #: Kept separate from `external_signal` above because the two are different
     #: kinds of evidence with different destinations. These carry no

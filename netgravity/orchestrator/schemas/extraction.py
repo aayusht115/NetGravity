@@ -54,7 +54,16 @@ class SourceType(str, Enum):
     """
     CLIENT_DATA_DIRECTORY = "CLIENT_DATA_DIRECTORY"   # a folder of client files
     CLIENT_DATA_FILE      = "CLIENT_DATA_FILE"        # one workbook or CSV
-    EXTERNAL_SIGNAL_TEXT  = "EXTERNAL_SIGNAL_TEXT"    # free text about an event
+    EXTERNAL_SIGNAL_TEXT  = "EXTERNAL_SIGNAL_TEXT"    # free text about a HAZARD event
+    #: A news article, circular or notice describing a MARKET change — a
+    #: fuel price, a surcharge, a port notice, a duty. Deliberately NOT the
+    #: same route as EXTERNAL_SIGNAL_TEXT, which produces a hazard event
+    #: carrying an event probability that feeds RF. Sending a price story
+    #: down that route would present a cost change as a disruption with an
+    #: unknown likelihood; sending a flood warning down this one would
+    #: silently discard the probability the risk chain needs. Two concepts,
+    #: two routes, no conversion between them.
+    MARKET_INTELLIGENCE_DOC = "MARKET_INTELLIGENCE_DOC"
     UNSUPPORTED           = "UNSUPPORTED"
 
 
@@ -173,6 +182,20 @@ class ExtractionResult(BaseModel):
     data_version: Optional[str] = None
 
     external_signals: List[Any] = Field(default_factory=list)
+    #: `MarketIntelligenceSignal` records — market context, guardrail-scored.
+    #:
+    #: A SEPARATE list, not a second kind of thing in `external_signals`. The
+    #: two signal types are different concepts that briefly shared a name, and
+    #: a single mixed list would force every consumer to type-test its
+    #: contents to find out whether it was holding a hazard with a probability
+    #: or a price change without one. Getting that test wrong is exactly the
+    #: failure the Phase 4A rename was performed to prevent, so the schema
+    #: does not create the opportunity.
+    #:
+    #: Nothing converts between the two lists. Deriving an event probability
+    #: from a signal's qualitative confidence would manufacture the number
+    #: that drives RF and governance.
+    market_intelligence: List[Any] = Field(default_factory=list)
 
     validation_results: List[ValidationFinding] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)

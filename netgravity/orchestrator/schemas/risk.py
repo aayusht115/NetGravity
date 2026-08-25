@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from netgravity.orchestrator.schemas.reasoning import ExecutiveBriefing
+
 
 class RFStatus(str, Enum):
     """Whether a combined risk factor could legitimately be produced."""
@@ -113,6 +115,9 @@ class ReasoningResult(BaseModel):
     recommendation: str = ""
     confidence: str = "LOW"          # LOW | MEDIUM | HIGH
     evidence: List[str] = Field(default_factory=list)
+    # Structured, UI-ready view. Legacy summary fields remain populated so
+    # existing orchestrator and chat consumers keep working unchanged.
+    briefing: Optional[ExecutiveBriefing] = None
 
     # "llm" when model-generated, "template" when the deterministic fallback
     # produced it. Callers can tell narrative provenance at a glance.

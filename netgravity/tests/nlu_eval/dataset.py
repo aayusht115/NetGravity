@@ -58,6 +58,7 @@ class Category(str, Enum):
     SCENARIO        = "SCENARIO"
     RESILIENCE      = "RESILIENCE"
     EXTERNAL_EVENT  = "EXTERNAL_EVENT"
+    MARKET_INTEL    = "MARKET_INTEL"
     FORECAST        = "FORECAST"
     AMBIGUOUS       = "AMBIGUOUS"
     UNKNOWN_ENTITY  = "UNKNOWN_ENTITY"
@@ -434,6 +435,76 @@ _EXTERNAL: List[EvalCase] = [
 # 7. FORECAST — recognised, then honestly declined. No engine exists.
 # ===========================================================================
 
+# ===========================================================================
+# 6b. MARKET_INTELLIGENCE — a stated market change, NOT a hazard.
+#
+# The whole point of this slice is the boundary against EXTERNAL_EVENT. Both
+# describe the outside world; only one carries a probability. Half of these
+# cases are near-misses in one direction or the other, because a taxonomy is
+# only tested by the sentences that sit close to the line.
+#
+# `event_probability` is None on EVERY case here, and that is a hard label
+# rather than an unfilled field: a market change has already happened, so
+# there is no likelihood to state. A system that produced a P for any of
+# these would have invented the number that drives RF.
+# ===========================================================================
+
+_MARKET_INTEL: List[EvalCase] = [
+    _c(id="mi01", text="Diesel is up 6% this week.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       event_probability=None, solver_free=True),
+    _c(id="mi02", text="Fuel prices have risen by 8% since last month.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       event_probability=None, solver_free=True),
+    _c(id="mi03", text="JNPA has announced a congestion surcharge of INR 2 per kg.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       event_probability=None, solver_free=True,
+       note="Port operator, but an announced CHARGE — market, not hazard."),
+    _c(id="mi04", text="Ocean freight rates have dropped sharply this quarter.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       event_probability=None, solver_free=True),
+    _c(id="mi05", text="The government has increased customs duty on imports.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       event_probability=None, solver_free=True),
+    _c(id="mi06", text="Toll charges on the Delhi corridor were revised upward.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       entity_ids=("DC_DELHI",), event_probability=None, solver_free=True,
+       note="Label corrected during Phase 4B: I first labelled this with no "
+            "entity, reasoning that 'the Delhi corridor' names a route rather "
+            "than a site. Resolving DC_DELHI is the better answer. A signal "
+            "that names somewhere we operate is more relevant than one that "
+            "does not, and the guardrail scores exactly that (entity-match "
+            "bonus, +0.25). Withholding the resolution would have made a "
+            "relevant signal look generic."),
+    _c(id="mi07", text="The rupee fell against the dollar this week.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       event_probability=None, solver_free=True),
+    _c(id="mi08", text="Our carrier has hiked trucking rates by 12%.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       event_probability=None, solver_free=True),
+    _c(id="mi09", text="Warehousing rates in the region have increased.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       event_probability=None, solver_free=True,
+       note="No quantity stated. Still a signal; magnitude stays qualitative."),
+    _c(id="mi10", text="Fuel prices are expected to rise 8% next month.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       event_probability=None, solver_free=True,
+       note="THE case this slice exists for. Contains 'expected', which is "
+            "hazard vocabulary, but the subject is a price. Must not become "
+            "EXTERNAL_EVENT with a missing probability."),
+    _c(id="mi11", text="A fuel surcharge has been added to all northbound lanes.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       event_probability=None, solver_free=True),
+    _c(id="mi12", text="Port handling charges at Mumbai went up 5% in January.",
+       category=Category.MARKET_INTEL, intent=Intent.MARKET_INTELLIGENCE,
+       entity_ids=("DC_MUMBAI",), event_probability=None, solver_free=True,
+       note="Same correction as mi06. Also the case that found the gap: "
+            "'port handling charges' matched no market subject until "
+            "'port handling' was added, so the whole sentence fell through to "
+            "UNKNOWN and then to an entity clarification — the system asking "
+            "which Mumbai was meant, about a sentence it had not understood."),
+]
+
 _FORECAST: List[EvalCase] = [
     _c(id="fc01", text="What will demand look like next quarter?",
        category=Category.FORECAST, intent=Intent.FORECAST, solver_free=True),
@@ -686,7 +757,7 @@ _ADVERSARIAL: List[EvalCase] = [
 
 CASES: Tuple[EvalCase, ...] = tuple(
     _STATUS + _NETWORK_STATE + _EXPLANATION + _SCENARIO + _RESILIENCE
-    + _EXTERNAL + _FORECAST + _AMBIGUOUS + _UNKNOWN_ENTITY + _MALFORMED
+    + _EXTERNAL + _MARKET_INTEL + _FORECAST + _AMBIGUOUS + _UNKNOWN_ENTITY + _MALFORMED
     + _FOLLOW_UP + _ADVERSARIAL
 )
 

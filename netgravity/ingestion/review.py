@@ -50,14 +50,43 @@ from netgravity.ingestion.memory.field_memory import (
     SCOPE_SUGGESTED,
     FieldMemory,
 )
+from netgravity.ingestion.memory.field_catalog import FieldCatalog
+from netgravity.ingestion.ai.field_mapper import canonical_fields_for
 from netgravity.ingestion.schemas.content import ContentType
-from netgravity.ingestion.schemas.field_mapping import ColumnDecision, SheetMapping
+from netgravity.ingestion.schemas.field_mapping import (
+    ColumnDecision,
+    FieldDisposition,
+    SheetMapping,
+)
 
 KIND_COLUMN = "column_mapping"
 KIND_CONTENT_TYPE = "content_type"
+KIND_UNFAMILIAR = "unfamiliar_field"
 
 #: Sentinel a reviewer sends back to say "this column maps to nothing".
 NOT_NEEDED = "__not_needed__"
+KEEP_SUPPLEMENTARY = "__supplementary__"
+KEEP_UNRESOLVED = "__unresolved__"
+PROPOSE_NEW = "__proposed_new__"
+
+ALLOWED_PERIODS = {"DAY", "WEEK", "MONTH", "QUARTER", "YEAR"}
+ALLOWED_UNIT_KEYS = {
+    "%", "percent", "unit", "units", "carton", "cartons", "case", "cases",
+    "order", "orders", "kg", "kilogram", "kilograms", "tonne", "tonnes",
+    "pallet", "pallets", "km", "kilometre", "kilometres", "day", "days",
+    "m3", "inr", "inr/kg", "inr/unit", "inr/km", "inr/year",
+}
+
+
+def metadata_error(answer: "ReviewDecision", *, canonical: bool) -> str:
+    """Validate user-supplied metadata before it can reach canonical memory."""
+    if not canonical:
+        return ""
+    if answer.period and answer.period.upper() not in ALLOWED_PERIODS:
+        return f"unsupported period '{answer.period}'"
+    if answer.unit and answer.unit.strip().lower() not in ALLOWED_UNIT_KEYS:
+        return f"unsupported unit '{answer.unit}'"
+    return ""
 
 
 @dataclass
@@ -99,8 +128,23 @@ class ReviewItem:
     reasons: List[str] = field(default_factory=list)
     options: List[ReviewOption] = field(default_factory=list)
     context: Dict[str, Any] = field(default_factory=dict)
+    # Non-blocking items appear in the unfamiliar-fields tray without
+    # preventing a safe canonical network from being finalised.
+    blocking: bool = True
 
     def as_dict(self) -> Dict[str, Any]:
+        if self.kind == KIND_UNFAMILIAR:
+            actions = [
+                "ask_ai", "map_existing", "keep_supplementary",
+                "propose_new", "leave_unresolved", "ignore",
+            ]
+            section = "unfamiliar_fields"
+        elif self.kind == KIND_CONTENT_TYPE:
+            actions = ["ask_ai", "choose_content_type"]
+            section = "required_review"
+        else:
+            actions = ["ask_ai", "confirm_recommendation", "choose_alternative"]
+            section = "required_review"
         return {
             "item_id": self.item_id,
             "kind": self.kind,
@@ -115,6 +159,12 @@ class ReviewItem:
             "reasons": list(self.reasons),
             "options": [o.as_dict() for o in self.options],
             "context": dict(self.context),
+            "blocking": self.blocking,
+            "ui": {
+                "section": section,
+                "component": "evidence_choice_card",
+                "actions": actions,
+            },
         }
 
 
@@ -130,16 +180,27 @@ class ReviewRequest:
         return not self.items
 
     @property
+    def blocking_items(self) -> List[ReviewItem]:
+        return [item for item in self.items if item.blocking]
+
+    @property
+    def has_blocking(self) -> bool:
+        return bool(self.blocking_items)
+
+    @property
     def summary(self) -> str:
         if self.is_empty:
             return "nothing needs review"
         columns = sum(1 for i in self.items if i.kind == KIND_COLUMN)
         sheets = sum(1 for i in self.items if i.kind == KIND_CONTENT_TYPE)
+        unfamiliar = sum(1 for i in self.items if i.kind == KIND_UNFAMILIAR)
         parts = []
         if sheets:
             parts.append(f"{sheets} file(s) whose type could not be confirmed")
         if columns:
             parts.append(f"{columns} column(s) awaiting confirmation")
+        if unfamiliar:
+            parts.append(f"{unfamiliar} unfamiliar column(s) preserved for review")
         return " and ".join(parts)
 
     def as_dict(self) -> Dict[str, Any]:
@@ -147,6 +208,8 @@ class ReviewRequest:
             "run_id": self.run_id,
             "summary": self.summary,
             "item_count": len(self.items),
+            "blocking_count": len(self.blocking_items),
+            "has_blocking": self.has_blocking,
             "items": [i.as_dict() for i in self.items],
         }
 
@@ -159,14 +222,20 @@ class ReviewDecision:
     value: str
     note: str = ""
     decided_by: str = "human"
+    definition: str = ""
+    unit: Optional[str] = None
+    period: Optional[str] = None
 
     @classmethod
     def from_dict(cls, raw: Dict[str, Any]) -> "ReviewDecision":
         return cls(
-            item_id=str(raw.get("item_id") or ""),
-            value=str(raw.get("value") or ""),
-            note=str(raw.get("note") or ""),
-            decided_by=str(raw.get("decided_by") or "human"),
+            item_id=str(raw.get("item_id") or "").strip()[:300],
+            value=str(raw.get("value") or "").strip()[:120],
+            note=str(raw.get("note") or "").strip()[:500],
+            decided_by=str(raw.get("decided_by") or "human").strip()[:100],
+            definition=str(raw.get("definition") or raw.get("text") or "").strip()[:500],
+            unit=(str(raw.get("unit")).strip()[:40] if raw.get("unit") else None),
+            period=(str(raw.get("period")).strip()[:40] if raw.get("period") else None),
         )
 
 
@@ -289,6 +358,37 @@ def _column_options(decision: ColumnDecision) -> List[ReviewOption]:
     return options
 
 
+def _unfamiliar_options() -> List[ReviewOption]:
+    """Stable actions a UI can render without understanding ingestion internals."""
+    return [
+        ReviewOption(
+            value=KEEP_SUPPLEMENTARY,
+            label="keep as supplementary context",
+            rationale="preserve and display it, but never send it to the optimiser",
+            suggested_by="safety policy",
+            recommended=True,
+        ),
+        ReviewOption(
+            value=KEEP_UNRESOLVED,
+            label="I don't know yet",
+            rationale="keep the raw field unresolved for later investigation",
+            suggested_by="reviewer",
+        ),
+        ReviewOption(
+            value=PROPOSE_NEW,
+            label="propose a new business field",
+            rationale="record the concept for governed schema review",
+            suggested_by="reviewer",
+        ),
+        ReviewOption(
+            value=NOT_NEEDED,
+            label="ignore intentionally",
+            rationale="preserve the raw source, but exclude this field from further review",
+            suggested_by="reviewer",
+        ),
+    ]
+
+
 def item_id_for(record_key: str, column: Optional[str] = None) -> str:
     """Stable id so an answer can be matched back to its question."""
     return f"{record_key}::{column}" if column else f"{record_key}::__content_type__"
@@ -364,12 +464,38 @@ def build_request(mappings: Sequence[SheetMapping],
                 },
             ))
 
+        for decision in mapping.unfamiliar:
+            request.items.append(ReviewItem(
+                item_id=item_id_for(mapping.record_key, decision.source_column),
+                kind=KIND_UNFAMILIAR,
+                question=(f'"{decision.source_column}" is not in the current schema. '
+                          "How should it be kept?"),
+                record_key=mapping.record_key,
+                source_id=mapping.source_id,
+                origin_label=mapping.origin_label,
+                content_type=mapping.content_type.value,
+                source_column=decision.source_column,
+                confidence=0.0,
+                reasons=["no approved canonical field was identified"],
+                options=_unfamiliar_options(),
+                context={
+                    "sample_values": list(decision.sample_values),
+                    "profile": decision.profile.as_dict(),
+                    "allowed_canonical_fields": sorted(
+                        canonical_fields_for(mapping.content_type)),
+                    "raw_preserved": True,
+                    "feeds_optimizer": False,
+                },
+                blocking=False,
+            ))
+
     return request
 
 
 def apply(request: ReviewRequest, decisions: Sequence[Any],
           mappings: Sequence[SheetMapping],
-          memory: Optional[FieldMemory] = None) -> ReviewOutcome:
+          memory: Optional[FieldMemory] = None,
+          catalog: Optional[FieldCatalog] = None) -> ReviewOutcome:
     """
     Apply answers: settle the decisions and write them into memory.
 
@@ -402,11 +528,31 @@ def apply(request: ReviewRequest, decisions: Sequence[Any],
             continue
 
         valid = {o.value for o in item.options}
+        # An unfamiliar-field screen may expose canonical search separately
+        # from its four disposition buttons. A confirmed result from that
+        # search is accepted only if it belongs to this content type's schema.
+        if item.kind == KIND_UNFAMILIAR:
+            valid.update(canonical_fields_for(mapping.content_type))
         if answer.value not in valid:
             outcome.rejected.append({
                 "item_id": answer.item_id,
                 "reason": (f"'{answer.value}' is not one of the offered options "
                            f"for this item")})
+            continue
+
+        special_values = {
+            KEEP_SUPPLEMENTARY, KEEP_UNRESOLVED, PROPOSE_NEW, NOT_NEEDED,
+        }
+        metadata_problem = metadata_error(
+            answer,
+            canonical=(item.kind != KIND_CONTENT_TYPE
+                       and answer.value not in special_values),
+        )
+        if metadata_problem:
+            outcome.rejected.append({
+                "item_id": answer.item_id,
+                "reason": metadata_problem,
+            })
             continue
 
         if item.kind == KIND_CONTENT_TYPE:
@@ -427,16 +573,67 @@ def apply(request: ReviewRequest, decisions: Sequence[Any],
                 "reason": f"column '{item.source_column}' is no longer present"})
             continue
 
+        if item.kind == KIND_UNFAMILIAR and answer.value in {
+                KEEP_SUPPLEMENTARY, KEEP_UNRESOLVED, PROPOSE_NEW, NOT_NEEDED}:
+            disposition = {
+                KEEP_SUPPLEMENTARY: FieldDisposition.SUPPLEMENTARY,
+                KEEP_UNRESOLVED: FieldDisposition.UNRESOLVED,
+                PROPOSE_NEW: FieldDisposition.PROPOSED_NEW,
+                NOT_NEEDED: FieldDisposition.IGNORED,
+            }[answer.value]
+            decision.disposition = disposition
+            decision.user_definition = answer.definition
+            decision.source_unit = answer.unit
+            decision.target_unit = answer.unit
+            decision.needs_review = False
+            decision.review_reasons = []
+            outcome.applied.append(answer.item_id)
+            if catalog is not None and disposition != FieldDisposition.UNRESOLVED:
+                catalog.record(
+                    content_type=mapping.content_type.value,
+                    source_column=decision.source_column,
+                    disposition=disposition,
+                    definition=answer.definition,
+                    unit=answer.unit,
+                    period=answer.period,
+                    confirmed_by=answer.decided_by,
+                    note=answer.note,
+                )
+                outcome.remembered.append(
+                    f"catalog:{mapping.content_type.value}:{decision.source_column}"
+                    f" -> {disposition.value}")
+            continue
+
         if answer.value == NOT_NEEDED:
             decision.target_field = None
+            decision.disposition = FieldDisposition.IGNORED
             decision.needs_review = False
             decision.review_reasons = []
             if decision.source_column not in mapping.unmapped_columns:
                 mapping.unmapped_columns.append(decision.source_column)
             outcome.applied.append(answer.item_id)
+            if catalog is not None:
+                catalog.record(
+                    content_type=mapping.content_type.value,
+                    source_column=decision.source_column,
+                    disposition=FieldDisposition.IGNORED,
+                    definition=answer.definition,
+                    unit=answer.unit,
+                    period=answer.period,
+                    confirmed_by=answer.decided_by,
+                    note=answer.note,
+                )
+                outcome.remembered.append(
+                    f"catalog:{mapping.content_type.value}:{decision.source_column}"
+                    " -> IGNORED")
             continue
 
         decision.target_field = answer.value
+        decision.disposition = FieldDisposition.CANONICAL
+        decision.user_definition = answer.definition
+        decision.source_unit = answer.unit or decision.source_unit
+        decision.target_unit = answer.unit or decision.target_unit
+        decision.confirmed_period = answer.period.upper() if answer.period else None
         decision.confidence = 1.0
         decision.decided_by = f"confirmed:{answer.decided_by}"
         decision.needs_review = False
@@ -451,6 +648,9 @@ def apply(request: ReviewRequest, decisions: Sequence[Any],
                 source_id=mapping.source_id,
                 confirmed_by=answer.decided_by,
                 note=answer.note,
+                unit=answer.unit,
+                period=(answer.period.upper() if answer.period else None),
+                definition=answer.definition,
             )
             outcome.remembered.append(
                 f"{mapping.content_type.value}:{decision.source_column}"

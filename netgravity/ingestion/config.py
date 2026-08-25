@@ -247,6 +247,18 @@ class IngestionConfig:
     gateway_url: Optional[str] = field(
         default_factory=lambda: _env("NETGRAVITY_GATEWAY_URL")
     )
+    #: Cap on gateway calls made by ONE client instance. The gateway's daily
+    #: capacity is shared with everyone holding the token, and ingestion is
+    #: the side that batches — a folder of forty files makes forty-plus calls
+    #: without anyone deciding to. Adopted from the orchestrator's gateway
+    #: client, which already had this guard.
+    #:
+    #: Deliberately generous relative to the orchestrator's 4: one ingestion
+    #: run legitimately reads many files, whereas one orchestrator execution
+    #: answering a single question should not need more than a handful.
+    gateway_max_calls: int = field(
+        default_factory=lambda: int(_env("NETGRAVITY_GATEWAY_MAX_CALLS", "40") or 40)
+    )
 
     # --- Behaviour ---
     # Rows failing a WARNING-level check are kept but flagged; ERROR-level rows

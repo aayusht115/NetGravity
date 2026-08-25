@@ -1,0 +1,50 @@
+[
+  {
+    "num_series": 10,
+    "detection_only_sec": 0.0563,
+    "detection_per_series_ms": 5.6297,
+    "forecast_detection_off_sec": 0.6281,
+    "forecast_detection_on_sec": 1.6416,
+    "overhead_factor": 2.614,
+    "throughput_off_series_per_sec": 15.9,
+    "throughput_on_series_per_sec": 6.1,
+    "peak_memory_off_mb": 0.36,
+    "peak_memory_on_mb": 0.34
+  },
+  {
+    "num_series": 100,
+    "detection_only_sec": 0.2852,
+    "detection_per_series_ms": 2.8517,
+    "forecast_detection_off_sec": 5.3597,
+    "forecast_detection_on_sec": 12.756,
+    "overhead_factor": 2.38,
+    "throughput_off_series_per_sec": 18.7,
+    "throughput_on_series_per_sec": 7.8,
+    "peak_memory_off_mb": 1.81,
+    "peak_memory_on_mb": 2.1
+  },
+  {
+    "num_series": 500,
+    "detection_only_sec": 1.0514,
+    "detection_per_series_ms": 2.1027,
+    "forecast_detection_off_sec": 19.305,
+    "forecast_detection_on_sec": 66.7486,
+    "overhead_factor": 3.458,
+    "throughput_off_series_per_sec": 25.9,
+    "throughput_on_series_per_sec": 7.5,
+    "peak_memory_off_mb": 8.3,
+    "peak_memory_on_mb": 9.78
+  },
+  {
+    "num_series": 1000,
+    "detection_only_sec": 5.4052,
+    "detection_per_series_ms": 5.4052,
+    "forecast_detection_off_sec": 60.3884,
+    "forecast_detection_on_sec": 128.7747,
+    "overhead_factor": 2.132,
+    "throughput_off_series_per_sec": 16.6,
+    "throughput_on_series_per_sec": 7.8,
+    "peak_memory_off_mb": 16.42,
+    "peak_memory_on_mb": 19.38
+  }
+]

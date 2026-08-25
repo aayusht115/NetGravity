@@ -49,6 +49,7 @@ class ContentType(str, Enum):
     DEMAND = "DEMAND"                        # demand per market/product
     LANE = "LANE"                            # transport lanes and rates
     SHIPMENT_LOG = "SHIPMENT_LOG"            # transactional despatch history
+    MARKET_SIGNAL = "MARKET_SIGNAL"          # dated external/market intelligence
     HISTORICAL_VOLUME = "HISTORICAL_VOLUME"  # volume time series
     UNKNOWN = "UNKNOWN"                      # could not be determined
 
@@ -80,6 +81,14 @@ _NETWORK_TYPES = {
 }
 _STAGING_TYPES = {
     ContentType.SHIPMENT_LOG, ContentType.HISTORICAL_VOLUME,
+    # MARKET_SIGNAL is staging, and that placement is the whole point.
+    # A fuel-price story or a port notice is CONTEXT: it shifts an
+    # assumption and explains a result. Routing it to NETWORK would let a
+    # headline become a number the MILP treats as fact, which the
+    # architecture forbids — only the deterministic engines produce
+    # numbers. Held here, a signal enriches a forecast and supports a
+    # root-cause narrative without ever silently editing a rate.
+    ContentType.MARKET_SIGNAL,
 }
 
 

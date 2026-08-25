@@ -1,0 +1,215 @@
+{
+  "A_Stable": {
+    "family": "baseline",
+    "expects_break": false,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "NO_BREAK": 43,
+      "BELOW_MATERIALITY": 7
+    },
+    "median_sup_f": 4.524,
+    "median_detected_period": null,
+    "true_break_period": null
+  },
+  "B_Linear_Growth": {
+    "family": "baseline",
+    "expects_break": false,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "NO_BREAK": 43,
+      "BELOW_MATERIALITY": 7
+    },
+    "median_sup_f": 4.524,
+    "median_detected_period": null,
+    "true_break_period": null
+  },
+  "C_Linear_Decline": {
+    "family": "baseline",
+    "expects_break": false,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "NO_BREAK": 43,
+      "BELOW_MATERIALITY": 7
+    },
+    "median_sup_f": 4.524,
+    "median_detected_period": null,
+    "true_break_period": null
+  },
+  "D_Strong_Growth": {
+    "family": "baseline",
+    "expects_break": false,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "NO_BREAK": 38,
+      "BELOW_MATERIALITY": 12
+    },
+    "median_sup_f": 6.002,
+    "median_detected_period": null,
+    "true_break_period": null
+  },
+  "E_Seasonal": {
+    "family": "baseline",
+    "expects_break": false,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "NO_BREAK": 43,
+      "BELOW_MATERIALITY": 7
+    },
+    "median_sup_f": 4.524,
+    "median_detected_period": null,
+    "true_break_period": null
+  },
+  "F_Seasonal_Trend": {
+    "family": "baseline",
+    "expects_break": false,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "NO_BREAK": 43,
+      "BELOW_MATERIALITY": 7
+    },
+    "median_sup_f": 4.524,
+    "median_detected_period": null,
+    "true_break_period": null
+  },
+  "G_Intermittent": {
+    "family": "baseline",
+    "expects_break": false,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "PATTERN_NOT_APPLICABLE": 50
+    },
+    "median_sup_f": null,
+    "median_detected_period": null,
+    "true_break_period": null
+  },
+  "H_Noisy": {
+    "family": "baseline",
+    "expects_break": false,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "NO_BREAK": 43,
+      "BELOW_MATERIALITY": 7
+    },
+    "median_sup_f": 4.503,
+    "median_detected_period": null,
+    "true_break_period": null
+  },
+  "I_Structural_Break": {
+    "family": "baseline",
+    "expects_break": true,
+    "fire_rate_pct": 100.0,
+    "n_seeds": 50,
+    "statuses": {
+      "DETECTED": 50
+    },
+    "median_sup_f": 271.826,
+    "median_detected_period": 40,
+    "true_break_period": null
+  },
+  "J_Signal_Affected": {
+    "family": "baseline",
+    "expects_break": false,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "NO_BREAK": 43,
+      "BELOW_MATERIALITY": 7
+    },
+    "median_sup_f": 4.524,
+    "median_detected_period": null,
+    "true_break_period": null
+  },
+  "SB_A_Level_Shift": {
+    "family": "structural_break",
+    "expects_break": true,
+    "fire_rate_pct": 100.0,
+    "n_seeds": 50,
+    "statuses": {
+      "DETECTED": 50
+    },
+    "median_sup_f": 211.97,
+    "median_detected_period": 49,
+    "true_break_period": 49
+  },
+  "SB_B_Trend_Shift": {
+    "family": "structural_break",
+    "expects_break": true,
+    "fire_rate_pct": 48.0,
+    "n_seeds": 50,
+    "statuses": {
+      "BELOW_MATERIALITY": 26,
+      "DETECTED": 24
+    },
+    "median_sup_f": 29.178,
+    "median_detected_period": 54,
+    "true_break_period": 49
+  },
+  "SB_C_Demand_Surge": {
+    "family": "structural_break",
+    "expects_break": true,
+    "fire_rate_pct": 100.0,
+    "n_seeds": 50,
+    "statuses": {
+      "DETECTED": 50
+    },
+    "median_sup_f": 624.781,
+    "median_detected_period": 49,
+    "true_break_period": 49
+  },
+  "SB_D_Demand_Collapse": {
+    "family": "structural_break",
+    "expects_break": true,
+    "fire_rate_pct": 100.0,
+    "n_seeds": 50,
+    "statuses": {
+      "DETECTED": 50
+    },
+    "median_sup_f": 599.084,
+    "median_detected_period": 49,
+    "true_break_period": 49
+  },
+  "SB_E_Temporary_Spike": {
+    "family": "structural_break",
+    "expects_break": false,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "BELOW_MATERIALITY": 50
+    },
+    "median_sup_f": 14.216,
+    "median_detected_period": null,
+    "true_break_period": null
+  },
+  "SB_F_Seasonal_Regime_Change": {
+    "family": "structural_break",
+    "expects_break": true,
+    "fire_rate_pct": 0.0,
+    "n_seeds": 50,
+    "statuses": {
+      "BELOW_MATERIALITY": 50
+    },
+    "median_sup_f": 66.008,
+    "median_detected_period": null,
+    "true_break_period": 49
+  },
+  "SB_G_Critical_100_to_200": {
+    "family": "structural_break",
+    "expects_break": true,
+    "fire_rate_pct": 100.0,
+    "n_seeds": 50,
+    "statuses": {
+      "DETECTED": 50
+    },
+    "median_sup_f": 1345.205,
+    "median_detected_period": 49,
+    "true_break_period": 49
+  }
+}

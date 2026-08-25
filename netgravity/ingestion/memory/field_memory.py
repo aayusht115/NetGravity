@@ -87,6 +87,9 @@ class FieldObservation:
     confirmed_at: str = ""
     confirmed_by: str = "human"
     note: str = ""
+    unit: Optional[str] = None
+    period: Optional[str] = None
+    definition: str = ""
 
     def as_dict(self) -> Dict[str, str]:
         return {
@@ -97,6 +100,9 @@ class FieldObservation:
             "confirmed_at": self.confirmed_at,
             "confirmed_by": self.confirmed_by,
             "note": self.note,
+            "unit": self.unit,
+            "period": self.period,
+            "definition": self.definition,
         }
 
     @classmethod
@@ -109,6 +115,9 @@ class FieldObservation:
             confirmed_at=str(raw.get("confirmed_at", "")),
             confirmed_by=str(raw.get("confirmed_by", "human")),
             note=str(raw.get("note", "")),
+            unit=raw.get("unit") or None,
+            period=raw.get("period") or None,
+            definition=str(raw.get("definition", "")),
         )
 
 
@@ -134,6 +143,9 @@ class MemoryResolution:
     needs_review: bool = True
     rationale: str = ""
     alternatives: List[MemoryAlternative] = field(default_factory=list)
+    unit: Optional[str] = None
+    period: Optional[str] = None
+    definition: str = ""
 
     @property
     def is_known(self) -> bool:
@@ -144,21 +156,28 @@ class MemoryResolution:
         return self.scope == SCOPE_CONFLICT
 
 
-def _key(content_type: str, column: str) -> str:
-    return f"{MEMORY_PREFIX}/{content_type}/{normalise_name(column)}.json"
+def _key(content_type: str, column: str, namespace: str = "default") -> str:
+    if not namespace or namespace == "default":
+        # Preserve the established on-disk layout for existing installations.
+        return f"{MEMORY_PREFIX}/{content_type}/{normalise_name(column)}.json"
+    safe = normalise_name(namespace) or "default"
+    return (f"{MEMORY_PREFIX}/clients/{safe}/{content_type}/"
+            f"{normalise_name(column)}.json")
 
 
 class FieldMemory:
     """Read/write access to confirmed column meanings."""
 
-    def __init__(self, storage: StorageBackend):
+    def __init__(self, storage: StorageBackend, namespace: str = "default"):
         self.storage = storage
+        self.namespace = namespace or "default"
 
     # -- persistence ------------------------------------------------------
 
     def _load(self, content_type: str, column: str) -> List[FieldObservation]:
         try:
-            raw = self.storage.get_text(MEMORY_ZONE, _key(content_type, column))
+            raw = self.storage.get_text(
+                MEMORY_ZONE, _key(content_type, column, self.namespace))
         except FileNotFoundError:
             return []
         try:
@@ -178,7 +197,7 @@ class FieldMemory:
             "observations": [o.as_dict() for o in observations],
         }
         return self.storage.save_text(
-            MEMORY_ZONE, _key(content_type, column),
+            MEMORY_ZONE, _key(content_type, column, self.namespace),
             json.dumps(body, indent=2, sort_keys=True),
         )
 
@@ -186,7 +205,9 @@ class FieldMemory:
 
     def record(self, *, source_column: str, target_field: str,
                content_type: str, source_id: str,
-               confirmed_by: str = "human", note: str = "") -> FieldObservation:
+               confirmed_by: str = "human", note: str = "",
+               unit: Optional[str] = None, period: Optional[str] = None,
+               definition: str = "") -> FieldObservation:
         """
         Store one confirmation.
 
@@ -208,6 +229,9 @@ class FieldMemory:
             confirmed_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             confirmed_by=confirmed_by,
             note=note,
+            unit=unit,
+            period=period,
+            definition=definition,
         )
         observations.append(observation)
         self._save(content_type, source_column, observations)
@@ -234,12 +258,24 @@ class FieldMemory:
                     needs_review=False,
                     rationale=(f"'{source_id}' confirmed this column as "
                                f"'{obs.target_field}' on {obs.confirmed_at or 'a previous run'}"),
+                    unit=obs.unit,
+                    period=obs.period,
+                    definition=obs.definition,
                 )
 
-        # 2. Other senders. Group them by what they said.
+        # 2. Other senders. Group HUMAN confirmations by what they said.
+        # Auto-confirmed mappings remain useful for the exact sender, but must
+        # never combine into organisation-wide truth without a person.
         by_field: Dict[str, List[str]] = {}
         for obs in observations:
+            if normalise_name(obs.confirmed_by) == "auto":
+                continue
             by_field.setdefault(obs.target_field, []).append(obs.source_id)
+        if not by_field:
+            return MemoryResolution(
+                rationale=("only machine-confirmed observations exist for this column; "
+                           "they do not generalise to another sender")
+            )
         alternatives = [
             MemoryAlternative(target_field=f, source_ids=sorted(set(ids)))
             for f, ids in by_field.items()
@@ -263,6 +299,15 @@ class FieldMemory:
 
         # 4. Unanimous. Does it have enough independent support to travel?
         only = alternatives[0]
+        supporting = [o for o in observations
+                      if o.target_field == only.target_field
+                      and normalise_name(o.confirmed_by) != "auto"]
+        units = {o.unit for o in supporting if o.unit}
+        periods = {o.period for o in supporting if o.period}
+        definitions = {o.definition for o in supporting if o.definition}
+        shared_unit = next(iter(units)) if len(units) == 1 else None
+        shared_period = next(iter(periods)) if len(periods) == 1 else None
+        shared_definition = next(iter(definitions)) if len(definitions) == 1 else ""
         if only.support >= GENERALISE_AFTER_SOURCES:
             return MemoryResolution(
                 target_field=only.target_field,
@@ -273,6 +318,9 @@ class FieldMemory:
                            f"independently confirmed this column as "
                            f"'{only.target_field}' for {content_type} data"),
                 alternatives=alternatives,
+                unit=shared_unit,
+                period=shared_period,
+                definition=shared_definition,
             )
 
         return MemoryResolution(
@@ -284,6 +332,9 @@ class FieldMemory:
                        f"'{only.target_field}'. One data point is not yet a pattern, "
                        f"so this is proposed rather than applied"),
             alternatives=alternatives,
+            unit=shared_unit,
+            period=shared_period,
+            definition=shared_definition,
         )
 
     # -- introspection ----------------------------------------------------
@@ -296,13 +347,17 @@ class FieldMemory:
     def stats(self) -> Dict[str, int]:
         """Counts for the report: how much has this system actually learned?"""
         try:
-            keys = self.storage.list(MEMORY_ZONE, MEMORY_PREFIX)
+            prefix = (MEMORY_PREFIX if self.namespace == "default"
+                      else f"{MEMORY_PREFIX}/clients/{normalise_name(self.namespace)}")
+            keys = self.storage.list(MEMORY_ZONE, prefix)
         except Exception:
             return {"columns": 0, "observations": 0, "content_types": 0}
         columns = 0
         observations = 0
         types: Counter = Counter()
         for key in keys:
+            if self.namespace == "default" and key.startswith(f"{MEMORY_PREFIX}/clients/"):
+                continue
             if not key.endswith(".json"):
                 continue
             try:

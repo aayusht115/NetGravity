@@ -17,6 +17,7 @@ Endpoints
     GET  /orchestrator/twin/states/<id>     one state, flows paginated
     GET  /orchestrator/twin/snapshots/<id>  state for a snapshot/scenario
     GET  /orchestrator/twin/compare         baseline vs scenario
+    POST /orchestrator/insights             executive/network/node/lane insight
     GET  /orchestrator/capabilities         registered capability catalogue
     GET  /orchestrator/workflows            available workflow templates
     GET  /orchestrator/health               control-plane health
@@ -333,6 +334,90 @@ def create_orchestrator_blueprint(orchestrator: Orchestrator, url_prefix: str = 
         except TwinStateNotFound as exc:
             return jsonify({"error": {"code": "NOT_FOUND", "message": str(exc)}}), 404
         return jsonify(result.model_dump(mode="json")), 200
+
+    # ------------------------------------------------------------------
+    # Read-only Reasoning Agent surface
+    # ------------------------------------------------------------------
+
+    @bp.route("/insights", methods=["POST"])
+    def insights():
+        """
+        Explain one already-published Digital Twin state.
+
+        Body::
+
+            {
+              "state_id": "tws_...",
+              "scope": "NETWORK" | "FACILITY" | "LANE" | "COMPARISON",
+              "entity_id": "DC_DELHI" | "DC_DELHI->MKT_NORTH", // scoped views
+              "comparison_state_id": "tws_...",                 // comparison
+              "question": "Why is this route important?",
+              "disable_llm": false
+            }
+
+        This endpoint is advisory and read-only. It cannot run an optimization,
+        mutate the twin, classify an action, or bypass numeric grounding.
+        """
+        from netgravity.orchestrator.reasoning.evidence import twin_reasoning_payload
+        from netgravity.orchestrator.schemas.reasoning import InsightRequest
+
+        body: Dict[str, Any] = request.get_json(silent=True) or {}
+        try:
+            insight_request = InsightRequest(**body)
+        except Exception as exc:  # noqa: BLE001
+            return jsonify({"error": {
+                "code": "INVALID_REQUEST",
+                "message": f"Malformed insight request: {exc}",
+            }}), 400
+
+        try:
+            state = orchestrator.twin.materialize(insight_request.state_id)
+            comparison = None
+            if insight_request.comparison_state_id:
+                comparison = orchestrator.twin.compare(
+                    insight_request.state_id,
+                    insight_request.comparison_state_id,
+                )
+            payload = twin_reasoning_payload(
+                state,
+                scope=insight_request.scope,
+                entity_id=insight_request.entity_id,
+                comparison=comparison,
+            )
+        except TwinStateNotFound as exc:
+            return jsonify({"error": {"code": "NOT_FOUND", "message": str(exc)}}), 404
+        except ValueError as exc:
+            return jsonify({"error": {
+                "code": "INVALID_ENTITY",
+                "message": str(exc),
+            }}), 400
+
+        unavailable = {
+            item.field: {"status": item.status.value, "reason": item.reason}
+            for item in state.unavailable
+        }
+        reasoning_agent = orchestrator.services["reasoning_agent"]
+        result = reasoning_agent.reason(
+            payload,
+            unavailable_evidence=unavailable,
+            provenance={
+                "state_id": state.state_id,
+                "snapshot_id": state.snapshot_id,
+                "scenario_id": state.scenario_id or "",
+            },
+            allow_llm=not insight_request.disable_llm,
+            scope=insight_request.scope,
+            entity_id=insight_request.entity_id,
+            user_question=insight_request.question,
+        )
+        return jsonify({
+            "state_id": state.state_id,
+            "snapshot_id": state.snapshot_id,
+            "scenario_id": state.scenario_id,
+            "scope": insight_request.scope.value,
+            "entity_id": insight_request.entity_id,
+            "reasoning": result.model_dump(mode="json"),
+        }), 200
 
     # ------------------------------------------------------------------
     @bp.route("/capabilities", methods=["GET"])

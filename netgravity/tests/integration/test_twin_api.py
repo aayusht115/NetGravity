@@ -192,6 +192,66 @@ class TestComparisonEndpoint:
         assert result.status_code == 404
 
 
+class TestReasoningInsightsEndpoint:
+
+    def test_network_insight_is_narrative_first_and_ui_ready(self, wired):
+        client, _, response = wired
+        state_id = next(t["state_id"] for t in response.twin_states
+                        if t["state_type"] == "OPTIMIZED")
+
+        result = client.post("/orchestrator/insights", json={
+            "state_id": state_id,
+            "scope": "NETWORK",
+            "question": "What should a business leader notice?",
+            "disable_llm": True,
+        })
+
+        assert result.status_code == 200
+        reasoning = result.get_json()["reasoning"]
+        assert reasoning["source"] == "template"
+        assert reasoning["briefing"]["opening"].startswith("I ")
+        assert reasoning["briefing"]["kpi_insights"]
+        assert reasoning["grounding_status"] in ("GROUNDED", "NO_CLAIMS")
+
+    def test_facility_and_lane_insights_validate_exact_map_entities(self, wired):
+        client, _, response = wired
+        state_id = next(t["state_id"] for t in response.twin_states
+                        if t["state_type"] == "OPTIMIZED")
+
+        facility = client.post("/orchestrator/insights", json={
+            "state_id": state_id,
+            "scope": "FACILITY",
+            "entity_id": "DC_DELHI",
+            "disable_llm": True,
+        })
+        lane = client.post("/orchestrator/insights", json={
+            "state_id": state_id,
+            "scope": "LANE",
+            "entity_id": "DC_DELHI->MKT_NORTH",
+            "disable_llm": True,
+        })
+
+        assert facility.status_code == 200
+        assert facility.get_json()["reasoning"]["briefing"]["entity_id"] == "DC_DELHI"
+        assert lane.status_code == 200
+        assert lane.get_json()["reasoning"]["briefing"]["entity_id"] == \
+            "DC_DELHI->MKT_NORTH"
+
+    def test_unknown_map_entity_is_refused_without_guessing(self, wired):
+        client, _, response = wired
+        state_id = response.twin_states[0]["state_id"]
+
+        result = client.post("/orchestrator/insights", json={
+            "state_id": state_id,
+            "scope": "FACILITY",
+            "entity_id": "DC_JAIPUR",
+            "disable_llm": True,
+        })
+
+        assert result.status_code == 400
+        assert result.get_json()["error"]["code"] == "INVALID_ENTITY"
+
+
 class TestRunResponseCarriesReferences:
 
     def test_the_run_endpoint_returns_twin_handles(self, wired):

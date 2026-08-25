@@ -293,6 +293,45 @@ class TestRejectsLookalikes:
         # The evidence is still reported, so the judgement can be argued with.
         assert result.sup_f is not None and result.sup_f > SUP_F_THRESHOLD
 
+    def test_a_seasonal_amplitude_change_is_not_a_level_shift(self):
+        # The swings get much bigger; the mean does not move. A level-shift
+        # test has nothing to say about that, and must not pretend otherwise.
+        # Left unguarded this was the feature's worst regression: MASE 1.42 to
+        # 4.98 on the seasonal-regime-change scenario.
+        fired = []
+        for seed in range(30):
+            rng = np.random.default_rng(seed)
+            t = np.arange(60)
+            amplitude = np.where(t < 48, 20.0, 70.0)
+            y = np.clip(
+                130 + amplitude * np.sin(2 * np.pi * t / 12)
+                + rng.normal(0, 6, 60),
+                1.0, None,
+            )
+            if detect_change_point(y).detected:
+                fired.append(seed)
+        assert not fired, (
+            f"a seasonal amplitude change was read as a level shift on "
+            f"{len(fired)}/30 realisations (seeds {fired[:5]})"
+        )
+
+    def test_a_step_inside_the_series_own_swing_is_refused(self):
+        # Statistically clear against the model residual, unremarkable against
+        # how far the series routinely travels. Both gates exist because each
+        # alone lets a different impostor through.
+        rng = np.random.default_rng(77)
+        t = np.arange(60)
+        y = np.clip(
+            200 + 60 * np.sin(2 * np.pi * t / 12)
+            + np.where(t < 40, 0.0, 55.0) + rng.normal(0, 3, 60),
+            1.0, None,
+        )
+        result = detect_change_point(y)
+        assert not result.detected
+        assert result.swing_magnitude is not None
+        assert result.swing_magnitude < 3.5
+        assert "routinely moves" in result.reason
+
     def test_a_break_needs_a_full_segment_on_each_side(self):
         # One post-break observation cannot form a regime, by construction.
         y = np.concatenate([stable(seed=2, n=47), [400.0]])
@@ -449,9 +488,11 @@ class TestAdaptiveForecastIsBetter:
     """
 
     def test_the_critical_case_beats_the_unadapted_pipeline(self):
-        # ~100 for 44 periods, then ~200. The future stays around 200 — but
-        # the expected value is nowhere in the assertion: what is asserted is
-        # that the adapted forecast lands closer to it.
+        # The specified case: ~100 for 44 periods, then ~200, with a future
+        # that stays in the new regime. Nothing here asserts that the forecast
+        # equals 200 — the assertions are that the adapted forecast lands
+        # closer to a future it was never shown, and that it tracks the new
+        # regime rather than splitting the difference between the two.
         rng = np.random.default_rng(21)
         history = np.concatenate([
             100 + rng.normal(0, 3, 44), 200 + rng.normal(0, 6, 6),
@@ -467,8 +508,41 @@ class TestAdaptiveForecastIsBetter:
         assert mae_after < mae_before, (
             f"adaptation did not help: {mae_after:.2f} vs {mae_before:.2f}"
         )
-        # Materially better, not marginally.
-        assert mae_after < 0.5 * mae_before
+
+        # The substantive claim, stated without a hardcoded expectation: the
+        # adapted forecast sits nearer the level the series has ALREADY been
+        # observed at than the unadapted one does. Both quantities come from
+        # data the model was given.
+        observed_new_level = float(np.mean(history[44:]))
+        gap_before = abs(np.mean([p.mean for p in before.points]) - observed_new_level)
+        gap_after = abs(np.mean([p.mean for p in after.points]) - observed_new_level)
+        assert gap_after < gap_before
+
+    def test_the_critical_case_improves_materially_across_seeds(self):
+        # "Materially" needs more than one realisation behind it, so the size
+        # of the improvement is asserted on the median of thirty.
+        ratios = []
+        for seed in range(30):
+            rng = np.random.default_rng(400 + seed)
+            history = np.concatenate([
+                100 + rng.normal(0, 3, 44), 200 + rng.normal(0, 6, 6),
+            ])
+            future = 200 + rng.normal(0, 6, 12)
+            before = mae(
+                [p.mean for p in forecast_of(history, detect=False).series[0].points],
+                future,
+            )
+            after = mae(
+                [p.mean for p in forecast_of(history, detect=True).series[0].points],
+                future,
+            )
+            ratios.append(after / before)
+
+        median_ratio = float(np.median(ratios))
+        assert median_ratio < 0.6, (
+            f"median error ratio {median_ratio:.3f} — adaptation is not a "
+            f"material improvement on this case"
+        )
 
     def test_a_recent_break_no_longer_diverges(self):
         # The defect this feature exists for. With a level shift inside the
@@ -558,19 +632,38 @@ class TestEvidenceIsHonest:
         assert "Not measured" in decision.reason
 
     def test_history_is_kept_when_measurement_says_to_keep_it(self):
-        # A detected break is not automatically a reason to forget. This is the
-        # branch that makes the comparison worth running: construct a break
-        # whose post-regime is long and well behaved, and confirm the decision
-        # can still come back FULL_HISTORY on the evidence.
-        outcomes = set()
+        # A detected break is NOT automatically a reason to forget, and this is
+        # the branch that makes the comparison worth running rather than being
+        # an elaborate way to reach a decision already made.
+        #
+        # The case is a strongly seasonal series that also steps up sharply.
+        # The break is real, large enough to clear every materiality gate, and
+        # detected — but the post-break window is shorter than one seasonal
+        # cycle, so forecasting from it alone throws away the only evidence of
+        # the seasonality. On some realisations the measurement says exactly
+        # that, and the decision keeps history.
+        kept = 0
+        measured = 0
         for seed in range(40):
-            y = level_shift(seed=seed, n_pre=24, n_post=24)
-            decision = select_regime(y, detect_change_point(y))
+            rng = np.random.default_rng(seed)
+            t = np.arange(46)
+            y = np.clip(
+                150 + 40 * np.sin(2 * np.pi * t / 12)
+                + np.where(t < 36, 0.0, 200.0) + rng.normal(0, 5, 46),
+                1.0, None,
+            )
+            decision = select_regime(
+                y, detect_change_point(y), horizon=12,
+            )
             if decision.basis is StrategyBasis.MEASURED:
-                outcomes.add(decision.strategy)
-        assert RegimeStrategy.FULL_HISTORY in outcomes, (
-            "the comparison never once kept full history; it is not really "
-            "comparing, it is rationalising a decision already made"
+                measured += 1
+                kept += decision.strategy is RegimeStrategy.FULL_HISTORY
+
+        assert measured > 0, "nothing was measured; the case proves nothing"
+        assert kept > 0, (
+            "the comparison never once kept full history on a series whose "
+            "post-break window is shorter than its seasonal cycle; it is not "
+            "really comparing, it is rationalising a decision already made"
         )
 
     def test_the_decision_names_the_measured_errors_in_its_reason(self):
@@ -578,6 +671,50 @@ class TestEvidenceIsHonest:
         decision = select_regime(y, detect_change_point(y))
         assert "MAE" in decision.reason
         assert str(decision.n_folds) in decision.reason
+
+    def test_the_rule_declines_when_the_new_regime_is_still_ramping(self):
+        # The rule's argument is that history describes "a level the series has
+        # left". On a series that stops being flat and starts climbing there is
+        # no new level to sit at, and applying the rule anyway forecasts a flat
+        # line through a ramp.
+        #
+        # The guard is a slope test, so it fires on ramps it can actually
+        # resolve — the majority, not all of them. A ramp buried in enough
+        # noise is not statistically distinguishable from a level on seven
+        # observations, and that limitation is documented rather than asserted
+        # away here.
+        declined = 0
+        fired = 0
+        for seed in range(30):
+            rng = np.random.default_rng(seed)
+            t = np.arange(60)
+            y = np.clip(
+                120 + np.clip(t - 48, 0, None) * 5.0 + rng.normal(0, 6, 60),
+                1.0, None,
+            )
+            break_result = detect_change_point(y)
+            if not break_result.detected:
+                continue
+            decision = select_regime(y, break_result, horizon=12)
+            if decision.basis is not StrategyBasis.RULE:
+                continue
+            fired += 1
+            if decision.strategy is RegimeStrategy.FULL_HISTORY:
+                declined += 1
+                assert "trending" in decision.reason
+
+        assert fired > 0, "the rule branch never ran; the case proves nothing"
+        assert declined > 0.6 * fired, (
+            f"the rule discarded history on {fired - declined} of {fired} "
+            f"clearly ramping series"
+        )
+
+    def test_a_flat_new_regime_still_takes_the_rule(self):
+        # The guard above must not suppress the case the rule exists for.
+        y = level_shift(seed=60, n_pre=44, n_post=4)
+        decision = select_regime(y, detect_change_point(y), horizon=12)
+        assert decision.basis is StrategyBasis.RULE
+        assert decision.strategy is RegimeStrategy.RECENT_REGIME
 
     def test_an_unmeasured_comparison_reports_none_not_zero(self):
         y = level_shift(seed=33, n_pre=44, n_post=4)

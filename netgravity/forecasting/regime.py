@@ -102,6 +102,26 @@ MIN_RECENT_TRAIN: int = 3
 #: anecdote — the same standard `AccuracyMetrics.n_folds` exists to expose.
 MIN_FOLDS_FOR_MEASUREMENT: int = 2
 
+#: Slope t-statistic above which the post-break segment is judged to be
+#: TRENDING rather than sitting at a new level.
+#:
+#: Only consulted on the unmeasured `RULE` path, and it is there because the
+#: rule's justification depends on it. The argument for taking the recent
+#: regime without measuring is that the pre-break data describes "a level the
+#: series has left" — which presumes the new regime IS a level. When demand
+#: stops being flat and starts ramping, that presumption fails: the detector
+#: reports a level shift somewhere in the middle of the ramp, the short window
+#: routes to a level-only prior, and the forecast goes flat while the series
+#: keeps climbing. Measured on a flat-then-ramping scenario it cost MASE 3.46
+#: to 4.20, the only regression the feature produced once seasonal amplitude
+#: changes were excluded.
+#:
+#: Genuine level shifts leave a post-break slope t of about 0.7 (90th
+#: percentile 2.0); the ramping scenario sits at 3.4. Where the measurement
+#: does run it already reaches the right answer on its own, so this guard is
+#: deliberately confined to the branch that cannot measure.
+MAX_POST_BREAK_SLOPE_T: float = 2.5
+
 #: Fraction of the requested horizon the folds must be able to score before the
 #: comparison is trusted over the rule.
 #:
@@ -183,6 +203,33 @@ class RegimeDecision(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+
+def _slope_t(segment: np.ndarray) -> float:
+    """
+    |t| for the slope of a straight line through a segment.
+
+    A scale-free measure of "is this drifting or is it sitting still", which
+    raw slope is not: five units a period is a steep ramp on demand of 100 and
+    noise on demand of 10,000. Returns 0.0 when the segment is too short for
+    the statistic to mean anything.
+    """
+    n = int(segment.size)
+    if n < 4:
+        return 0.0
+    x = np.arange(n, dtype=np.float64)
+    x = x - x.mean()
+    y = segment - segment.mean()
+    sxx = float(x @ x)
+    if sxx <= 0.0:
+        return 0.0
+    slope = float(x @ y) / sxx
+    residual = y - slope * x
+    dof = n - 2
+    if dof < 1:
+        return 0.0
+    se = math.sqrt(float(residual @ residual) / dof / sxx)
+    return abs(slope) / max(se, 1e-12)
+
 
 def _eval_horizon(n: int, first_origin: int, requested: int) -> int:
     """
@@ -363,7 +410,30 @@ def select_regime(
     deep_enough = eval_horizon >= required_depth
 
     if n_folds < MIN_FOLDS_FOR_MEASUREMENT or not deep_enough:
-        # Too little new regime to score. Rule, and labelled as one.
+        # Too little new regime to score, so the rule applies — but only where
+        # the rule's premise holds. A post-break segment that is still climbing
+        # or falling is not a new *level*, and forecasting a flat line from it
+        # is worse than leaving the existing path alone.
+        slope_t = _slope_t(arr[change_index:])
+        if slope_t > MAX_POST_BREAK_SLOPE_T:
+            return full(
+                StrategyBasis.RULE,
+                f"break detected at period {change_index + 1}, but the "
+                f"{n_post} observations after it are still trending "
+                f"(slope t={slope_t:.2f} against a "
+                f"{MAX_POST_BREAK_SLOPE_T:.2f} ceiling), so they describe a "
+                f"ramp rather than a new level — and there is too little of "
+                f"the new regime to measure the alternative "
+                f"({n_folds} usable fold(s) at {eval_horizon} step(s)). "
+                f"Keeping full history: the rule that would discard it assumes "
+                f"a level the series is not sitting at.",
+                full_history_engine=full_eng,
+                recent_regime_engine=recent_eng,
+                n_folds=n_folds,
+                eval_horizon=eval_horizon if n_folds else 0,
+            )
+
+        # Rule, and labelled as one.
         return RegimeDecision(
             strategy=RegimeStrategy.RECENT_REGIME,
             basis=StrategyBasis.RULE,
@@ -444,6 +514,7 @@ def select_regime(
 
 __all__ = [
     "MIN_FOLDS_FOR_MEASUREMENT",
+    "MAX_POST_BREAK_SLOPE_T",
     "MIN_RECENT_TRAIN",
     "RegimeDecision",
     "RegimeStrategy",

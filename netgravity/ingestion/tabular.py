@@ -52,9 +52,11 @@ from netgravity.ingestion import review as review_module
 from netgravity.ingestion.adapters import structured
 from netgravity.ingestion.ai.classifier import classify
 from netgravity.ingestion.ai.client import get_client
+from netgravity.ingestion.ai.client import LLM_FAILURE_MARKER
 from netgravity.ingestion.ai.field_mapper import build_mapping
 from netgravity.ingestion.config import IngestionConfig
 from netgravity.ingestion.memory.field_memory import FieldMemory
+from netgravity.ingestion.memory.field_catalog import FieldCatalog
 from netgravity.ingestion.schemas.content import (
     DEST_HOLD,
     DEST_NETWORK,
@@ -117,7 +119,9 @@ def ingest_tabular(source: Path, config: IngestionConfig,
                    storage: Optional[StorageBackend] = None,
                    *, known_ids: Optional[Sequence[str]] = None,
                    auto_confirm: bool = False,
-                   sources: Optional[Sequence[DataSource]] = None) -> TabularResult:
+                   sources: Optional[Sequence[DataSource]] = None,
+                   catalog_scope: str = "default",
+                   content_type_overrides: Optional[Dict[str, str]] = None) -> TabularResult:
     """
     Run the unified path over a directory (or an explicit list of sources).
 
@@ -125,7 +129,10 @@ def ingest_tabular(source: Path, config: IngestionConfig,
     DataSource, so nothing here is file-specific.
     """
     outcome = TabularResult()
-    memory = FieldMemory(storage) if storage is not None else None
+    memory = (FieldMemory(storage, namespace=catalog_scope)
+              if storage is not None else None)
+    catalog = (FieldCatalog(storage, client_id=catalog_scope)
+               if storage is not None else None)
     client = get_client(config)
     known = list(known_ids or [])
 
@@ -133,14 +140,17 @@ def ingest_tabular(source: Path, config: IngestionConfig,
         for record_set in data_source.record_sets():
             outcome.results.append(
                 _ingest_record_set(record_set, client, memory, known,
-                                   outcome, auto_confirm))
+                                   outcome, auto_confirm, catalog,
+                                   content_type_overrides or {}))
 
     return outcome
 
 
 def _ingest_record_set(record_set: RecordSet, client, memory: Optional[FieldMemory],
                        known_ids: Sequence[str], outcome: TabularResult,
-                       auto_confirm: bool) -> FileResult:
+                       auto_confirm: bool,
+                       catalog: Optional[FieldCatalog] = None,
+                       content_type_overrides: Optional[Dict[str, str]] = None) -> FileResult:
     result = FileResult(
         source_file=record_set.origin.label,
         adapter="tabular",
@@ -159,11 +169,20 @@ def _ingest_record_set(record_set: RecordSet, client, memory: Optional[FieldMemo
         return result
 
     classification = classify(client, record_set)
+    override = (content_type_overrides or {}).get(record_set.key)
+    if override:
+        classification.content_type = ContentType.parse(override)
+        classification.confidence = 1.0
+        classification.needs_review = False
+        classification.review_reasons = []
+        classification.proposed_by = "human:content-type-override"
     mapping = build_mapping(client, record_set, classification,
-                            memory=memory, known_ids=known_ids)
+                            memory=memory, catalog=catalog,
+                            known_ids=known_ids)
     outcome.mappings.append(mapping)
 
     result.ai_notes.extend(mapping.notes)
+    result.ai_failed = any(LLM_FAILURE_MARKER in note for note in mapping.notes)
     result.ai_notes.append(
         f"classified as {classification.content_type.value} "
         f"({classification.confidence:.0%}, via {classification.proposed_by}) "

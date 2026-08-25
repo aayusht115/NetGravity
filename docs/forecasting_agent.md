@@ -16,6 +16,9 @@ Extraction / Parsing Agent  →  STAGING zone
       Orchestrator
           ↓
 ForecastRequest → ForecastingService → ForecastResult
+                        │
+                        └── change-point detection → regime selection
+                            (which slice of history to fit on)
           ↓
       Orchestrator            ← validates, then builds the MILP input
           ↓
@@ -28,6 +31,13 @@ ForecastRequest → ForecastingService → ForecastResult
 or a solver. Turning an estimate into a network happens in
 `orchestrator/engines/forecast_bridge.py`, on the far side of the boundary.
 Tests assert the import graph rather than trusting this paragraph.
+
+Before an engine is chosen, each series is scanned for a structural break and,
+where the evidence supports it, forecast from the new regime rather than the
+whole history. It is on by default because it is a correctness guard rather
+than a feature — without it a recent level shift makes the recursive quantile
+forecast diverge. Method, measurements and limitations:
+[`forecasting_structural_break.md`](forecasting_structural_break.md).
 
 ## 2. External signals: who decides what
 
@@ -272,11 +282,17 @@ statement about a series that has been zero throughout, and it is correct.
    period is a date string are skipped and counted, because mapping dates onto
    planning periods needs a calendar this layer does not own.
 6. **No model persistence or lifecycle.** Every forecast refits from scratch.
-   Fine at the scale measured (~2 ms/series); no model registry, no drift
-   detection, no retraining schedule.
+   Fine at the scale measured (~2 ms/series); no model registry and no
+   retraining schedule. Structural-break detection covers *abrupt* level
+   changes only — gradual drift is not detected, and trend shifts are detected
+   badly (see `forecasting_structural_break.md` §9).
 7. **The chat surface still refuses forecasts.** `chat_service._forecast_response`
    says "NetGravity has no forecasting capability registered", which is now
    false. Left untouched because this phase was instructed not to modify the
    chatbot; it is a one-message fix and should be made.
-8. **Backtesting is one-step-ahead.** Multi-step accuracy is unmeasured, so the
-   MASE figures describe period-1 forecasts only.
+8. **Backtesting is one-step-ahead.** `validation.backtest` and
+   `select_by_backtest` score period-1 forecasts only, so the MASE they report
+   describes one-step accuracy. The regime comparison in `regime.py` scores
+   multi-step, having measured that a one-step ranking is a poor proxy for a
+   twelve-step forecast; the engine selector has not been changed to match, and
+   probably should be.
