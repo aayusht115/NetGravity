@@ -36,6 +36,10 @@ from netgravity.orchestrator.schemas.plans import (
     ToolResult,
     UnavailableEvidence,
 )
+from netgravity.orchestrator.schemas.recovery import (
+    EscalationOutcome,
+    StepAttemptRecord,
+)
 from netgravity.orchestrator.schemas.requests import (
     Actor,
     ExternalSignal,
@@ -181,10 +185,15 @@ class ExecutionContext:
     governance_result: Optional[GovernanceDecision] = None
     approval_request: Optional[ApprovalRequest] = None
 
-    # --- diagnostics ---
+    # --- diagnostics & recovery history ---
     errors: List[Dict[str, Any]] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     audit_metadata: Dict[str, Any] = field(default_factory=dict)
+    # Observable chronological history of every execution attempt per step_id.
+    # Prevents retries from overwriting earlier failed attempts.
+    step_attempts: Dict[str, List[StepAttemptRecord]] = field(default_factory=dict)
+    # Explicit records of unrecoverable or safety escalations.
+    escalations: List[EscalationOutcome] = field(default_factory=list)
 
     # Set when the run must not perform model calls.
     llm_enabled: bool = True
@@ -346,6 +355,51 @@ class ExecutionContext:
     def add_warning(self, message: str) -> None:
         if message not in self.warnings:
             self.warnings.append(message)
+
+    def record_attempt(
+        self,
+        step_id: str,
+        capability: str,
+        attempt: int,
+        status: AgentStatus,
+        *,
+        duration_seconds: float = 0.0,
+        error_code: Optional[str] = None,
+        error_message: Optional[str] = None,
+        failure_class: Optional[str] = None,
+        is_reroute: bool = False,
+        rerouted_from: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> StepAttemptRecord:
+        """
+        Record a single execution attempt chronologically.
+
+        Preserves attempt history so retries/reroutes are fully observable.
+        """
+        record = StepAttemptRecord(
+            step_id=step_id,
+            capability=capability,
+            attempt=attempt,
+            status=status,
+            duration_seconds=duration_seconds,
+            error_code=error_code,
+            error_message=error_message,
+            failure_class=failure_class,
+            is_reroute=is_reroute,
+            rerouted_from=rerouted_from,
+            context=dict(context or {}),
+        )
+        if step_id not in self.step_attempts:
+            self.step_attempts[step_id] = []
+        self.step_attempts[step_id].append(record)
+        return record
+
+    def record_escalation(self, escalation: EscalationOutcome) -> None:
+        """Record an explicit escalation outcome."""
+        self.escalations.append(escalation)
+        self.add_warning(
+            f"Escalation on capability '{escalation.capability}': {escalation.reason}"
+        )
 
     # ------------------------------------------------------------------
     # Accessors

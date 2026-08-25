@@ -31,6 +31,7 @@ from netgravity.orchestrator.audit.audit_logger import AuditLogger, ExecutionTra
 from netgravity.orchestrator.core.execution_context import ExecutionContext
 from netgravity.orchestrator.core.execution_state import ExecutionState
 from netgravity.orchestrator.core.executor import CapabilityExecutor
+from netgravity.orchestrator.core.failure_manager import FailureManager
 from netgravity.orchestrator.core.planner import WorkflowPlanner
 from netgravity.orchestrator.exceptions import (
     FailureClass,
@@ -152,6 +153,8 @@ class Orchestrator:
         # goes through it, and it is reachable from outside for callers that need
         # to run one capability without a plan.
         self.executor = CapabilityExecutor(registry)
+        # Phase 8.4 — Failure management layer with retry, reroute, and circuit breaker
+        self.failure_manager = FailureManager(executor=self.executor, registry=registry)
 
         self.planner = WorkflowPlanner(registry)
         self.request_validator = RequestValidator()
@@ -352,167 +355,14 @@ class Orchestrator:
 
     async def _execute_plan(self, context: ExecutionContext, trace: ExecutionTrace) -> None:
         """
-        Run the plan layer by layer.
+        Run the plan layer by layer with failure management and recovery policy.
 
-        Steps in a layer are independent by construction, so they are launched
-        together.
-
-        Dependency criticality decides what a failure does:
-
-          HARD unmet → the dependent is BLOCKED. It cannot run safely.
-          SOFT unmet → the dependent RUNS, and is handed explicit
-                       `unavailable_evidence` for what is missing.
-
-        A soft failure therefore degrades the run rather than collapsing the
-        rest of the graph — losing REI must not cost us the reasoning and
-        governance that the surviving MILP and KPI results can still support.
+        Delegated to FailureManager, which coordinates bounded retries, rerouting,
+        dependency failure propagation, circuit breaking, and escalation above
+        CapabilityExecutor.
         """
         assert context.plan is not None
-        layers = context.plan.execution_layers()
-
-        for layer_index, layer in enumerate(layers):
-            runnable: List[str] = []
-
-            for step_id in layer:
-                step = context.plan.step(step_id)
-                assert step is not None
-
-                resolution = context.plan.classify_dependencies(
-                    step, set(context.completed_steps),
-                )
-
-                if not resolution.runnable:
-                    step.status = StepStatus.BLOCKED
-                    context.record_blocked(step_id, step.capability, resolution.blocking)
-                    trace.record(events.STEP_BLOCKED, step_id=step_id,
-                                 capability=step.capability,
-                                 blocked_by=resolution.blocking)
-                    trace.record(events.EVIDENCE_UNAVAILABLE, step_id=step_id,
-                                 capability=step.capability, status="NOT_RUN",
-                                 reason=f"hard dependency failed: {resolution.blocking}")
-                    logger.warning(
-                        "orchestrator.step.blocked step=%s hard_deps_failed=%s %s",
-                        step_id, resolution.blocking, context.correlation(),
-                    )
-                    continue
-
-                if resolution.is_degraded:
-                    # Runs, but honestly: the missing pieces are named.
-                    missing_caps = [
-                        (context.plan.step(d).capability if context.plan.step(d) else d)
-                        for d in resolution.degraded
-                    ]
-                    context.add_warning(
-                        f"step '{step_id}' running with degraded evidence; unavailable: "
-                        f"{', '.join(missing_caps)}"
-                    )
-                    trace.record(events.STEP_DEGRADED, step_id=step_id,
-                                 capability=step.capability,
-                                 soft_deps_failed=resolution.degraded,
-                                 missing_capabilities=missing_caps)
-                    logger.info(
-                        "orchestrator.step.degraded step=%s soft_deps_failed=%s %s",
-                        step_id, resolution.degraded, context.correlation(),
-                    )
-
-                runnable.append(step_id)
-
-            if not runnable:
-                continue
-
-            logger.info(
-                "orchestrator.layer.start layer=%d steps=%s %s",
-                layer_index, runnable, context.correlation(),
-            )
-            for step_id in runnable:
-                step = context.plan.step(step_id)
-                assert step is not None
-                trace.record(events.STEP_STARTED, step_id=step_id,
-                             capability=step.capability, layer=layer_index)
-
-            results = await asyncio.gather(
-                *(self._run_step(context, sid) for sid in runnable),
-                return_exceptions=True,
-            )
-
-            for step_id, outcome in zip(runnable, results):
-                step = context.plan.step(step_id)
-                assert step is not None
-
-                if isinstance(outcome, BaseException):
-                    step.status = StepStatus.FAILED
-                    context.record_error(
-                        "ENGINE_FAILURE",
-                        f"Step '{step_id}' raised {type(outcome).__name__}: {outcome}",
-                        FailureClass.NON_RETRYABLE.value,
-                    )
-                    trace.record(events.STEP_EXCEPTION, step_id=step_id,
-                                 capability=step.capability,
-                                 error_type=type(outcome).__name__,
-                                 error=str(outcome))
-                    trace.record(events.STEP_FAILED, step_id=step_id,
-                                 capability=step.capability, code="ENGINE_FAILURE")
-                    continue
-
-                # NOT recorded here. The executor already wrote this outcome
-                # to the context — one write path, so the step lists, the
-                # capability status and the missing-evidence map cannot end up
-                # disagreeing about the same execution.
-                first_error = outcome.errors[0] if outcome.errors else None
-                step.status = (StepStatus.COMPLETED if outcome.is_usable
-                               else StepStatus.FAILED)
-                trace.record_tool(
-                    step_id=step_id,
-                    capability=outcome.capability,
-                    success=outcome.is_usable,
-                    duration_seconds=outcome.provenance.duration_seconds,
-                    attempts=outcome.provenance.attempts,
-                    execution_mode=outcome.provenance.execution_mode.value,
-                    error_code=first_error.code if first_error else None,
-                    error_message=first_error.message if first_error else None,
-                )
-
-                if outcome.is_usable:
-                    # The flattened projection, read back from the context. The
-                    # envelope carries the TYPED result, which is the wrong thing
-                    # to put in a transport-shaped trace.
-                    trace.engine_results[outcome.capability] = (
-                        context.output_of(outcome.capability) or {}
-                    )
-                    trace.record(events.STEP_COMPLETED, step_id=step_id,
-                                 capability=outcome.capability,
-                                 status=outcome.status.value,
-                                 duration_seconds=round(
-                                     outcome.provenance.duration_seconds, 4))
-                    continue
-
-                # Every failure — optional or not — removes evidence something
-                # downstream might have relied on. Record the absence explicitly
-                # so a reader never has to infer it from a missing key.
-                trace.record(events.STEP_FAILED, step_id=step_id,
-                             capability=outcome.capability,
-                             code=first_error.code if first_error else outcome.status.value,
-                             status=outcome.status.value,
-                             optional=step.optional)
-                evidence = context.unavailable_evidence.get(outcome.capability)
-                trace.record(
-                    events.EVIDENCE_UNAVAILABLE, step_id=step_id,
-                    capability=outcome.capability,
-                    status=evidence.status.value if evidence else "UNAVAILABLE",
-                    reason=(evidence.reason if evidence
-                            else (first_error.message if first_error else "")) or "",
-                )
-
-                if first_error is not None and first_error.code == "SOLVER_INFEASIBLE":
-                    # An outcome, not a fault. Stop the run and report it —
-                    # never retried, never dressed up as an error.
-                    context.audit_metadata["infeasible_step"] = step_id
-                    context.audit_metadata["infeasible_detail"] = (
-                        first_error.context or outcome.metadata.get("error_context", {})
-                    )
-                    trace.record(events.SOLVER_INFEASIBLE, step_id=step_id,
-                                 capability=outcome.capability)
-                    return
+        await self.failure_manager.execute_plan(context.plan, context, trace=trace)
 
     async def _run_step(self, context: ExecutionContext, step_id: str) -> AgentResult:
         """

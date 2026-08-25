@@ -149,6 +149,9 @@ class CapabilityContract(BaseModel):
     #: Validators that must pass before the output may be consumed, by name.
     #: Declared so a caller can tell "unvalidated" from "validated and clean".
     validations: Tuple[str, ...] = ()
+    #: Explicitly declared alternative capabilities that can serve as a registered
+    #: fallback or reroute if this capability encounters an unrecoverable failure.
+    alternative_capabilities: Tuple[str, ...] = ()
 
     #: Ordering rank for a capability that must run AFTER the analytic work,
     #: whatever that work turned out to be. 0 means "not terminal".

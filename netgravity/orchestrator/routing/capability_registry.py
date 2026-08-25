@@ -49,6 +49,8 @@ class CapabilityRegistry:
         # not plan steps: extraction, the twin projection, forecast signal
         # routing. A planner can see they exist and see it may not schedule them.
         self._contracts: Dict[str, CapabilityContract] = {}
+        # Explicit alternative capabilities for rerouting under failure
+        self._alternatives: Dict[str, List[str]] = {}
 
     # ------------------------------------------------------------------
     # Registration
@@ -326,6 +328,34 @@ class CapabilityRegistry:
         reference it and fail at execution time.
         """
         return sorted(k for k in self._contracts if k not in self._capabilities)
+
+    def register_alternative(self, primary: str, *alternatives: str) -> None:
+        """
+        Explicitly register one or more valid alternative capabilities for rerouting.
+
+        Used by FailureManager when a primary capability fails and cannot be retried.
+        """
+        if primary not in self._alternatives:
+            self._alternatives[primary] = []
+        for alt in alternatives:
+            if alt not in self._alternatives[primary]:
+                self._alternatives[primary].append(alt)
+
+    def get_alternatives(self, capability_id: str) -> List[str]:
+        """
+        Get valid registered alternative capabilities for a given capability.
+
+        Combines explicitly registered alternatives with contract-declared alternatives,
+        filtering to those actually present in the registry.
+        """
+        candidates: List[str] = list(self._alternatives.get(capability_id, []))
+        if capability_id in self._contracts:
+            contract = self._contracts[capability_id]
+            for alt in contract.alternative_capabilities:
+                if alt not in candidates:
+                    candidates.append(alt)
+        # Ensure candidate is actually registered and executable
+        return [alt for alt in candidates if alt in self._capabilities or alt in self._contracts]
 
     def __len__(self) -> int:
         return len(self._capabilities)
