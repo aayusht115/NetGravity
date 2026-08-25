@@ -21,6 +21,50 @@ class ExecutionMode(str, Enum):
     PROBABILISTIC = "PROBABILISTIC"   # model-backed: intent, reasoning
 
 
+class AgentStatus(str, Enum):
+    """
+    Outcome of one capability execution, as the orchestrator must read it.
+
+    Defined here, beside `StepStatus` and `EvidenceStatus`, because it belongs to
+    the same result layer and `ToolResult` needs it without importing the
+    envelope that wraps it. `AgentResult` in `schemas/agent_result.py` re-exports
+    it as the public name.
+
+    The distinctions are not cosmetic — each one calls for a different response:
+
+    SUCCESS                Complete, valid, every declared input present.
+
+    PARTIAL                Usable output, knowingly incomplete: some sub-unit
+                           failed, or a SOFT dependency was unavailable. The
+                           caller may use it PROVIDED it is told what is missing,
+                           which is why `unavailable` travels alongside.
+
+    RETRYABLE_FAILURE      Transient. Re-running could succeed. Reported in this
+                           phase; retry logic is deliberately not built yet.
+
+    NON_RETRYABLE_FAILURE  Deterministic failure. Re-running produces the same
+                           answer, so retrying only wastes solver time and
+                           shared model budget. Infeasibility lives here: the
+                           solver PROVED there is no solution, which is a real
+                           finding rather than a fault.
+
+    INVALID_OUTPUT         It ran and produced something the validators refused.
+                           Worse than missing output, because it looks usable.
+
+    INSUFFICIENT_EVIDENCE  Never attempted, or not computable, because required
+                           inputs were absent. Nothing malfunctioned. Kept apart
+                           from the failure statuses so a gap in the data is not
+                           reported as a broken engine — and, above all, so it
+                           is never reported as a value of zero.
+    """
+    SUCCESS               = "SUCCESS"
+    PARTIAL               = "PARTIAL"
+    RETRYABLE_FAILURE     = "RETRYABLE_FAILURE"
+    NON_RETRYABLE_FAILURE = "NON_RETRYABLE_FAILURE"
+    INVALID_OUTPUT        = "INVALID_OUTPUT"
+    INSUFFICIENT_EVIDENCE = "INSUFFICIENT_EVIDENCE"
+
+
 class StepStatus(str, Enum):
     PENDING   = "PENDING"
     RUNNING   = "RUNNING"
@@ -310,6 +354,16 @@ class ToolResult(BaseModel):
     capability: str
     success: bool
     output: Dict[str, Any] = Field(default_factory=dict)
+
+    #: Optional finer-grained outcome. `success` stays the executor's own
+    #: contract and every existing caller keeps reading it; this only lets a
+    #: handler say something the boolean cannot — that a result is PARTIAL, or
+    #: that the inputs were absent rather than the work broken.
+    #:
+    #: Left None by default, in which case `AgentResult.classify` derives the
+    #: status from `success`, `error_code` and `failure_class`. So no handler is
+    #: obliged to change, and none did in this phase.
+    status: Optional[AgentStatus] = None
 
     error_code: Optional[str] = None
     error_message: Optional[str] = None

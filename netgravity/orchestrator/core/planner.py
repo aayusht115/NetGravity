@@ -46,6 +46,24 @@ CAP_SCORE_MARKET   = "market.score_signal"
 CAP_REASON         = "reasoning.synthesise"
 CAP_GOVERN         = "governance.classify"
 
+# --- declared, but NOT plan steps ------------------------------------------
+# These three are real capabilities with real providers, and the capability
+# catalogue describes them so the future planner can reason about what the
+# system can do. None of them is scheduled in an `ExecutionPlan`, and the names
+# live here only to keep every canonical capability name in one place rather
+# than drifting apart across modules.
+#
+# Extraction runs BEFORE an execution exists — it is what produces the network a
+# run is later pinned to. The twin projection runs AFTER the plan settles, from
+# results the orchestrator has already composed. Signal routing is a gated stage
+# inside the forecast handler with no independent entry point.
+#
+# The planner must not schedule any of them; `WORKFLOW_TEMPLATES` therefore
+# never references these constants, and a test asserts that.
+CAP_EXTRACT        = "extraction.parse"
+CAP_TWIN_PUBLISH   = "twin.publish"
+CAP_ROUTE_SIGNAL   = "signal.route_for_forecast"
+
 
 @dataclass(frozen=True)
 class WorkflowTemplate:

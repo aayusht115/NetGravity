@@ -16,6 +16,11 @@ import logging
 from typing import Dict, Iterable, List, Optional
 
 from netgravity.orchestrator.exceptions import CapabilityNotFoundError
+from netgravity.orchestrator.schemas.capability import (
+    CapabilityContract,
+    CapabilityDomain,
+    CapabilitySummary,
+)
 from netgravity.orchestrator.schemas.plans import ExecutionMode
 from netgravity.orchestrator.tools.base import Capability, CapabilityTool
 
@@ -34,6 +39,16 @@ class CapabilityRegistry:
     def __init__(self) -> None:
         self._capabilities: Dict[str, Capability] = {}
         self._tools: Dict[str, CapabilityTool] = {}
+        # Declarations, kept in a SEPARATE store from handlers on purpose. A
+        # contract is metadata; a tool is executable. Because a contract can
+        # exist here with no entry in `_tools`, a metadata lookup has no handler
+        # to call even by accident — which is what "the registry must not
+        # execute capabilities" means in practice rather than as a comment.
+        #
+        # It also lets the registry describe capabilities that are real but are
+        # not plan steps: extraction, the twin projection, forecast signal
+        # routing. A planner can see they exist and see it may not schedule them.
+        self._contracts: Dict[str, CapabilityContract] = {}
 
     # ------------------------------------------------------------------
     # Registration
@@ -55,6 +70,11 @@ class CapabilityRegistry:
             )
         self._capabilities[capability.name] = capability
         self._tools[capability.name] = CapabilityTool(capability)
+        # A capability that carries its own declaration registers it too, so the
+        # handler and the metadata describing it cannot be added separately and
+        # drift apart.
+        if capability.contract is not None:
+            self.register_contract(capability.contract, replace=True)
         logger.info(
             "orchestrator.capability.registered name=%s mode=%s deps=%s optional=%s",
             capability.name, capability.execution_mode.value,
@@ -138,6 +158,174 @@ class CapabilityRegistry:
                 f"Registered: {self.names()}",
                 context={"missing": sorted(set(missing))},
             )
+
+    # ------------------------------------------------------------------
+    # Contracts — declaration, resolution, input checking
+    # ------------------------------------------------------------------
+    #
+    # Everything below is metadata. Nothing here calls a handler, imports an
+    # engine, or touches execution state. `resolve` answers "who can do X?" and
+    # `validate_inputs` answers "could X run with these inputs?" — the decision
+    # to actually run it belongs to the orchestrator, and the running belongs to
+    # `CapabilityTool`.
+
+    def register_contract(
+        self, contract: CapabilityContract, *, replace: bool = False,
+    ) -> None:
+        """
+        Declare what a capability consumes, produces and depends on.
+
+        Raises:
+            ValueError: already declared and `replace` is False. Same reasoning
+                as `register`: a silent overwrite would change what the planner
+                believes about the system with nothing in the log.
+        """
+        existing = self._contracts.get(contract.capability_id)
+        if existing is not None and not replace and existing != contract:
+            raise ValueError(
+                f"Capability contract '{contract.capability_id}' is already "
+                f"declared. Pass replace=True to override deliberately."
+            )
+        self._contracts[contract.capability_id] = contract
+
+    def register_contracts(
+        self, contracts: Iterable[CapabilityContract], *, replace: bool = False,
+    ) -> None:
+        for contract in contracts:
+            self.register_contract(contract, replace=replace)
+
+    def has_contract(self, capability_id: str) -> bool:
+        return capability_id in self._contracts
+
+    def contract(self, capability_id: str) -> CapabilityContract:
+        """
+        The declaration for one capability.
+
+        Raises:
+            CapabilityNotFoundError
+        """
+        found = self._contracts.get(capability_id)
+        if found is None:
+            raise CapabilityNotFoundError(
+                f"No contract declared for capability '{capability_id}'. "
+                f"Declared: {sorted(self._contracts)}",
+                context={"requested": capability_id},
+            )
+        return found
+
+    def contracts(self) -> List[CapabilityContract]:
+        return [self._contracts[k] for k in sorted(self._contracts)]
+
+    def resolve(self, domain: CapabilityDomain) -> List[CapabilityContract]:
+        """
+        Which capabilities answer questions in `domain`.
+
+        The lookup a planner is meant to use: resolve by DOMAIN, not by name, so
+        adding or replacing a provider does not require a planner change. Returns
+        a list because a domain legitimately has several providers — observed and
+        scenario optimisation both serve OPTIMIZATION.
+        """
+        return [c for c in self.contracts() if c.domain == domain]
+
+    def resolve_capability(
+        self,
+        domain: CapabilityDomain,
+        *,
+        schedulable_only: bool = True,
+    ) -> Optional[CapabilityContract]:
+        """
+        One provider for `domain`, or None.
+
+        `schedulable_only` defaults True so a planner cannot be handed a
+        capability it is not allowed to place in a plan — extraction and the twin
+        projection are real, but scheduling either would be wrong.
+
+        Returns None rather than raising: "nothing serves this domain" is an
+        ordinary answer for a planner deciding what a question needs, and
+        exceptions are for genuine faults.
+        """
+        matches = self.resolve(domain)
+        if schedulable_only:
+            matches = [c for c in matches if c.is_plan_schedulable]
+        return matches[0] if matches else None
+
+    def providers_of(self, domain: CapabilityDomain) -> List[str]:
+        """Capability ids serving `domain`."""
+        return [c.capability_id for c in self.resolve(domain)]
+
+    def domains(self) -> List[str]:
+        """Every declared domain, sorted."""
+        return sorted({c.domain.value for c in self.contracts()})
+
+    def schedulable(self) -> List[CapabilityContract]:
+        """Contracts a planner may place in an `ExecutionPlan`."""
+        return [c for c in self.contracts() if c.is_plan_schedulable]
+
+    def authoritative(self) -> List[CapabilityContract]:
+        """
+        Contracts whose output may be cited as fact.
+
+        Deterministic only. Reasoning is excluded by construction, which is the
+        registry-level expression of the rule that a narrative never becomes a
+        number.
+        """
+        return [c for c in self.contracts() if c.is_authoritative]
+
+    def validate_inputs(
+        self, capability_id: str, available: object,
+    ) -> List[str]:
+        """
+        Which declared inputs of `capability_id` are absent from `available`.
+
+        Pure comparison against the contract. Returns the missing keys; raises
+        nothing for a merely-incomplete input set, because "not yet runnable" is
+        information a planner acts on rather than an error.
+
+        Args:
+            capability_id: Declared capability to check.
+            available: Anything supporting `in` — normally `ToolRequest.params`
+                or a set of satisfied context field names.
+
+        Raises:
+            CapabilityNotFoundError: no contract is declared for the capability.
+                This one IS an error: it means the caller is planning around
+                something that does not exist.
+        """
+        return list(self.contract(capability_id).missing_inputs(available))
+
+    def dependency_map(self) -> Dict[str, List[str]]:
+        """
+        capability_id -> declared dependencies.
+
+        The raw material for planning. Deliberately NOT a workflow: it states
+        what each capability reads, and leaves which of those a given question
+        needs to the planner. Nothing here implies one universal order.
+        """
+        return {c.capability_id: list(c.dependencies) for c in self.contracts()}
+
+    def describe_contracts(self) -> List[CapabilitySummary]:
+        """Flat listing of every declaration, for the API and audit records."""
+        return [CapabilitySummary.of(c) for c in self.contracts()]
+
+    def undeclared(self) -> List[str]:
+        """
+        Registered capabilities with no contract.
+
+        A gap rather than a failure: such a capability still executes, but a
+        planner cannot reason about what it needs. Surfaced so the gap is
+        visible instead of implicit.
+        """
+        return sorted(n for n in self._capabilities if n not in self._contracts)
+
+    def unimplemented(self) -> List[str]:
+        """
+        Declared capabilities with no registered handler.
+
+        Expected to be exactly the SERVICE and EMBEDDED ones. Anything
+        ORCHESTRATED appearing here is a real inconsistency — a plan could
+        reference it and fail at execution time.
+        """
+        return sorted(k for k in self._contracts if k not in self._capabilities)
 
     def __len__(self) -> int:
         return len(self._capabilities)

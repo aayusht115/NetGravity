@@ -25,6 +25,7 @@ from netgravity.orchestrator.exceptions import (
     FailureClass,
     OrchestratorError,
 )
+from netgravity.orchestrator.schemas.capability import CapabilityContract
 from netgravity.orchestrator.schemas.plans import (
     ExecutionMode,
     ToolRequest,
@@ -116,6 +117,18 @@ class Capability:
 
     input_schema: Optional[type] = None
     output_schema: Optional[type] = None
+
+    #: Orchestration metadata: domain, provider, typed I/O, where the
+    #: authoritative result lands. Separate from the execution fields above
+    #: because they answer different questions — these say HOW to run this, the
+    #: contract says WHAT it is for and what it needs. A planner reads the
+    #: contract; the executor reads the rest and never looks at it.
+    #:
+    #: Optional so a capability can be registered without one. The registry
+    #: reports such capabilities through `undeclared()` rather than rejecting
+    #: them, since an undeclared capability still executes correctly — it just
+    #: cannot be planned around.
+    contract: Optional["CapabilityContract"] = None
 
     @property
     def is_deterministic(self) -> bool:

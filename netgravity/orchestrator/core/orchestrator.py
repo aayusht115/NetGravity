@@ -30,6 +30,7 @@ from netgravity.orchestrator.audit import events
 from netgravity.orchestrator.audit.audit_logger import AuditLogger, ExecutionTrace
 from netgravity.orchestrator.core.execution_context import ExecutionContext
 from netgravity.orchestrator.core.execution_state import ExecutionState
+from netgravity.orchestrator.core.executor import CapabilityExecutor
 from netgravity.orchestrator.core.planner import WorkflowPlanner
 from netgravity.orchestrator.exceptions import (
     FailureClass,
@@ -44,12 +45,17 @@ from netgravity.orchestrator.governance.action_classifier import (
     GovernancePolicy,
 )
 from netgravity.orchestrator.routing.capability_registry import CapabilityRegistry
+from netgravity.orchestrator.schemas.agent_result import AgentResult
 from netgravity.orchestrator.schemas.actions import (
     ActionClassification,
     ActionType,
     FinalResponse,
 )
-from netgravity.orchestrator.schemas.plans import StepStatus, ToolRequest
+from netgravity.orchestrator.schemas.capability import (
+    CapabilityContract,
+    CapabilityDomain,
+)
+from netgravity.orchestrator.schemas.plans import StepStatus, ToolRequest, ToolResult
 from netgravity.orchestrator.schemas.requests import (
     Intent,
     IntentResolution,
@@ -141,6 +147,11 @@ class Orchestrator:
         # and none can acquire one without passing through here.
         self.twin = twin if twin is not None else DigitalTwinService()
         _init_twin_status_maps()
+
+        # The single execution seam. Every capability invocation in this class
+        # goes through it, and it is reachable from outside for callers that need
+        # to run one capability without a plan.
+        self.executor = CapabilityExecutor(registry)
 
         self.planner = WorkflowPlanner(registry)
         self.request_validator = RequestValidator()
@@ -441,62 +452,86 @@ class Orchestrator:
                                  capability=step.capability, code="ENGINE_FAILURE")
                     continue
 
-                context.record_step(step_id, outcome)
-                step.status = StepStatus.COMPLETED if outcome.success else StepStatus.FAILED
+                # NOT recorded here. The executor already wrote this outcome
+                # to the context — one write path, so the step lists, the
+                # capability status and the missing-evidence map cannot end up
+                # disagreeing about the same execution.
+                first_error = outcome.errors[0] if outcome.errors else None
+                step.status = (StepStatus.COMPLETED if outcome.is_usable
+                               else StepStatus.FAILED)
                 trace.record_tool(
                     step_id=step_id,
                     capability=outcome.capability,
-                    success=outcome.success,
-                    duration_seconds=outcome.duration_seconds,
-                    attempts=outcome.attempts,
-                    execution_mode=outcome.execution_mode.value,
-                    error_code=outcome.error_code,
-                    error_message=outcome.error_message,
+                    success=outcome.is_usable,
+                    duration_seconds=outcome.provenance.duration_seconds,
+                    attempts=outcome.provenance.attempts,
+                    execution_mode=outcome.provenance.execution_mode.value,
+                    error_code=first_error.code if first_error else None,
+                    error_message=first_error.message if first_error else None,
                 )
 
-                if outcome.success:
-                    trace.engine_results[outcome.capability] = outcome.output
+                if outcome.is_usable:
+                    # The flattened projection, read back from the context. The
+                    # envelope carries the TYPED result, which is the wrong thing
+                    # to put in a transport-shaped trace.
+                    trace.engine_results[outcome.capability] = (
+                        context.output_of(outcome.capability) or {}
+                    )
                     trace.record(events.STEP_COMPLETED, step_id=step_id,
                                  capability=outcome.capability,
-                                 duration_seconds=round(outcome.duration_seconds, 4))
+                                 status=outcome.status.value,
+                                 duration_seconds=round(
+                                     outcome.provenance.duration_seconds, 4))
                     continue
 
                 # Every failure — optional or not — removes evidence something
                 # downstream might have relied on. Record the absence explicitly
                 # so a reader never has to infer it from a missing key.
                 trace.record(events.STEP_FAILED, step_id=step_id,
-                             capability=outcome.capability, code=outcome.error_code,
+                             capability=outcome.capability,
+                             code=first_error.code if first_error else outcome.status.value,
+                             status=outcome.status.value,
                              optional=step.optional)
                 evidence = context.unavailable_evidence.get(outcome.capability)
                 trace.record(
                     events.EVIDENCE_UNAVAILABLE, step_id=step_id,
                     capability=outcome.capability,
                     status=evidence.status.value if evidence else "UNAVAILABLE",
-                    reason=(evidence.reason if evidence else outcome.error_message) or "",
+                    reason=(evidence.reason if evidence
+                            else (first_error.message if first_error else "")) or "",
                 )
 
-                if outcome.error_code == "SOLVER_INFEASIBLE":
+                if first_error is not None and first_error.code == "SOLVER_INFEASIBLE":
                     # An outcome, not a fault. Stop the run and report it —
                     # never retried, never dressed up as an error.
                     context.audit_metadata["infeasible_step"] = step_id
-                    context.audit_metadata["infeasible_detail"] = outcome.metadata.get(
-                        "error_context", {}
+                    context.audit_metadata["infeasible_detail"] = (
+                        first_error.context or outcome.metadata.get("error_context", {})
                     )
                     trace.record(events.SOLVER_INFEASIBLE, step_id=step_id,
                                  capability=outcome.capability)
                     return
 
-    async def _run_step(self, context: ExecutionContext, step_id: str) -> Any:
-        """Execute one step through its capability tool."""
+    async def _run_step(self, context: ExecutionContext, step_id: str) -> AgentResult:
+        """
+        Execute one step through the capability executor.
+
+        What stays here is authorization, because it is the only part of the
+        decision that depends on the ACTOR rather than the capability: a model
+        may propose a capability by name, and this is where a role that is not
+        permitted to invoke it is stopped. Raised rather than returned, so an
+        authorization failure can never be mistaken for a data-shaped outcome.
+
+        Everything else — input checks, dependency checks, invocation, status
+        normalisation, output validation and recording — belongs to the executor
+        and happens identically for every caller.
+        """
         assert context.plan is not None
         step = context.plan.step(step_id)
         assert step is not None
         step.status = StepStatus.RUNNING
 
         capability = self.registry.get(step.capability)
-
-        # Capability-level authorization: a model can name a capability, but it
-        # only runs if this actor's role permits it.
         if capability.required_roles and context.actor.role.value not in capability.required_roles:
             from netgravity.orchestrator.exceptions import AuthorizationError
             raise AuthorizationError(
@@ -505,7 +540,6 @@ class Orchestrator:
                 context={"capability": step.capability},
             )
 
-        tool = self.registry.tool(step.capability)
         upstream = {
             dep: context.step_output(dep)
             for dep in step.depends_on
@@ -513,18 +547,15 @@ class Orchestrator:
         }
         # Hand the handler the missing pieces explicitly, so it can degrade
         # honestly instead of inferring a default from an absent key.
-        unavailable = {
-            cap: evidence
-            for cap, evidence in context.unavailable_evidence.items()
-        }
-        return await tool.execute(
+        unavailable = dict(context.unavailable_evidence)
+
+        return await self.executor.execute(
+            step.capability,
             context,
-            ToolRequest(
-                capability=step.capability,
-                params=dict(step.params),
-                upstream=upstream,
-                unavailable=unavailable,
-            ),
+            params=dict(step.params),
+            upstream=upstream,
+            unavailable=unavailable,
+            step_id=step_id,
         )
 
     # ------------------------------------------------------------------
@@ -1161,6 +1192,91 @@ class Orchestrator:
 
     def get_trace(self, execution_id: str) -> Optional[ExecutionTrace]:
         return self.audit.get(execution_id)
+
+    # ==================================================================
+    # Capability control plane
+    # ==================================================================
+    #
+    # The primitives a future planner needs, and nothing more. Every method here
+    # either reads metadata or reads recorded state. None of them chooses what
+    # to run, reroutes, retries, escalates, or calls a model — those decisions
+    # belong to a phase that has not been built, and putting a seam here now is
+    # what keeps that phase from having to reach inside the executor.
+
+    def resolve_capability(
+        self,
+        domain: "CapabilityDomain",
+        *,
+        schedulable_only: bool = True,
+    ) -> Optional["CapabilityContract"]:
+        """
+        Which capability answers questions in `domain`.
+
+        Resolution by domain rather than by name is what lets a capability be
+        replaced without touching whatever plans around it.
+
+        Returns None when nothing serves the domain — an ordinary answer while
+        working out what a question needs, not a fault.
+        """
+        return self.registry.resolve_capability(
+            domain, schedulable_only=schedulable_only,
+        )
+
+    def get_capability(self, capability_id: str) -> "CapabilityContract":
+        """
+        The declaration for one capability.
+
+        Raises:
+            CapabilityNotFoundError: nothing is declared under that id. An error
+                rather than None, because planning around a capability that does
+                not exist is a mistake to surface immediately.
+        """
+        return self.registry.contract(capability_id)
+
+    def validate_inputs(self, capability_id: str, available: Any) -> List[str]:
+        """
+        Declared inputs of `capability_id` that are absent from `available`.
+
+        Metadata comparison only — nothing executes, and an empty list means
+        "the declared inputs are present", not "this will succeed".
+        """
+        return self.registry.validate_inputs(capability_id, available)
+
+    def record_result(
+        self, context: ExecutionContext, step_id: str, result: ToolResult,
+    ) -> None:
+        """
+        Attach one capability outcome to a run.
+
+        A thin delegate on purpose. The context owns execution state and is the
+        only thing that writes it; routing the write through here would create a
+        second path to the same state, which is how two copies of the truth
+        start.
+        """
+        context.record_step(step_id, result)
+
+    def get_execution_state(self, execution_id: str) -> Optional[ExecutionContext]:
+        """
+        The recorded state of one run, from the existing store.
+
+        No new store: `ExecutionStateStore` already holds contexts by id and
+        enforces request-level idempotency.
+        """
+        return self.state_store.get(execution_id)
+
+    def capability_contracts(self) -> List[Dict[str, Any]]:
+        """Flat listing of every declaration, for the API and the audit trail."""
+        return [s.model_dump() for s in self.registry.describe_contracts()]
+
+    def capability_dependencies(self) -> Dict[str, List[str]]:
+        """
+        capability_id -> declared dependencies.
+
+        Raw material for planning, not a workflow. It says what each capability
+        reads; which of those a given question needs stays the planner's
+        decision, and no universal order is implied.
+        """
+        return self.registry.dependency_map()
 
     def health(self) -> Dict[str, Any]:
         """Control-plane health, including degraded-mode visibility."""

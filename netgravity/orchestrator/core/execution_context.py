@@ -27,9 +27,12 @@ from netgravity.orchestrator.schemas.actions import (
     ApprovalRequest,
     GovernanceDecision,
 )
+from netgravity.orchestrator.schemas.agent_result import AgentResult
 from netgravity.orchestrator.schemas.plans import (
+    AgentStatus,
     EvidenceStatus,
     ExecutionPlan,
+    StepStatus,
     ToolResult,
     UnavailableEvidence,
 )
@@ -119,6 +122,19 @@ class ExecutionContext:
     skipped_steps: List[str] = field(default_factory=list)
     blocked_steps: List[str] = field(default_factory=list)
 
+    # Outcome per CAPABILITY, as the orchestrator must read it.
+    #
+    # The step lists above are keyed by STEP id, which is the right key for
+    # executing a plan — the same capability can legitimately appear as two
+    # steps (a baseline solve and a scenario solve). But a planner asks
+    # capability-shaped questions: "do we have resilience evidence yet?" It
+    # should not have to know which step ids happened to carry it.
+    #
+    # Derived state, written only by `record_step` and the record_* methods
+    # below, so it cannot disagree with the step lists. Not a second store:
+    # nothing is kept here that is not already implied by `step_results`.
+    capability_status: Dict[str, AgentStatus] = field(default_factory=dict)
+
     # Evidence that was expected but is MISSING, keyed by capability name.
     # Populated whenever a step fails, is blocked, or produces invalid output.
     # Downstream consumers read this to tell "no data" from "a value of zero".
@@ -149,6 +165,17 @@ class ExecutionContext:
     # rebuilding a result from it would lose per-series calculation status —
     # making a series that FAILED indistinguishable from one nobody asked for.
     forecast_result: Optional[Any] = None
+    # The typed `ExtractionResult`, when extraction was executed through the
+    # capability seam. Same rationale as the fields above: `engine_results`
+    # holds a flattened projection, and rebuilding a result from it would lose
+    # the per-finding validation detail that distinguishes "accepted with
+    # warnings" from "rejected".
+    #
+    # Usually None. Extraction normally runs BEFORE an execution exists — it
+    # produces the network a run is later pinned to — so most runs never touch
+    # this. It is populated only when a caller executes `extraction.parse`
+    # against a context of its own.
+    extraction_result: Optional[Any] = None
     risk_results: Optional[RiskAssessment] = None
     reasoning: Optional[ReasoningResult] = None
     governance_result: Optional[GovernanceDecision] = None
@@ -194,9 +221,46 @@ class ExecutionContext:
     # Recording
     # ------------------------------------------------------------------
 
+    def _record_capability_status(self, capability: str, incoming: AgentStatus) -> None:
+        """
+        Fold one step outcome into the capability-level view.
+
+        A capability can be carried by several steps — a comparison run solves
+        two scenarios through the same capability. When those steps disagree,
+        neither extreme is honest: reporting SUCCESS hides a failed solve, and
+        reporting failure discards a solve that worked. PARTIAL is the accurate
+        answer, and it is exactly what PARTIAL exists to say.
+
+        A repeat SUCCESS after a failure does clear it, matching the existing
+        behaviour of `unavailable_evidence` on the retry and approval-resume
+        paths: the capability has since produced a good result for that step.
+        """
+        previous = self.capability_status.get(capability)
+        if previous is None or previous == incoming:
+            self.capability_status[capability] = incoming
+            return
+
+        succeeded = {AgentStatus.SUCCESS, AgentStatus.PARTIAL}
+        if previous in succeeded and incoming not in succeeded:
+            # Something worked and something did not.
+            self.capability_status[capability] = AgentStatus.PARTIAL
+        else:
+            self.capability_status[capability] = incoming
+
     def record_step(self, step_id: str, result: ToolResult) -> None:
         """Attach a step outcome and update progress bookkeeping."""
         self.step_results[step_id] = result
+        # Explicit status wins; otherwise it is derived from the same evidence
+        # the boolean and the error code already carry, so nothing new is
+        # inferred here.
+        self._record_capability_status(
+            result.capability,
+            result.status or AgentResult.classify(
+                success=result.success,
+                error_code=result.error_code,
+                failure_class=result.failure_class,
+            ),
+        )
         if result.success:
             if step_id not in self.completed_steps:
                 self.completed_steps.append(step_id)
@@ -242,6 +306,12 @@ class ExecutionContext:
         self.unavailable_evidence[capability] = UnavailableEvidence(
             capability=capability, status=status, reason=reason, step_id=step_id,
         )
+        # `setdefault`, not assignment. A step that FAILED has already recorded
+        # its own classification a moment ago, and overwriting it here would
+        # turn every engine fault into "the inputs were missing" — losing the
+        # retryable/non-retryable distinction that this record exists to
+        # preserve. Only a capability with no outcome at all is INSUFFICIENT.
+        self.capability_status.setdefault(capability, AgentStatus.INSUFFICIENT_EVIDENCE)
 
     def record_skip(self, step_id: str, reason: str) -> None:
         if step_id not in self.skipped_steps:
@@ -280,6 +350,173 @@ class ExecutionContext:
     # ------------------------------------------------------------------
     # Accessors
     # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
+    # Capability-level view
+    # ------------------------------------------------------------------
+    #
+    # Everything here is DERIVED from `capability_status`, `step_results` and the
+    # plan. No new state is stored, so these views cannot drift from the step
+    # bookkeeping they summarise.
+
+    def completed_capabilities(self) -> List[str]:
+        """Capabilities that produced usable output, complete or partial."""
+        return sorted(
+            c for c, s in self.capability_status.items()
+            if s in (AgentStatus.SUCCESS, AgentStatus.PARTIAL)
+        )
+
+    def failed_capabilities(self) -> List[str]:
+        """
+        Capabilities that produced nothing usable.
+
+        Includes INSUFFICIENT_EVIDENCE and INVALID_OUTPUT: from a consumer's
+        point of view all three mean "do not read a number from this". The
+        status itself still distinguishes why, which is what governance and the
+        narrative need.
+        """
+        return sorted(
+            c for c, s in self.capability_status.items()
+            if s not in (AgentStatus.SUCCESS, AgentStatus.PARTIAL)
+        )
+
+    def pending_capabilities(self) -> List[str]:
+        """
+        Capabilities the plan still expects and that have not settled.
+
+        Computed from the plan each time rather than maintained as a list — a
+        stored copy is one more thing that can fall out of step with the steps
+        it describes. With no plan yet, `required_capabilities` is used, which is
+        what the planner fills in before a plan exists.
+        """
+        if self.plan is None:
+            return sorted(
+                set(self.required_capabilities) - set(self.capability_status)
+            )
+        expected = {
+            s.capability for s in self.plan.steps
+            if s.status not in (StepStatus.SKIPPED, StepStatus.CANCELLED)
+        }
+        return sorted(expected - set(self.capability_status))
+
+    def capability_outcome(self, capability: str) -> Optional[AgentStatus]:
+        """Recorded outcome for one capability, or None if it never ran."""
+        return self.capability_status.get(capability)
+
+    def typed_output(self, capability: str, authoritative_field: str) -> Any:
+        """
+        The AUTHORITATIVE typed result for a capability.
+
+        `authoritative_field` comes from the capability's contract, so the
+        mapping from capability to field is declared in exactly one place. This
+        method deliberately does not keep its own copy of that mapping — a
+        second copy is how the two come to disagree.
+
+        Reads the typed field, never `engine_results`. That dict holds a
+        flattened projection for transport: rebuilding a registry or a forecast
+        from it would default a FAILED node's status to OK and make a series
+        nobody could compute indistinguishable from one nobody asked for.
+        """
+        if not authoritative_field:
+            return None
+        value = getattr(self, authoritative_field, None)
+        if isinstance(value, dict):
+            # Capability-keyed containers such as `network_states`. Prefer this
+            # capability's own entry; a scenario solve stores under a
+            # scenario-qualified key, so fall back to the sole entry when there
+            # is exactly one and no ambiguity about which run it describes.
+            if capability in value:
+                return value[capability]
+            return next(iter(value.values())) if len(value) == 1 else None
+        return value
+
+    def agent_result(
+        self,
+        capability: str,
+        *,
+        authoritative_field: str = "",
+        agent: str = "",
+    ) -> AgentResult:
+        """
+        Express one capability's outcome through the common contract.
+
+        A VIEW over what is already recorded, built on demand. The context keeps
+        storing what it always stored; this only presents it in the shape the
+        future planner reads, which is why introducing the contract changed no
+        behaviour.
+
+        Returns an INSUFFICIENT_EVIDENCE result for a capability that never ran
+        — never an empty success, and never a zero.
+        """
+        result = next(
+            (r for r in reversed(list(self.step_results.values()))
+             if r.capability == capability),
+            None,
+        )
+        if result is None:
+            missing = self.unavailable_evidence.get(capability)
+            return AgentResult.insufficient_evidence(
+                capability,
+                reason=(missing.reason if missing else "capability did not run in this execution"),
+                status=(missing.status if missing else EvidenceStatus.NOT_RUN),
+                agent=agent,
+                execution_id=self.execution_id,
+            )
+
+        status = self.capability_status.get(capability)
+        output = self.typed_output(capability, authoritative_field)
+        # A PARTIAL or SUCCESS must carry output. When the typed field is empty
+        # — the capability keeps no domain object, or its field was never set —
+        # fall back to the flattened projection so the envelope's invariant
+        # holds without inventing anything: this is the same dict every existing
+        # consumer already reads.
+        if output is None and result.success:
+            output = self.engine_results.get(capability)
+        if output is None and status in (AgentStatus.SUCCESS, AgentStatus.PARTIAL):
+            return AgentResult.insufficient_evidence(
+                capability,
+                reason="capability reported success but recorded no output",
+                status=EvidenceStatus.INVALID,
+                agent=agent,
+                execution_id=self.execution_id,
+            )
+
+        return AgentResult.from_tool_result(
+            result,
+            output=output,
+            agent=agent,
+            execution_id=self.execution_id,
+            snapshot_id=self.baseline_snapshot_id,
+            scenario_id=self.scenario_id,
+            unavailable={
+                k: v for k, v in self.unavailable_evidence.items() if k == capability
+            },
+            complete=(status != AgentStatus.PARTIAL),
+        )
+
+    def capability_provenance(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Per-capability provenance, for the audit trail and the twin.
+
+        Says which snapshot and scenario each outcome describes, so two results
+        pinned to different data versions can never be presented as evidence
+        about the same network.
+        """
+        return {
+            capability: {
+                "status": status.value,
+                "snapshot_id": self.baseline_snapshot_id,
+                "scenario_id": self.scenario_id,
+                "execution_id": self.execution_id,
+                "authoritative": next(
+                    (r.execution_mode.value == "DETERMINISTIC"
+                     for r in self.step_results.values()
+                     if r.capability == capability),
+                    False,
+                ),
+            }
+            for capability, status in sorted(self.capability_status.items())
+        }
 
     def output_of(self, capability: str) -> Optional[Dict[str, Any]]:
         """Successful output of a capability, if it ran."""

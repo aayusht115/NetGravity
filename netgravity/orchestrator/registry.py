@@ -28,6 +28,7 @@ from netgravity.orchestrator.core.execution_context import ExecutionContext
 from netgravity.orchestrator.core.orchestrator import Orchestrator
 from netgravity.orchestrator.core.planner import (
     CAP_CREATE_SCEN,
+    CAP_EXTRACT,
     CAP_FORECAST,
     CAP_GOVERN,
     CAP_INTERPRET_SIG,
@@ -38,7 +39,9 @@ from netgravity.orchestrator.core.planner import (
     CAP_REASON,
     CAP_REI,
     CAP_RISK,
+    CAP_ROUTE_SIGNAL,
     CAP_SCORE_MARKET,
+    CAP_TWIN_PUBLISH,
     CAP_VALIDATE_SCEN,
 )
 from netgravity.orchestrator.engines.deterministic import (
@@ -52,6 +55,7 @@ from netgravity.orchestrator.engines.deterministic import (
 )
 from netgravity.orchestrator.engines.scenario_builder import ScenarioBuilder
 from netgravity.orchestrator.exceptions import (
+    EngineFailureError,
     InvalidScenarioError,
     MissingDataError,
 )
@@ -62,6 +66,10 @@ from netgravity.orchestrator.reasoning.runtime import (
     ReasoningRuntime,
 )
 from netgravity.orchestrator.risk.risk_factor import assess_network_risk, not_computable
+from netgravity.orchestrator.routing.capability_contracts import (
+    CAPABILITY_CONTRACTS,
+    CONTRACTS_BY_ID,
+)
 from netgravity.orchestrator.routing.capability_registry import CapabilityRegistry
 from netgravity.orchestrator.routing.signal_router import ExternalSignalRouter
 from netgravity.orchestrator.schemas.plans import ExecutionMode, ToolRequest
@@ -183,6 +191,20 @@ def build_orchestrator(
 
 def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None:
     svc = orch.services
+
+    def trace_for(ctx: ExecutionContext) -> Any:
+        """
+        The audit trace for this run, creating one if the run has none.
+
+        A context built through `Orchestrator.run` always has a trace. One built
+        directly — which the capability seam now makes possible — does not, and
+        `_govern` and `_project_twin` both record unconditionally. Handing them
+        None made governance fail and made the twin swallow an AttributeError.
+
+        Starting a trace here is the honest fix rather than a guard: a capability
+        execution that happens outside a plan still deserves an audit record.
+        """
+        return orch.audit.get(ctx.execution_id) or orch.audit.start(ctx)
 
     # ---- network.load_snapshot --------------------------------------
     async def load_snapshot(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
@@ -811,15 +833,142 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
         Delegates to the orchestrator's classifier so the same rules apply
         whether governance runs as a plan step or as the post-run safety net.
         """
-        orch._govern(ctx, orch.audit.get(ctx.execution_id))  # noqa: SLF001
+        orch._govern(ctx, trace_for(ctx))  # noqa: SLF001
         assert ctx.governance_result is not None
         return ctx.governance_result.model_dump()
+
+    # ==================================================================
+    # Service and embedded capabilities
+    # ==================================================================
+    #
+    # These three are reachable through the capability seam like everything
+    # else, and remain UNSCHEDULABLE: their contracts say SERVICE / EMBEDDED, so
+    # `resolve_capability` does not offer them to a planner and no workflow
+    # template names them.
+    #
+    # Having a handler is what makes a capability EXECUTABLE; `invocation` is
+    # what makes it PLANNABLE. Those are different questions, and before this
+    # phase the codebase answered both with "does it have a handler?" — which is
+    # why these three could not be executed through the seam at all.
+    #
+    # Each delegates to the SAME production entry point it always used. No logic
+    # moved into these functions.
+
+    # ---- extraction.parse ---------------------------------------------
+    async def parse_source(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
+        """
+        Parse client data into a validated CanonicalNetwork.
+
+        Straight to `ExtractionParsingAgent.extract`, which owns every row rule,
+        referential check and adjudication decision. Nothing is re-validated
+        here and nothing reinterpreted: the agent's own `ExtractionStatus` is
+        what the executor normalises.
+        """
+        from netgravity.orchestrator.agents.extraction_agent import (
+            ExtractionParsingAgent,
+        )
+        from netgravity.orchestrator.schemas.extraction import (
+            ExtractionRequest,
+            SourceType,
+        )
+
+        agent = svc.get("extraction") or ExtractionParsingAgent(orch.snapshots)
+        source_type = req.params.get("source_type")
+        request = ExtractionRequest(
+            source=req.params["source"],
+            **({"source_type": SourceType(source_type)} if source_type else {}),
+            options=dict(req.params.get("options") or {}),
+        )
+        result = await asyncio.get_running_loop().run_in_executor(
+            None, lambda: agent.extract(request),
+        )
+
+        # The TYPED result is authoritative; the dict below is transport.
+        ctx.extraction_result = result
+        for finding in result.validation_results:
+            ctx.add_warning(f"extraction {finding.code}: {finding.message}")
+
+        return {
+            "status": result.status.value,
+            "ingestion_id": result.ingestion_id,
+            "snapshot_id": result.snapshot_id,
+            "data_version": result.data_version,
+            "n_external_signals": len(result.external_signals),
+            "n_market_intelligence": len(result.market_intelligence),
+            "n_findings": len(result.validation_results),
+        }
+
+    # ---- signal.route_for_forecast ------------------------------------
+    async def route_signals(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
+        """
+        Decide which reported signals may inform a forecast.
+
+        The router remains the sole authority on that question. This is the same
+        `route_for_forecast` call the forecast handler makes, exposed so the
+        decision can be executed and audited on its own. It produces no
+        probability, and nothing it returns reaches RF.
+        """
+        snapshot = orch.snapshots.get(ctx.baseline_snapshot_id or "")
+        known = ({f.id for f in snapshot.network.facilities}
+                 if snapshot is not None else set())
+
+        offered = list(req.params.get("signals") or ctx.market_signals)
+        routing = svc["signal_router"].route_for_forecast(
+            offered, known_entity_ids=known,
+        )
+        ctx.signal_routing = routing
+        for record in routing.rejected:
+            ctx.add_warning(
+                f"external signal '{record.signal_id}' not routed to forecasting "
+                f"({record.outcome.value}): {record.reason}"
+            )
+        return {
+            "n_offered": len(routing.records),
+            "n_accepted": len(routing.accepted),
+            "accepted_ids": routing.accepted_ids,
+            "outcomes": routing.outcome_counts(),
+        }
+
+    # ---- twin.publish -------------------------------------------------
+    async def publish_twin(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
+        """
+        Publish this run's authoritative results as a twin state.
+
+        Delegates to `Orchestrator._project_twin`, which is and remains the ONLY
+        path into the twin. It computes nothing — it composes results the
+        deterministic engines already produced.
+
+        `_project_twin` never raises: inside a workflow, failing to draw the
+        picture must not fail the analysis that produced it, so it records a
+        warning and moves on. But when this capability is invoked directly,
+        publishing IS what was asked for, and publishing nothing is a failure of
+        that request — reported here rather than returned as an empty success.
+        The in-run projection is untouched and still degrades quietly.
+        """
+        before = len(ctx.twin_refs)
+        orch._project_twin(ctx, trace_for(ctx))  # noqa: SLF001
+        if len(ctx.twin_refs) == before:
+            raise EngineFailureError(
+                "The Digital Twin projection published no state. Reasons are "
+                "recorded as warnings on this run; the twin reports a failed or "
+                "partial state rather than leaving a stale picture, so producing "
+                "nothing at all means the projection itself did not complete.",
+                context={"capability": req.capability,
+                         "snapshot_id": ctx.baseline_snapshot_id},
+            )
+        return {
+            "n_states": len(ctx.twin_refs),
+            "state_ids": [ref.state_id for ref in ctx.twin_refs],
+            "calculation_status": [
+                ref.calculation_status.value for ref in ctx.twin_refs
+            ],
+        }
 
     # ------------------------------------------------------------------
     # Registration
     # ------------------------------------------------------------------
 
-    registry.register_all([
+    capabilities = [
         Capability(
             name=CAP_LOAD_NETWORK, handler=load_snapshot,
             description="Pin and verify the observed network snapshot for this run.",
@@ -916,7 +1065,47 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             execution_mode=ExecutionMode.DETERMINISTIC,
             timeout_seconds=15.0, retry_policy=NO_RETRY,
         ),
-    ])
+
+        # --- executable, but never plannable --------------------------
+        # Their contracts mark them SERVICE / EMBEDDED, which is what keeps them
+        # out of every plan. See the handlers above.
+        Capability(
+            name=CAP_EXTRACT, handler=parse_source,
+            description="Parse client files into a validated CanonicalNetwork.",
+            execution_mode=ExecutionMode.DETERMINISTIC,
+            timeout_seconds=300.0, retry_policy=NO_RETRY,
+        ),
+        Capability(
+            name=CAP_ROUTE_SIGNAL, handler=route_signals,
+            description="Decide whether a signal may inform a forecast.",
+            execution_mode=ExecutionMode.DETERMINISTIC,
+            dependencies=(CAP_LOAD_NETWORK,),
+            timeout_seconds=15.0, retry_policy=NO_RETRY,
+        ),
+        Capability(
+            name=CAP_TWIN_PUBLISH, handler=publish_twin,
+            description="Publish this run's authoritative results as a twin state.",
+            execution_mode=ExecutionMode.DETERMINISTIC,
+            timeout_seconds=60.0, retry_policy=NO_RETRY, optional=True,
+        ),
+    ]
+
+    # Attach each capability's declaration to the capability itself, so a
+    # handler and the metadata describing it are registered in one act and
+    # cannot be added separately and drift apart. Looked up by name rather than
+    # written out per call site, because a second copy of the mapping is exactly
+    # how the two come to disagree.
+    for capability in capabilities:
+        capability.contract = CONTRACTS_BY_ID.get(capability.name)
+
+    registry.register_all(capabilities)
+
+    # Declare the rest of the catalogue: extraction, the Digital Twin
+    # projection, and forecast signal routing. All three are real capabilities
+    # with real providers, and none is a plan step — so they are declared as
+    # SERVICE or EMBEDDED and get no handler. A planner can see that they exist
+    # and see that it may not schedule them.
+    registry.register_contracts(CAPABILITY_CONTRACTS, replace=True)
 
 
 def _first_upstream(req: ToolRequest, key: str) -> Optional[str]:
