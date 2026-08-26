@@ -1,0 +1,51 @@
+{
+  "Scenario_A": {
+    "sequential_behavior": true,
+    "adaptive_behavior": true,
+    "replanning_observed": false,
+    "agentic_behavior_proven": true,
+    "classification": "PASS"
+  },
+  "Scenario_B": {
+    "sequential_behavior": true,
+    "adaptive_behavior": true,
+    "replanning_observed": false,
+    "risk_isolated_from_demand": false,
+    "agentic_behavior_proven": true,
+    "classification": "PASS"
+  },
+  "Scenario_C": {
+    "sequential_behavior": true,
+    "adaptive_behavior": true,
+    "replanning_observed": true,
+    "agentic_behavior_proven": true,
+    "classification": "PASS"
+  },
+  "Scenario_D": {
+    "sequential_behavior": true,
+    "adaptive_behavior": true,
+    "failure_trapped_by_manager": true,
+    "agentic_behavior_proven": true,
+    "classification": "PASS"
+  },
+  "Scenario_E": {
+    "sequential_behavior": true,
+    "adaptive_behavior": true,
+    "multi_domain_orchestration": true,
+    "agentic_behavior_proven": true,
+    "classification": "PASS"
+  },
+  "NLU_Edge_Cases": {
+    "ambiguous_request": {
+      "input": "Analyze Delhi.",
+      "response_reply": "Do you want to simulate closure of the DC_DELHI facility, or stop customer allocation from DC_DELHI?",
+      "clarity": "AMBIGUOUS",
+      "handled_safely": true
+    },
+    "unsupported_request": {
+      "input": "Can you write a poem about supply chain logistics?",
+      "response_reply": "I could not work out what you would like me to do. I can report the current network state, run what-if scenarios (closing a facility, changing capacity), assess resilience exposure, or combine an exte",
+      "handled_safely": true
+    }
+  }
+}

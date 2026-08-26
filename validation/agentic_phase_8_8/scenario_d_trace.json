@@ -1,0 +1,563 @@
+{
+  "scenario": "D",
+  "name": "Failure / Insufficient Evidence",
+  "original_user_request": "Review resilience and exposure for Delhi facilities.",
+  "duration_s": 26.61,
+  "primary_chat_response": {
+    "conversation_id": "conv_scen_d",
+    "turn_id": "70dca601-8d6",
+    "reply": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). Suggested next step: I recommend reviewing the quantified impact above before moving to a formal option appraisal. No action is proposed; this is analysis only.",
+    "intent": "RESILIENCE_QUERY",
+    "clarity": "CLEAR",
+    "intent_schema_version": "1.0",
+    "intent_confidence": 0.9,
+    "intent_source": "rules",
+    "resolved_entity_ids": [
+      "DC_DELHI"
+    ],
+    "clarification": null,
+    "provenance": "OBSERVED",
+    "execution_id": "fdb68798-27b",
+    "workflow_id": "wf_resilience_query",
+    "network_snapshot_id": "snap_72a48e1a0664",
+    "scenario_id": null,
+    "status": "COMPLETED",
+    "results": {
+      "resilience": {
+        "network_id": "PHASE2_DELHI",
+        "data_version": "72a48e1a066440af",
+        "batch_id": "rei_05fe8484902f",
+        "batch_status": "COMPLETED_WITH_ERRORS",
+        "network_snapshot_id": "snap_72a48e1a0664",
+        "computed_for_snapshot_id": null,
+        "material_fingerprint": "fp1_34ab4fd8199c2adc",
+        "model_version": "1.2.0",
+        "served_from_cache": false,
+        "n_milp_solves": 6,
+        "baseline_business_cost": 1200.0,
+        "baseline_solver_status": "OPTIMAL",
+        "rei_status": "COMPUTED",
+        "max_performance_impact": 500.0,
+        "n_facilities_assessed": 4,
+        "n_successful": 3,
+        "n_failed": 0,
+        "n_infeasible": 1,
+        "highest_exposure_facility": "DC_MUMBAI",
+        "max_rei": 1.0,
+        "facilities": [
+          {
+            "facility_id": "DC_MUMBAI",
+            "facility_name": "Mumbai DC",
+            "facility_role": "DC",
+            "rank": 1,
+            "rei": 1.0,
+            "performance_impact": 500.0,
+            "economic_impact": 500.0,
+            "cost_impact_pct": 41.666667,
+            "unserved_demand": 0.0,
+            "unserved_demand_rate": 0.0,
+            "service_loss": 0.0,
+            "rerouted_volume": 200.0,
+            "is_feasible": true,
+            "solver_status": "OPTIMAL",
+            "calculation_status": "OK",
+            "failure_reason": null,
+            "risk_classification": "NOT_CLASSIFIED",
+            "diagnostics": [
+              "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+            ]
+          },
+          {
+            "facility_id": "DC_DELHI",
+            "facility_name": "Delhi NCR DC",
+            "facility_role": "DC",
+            "rank": 2,
+            "rei": 0.8,
+            "performance_impact": 400.0,
+            "economic_impact": 400.0,
+            "cost_impact_pct": 33.333333,
+            "unserved_demand": 0.0,
+            "unserved_demand_rate": 0.0,
+            "service_loss": 0.0,
+            "rerouted_volume": 200.0,
+            "is_feasible": true,
+            "solver_status": "OPTIMAL",
+            "calculation_status": "OK",
+            "failure_reason": null,
+            "risk_classification": "NOT_CLASSIFIED",
+            "diagnostics": [
+              "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+            ]
+          },
+          {
+            "facility_id": "DC_KOLKATA",
+            "facility_name": "Kolkata DC",
+            "facility_role": "DC",
+            "rank": 3,
+            "rei": 0.4,
+            "performance_impact": 200.0,
+            "economic_impact": 200.0,
+            "cost_impact_pct": 16.666667,
+            "unserved_demand": 0.0,
+            "unserved_demand_rate": 0.0,
+            "service_loss": 0.0,
+            "rerouted_volume": 200.0,
+            "is_feasible": true,
+            "solver_status": "OPTIMAL",
+            "calculation_status": "OK",
+            "failure_reason": null,
+            "risk_classification": "NOT_CLASSIFIED",
+            "diagnostics": [
+              "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+            ]
+          },
+          {
+            "facility_id": "PLANT_N",
+            "facility_name": "North Plant",
+            "facility_role": "PLANT",
+            "rank": null,
+            "rei": null,
+            "performance_impact": null,
+            "economic_impact": null,
+            "cost_impact_pct": null,
+            "unserved_demand": 300.0,
+            "unserved_demand_rate": 1.0,
+            "service_loss": 1.0,
+            "rerouted_volume": 300.0,
+            "is_feasible": false,
+            "solver_status": "INFEASIBLE",
+            "calculation_status": "INFEASIBLE",
+            "failure_reason": "disruption produced solver status INFEASIBLE",
+            "risk_classification": "CRITICAL",
+            "diagnostics": [
+              "Disruption of 'PLANT_N' left the network without a feasible solution (solver status: INFEASIBLE). The network cannot absorb this disruption under the current constraints. Performance Impact and REI are undefined and reported as None rather than estimated.",
+              "Service diagnostic: re-solved 'PLANT_N' with shortage enabled to quantify the damage. 300.00 units (100.00% of demand) cannot be served. These service figures are diagnostic only \u2014 cost, Performance Impact and REI remain undefined for this facility."
+            ]
+          }
+        ],
+        "rei_by_facility": {
+          "DC_MUMBAI": 1.0,
+          "DC_DELHI": 0.8,
+          "DC_KOLKATA": 0.4,
+          "PLANT_N": null
+        },
+        "disruption_summary": "FACILITY_FAILURE for the modelled planning period (allow_shortage=False)",
+        "warnings": [
+          "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+          "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE"
+        ]
+      }
+    },
+    "risk": null,
+    "governance": {
+      "action_type": "REPORT",
+      "classification": "AUTO_ACTION",
+      "reason": "'REPORT' produces analysis only and does not modify observed network state.",
+      "triggered_rules": [
+        "R7_ANALYTICAL_ONLY"
+      ],
+      "governing_rule": "R7_ANALYTICAL_ONLY",
+      "evaluated": {
+        "action_type": "REPORT",
+        "is_feasible": true,
+        "cost_impact_pct": null,
+        "unserved_demand_rate": null,
+        "rei": 1.0,
+        "risk_factor": null,
+        "confidence": "LOW",
+        "data_quality_ok": true,
+        "missing_evidence": {},
+        "missing_critical_evidence": [],
+        "unresolved_evidence": {},
+        "grounding_failed": false,
+        "action_requires_risk_evidence": true
+      },
+      "blocked_by_missing_evidence": false,
+      "evidence_status": {},
+      "requires_approval": false,
+      "approval_request_id": null,
+      "eligible_approver_roles": []
+    },
+    "grounding_status": "GROUNDED",
+    "briefing": {
+      "schema_version": "2.0",
+      "scope": "NETWORK",
+      "entity_id": null,
+      "opening": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00).",
+      "context": "",
+      "kpi_insights": [],
+      "key_drivers": [
+        "DC_MUMBAI carries the greatest disruption exposure"
+      ],
+      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "limitation": "",
+      "missing_information": [],
+      "suggested_questions": [
+        "What is driving this result?",
+        "Which node or lane should I examine?"
+      ],
+      "evidence_completeness": "COMPLETE"
+    },
+    "warnings": [
+      "LLM planner failed (Live planner call quota exhausted: reached maximum of 5 calls.); fell back to deterministic workflow planner.",
+      "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+      "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE",
+      "reasoning: LLM reasoning output could not be parsed; deterministic template used. Cause: the gateway returned an empty body; no output to parse (output_tokens=1984)"
+    ],
+    "errors": [],
+    "duration_seconds": 26.6051
+  },
+  "secondary_direct_response": {
+    "execution_id": "faff97ca-18f",
+    "request_id": "bb9a08d2-c517-4ff7-96c3-03cd83259433",
+    "status": "COMPLETED",
+    "intent": "RESILIENCE_QUERY",
+    "network_snapshot_id": "snap_72a48e1a0664",
+    "scenario_id": null,
+    "scenario_version": null,
+    "is_hypothetical": false,
+    "summary": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00).",
+    "results": {
+      "resilience": {
+        "network_id": "PHASE2_DELHI",
+        "data_version": "72a48e1a066440af",
+        "batch_id": "rei_05fe8484902f",
+        "batch_status": "COMPLETED_WITH_ERRORS",
+        "network_snapshot_id": "snap_72a48e1a0664",
+        "computed_for_snapshot_id": null,
+        "material_fingerprint": "fp1_34ab4fd8199c2adc",
+        "model_version": "1.2.0",
+        "served_from_cache": true,
+        "n_milp_solves": 0,
+        "baseline_business_cost": 1200.0,
+        "baseline_solver_status": "OPTIMAL",
+        "rei_status": "COMPUTED",
+        "max_performance_impact": 500.0,
+        "n_facilities_assessed": 4,
+        "n_successful": 3,
+        "n_failed": 0,
+        "n_infeasible": 1,
+        "highest_exposure_facility": "DC_MUMBAI",
+        "max_rei": 1.0,
+        "facilities": [
+          {
+            "facility_id": "DC_MUMBAI",
+            "facility_name": "Mumbai DC",
+            "facility_role": "DC",
+            "rank": 1,
+            "rei": 1.0,
+            "performance_impact": 500.0,
+            "economic_impact": 500.0,
+            "cost_impact_pct": 41.666667,
+            "unserved_demand": 0.0,
+            "unserved_demand_rate": 0.0,
+            "service_loss": 0.0,
+            "rerouted_volume": 200.0,
+            "is_feasible": true,
+            "solver_status": "OPTIMAL",
+            "calculation_status": "OK",
+            "failure_reason": null,
+            "risk_classification": "NOT_CLASSIFIED",
+            "diagnostics": [
+              "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+            ]
+          },
+          {
+            "facility_id": "DC_DELHI",
+            "facility_name": "Delhi NCR DC",
+            "facility_role": "DC",
+            "rank": 2,
+            "rei": 0.8,
+            "performance_impact": 400.0,
+            "economic_impact": 400.0,
+            "cost_impact_pct": 33.333333,
+            "unserved_demand": 0.0,
+            "unserved_demand_rate": 0.0,
+            "service_loss": 0.0,
+            "rerouted_volume": 200.0,
+            "is_feasible": true,
+            "solver_status": "OPTIMAL",
+            "calculation_status": "OK",
+            "failure_reason": null,
+            "risk_classification": "NOT_CLASSIFIED",
+            "diagnostics": [
+              "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+            ]
+          },
+          {
+            "facility_id": "DC_KOLKATA",
+            "facility_name": "Kolkata DC",
+            "facility_role": "DC",
+            "rank": 3,
+            "rei": 0.4,
+            "performance_impact": 200.0,
+            "economic_impact": 200.0,
+            "cost_impact_pct": 16.666667,
+            "unserved_demand": 0.0,
+            "unserved_demand_rate": 0.0,
+            "service_loss": 0.0,
+            "rerouted_volume": 200.0,
+            "is_feasible": true,
+            "solver_status": "OPTIMAL",
+            "calculation_status": "OK",
+            "failure_reason": null,
+            "risk_classification": "NOT_CLASSIFIED",
+            "diagnostics": [
+              "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+            ]
+          },
+          {
+            "facility_id": "PLANT_N",
+            "facility_name": "North Plant",
+            "facility_role": "PLANT",
+            "rank": null,
+            "rei": null,
+            "performance_impact": null,
+            "economic_impact": null,
+            "cost_impact_pct": null,
+            "unserved_demand": 300.0,
+            "unserved_demand_rate": 1.0,
+            "service_loss": 1.0,
+            "rerouted_volume": 300.0,
+            "is_feasible": false,
+            "solver_status": "INFEASIBLE",
+            "calculation_status": "INFEASIBLE",
+            "failure_reason": "disruption produced solver status INFEASIBLE",
+            "risk_classification": "CRITICAL",
+            "diagnostics": [
+              "Disruption of 'PLANT_N' left the network without a feasible solution (solver status: INFEASIBLE). The network cannot absorb this disruption under the current constraints. Performance Impact and REI are undefined and reported as None rather than estimated.",
+              "Service diagnostic: re-solved 'PLANT_N' with shortage enabled to quantify the damage. 300.00 units (100.00% of demand) cannot be served. These service figures are diagnostic only \u2014 cost, Performance Impact and REI remain undefined for this facility."
+            ]
+          }
+        ],
+        "rei_by_facility": {
+          "DC_MUMBAI": 1.0,
+          "DC_DELHI": 0.8,
+          "DC_KOLKATA": 0.4,
+          "PLANT_N": null
+        },
+        "disruption_summary": "FACILITY_FAILURE for the modelled planning period (allow_shortage=False)",
+        "warnings": [
+          "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+          "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE"
+        ]
+      }
+    },
+    "risk": null,
+    "reasoning": {
+      "summary": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00).",
+      "key_drivers": [
+        "DC_MUMBAI carries the greatest disruption exposure"
+      ],
+      "risks": [],
+      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "confidence": "LOW",
+      "evidence": [
+        "highest_exposure_facility = DC_MUMBAI"
+      ],
+      "briefing": {
+        "schema_version": "2.0",
+        "scope": "NETWORK",
+        "entity_id": null,
+        "opening": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00).",
+        "context": "",
+        "kpi_insights": [],
+        "key_drivers": [
+          "DC_MUMBAI carries the greatest disruption exposure"
+        ],
+        "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+        "limitation": "",
+        "missing_information": [],
+        "suggested_questions": [
+          "What is driving this result?",
+          "Which node or lane should I examine?"
+        ],
+        "evidence_completeness": "COMPLETE"
+      },
+      "source": "template",
+      "validation_warnings": [
+        "LLM reasoning output could not be parsed; deterministic template used. Cause: the gateway returned an empty body; no output to parse (output_tokens=1984)"
+      ],
+      "grounding_status": "GROUNDED",
+      "grounded_claims": [
+        {
+          "claim": "1.00",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "rei.max_rei",
+          "authoritative_value": 1.0,
+          "source": "rei_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "faff97ca-18f",
+            "snapshot_id": "snap_72a48e1a0664",
+            "scenario_id": "",
+            "source": "rei_engine",
+            "fact": "rei.max_rei"
+          }
+        },
+        {
+          "claim": "1.00",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "rei.max_rei",
+          "authoritative_value": 1.0,
+          "source": "rei_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "faff97ca-18f",
+            "snapshot_id": "snap_72a48e1a0664",
+            "scenario_id": "",
+            "source": "rei_engine",
+            "fact": "rei.max_rei"
+          }
+        }
+      ],
+      "unavailable_evidence": {}
+    },
+    "governance": {
+      "action_type": "REPORT",
+      "classification": "AUTO_ACTION",
+      "reason": "'REPORT' produces analysis only and does not modify observed network state.",
+      "triggered_rules": [
+        "R7_ANALYTICAL_ONLY"
+      ],
+      "governing_rule": "R7_ANALYTICAL_ONLY",
+      "evaluated": {
+        "action_type": "REPORT",
+        "is_feasible": true,
+        "cost_impact_pct": null,
+        "unserved_demand_rate": null,
+        "rei": 1.0,
+        "risk_factor": null,
+        "confidence": "LOW",
+        "data_quality_ok": true,
+        "missing_evidence": {},
+        "missing_critical_evidence": [],
+        "unresolved_evidence": {},
+        "grounding_failed": false,
+        "action_requires_risk_evidence": true
+      },
+      "blocked_by_missing_evidence": false,
+      "evidence_status": {},
+      "requires_approval": false,
+      "approval_request_id": null,
+      "eligible_approver_roles": []
+    },
+    "approval": null,
+    "twin_states": [
+      {
+        "state_id": "tws_snap_72a48e1a0664_optimized",
+        "snapshot_id": "snap_72a48e1a0664",
+        "scenario_id": null,
+        "state_type": "OPTIMIZED",
+        "calculation_status": "PARTIAL",
+        "n_facilities": 0,
+        "n_flows": 0,
+        "generated_at": "2026-08-26T06:07:37.676574+00:00"
+      }
+    ],
+    "errors": [],
+    "warnings": [
+      "LLM planner failed (Live planner call quota exhausted: reached maximum of 5 calls.); fell back to deterministic workflow planner.",
+      "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+      "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE",
+      "reasoning: LLM reasoning output could not be parsed; deterministic template used. Cause: the gateway returned an empty body; no output to parse (output_tokens=1984)"
+    ],
+    "duration_seconds": 29.865,
+    "started_at": "2026-08-26T06:07:07.811772+00:00",
+    "completed_at": "2026-08-26T06:07:37.676751+00:00",
+    "steps": [
+      {
+        "step_id": "load",
+        "capability": "network.load_snapshot",
+        "status": "COMPLETED",
+        "duration_seconds": 0.0,
+        "attempts": 1,
+        "error": null
+      },
+      {
+        "step_id": "rei",
+        "capability": "resilience.assess",
+        "status": "COMPLETED",
+        "duration_seconds": 0.0011,
+        "attempts": 1,
+        "error": null
+      },
+      {
+        "step_id": "reason",
+        "capability": "reasoning.synthesise",
+        "status": "COMPLETED",
+        "duration_seconds": 29.862,
+        "attempts": 1,
+        "error": null
+      },
+      {
+        "step_id": "govern",
+        "capability": "governance.classify",
+        "status": "COMPLETED",
+        "duration_seconds": 0.0001,
+        "attempts": 1,
+        "error": null
+      }
+    ]
+  },
+  "executed_steps": [
+    "network.load_snapshot",
+    "resilience.assess",
+    "reasoning.synthesise",
+    "governance.classify"
+  ],
+  "decisions": [
+    {
+      "action": "CONTINUE",
+      "reason": "Step 'load' completed successfully; proceeding to next planned capability.",
+      "step_id": "load",
+      "capability": "network.load_snapshot",
+      "replan_proposal": null,
+      "escalation": null,
+      "metadata": {},
+      "timestamp": "2026-08-26T06:07:07.812513+00:00"
+    },
+    {
+      "action": "CONTINUE",
+      "reason": "Step 'rei' completed successfully; proceeding to next planned capability.",
+      "step_id": "rei",
+      "capability": "resilience.assess",
+      "replan_proposal": null,
+      "escalation": null,
+      "metadata": {},
+      "timestamp": "2026-08-26T06:07:07.813876+00:00"
+    },
+    {
+      "action": "CONTINUE",
+      "reason": "Step 'reason' completed successfully; proceeding to next planned capability.",
+      "step_id": "reason",
+      "capability": "reasoning.synthesise",
+      "replan_proposal": null,
+      "escalation": null,
+      "metadata": {},
+      "timestamp": "2026-08-26T06:07:37.676150+00:00"
+    },
+    {
+      "action": "CONTINUE",
+      "reason": "Step 'govern' completed successfully; proceeding to next planned capability.",
+      "step_id": "govern",
+      "capability": "governance.classify",
+      "replan_proposal": null,
+      "escalation": null,
+      "metadata": {},
+      "timestamp": "2026-08-26T06:07:37.676494+00:00"
+    }
+  ],
+  "errors": [],
+  "agentic_assessment": {
+    "sequential_behavior": true,
+    "adaptive_behavior": true,
+    "failure_trapped_by_manager": true,
+    "agentic_behavior_proven": true,
+    "classification": "PASS"
+  }
+}
