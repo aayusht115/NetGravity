@@ -45,6 +45,7 @@ from netgravity.orchestrator.governance.action_classifier import (
     AuthorizationService,
     GovernancePolicy,
 )
+from netgravity.orchestrator.planner.llm_planner import LLMPlannerProtocol, MockPlanner
 from netgravity.orchestrator.routing.capability_registry import CapabilityRegistry
 from netgravity.orchestrator.schemas.agent_result import AgentResult
 from netgravity.orchestrator.schemas.actions import (
@@ -56,7 +57,12 @@ from netgravity.orchestrator.schemas.capability import (
     CapabilityContract,
     CapabilityDomain,
 )
-from netgravity.orchestrator.schemas.plans import StepStatus, ToolRequest, ToolResult
+from netgravity.orchestrator.schemas.planner_contract import (
+    PlanProposal,
+    plan_proposal_to_execution_plan,
+)
+from netgravity.orchestrator.schemas.plan_validation import PlanOrigin
+from netgravity.orchestrator.schemas.plans import ExecutionPlan, StepStatus, ToolRequest, ToolResult
 from netgravity.orchestrator.schemas.requests import (
     Intent,
     IntentResolution,
@@ -134,6 +140,7 @@ class Orchestrator:
         gateway: Optional[LLMGateway] = None,
         governance_policy: Optional[GovernancePolicy] = None,
         twin: Optional["DigitalTwinService"] = None,
+        llm_planner: Optional[LLMPlannerProtocol] = None,
     ) -> None:
         from netgravity.orchestrator.twin.service import DigitalTwinService
 
@@ -143,6 +150,7 @@ class Orchestrator:
         self.state_store = state_store or ExecutionStateStore()
         self.audit = audit or AuditLogger()
         self.gateway = gateway
+        self.llm_planner = llm_planner if llm_planner is not None else MockPlanner(registry=registry)
         # The Digital Twin. Held by the orchestrator because the orchestrator is
         # its sole upstream integration point — no engine has a reference to it,
         # and none can acquire one without passing through here.
@@ -257,10 +265,8 @@ class Orchestrator:
                                note="intent could not be determined")
             return
 
-        # ---- PLAN --------------------------------------------------------
-        # The planner sees the context, so it can record what is already
-        # satisfied. It still does not decide to skip work on a template.
-        plan = self.planner.plan(resolution, context)
+        # ---- PLAN (LLM Proposal -> Deterministic Validation -> Fallback) -
+        plan = await self._plan_with_validation_and_fallback(request, resolution, context, trace)
         context.plan = plan
         context.workflow_id = plan.workflow_id
         context.required_capabilities = [s.capability for s in plan.steps]
@@ -271,7 +277,7 @@ class Orchestrator:
             for s in plan.steps
         ]
         context.transition(ExecutionState.PLANNED)
-        trace.record(events.PLAN_BUILT, steps=len(plan.steps))
+        trace.record(events.PLAN_BUILT, steps=len(plan.steps), origin=plan.origin.value)
         trace.record(
             events.WORKFLOW_STARTED,
             intent=plan.intent,
@@ -348,6 +354,80 @@ class Orchestrator:
                 "intent", resolution.source, resolution.raw_model_output,
             )
         return resolution
+
+    # ------------------------------------------------------------------
+    # PLAN — LLM proposal, deterministic validation, and fallback
+    # ------------------------------------------------------------------
+
+    async def _plan_with_validation_and_fallback(
+        self,
+        request: OrchestratorRequest,
+        resolution: IntentResolution,
+        context: ExecutionContext,
+        trace: ExecutionTrace,
+    ) -> ExecutionPlan:
+        """
+        Derive an approved ExecutionPlan through LLM proposal, deterministic validation,
+        and automatic fallback to WorkflowPlanner if the proposal is invalid or fails.
+        """
+        proposal: Optional[PlanProposal] = None
+
+        if self.llm_planner is not None:
+            try:
+                proposal = await self.llm_planner.propose_plan(request, resolution, context)
+                if proposal.raw_model_output:
+                    audit_entry = self.audit.get(context.execution_id)
+                    if audit_entry is not None:
+                        audit_entry.record_llm(
+                            "planner", proposal.planner_source.value, proposal.raw_model_output,
+                        )
+            except Exception as exc:
+                logger.warning(
+                    "orchestrator.llm_planner.failed execution_id=%s exc=%s. Falling back to deterministic planner.",
+                    context.execution_id, exc,
+                )
+                context.add_warning(f"LLM planner failed ({exc}); fell back to deterministic workflow planner.")
+
+        if proposal is not None and proposal.steps:
+            try:
+                candidate_plan = plan_proposal_to_execution_plan(proposal, origin=proposal.planner_source)
+                candidate_plan.request_id = context.request_id
+                candidate_plan.execution_id = context.execution_id
+
+                validation = self.planner.validator.validate(candidate_plan, context=context)
+                if validation.valid:
+                    candidate_plan.validation = validation
+                    logger.info(
+                        "orchestrator.plan.llm_proposal_approved plan_id=%s steps=%d source=%s",
+                        candidate_plan.plan_id, len(candidate_plan.steps), proposal.planner_source.value,
+                    )
+                    return candidate_plan
+
+                # Proposal failed validation
+                reasons = [r.value for r in validation.reasons()]
+                logger.warning(
+                    "orchestrator.plan.llm_proposal_refused plan_id=%s reasons=%s. Falling back to deterministic planner.",
+                    candidate_plan.plan_id, reasons,
+                )
+                context.add_warning(
+                    f"LLM plan proposal '{candidate_plan.plan_id}' failed validation ({', '.join(reasons)}); "
+                    f"falling back to deterministic template."
+                )
+            except Exception as exc:
+                logger.warning(
+                    "orchestrator.plan.conversion_failed execution_id=%s exc=%s. Falling back to deterministic planner.",
+                    context.execution_id, exc,
+                )
+                context.add_warning(
+                    f"LLM plan proposal conversion failed ({exc}); falling back to deterministic template."
+                )
+
+        # Fallback path: deterministic WorkflowPlanner
+        fallback_plan = self.planner.plan(resolution, context)
+        if proposal is not None:
+            fallback_plan.origin = PlanOrigin.DETERMINISTIC_FALLBACK
+            fallback_plan.rationale.append("Deterministic template applied via fallback.")
+        return fallback_plan
 
     # ------------------------------------------------------------------
     # EXECUTE — dependency-aware, layer-parallel

@@ -96,6 +96,7 @@ def build_orchestrator(
     reasoning_runtime: Optional[ReasoningRuntime] = None,
     history_provider: Optional[Any] = None,
     signal_provider: Optional[Any] = None,
+    llm_planner: Optional[Any] = None,
 ) -> Orchestrator:
     """
     Construct a fully wired orchestrator.
@@ -117,6 +118,8 @@ def build_orchestrator(
             Supplies structured external signals from the Extraction Agent to
             the control plane. Supplying a signal OFFERS it for routing; the
             orchestrator still decides whether it may reach the forecaster.
+        llm_planner: Optional LLM planner conforming to LLMPlannerProtocol.
+            Defaults to MockPlanner for deterministic local execution.
 
     Returns:
         A ready Orchestrator.
@@ -140,6 +143,7 @@ def build_orchestrator(
         audit=audit,
         gateway=gateway,
         governance_policy=governance_policy,
+        llm_planner=llm_planner,
     )
 
     optimization = OptimizationClient()

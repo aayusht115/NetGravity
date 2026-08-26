@@ -31,6 +31,12 @@ class PlanOrigin(str, Enum):
     TEMPLATE = "TEMPLATE"
     #: Derived from capability contracts by closing required dependencies.
     CAPABILITY_GRAPH = "CAPABILITY_GRAPH"
+    #: Proposed by offline/mock LLM planner.
+    MOCK_LLM = "MOCK_LLM"
+    #: Proposed by live LLM planner.
+    LLM = "LLM"
+    #: Fell back to deterministic template after LLM proposal refusal or planner failure.
+    DETERMINISTIC_FALLBACK = "DETERMINISTIC_FALLBACK"
 
 
 class PlanFailureReason(str, Enum):

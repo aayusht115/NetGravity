@@ -1,0 +1,47 @@
+{
+  "calls_attempted": 5,
+  "calls_successful": 3,
+  "calls_failed": 2,
+  "results": [
+    {
+      "case_num": 1,
+      "title": "CORE CASE 1 \u2014 NETWORK STATE",
+      "prompt": "What is the current state of the network?",
+      "duration_s": 38.76753616333008,
+      "error": "'ExecutionTrace' object has no attribute 'llm_calls'",
+      "fallback_triggered": false
+    },
+    {
+      "case_num": 2,
+      "title": "CORE CASE 2 \u2014 FORECAST",
+      "prompt": "Forecast demand for Delhi for the next 6 months.",
+      "duration_s": 13.098663091659546,
+      "error": "'ExecutionTrace' object has no attribute 'llm_calls'",
+      "fallback_triggered": false
+    },
+    {
+      "case_num": 3,
+      "title": "CORE CASE 3 \u2014 SCENARIO / OPTIMIZATION",
+      "prompt": "What happens if demand in Delhi increases by 20%?",
+      "duration_s": 26.292848110198975,
+      "error": "'ExecutionTrace' object has no attribute 'llm_calls'",
+      "fallback_triggered": false
+    },
+    {
+      "case_num": 4,
+      "title": "CORE CASE 4 \u2014 EXTERNAL SIGNAL -> FORECAST",
+      "prompt": "A major customer is expanding in Delhi. Assess how this could affect demand.",
+      "duration_s": 0.01589822769165039,
+      "error": "'ExecutionTrace' object has no attribute 'llm_calls'",
+      "fallback_triggered": false
+    },
+    {
+      "case_num": 5,
+      "title": "CORE CASE 5 \u2014 COMPLEX END-TO-END REQUEST",
+      "prompt": "A major customer is expanding in Delhi. Assess the impact on the network and recommend what we should do.",
+      "duration_s": 0.07860636711120605,
+      "error": "'ExecutionTrace' object has no attribute 'llm_calls'",
+      "fallback_triggered": false
+    }
+  ]
+}
