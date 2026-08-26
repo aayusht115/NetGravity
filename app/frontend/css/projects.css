@@ -374,62 +374,6 @@
 .proj-select:invalid,
 .proj-select.placeholder { color: var(--proj-text-4); }
 
-/* Upload */
-.proj-dropzone {
-  border: 1.5px dashed #dcd5ea;
-  border-radius: calc(12 * var(--u));
-  background: rgba(252, 251, 254, 0.7);
-  padding: calc(22 * var(--u)) calc(18 * var(--u));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: calc(16 * var(--u));
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.proj-dropzone:hover,
-.proj-dropzone.dragover {
-  border-color: var(--brand-purple);
-  background: rgba(245, 241, 251, 0.9);
-}
-
-.proj-dropzone.has-file {
-  border-style: solid;
-  border-color: #c9b3ec;
-  background: rgba(245, 241, 251, 0.75);
-}
-
-.proj-dropzone-icon {
-  color: var(--proj-text-4);
-  display: flex;
-  flex-shrink: 0;
-}
-
-.proj-dropzone.has-file .proj-dropzone-icon { color: var(--brand-purple); }
-
-.proj-dropzone-icon svg {
-  width: calc(28 * var(--u));
-  height: calc(28 * var(--u));
-}
-
-.proj-dropzone-main {
-  font-size: calc(15 * var(--u));
-  color: var(--proj-text-2);
-}
-
-.proj-dropzone-main b {
-  color: var(--brand-purple);
-  font-weight: 600;
-}
-
-.proj-dropzone-sub {
-  margin-top: calc(4 * var(--u));
-  font-size: calc(13.5 * var(--u));
-  color: var(--proj-text-4);
-}
-
 .proj-create-actions {
   display: flex;
   flex-direction: column;

@@ -51,8 +51,12 @@ const ui = {
   search: '',
   sort: 'updated',
   view: 'list',
-  file: null,
 };
+
+/* The project currently open in the app shell — set on create/open, read
+   by the topbar's Upload Data button (see app.js) so a mid-session
+   upload knows which project it belongs to. */
+let currentProject = null;
 
 /* ─── Icons ──────────────────────────────────────────────────── */
 const ICONS = {
@@ -71,8 +75,6 @@ const ICONS = {
   file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
   globe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>`,
   target: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg>`,
-  sheet: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`,
-  upload: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.5a4 4 0 0 0-1-7.87 6 6 0 0 0-11.6 1.5A3.5 3.5 0 0 0 6 17"/><polyline points="9 13 12 10 15 13"/><line x1="12" y1="10" x2="12" y2="19"/></svg>`,
   folder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`,
   arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
   plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
@@ -172,21 +174,6 @@ export function renderCreateProject() {
             </select>
           </div>
         </div>
-
-        <div class="proj-form-row">
-          <span class="proj-row-icon">${ICONS.sheet}</span>
-          <div>
-            <label class="proj-field-label">Upload data (Excel / CSV)</label>
-            <div class="proj-dropzone" id="proj-dropzone" tabindex="0" role="button">
-              <span class="proj-dropzone-icon">${ICONS.upload}</span>
-              <div>
-                <div class="proj-dropzone-main" id="proj-drop-main">Drag and drop a file here, or <b>browse</b></div>
-                <div class="proj-dropzone-sub" id="proj-drop-sub">Supports .xlsx, .xls, .csv up to 25MB</div>
-              </div>
-            </div>
-            <input type="file" id="proj-file-input" accept=".xlsx,.xls,.csv" hidden />
-          </div>
-        </div>
       </form>
 
       <div class="proj-create-actions">
@@ -201,8 +188,6 @@ export function renderCreateProject() {
 
 function bindCreateProject() {
   const grid = document.getElementById('proj-mode-grid');
-  const dropzone = document.getElementById('proj-dropzone');
-  const fileInput = document.getElementById('proj-file-input');
   const nameInput = document.getElementById('proj-name');
   const errorEl = document.getElementById('proj-create-error');
 
@@ -210,11 +195,6 @@ function bindCreateProject() {
     card.addEventListener('click', () => {
       ui.mode = card.dataset.mode;
       grid.querySelectorAll('.proj-mode-card').forEach(c => c.classList.toggle('selected', c === card));
-      // "Import network data" is only meaningful with a file attached.
-      if (ui.mode === 'import') {
-        dropzone?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        dropzone?.focus({ preventScroll: true });
-      }
     });
   });
 
@@ -223,35 +203,6 @@ function bindCreateProject() {
     const sel = document.getElementById(id);
     sel?.addEventListener('change', () => sel.classList.toggle('placeholder', !sel.value));
   });
-
-  function showFile(file) {
-    ui.file = file;
-    const main = document.getElementById('proj-drop-main');
-    const sub = document.getElementById('proj-drop-sub');
-    if (!file) {
-      dropzone.classList.remove('has-file');
-      if (main) main.innerHTML = 'Drag and drop a file here, or <b>browse</b>';
-      if (sub) sub.textContent = 'Supports .xlsx, .xls, .csv up to 25MB';
-      return;
-    }
-    dropzone.classList.add('has-file');
-    if (main) main.innerHTML = `<b>${escapeHtml(file.name)}</b> ready to import`;
-    if (sub) sub.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB · click to replace`;
-  }
-
-  dropzone?.addEventListener('click', () => fileInput?.click());
-  dropzone?.addEventListener('keydown', e => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput?.click(); }
-  });
-  ['dragenter', 'dragover'].forEach(ev =>
-    dropzone?.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('dragover'); }));
-  ['dragleave', 'drop'].forEach(ev =>
-    dropzone?.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('dragover'); }));
-  dropzone?.addEventListener('drop', e => {
-    const file = e.dataTransfer?.files?.[0];
-    if (file) showFile(file);
-  });
-  fileInput?.addEventListener('change', () => showFile(fileInput.files?.[0] || null));
 
   nameInput?.addEventListener('input', () => { if (errorEl) errorEl.textContent = ''; });
 
@@ -262,12 +213,8 @@ function bindCreateProject() {
       nameInput?.focus();
       return;
     }
-    if (ui.mode === 'import' && !ui.file) {
-      if (errorEl) errorEl.textContent = 'Attach an Excel or CSV file, or choose a different starting point.';
-      return;
-    }
 
-    PROJECTS.unshift({
+    const project = {
       id: 'pr-' + Date.now().toString(36),
       name,
       region: document.getElementById('proj-region')?.value || 'India',
@@ -275,10 +222,15 @@ function bindCreateProject() {
       rank: 0,
       owner: 'You',
       status: 'Draft',
-    });
+    };
+    PROJECTS.unshift(project);
     PROJECTS.forEach((p, i) => { p.rank = i + 1; });
+    currentProject = project;
 
-    enterApp();
+    // Data upload/AI ingestion is the next step, not the app itself —
+    // see js/ingestion.js for Upload Data → mapping → network build.
+    if (typeof window.showUploadData === 'function') window.showUploadData(project);
+    else enterApp();
   });
 
   document.getElementById('proj-create-cancel')?.addEventListener('click', () => {
@@ -453,6 +405,13 @@ function bindSelectProject() {
   });
 }
 
+/** Called by ingestion.js once a newly created project's data has been
+ *  mapped and the network build finishes, so it stops reading "Draft". */
+export function markProjectInProgress(id) {
+  const p = PROJECTS.find(x => x.id === id);
+  if (p) p.status = 'In progress';
+}
+
 function openProject(id) {
   const p = PROJECTS.find(x => x.id === id);
   if (p) {
@@ -460,6 +419,7 @@ function openProject(id) {
     PROJECTS.forEach(x => { if (x.rank < p.rank) x.rank += 1; });
     p.rank = 1;
     p.updated = 'Just now';
+    currentProject = p;
   }
   enterApp();
 }
@@ -489,6 +449,7 @@ function hideLanding() {
 export function showSelectProject() {
   hideLanding();
   hideProjectPages();
+  if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
   renderSelectProject();
   const page = document.getElementById('select-project-page');
   if (page) {
@@ -500,9 +461,9 @@ export function showSelectProject() {
 export function showCreateProject(origin) {
   ui.createOrigin = origin === 'existing' ? 'existing' : 'first';
   ui.mode = 'scratch';
-  ui.file = null;
   hideLanding();
   hideProjectPages();
+  if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
   renderCreateProject();
   const page = document.getElementById('create-project-page');
   if (page) {
@@ -514,6 +475,7 @@ export function showCreateProject(origin) {
 /** Leave the project screens and hand off to the authenticated app shell. */
 export function enterApp() {
   hideProjectPages();
+  if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
 
   const landing = document.getElementById('landing-page');
   if (landing) {
@@ -524,6 +486,9 @@ export function enterApp() {
   if (shell) shell.style.display = 'flex';
   const fab = document.getElementById('floating-chatbot-fab');
   if (fab) fab.style.display = 'flex';
+
+  const nameEl = document.getElementById('topbar-current-project-name');
+  if (nameEl && currentProject) nameEl.textContent = currentProject.name;
 
   if (typeof window.navigateToTab === 'function') window.navigateToTab('home');
 
@@ -539,5 +504,7 @@ export function initProjects() {
     window.showCreateProject = showCreateProject;
     window.hideProjectPages = hideProjectPages;
     window.enterApp = enterApp;
+    window.markProjectInProgress = markProjectInProgress;
+    window.getCurrentProject = () => currentProject;
   }
 }

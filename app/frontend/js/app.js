@@ -6,7 +6,7 @@
  */
 
 import { PLANTS, DCS, MARKETS, LANES, EXTERNAL_SIGNALS,
-         RECOMMENDATION, PERIODS, HOME_ACTION_ITEMS,
+         RECOMMENDATION, PERIODS, HOME_ACTION_ITEMS, FACILITY_KPIS,
          formatCurrency, formatNumber, getUtilColor, getUtilLabel,
          getFacilityById, getInsightsForFacility, getKpisForFacility } from './data.js';
 import { initMap, setNetworkState, invalidateMapSize } from './map.js';
@@ -16,10 +16,10 @@ import { renderForecastChart,
 import { initScenarios } from './scenarios.js';
 import { initAgent } from './agent.js';
 import { initLandingPage } from './landing.js';
-import { initInsightsPage } from './insights.js';
-import { initRecommendationsPage } from './recommendations.js';
+import { initInsightDetail } from './insight-detail.js';
 import { initAuth } from './auth.js';
 import { initProjects } from './projects.js';
+import { initIngestion } from './ingestion.js';
 import { initChatbot } from './chatbot.js';
 import { triggerAgentReasoning } from './agent-reasoning.js';
 
@@ -38,7 +38,6 @@ const state = {
 // Expose globally on window
 if (typeof window !== 'undefined') {
   window.navigateToTab = navigateToTab;
-  window.openActionDrawer = openActionDrawer;
   window.closeActionDrawer = closeActionDrawer;
   window.renderHome = renderHome;
 }
@@ -46,17 +45,18 @@ if (typeof window !== 'undefined') {
 // ─── Boot ───────────────────────────────────────────────────
 function bootApp() {
   try { initProjects(); } catch (e) { console.error('initProjects error:', e); }
+  try { initIngestion(); } catch (e) { console.error('initIngestion error:', e); }
   try { initAuth();
   initChatbot(); } catch (e) { console.error('initAuth error:', e); }
   try { initLandingPage(); } catch (e) { console.error('initLandingPage error:', e); }
   try { initTabs(); } catch (e) { console.error('initTabs error:', e); }
+  try { initSidebarCollapse(); } catch (e) { console.error('initSidebarCollapse error:', e); }
   try { initHomeSelectors(); } catch (e) { console.error('initHomeSelectors error:', e); }
   try { renderHome(); } catch (e) { console.error('renderHome error:', e); }
   try { renderTwinTables(); } catch (e) { console.error('renderTwinTables error:', e); }
   try { initScenarios(); } catch (e) { console.error('initScenarios error:', e); }
   try { initAgent(); } catch (e) { console.error('initAgent error:', e); }
-  try { initInsightsPage();
-  initRecommendationsPage(); } catch (e) { console.error('initInsightsPage error:', e); }
+  try { initInsightDetail(); } catch (e) { console.error('initInsightDetail error:', e); }
 }
 
 if (document.readyState === 'loading') {
@@ -69,21 +69,30 @@ if (document.readyState === 'loading') {
 function updateTopBarLayout(tab) {
   const isHomeOverview = (tab === 'home' || tab === 'overview');
 
-  // Upload Data button: ONLY on Home Overview page
+  // Upload Data button: ONLY on Home Overview page (unchanged from
+  // before the redesign). Launches the same ingestion flow used during
+  // onboarding — see initTabs' btn-topbar-upload handler.
   const btnUpload = document.getElementById('btn-topbar-upload');
   if (btnUpload) {
     btnUpload.style.display = isHomeOverview ? 'flex' : 'none';
   }
 
-  // Sub-topbar Page Title in parallel with selectors across ALL pages
+  // Home's redesign (Dump/Home Overview-updated.png) has no generic
+  // greeting/selector row — its own headers (attention feed, Digital
+  // Twin card) carry that context instead, and the Digital Twin card has
+  // its own Facility/Period controls. Every other page keeps this row.
+  const subTopbar = document.getElementById('app-sub-topbar');
+  if (subTopbar) {
+    subTopbar.style.display = isHomeOverview ? 'none' : 'flex';
+  }
+  if (isHomeOverview) return;
+
+  // Sub-topbar Page Title in parallel with selectors across other pages
   const mainTitle = document.getElementById('sub-topbar-main-title');
   const subTitle = document.getElementById('sub-topbar-sub-title');
 
   if (mainTitle && subTitle) {
-    if (tab === 'home' || tab === 'overview') {
-      mainTitle.innerHTML = 'Hello, <strong id="logged-in-user-name">Amit Kumar</strong>';
-      subTitle.textContent = '· Network Decision Command Center';
-    } else if (tab === 'insights') {
+    if (tab === 'insights') {
       mainTitle.innerHTML = 'Insights';
       subTitle.textContent = '· AI-generated observations from your network';
     } else if (tab === 'facility-dashboard') {
@@ -104,7 +113,7 @@ function updateTopBarLayout(tab) {
     }
   }
 
-  // Facility & Period selectors: STAYS visible across all pages
+  // Facility & Period selectors: STAYS visible across all non-Home pages
   const controls = document.getElementById('topbar-controls');
   if (controls) {
     controls.style.display = 'flex';
@@ -115,62 +124,20 @@ function updateTopBarLayout(tab) {
 export function navigateToTab(tab) {
   updateTopBarLayout(tab);
 
-  // 1. Insights Page (nested under Home)
-  if (tab === 'insights') {
-    const homeGroup = document.getElementById('nav-group-home');
-    if (homeGroup) homeGroup.classList.add('expanded');
+  // Sidebar is flat (Home, KPIs, Digital Twin, Forecast, Scenario
+  // Planning). Insights/Recommendations pages are gone — an insight card
+  // on Home opens a full-page deep dive instead (see insight-detail.js),
+  // which is not itself a sidebar destination and manages its own nav
+  // highlighting/panel display independent of this function.
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  const navKey = (tab === 'overview') ? 'home' : tab;
+  document.querySelector(`.nav-item[data-tab="${navKey}"]`)?.classList.add('active');
 
-    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
-    document.getElementById('nav-item-home')?.classList.add('active');
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
 
-    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
-    document.getElementById('nav-sub-insights')?.classList.add('active');
-
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    const panel = document.getElementById('tab-insights');
-    if (panel) panel.classList.add('active');
-
-    state.activeTab = 'insights';
-    try { initInsightsPage();
-  initRecommendationsPage(); } catch (e) { console.error(e); }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return;
-  }
-
-  // 2. Recommendations Page (nested under Home)
-  if (tab === 'recommendations' || tab === 'recommend') {
-    const homeGroup = document.getElementById('nav-group-home');
-    if (homeGroup) homeGroup.classList.add('expanded');
-
-    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
-    document.getElementById('nav-item-home')?.classList.add('active');
-
-    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
-    document.getElementById('nav-sub-recommendations')?.classList.add('active');
-
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    const panel = document.getElementById('tab-recommendations') || document.getElementById('tab-recommend');
-    if (panel) panel.classList.add('active');
-
-    state.activeTab = 'recommendations';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    return;
-  }
-
-  // 3. Home / Overview (nested under Home)
+  // 1. Home / Overview
   if (tab === 'home' || tab === 'overview') {
-    const homeGroup = document.getElementById('nav-group-home');
-    if (homeGroup) homeGroup.classList.add('expanded');
-
-    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
-    document.getElementById('nav-item-home')?.classList.add('active');
-
-    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
-    document.getElementById('nav-sub-overview')?.classList.add('active');
-
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.getElementById('tab-home')?.classList.add('active');
-
     state.activeTab = 'home';
     setTimeout(() => {
       renderHome();
@@ -180,13 +147,8 @@ export function navigateToTab(tab) {
     return;
   }
 
-  // 4. Facility KPI Dashboard
+  // 2. Facility KPI Dashboard
   if (tab === 'facility-dashboard') {
-    document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
-    document.getElementById('nav-item-kpis')?.classList.add('active');
-    document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
-
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.getElementById('tab-facility-dashboard')?.classList.add('active');
     state.activeTab = 'facility-dashboard';
     renderFacilityDashboard();
@@ -194,12 +156,7 @@ export function navigateToTab(tab) {
     return;
   }
 
-  // 5. Other Top Tabs (Digital Twin, Scenario Planning, Forecasting)
-  document.querySelectorAll('.nav-item, .nav-item-expandable').forEach(n => n.classList.remove('active'));
-  document.querySelector(`.nav-item[data-tab="${tab}"]`)?.classList.add('active');
-  document.querySelectorAll('.nav-sub-pill').forEach(p => p.classList.remove('active'));
-
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  // 3. Other Top Tabs (Digital Twin, Scenario Planning, Forecasting)
   const panel = document.getElementById('tab-' + tab);
   if (panel) panel.classList.add('active');
 
@@ -241,8 +198,47 @@ export function navigateToTab(tab) {
   }
 }
 
+// ─── Sidebar Collapse (icon rail <-> full labels) ────────────
+// Defaults to collapsed (see the .sidebar.collapsed class already on the
+// element in index.html), matching Dump/Home Overview-updated.png. The
+// choice is remembered per-browser so a reload doesn't reset it.
+function initSidebarCollapse() {
+  const sidebar = document.getElementById('sidebar');
+  const toggleBtn = document.getElementById('sidebar-toggle-btn');
+  if (!sidebar || !toggleBtn) return;
+
+  let collapsed = true;
+  try {
+    const saved = window.localStorage.getItem('ng_sidebar_collapsed');
+    if (saved !== null) collapsed = saved === '1';
+  } catch (e) { /* localStorage unavailable (private mode, etc.) — keep default */ }
+
+  function apply() {
+    sidebar.classList.toggle('collapsed', collapsed);
+    // Width is also set explicitly here, not left to .sidebar.collapsed's
+    // CSS alone: #sidebar is a non-shrinking flex item with position:sticky,
+    // and that combination has proven unreliable to re-measure after a
+    // pure class-based width change (observed via headless verification —
+    // same class of engine quirk as the rAF/CSS-transition issues on the
+    // ingestion loading pop-up). Setting it directly here is deterministic
+    // regardless of that.
+    sidebar.style.width = collapsed ? '76px' : 'var(--sidebar-w)';
+    void sidebar.offsetWidth; // force a synchronous layout flush
+    toggleBtn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+  }
+  apply();
+
+  toggleBtn.addEventListener('click', () => {
+    collapsed = !collapsed;
+    apply();
+    try { window.localStorage.setItem('ng_sidebar_collapsed', collapsed ? '1' : '0'); } catch (e) { /* ignore */ }
+  });
+}
+
 function initTabs() {
-  // Primary nav items
+  // Primary nav items (flat: Home, KPIs, Digital Twin, Forecast, Scenario
+  // Planning — see navigateToTab for how Insights/Recommendations, which
+  // no longer have their own sidebar entry, still route correctly).
   document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
     item.addEventListener('click', () => {
       const tab = item.dataset.tab;
@@ -250,42 +246,26 @@ function initTabs() {
     });
   });
 
-  // Expandable Home Menu Click
-  const navItemHome = document.getElementById('nav-item-home');
-  if (navItemHome) {
-    navItemHome.addEventListener('click', (e) => {
-      const homeGroup = document.getElementById('nav-group-home');
-      if (homeGroup) {
-        // Toggle expansion or navigate
-        if (state.activeTab !== 'home' && state.activeTab !== 'insights' && state.activeTab !== 'recommendations') {
-          navigateToTab('home');
-        } else {
-          homeGroup.classList.toggle('expanded');
-        }
-      }
-    });
-  }
-
-  // Nested sub-pills under Home
-  document.querySelectorAll('.nav-sub-pill[data-tab]').forEach(pill => {
-    pill.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const tab = pill.dataset.tab;
-      navigateToTab(tab);
-    });
-  });
-
-  // Home Page: Click on Insights Card or Items -> Navigate to Insights Page
-  document.getElementById('home-insights-card')?.addEventListener('click', () => {
-    navigateToTab('insights');
-  });
-  document.getElementById('home-insights-header')?.addEventListener('click', () => {
-    navigateToTab('insights');
-  });
-
   // Topbar Global Action Handlers
+
+  // Upload Data: same ingestion flow used during onboarding
+  // (upload -> AI loading -> Excel/PDF mapping -> network loading -> Home).
+  // See js/ingestion.js and js/projects.js (getCurrentProject).
   document.getElementById('btn-topbar-upload')?.addEventListener('click', () => {
-    alert('Upload Network Data\n\nSAP S/4HANA, Manhattan WMS, and Oracle OTM data pipelines are connected.\nSelect CSV/Excel freight matrix or ERP dump to sync.');
+    if (typeof window.showUploadData === 'function') {
+      const project = typeof window.getCurrentProject === 'function' ? window.getCurrentProject() : null;
+      window.showUploadData(project);
+    }
+  });
+
+  // Home attention feed: manual refresh (re-renders Home in place)
+  document.getElementById('home2-refresh-btn')?.addEventListener('click', (e) => {
+    const btn = e.currentTarget;
+    btn.classList.add('spinning');
+    setTimeout(() => btn.classList.remove('spinning'), 650);
+    const t = document.getElementById('home2-refresh-time');
+    if (t) t.textContent = 'Just now';
+    renderHome();
   });
 
   document.getElementById('btn-topbar-notifications')?.addEventListener('click', () => {
@@ -369,13 +349,7 @@ function initTabs() {
   // Facility panel close
   document.getElementById('fp-close')?.addEventListener('click', closeFacilityPanel);
 
-  // Insight drawer close
-  document.getElementById('insight-drawer-close')?.addEventListener('click', closeInsightDrawer);
-  document.getElementById('insight-drawer-overlay')?.addEventListener('click', (e) => {
-    if (e.target === e.currentTarget) closeInsightDrawer();
-  });
-
-  // Action drawer close
+  // Action drawer close (still used by scenarios.js's own detail drawer)
   document.getElementById('action-drawer-close')?.addEventListener('click', closeActionDrawer);
   document.getElementById('action-drawer-overlay')?.addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeActionDrawer();
@@ -418,6 +392,23 @@ function initHomeSelectors() {
 
     selPeriod.addEventListener('change', () => {
       state.selectedPeriod = selPeriod.value;
+      renderHome();
+    });
+  }
+
+  // Digital Twin card's own Period selector (Home's redesign hides the
+  // generic topbar row, so this is the visible period control there —
+  // see updateTopBarLayout). Kept in sync with the same global state.
+  const selTwinPeriod = document.getElementById('home2-twin-period');
+  if (selTwinPeriod) {
+    selTwinPeriod.innerHTML = (PERIODS || []).map(p =>
+      `<option value="${p.id}">${p.label}</option>`
+    ).join('');
+    selTwinPeriod.value = state.selectedPeriod;
+
+    selTwinPeriod.addEventListener('change', () => {
+      state.selectedPeriod = selTwinPeriod.value;
+      if (selPeriod) selPeriod.value = state.selectedPeriod;
       renderHome();
     });
   }
@@ -504,8 +495,7 @@ function renderHome() {
   renderHomeKPIs();
   renderHomeForecast();
   renderHomeDigitalTwin();
-  renderHomeInsights();
-  renderHomeActions();
+  renderHomeAttentionFeed();
 }
 
 // ─── Facility Full Analytics Dashboard ──────────────────────
@@ -683,53 +673,124 @@ export function renderFacilityDashboard() {
 }
 
 
-// ─── Home KPI Cards (2x2 Compact Grid) ───────────────────────
+// ─── Network-wide KPI aggregation (Home Overview only) ───────
+// Home's redesign (Dump/Home Overview-updated.png) shows a whole-network
+// pulse, not a single selected facility — that per-facility breakdown is
+// what the KPIs tab is for. This averages/sums across every DC's
+// FACILITY_KPIS entry for the chosen period.
+function getNetworkKpis(periodId) {
+  let rows = DCS
+    .map(d => (FACILITY_KPIS[d.id] || {})[periodId])
+    .filter(Boolean);
+  // Not every period in PERIODS has mock data for every facility yet —
+  // fall back the same way getKpisForFacility does.
+  if (!rows.length) {
+    rows = DCS.map(d => (FACILITY_KPIS[d.id] || {}).AUG_2026).filter(Boolean);
+  }
+  if (!rows.length) return null;
+
+  const avg = sel => rows.reduce((s, r) => s + sel(r), 0) / rows.length;
+  const sum = sel => rows.reduce((s, r) => s + sel(r), 0);
+
+  return {
+    utilisation: { value: +avg(r => r.utilisation.value).toFixed(1), prev: +avg(r => r.utilisation.prev).toFixed(1) },
+    sla: { value: +avg(r => r.sla.value).toFixed(1), prev: +avg(r => r.sla.prev).toFixed(1), target: rows[0].sla.target },
+    totalCost: { value: sum(r => r.totalCost.value), prev: sum(r => r.totalCost.prev) },
+    inventoryDays: { value: +avg(r => r.inventoryDays.value).toFixed(1), prev: +avg(r => r.inventoryDays.prev).toFixed(1) },
+  };
+}
+
+function pctDelta(value, prev) {
+  if (!prev) return 0;
+  return ((value - prev) / prev) * 100;
+}
+
+// Lower-is-better metrics (cost, inventory days): a drop is "Good", a
+// rise is flagged by how large it is. Tone names match the existing
+// tag-success/tag-warning/tag-danger palette used across the app.
+function deltaStatus(pct) {
+  if (pct <= 0) return { tone: Math.abs(pct) < 1 ? 'gray' : 'green', label: Math.abs(pct) < 1 ? 'Stable' : 'Good' };
+  if (pct > 6) return { tone: 'red', label: 'High' };
+  return { tone: 'amber', label: 'Medium' };
+}
+
+function slaStatus(value, target) {
+  if (value >= target) return { tone: 'green', label: 'Good' };
+  if (value >= target - 2) return { tone: 'amber', label: 'Watch' };
+  return { tone: 'red', label: 'Below Target' };
+}
+
+function utilTone(label) {
+  return label === 'Critical' ? 'red' : label === 'Moderate' ? 'amber' : 'green';
+}
+
+function fmtDelta(pct) {
+  return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+}
+
+function kpiCardHtml({ icon, iconBg, iconColor, name, value, sub, tone, pillLabel, barPct }) {
+  return `
+    <div class="home2-kpi-card">
+      <div class="home2-kpi-card-head">
+        <span class="home2-kpi-icon-badge" style="background:${iconBg};color:${iconColor}">${icon}</span>
+        <span class="home2-kpi-name">${name}</span>
+      </div>
+      <div class="home2-kpi-val-row">
+        <span class="home2-kpi-val">${value}</span>
+        <span class="home2-kpi-pill tone-${tone}">${pillLabel}</span>
+      </div>
+      <div class="home2-kpi-sub">${sub}</div>
+      <div class="home2-kpi-progress-track"><div class="home2-kpi-progress-fill tone-${tone}" style="width:${Math.max(4, Math.min(100, barPct))}%"></div></div>
+    </div>`;
+}
+
+// ─── Home KPI Row (Network Health — compact, network-wide) ──
 function renderHomeKPIs() {
-  const kpis = getKpisForFacility(state.selectedFacility, state.selectedPeriod);
+  const kpis = getNetworkKpis(state.selectedPeriod);
   const grid = document.getElementById('home-kpi-grid');
   if (!kpis || !grid) return;
 
-  grid.innerHTML = `
-    <!-- Card 1: Capacity Utilisation -->
-    <div class="home-kpi-item">
-      <div class="home-kpi-item-header">
-        <div class="home-kpi-name">Capacity Utilisation</div>
-        <div class="home-kpi-icon-badge" style="background:#f5f0fa;color:var(--primary)">📊</div>
-      </div>
-      <div class="home-kpi-val">${kpis.utilisation.value}%</div>
-      <div class="home-kpi-sub">of ${formatNumber(kpis.utilisation.capacity)} ${kpis.utilisation.unit}</div>
-    </div>
+  const utilLabel = getUtilLabel(kpis.utilisation.value);
+  const sla = slaStatus(kpis.sla.value, kpis.sla.target);
+  const costDeltaPct = pctDelta(kpis.totalCost.value, kpis.totalCost.prev);
+  const costStatus = deltaStatus(costDeltaPct);
+  const invDeltaPct = pctDelta(kpis.inventoryDays.value, kpis.inventoryDays.prev);
+  const invStatus = deltaStatus(invDeltaPct);
 
-    <!-- Card 2: On-time Service (SLA) -->
-    <div class="home-kpi-item">
-      <div class="home-kpi-item-header">
-        <div class="home-kpi-name">On-time Service (SLA)</div>
-        <div class="home-kpi-icon-badge" style="background:#f0fdf4;color:var(--green)">✅</div>
-      </div>
-      <div class="home-kpi-val">${kpis.sla.value}%</div>
-      <div class="home-kpi-sub">Target: ≥${kpis.sla.target}%</div>
-    </div>
-
-    <!-- Card 3: Total Cost -->
-    <div class="home-kpi-item">
-      <div class="home-kpi-item-header">
-        <div class="home-kpi-name">Total Cost</div>
-        <div class="home-kpi-icon-badge" style="background:#f5f0fa;color:var(--primary);font-weight:700">₹</div>
-      </div>
-      <div class="home-kpi-val">${formatCurrency(kpis.totalCost.value)}</div>
-      <div class="home-kpi-sub">Total cost for period</div>
-    </div>
-
-    <!-- Card 4: Inventory Days -->
-    <div class="home-kpi-item">
-      <div class="home-kpi-item-header">
-        <div class="home-kpi-name">Inventory Days</div>
-        <div class="home-kpi-icon-badge" style="background:#fffbeb;color:var(--amber)">📦</div>
-      </div>
-      <div class="home-kpi-val">${kpis.inventoryDays.value} days</div>
-      <div class="home-kpi-sub">of supply</div>
-    </div>
-  `;
+  grid.innerHTML = [
+    kpiCardHtml({
+      icon: '📊', iconBg: '#f5f0fa', iconColor: 'var(--primary)',
+      name: 'Capacity Utilization',
+      value: `${kpis.utilisation.value}%`,
+      sub: 'of total capacity',
+      tone: utilTone(utilLabel), pillLabel: utilLabel,
+      barPct: kpis.utilisation.value,
+    }),
+    kpiCardHtml({
+      icon: '✅', iconBg: '#f0fdf4', iconColor: 'var(--green)',
+      name: 'On-time Service (SLA)',
+      value: `${kpis.sla.value}%`,
+      sub: `Target: ≥${kpis.sla.target}%`,
+      tone: sla.tone, pillLabel: sla.label,
+      barPct: kpis.sla.value,
+    }),
+    kpiCardHtml({
+      icon: '₹', iconBg: '#f5f0fa', iconColor: 'var(--primary)',
+      name: 'Total Cost',
+      value: formatCurrency(kpis.totalCost.value),
+      sub: `vs last period: ${fmtDelta(costDeltaPct)}`,
+      tone: costStatus.tone, pillLabel: costStatus.label,
+      barPct: 50 + costDeltaPct * 3,
+    }),
+    kpiCardHtml({
+      icon: '📦', iconBg: '#fffbeb', iconColor: 'var(--amber)',
+      name: 'Inventory Days',
+      value: `${kpis.inventoryDays.value} days`,
+      sub: `vs last period: ${fmtDelta(invDeltaPct)}`,
+      tone: invStatus.tone, pillLabel: invStatus.label,
+      barPct: 50 + invDeltaPct * 3,
+    }),
+  ].join('');
 }
 
 // ─── Home Forecast Section ──────────────────────────────────
@@ -762,156 +823,100 @@ function renderHomeDigitalTwin() {
 }
 
 // ─── Home Numbered Insights (Right Rail) ─────────────────────
-function renderHomeInsights() {
-  const list = document.getElementById('home-insights-list');
-  if (!list) return;
+// ─── Attention feed categorisation ───────────────────────────
+// Buckets an insight's `impact` (or an action's `tag` — the two use
+// overlapping wording) into the small taxonomy shown in
+// Dump/Home Overview-updated.png. Order matters: check the more
+// specific phrase ("high value", "high impact") before the generic one.
+const ATTENTION_CATEGORY_META = {
+  'Recommendation':      { icon: '✨', bg: '#f5f0fa', color: '#6B2FA0', link: 'Review' },
+  'Capacity Risk':       { icon: '⚠️', bg: '#fef2f2', color: '#dc2626', link: 'Investigate' },
+  'Service Risk':        { icon: '🛡️', bg: '#fffbeb', color: '#b45309', link: 'View details' },
+  'Network Opportunity': { icon: '📈', bg: '#f0fdf4', color: '#16a34a', link: 'Review' },
+  'Performance Update':  { icon: '✅', bg: '#f0fdf4', color: '#16a34a', link: 'View details' },
+  'Status':              { icon: 'ℹ️', bg: '#eff6ff', color: '#2563eb', link: 'View details' },
+};
 
-  const insights = getInsightsForFacility(state.selectedFacility);
-
-  list.innerHTML = insights.map((ins, idx) => {
-    const num = ins.num || (idx + 1);
-    const actionText = ins.action || 'view details →';
-    return `
-      <div class="home-insight-row" data-insight-id="${ins.id}" onclick="window.openInsightDrawer && window.openInsightDrawer('${ins.id}')" style="cursor:pointer;" title="Click to view insight details">
-        <div class="insight-row-left">
-          <span class="insight-num-badge">${num}</span>
-          <span>${ins.title}</span>
-          <span class="insight-info-icon">ⓘ</span>
-        </div>
-        ${actionText ? `<span class="insight-overlay-hint">${actionText}</span>` : ''}
-      </div>
-    `;
-  }).join('');
-
-  // Wire View More Insights Button
-  const btnViewMore = document.getElementById('btn-view-more-insights');
-  if (btnViewMore) {
-    btnViewMore.onclick = (e) => {
-      e.stopPropagation();
-      navigateToTab('insights');
-    };
-  }
+function categorizeAttentionLabel(text) {
+  const t = (text || '').toLowerCase();
+  if (t.includes('high value')) return 'Recommendation';
+  if (t.includes('high impact')) return 'Capacity Risk';
+  if (t.includes('medium impact')) return 'Service Risk';
+  if (t.includes('opportunity') || t.includes('optimization')) return 'Network Opportunity';
+  if (t.includes('positive') || t.includes('normal')) return 'Performance Update';
+  return 'Status';
 }
 
-// ─── Home Recommendations (Right Rail) ────────────────────────
-function renderHomeActions() {
-  const list = document.getElementById('home-actions-list') || document.getElementById('home-recommendations-list');
+function attentionCardHtml(kind, id, category, title, subtitle) {
+  const meta = ATTENTION_CATEGORY_META[category];
+  const link = kind === 'action' ? 'Run scenario' : meta.link;
+  return `
+    <div class="home2-attn-item" data-kind="${kind}" data-id="${id}" title="Click for details">
+      <span class="home2-attn-icon" style="background:${meta.bg};color:${meta.color}">${meta.icon}</span>
+      <div class="home2-attn-body">
+        <div class="home2-attn-kicker">${category}</div>
+        <div class="home2-attn-item-title">${title}</div>
+        <div class="home2-attn-item-sub">${subtitle}</div>
+        <span class="home2-attn-link">${link}
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+        </span>
+      </div>
+    </div>`;
+}
+
+// Insights actioned via the deep-dive page (insight-detail.js) are
+// dropped from Home's feed on the next render — see
+// window.markAttentionItemResolved below.
+const resolvedInsightIds = new Set();
+
+// ─── Home Attention Feed (merged Insights + Recommendations) ─
+// Replaces the two separate "Here is what I found" / "Here are my
+// recommendations" preview cards with one scrollable feed, per
+// Dump/Home Overview-updated.png. Clicking a card navigates to the
+// full-page insight deep dive — see insight-detail.js.
+function renderHomeAttentionFeed() {
+  const list = document.getElementById('home-attention-list');
   if (!list) return;
 
-  list.innerHTML = HOME_ACTION_ITEMS.map(act => `
-    <div class="home-action-row" data-action-id="${act.id}" onclick="window.openActionDrawer && window.openActionDrawer('${act.id}')" style="cursor:pointer;" title="Click to view recommendation details">
-      <div class="home-action-checkbox" style="color:#9218EA;font-weight:700">✦</div>
-      <div class="home-action-text">
-        ${act.title}
-        <span class="home-action-tag" style="color:${act.tagColor}">(${act.tag})</span>
-      </div>
-    </div>
-  `).join('');
+  const insights = getInsightsForFacility(state.selectedFacility)
+    .filter(ins => !resolvedInsightIds.has(ins.id));
 
-  // Wire click handlers as well
-  list.querySelectorAll('.home-action-row').forEach(row => {
-    row.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const actionId = row.dataset.actionId;
-      if (typeof window.openActionDrawer === 'function') {
-        window.openActionDrawer(actionId);
+  const insightCards = insights.map(ins =>
+    attentionCardHtml('insight', ins.id, categorizeAttentionLabel(ins.impact), ins.title, ins.subtitle));
+
+  const actionCards = HOME_ACTION_ITEMS
+    .filter(act => !resolvedInsightIds.has(act.id))
+    .map(act => {
+      const impact = act.expectedImpact || {};
+      const subtitle = [impact.cost, impact.sla ? `SLA ${impact.sla}` : null].filter(Boolean).join(' · ');
+      return attentionCardHtml('action', act.id, categorizeAttentionLabel(act.tag), act.title, subtitle);
+    });
+
+  const cards = [...insightCards, ...actionCards];
+  list.innerHTML = cards.length
+    ? cards.join('')
+    : `<div class="home2-attn-empty">No open items right now — network is performing within target.</div>`;
+
+  list.querySelectorAll('.home2-attn-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const { kind, id } = el.dataset;
+      if (typeof window.showInsightDetail === 'function') {
+        window.showInsightDetail(kind, id);
       }
     });
   });
-
-  // Wire View More Recommendations Button
-  const btnViewMoreRec = document.getElementById('btn-view-more-recommendations');
-  if (btnViewMoreRec) {
-    btnViewMoreRec.onclick = (e) => {
-      e.stopPropagation();
-      navigateToTab('recommendations');
-    };
-  }
 }
 
-// ─── Recommendation Detail Drawer ───────────────────────────
-export function openActionDrawer(actionOrId) {
-  const overlay = document.getElementById('action-drawer-overlay');
-  const content = document.getElementById('action-drawer-content');
-  if (!overlay || !content) return;
-
-  let action = null;
-  if (typeof actionOrId === 'object' && actionOrId !== null) {
-    action = actionOrId;
-  } else if (typeof actionOrId === 'string' && typeof HOME_ACTION_ITEMS !== 'undefined') {
-    action = HOME_ACTION_ITEMS.find(a => a.id === actionOrId);
-  }
-  if (!action && typeof HOME_ACTION_ITEMS !== 'undefined' && HOME_ACTION_ITEMS.length > 0) {
-    action = HOME_ACTION_ITEMS[0];
-  }
-  if (!action) return;
-
-  content.innerHTML = `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px">
-      <span class="provenance-badge ai-assessment" style="padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;background:#f5f3ff;color:#9218EA;">AI RECOMMENDATION</span>
-      <button class="facility-panel-close" onclick="window.closeActionDrawer && window.closeActionDrawer()" style="background:none;border:none;font-size:22px;color:#9ca3af;cursor:pointer;padding:4px;line-height:1;">✕</button>
-    </div>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <h2 style="font-size:20px;font-weight:800;margin:0;color:#111827;">${action.title}</h2>
-      <span class="tag" style="background:#faf5ff;color:${action.tagColor};font-weight:700;padding:4px 8px;border-radius:6px;font-size:11px;">${action.tag}</span>
-    </div>
-
-    <div style="background:#fafafc;border:1px solid #f0f0f5;border-radius:12px;padding:14px 16px;margin-bottom:16px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#9218EA;margin-bottom:6px;letter-spacing:0.05em;">Why am I recommending this?</div>
-      <p style="font-size:13px;line-height:1.6;color:#374151;margin:0;">${action.why}</p>
-    </div>
-
-    <div style="margin-bottom:16px;">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:8px;letter-spacing:0.05em;">Root Cause & Network Telemetry</div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        ${action.rootCause ? action.rootCause.map(r => `
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#ffffff;border:1px solid #eef0f3;border-radius:8px;">
-            <span style="font-size:12.5px;color:#6b7280;">${r.label}</span>
-            <div style="display:flex;align-items:center;gap:6px;">
-              <span style="font-size:13px;font-weight:700;color:#111827;">${r.value}</span>
-              <span class="provenance-badge ${r.provenance.toLowerCase().replace(/ /g, '-')}" style="font-size:10px;padding:2px 6px;border-radius:4px;background:#f3f4f6;color:#6b7280;">${r.provenance}</span>
-            </div>
-          </div>
-        `).join('') : ''}
-      </div>
-    </div>
-
-    ${action.expectedImpact ? `
-      <div style="margin-bottom:16px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;color:#6b7280;margin-bottom:8px;letter-spacing:0.05em;">Expected Impact</div>
-        <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:10px;">
-          <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:12px 10px;text-align:center">
-            <div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase">Cost</div>
-            <div style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px">${action.expectedImpact.cost}</div>
-          </div>
-          <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:12px 10px;text-align:center">
-            <div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase">SLA</div>
-            <div style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px">${action.expectedImpact.sla}</div>
-          </div>
-          <div style="background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;padding:12px 10px;text-align:center">
-            <div style="font-size:11px;color:#166534;font-weight:600;text-transform:uppercase">Capacity Risk</div>
-            <div style="font-size:16px;font-weight:800;color:#15803d;margin-top:2px">${action.expectedImpact.risk}</div>
-          </div>
-        </div>
-      </div>
-    ` : ''}
-
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:auto;padding-top:16px;">
-      <button class="btn-primary" onclick="window.navigateToTab && window.navigateToTab('scenarios'); window.closeActionDrawer && window.closeActionDrawer();" style="width:100%;padding:12px;border-radius:8px;background:#9218EA;color:#fff;border:none;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 2px 8px rgba(146,24,234,0.25);">
-        Simulate in Scenario Planner →
-      </button>
-      <button onclick="window.navigateToTab && window.navigateToTab('recommendations'); window.closeActionDrawer && window.closeActionDrawer();" style="width:100%;padding:9px;border-radius:8px;background:#f9fafb;color:#374151;border:1px solid #e5e7eb;font-weight:600;font-size:12.5px;cursor:pointer;">
-        View All Recommendations →
-      </button>
-    </div>
-  `;
-
-  overlay.classList.add('active');
-  overlay.classList.add('visible');
-  overlay.style.display = 'flex';
+if (typeof window !== 'undefined') {
+  window.markAttentionItemResolved = id => resolvedInsightIds.add(id);
 }
 
+// ─── Scenario Comparison Action Drawer (scenarios.js) ────────
+// Home's attention feed no longer uses this drawer (it navigates to a
+// full-page insight deep dive instead — see insight-detail.js), but
+// scenarios.js's own "Scenario Comparison Actions" list still opens
+// detail into these same #action-drawer-* elements, so closeActionDrawer
+// stays here as the shared close handler.
 export function closeActionDrawer() {
   const overlay = document.getElementById('action-drawer-overlay');
   if (overlay) {

@@ -1,50 +1,43 @@
 /* ═════════════════════════════════════════════════════════════════════
    NETGRAVITY HOME OVERVIEW STYLES
-   - 1. Network Health (4 Full-Width KPI Cards at top)
-   - Middle Split:
-     * Left Column: 2. Where is it happening? (Digital Twin Map Card matching combined right height)
-     * Right Column:
-       - 3. Here is what I found (Insights Card)
-       - 4. Here are my recommendations (Recommendations Card matching Insights layout)
+   Reference: Dump/Home Overview-updated.png
+
+   Layout: left column is a full-height, independently-scrollable feed
+   that merges what used to be two separate "Insights" and
+   "Recommendations" preview cards into one prioritized attention list.
+   Right column stacks a compact, network-wide KPI row above the
+   Digital Twin card. Facility/period context for Home lives on the
+   Digital Twin card itself — see updateTopBarLayout() in app.js, which
+   hides the generic sub-topbar row for this tab only.
    ═════════════════════════════════════════════════════════════════════ */
 
-.home-overview-container {
-  display: flex;
-  flex-direction: column;
+.home2-container {
+  display: grid;
+  grid-template-columns: 400px 1fr;
   gap: 20px;
   width: 100%;
-  padding-bottom: 24px;
+  align-items: start;
+  /* Full-height columns: viewport minus the global topbar above this
+     section. Both children scroll internally rather than the page. */
+  height: calc(100vh - 132px);
+  min-height: 520px;
 }
 
-/* ─── Shared Section Header ───────────────────────────────────────── */
-.home-section-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 12px;
+@media (max-width: 1180px) {
+  .home2-container {
+    grid-template-columns: 340px 1fr;
+  }
 }
 
-.home-section-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+@media (max-width: 980px) {
+  .home2-container {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
 }
 
-.home-section-title {
-  font-size: 16px;
-  font-weight: 700;
-  color: #111827;
-  letter-spacing: -0.01em;
-  margin: 0;
-}
-
-.home-section-subtitle {
-  font-size: 12.5px;
-  color: #6b7280;
-  font-weight: 400;
-  margin: 0;
-}
-
+/* ─── Shared section header (still used by the KPI row's "View all
+   KPIs" link and the Digital Twin card's "Open Digital Twin" link) ─── */
 .home-section-link {
   font-size: 12.5px;
   font-weight: 600;
@@ -57,6 +50,7 @@
   background: none;
   border: none;
   padding: 0;
+  white-space: nowrap;
   transition: all 0.15s ease;
 }
 
@@ -65,150 +59,401 @@
   transform: translateX(2px);
 }
 
-/* ─── 1. Network Health (4 Top KPI Cards) ─────────────────────────── */
-.home-health-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
-  width: 100%;
+/* ═══════════════════════════════════════════════════════════════════
+   LEFT COLUMN — merged attention feed
+   ═══════════════════════════════════════════════════════════════════ */
+.home2-left-col {
+  height: 100%;
+  min-height: 0;
 }
 
-.home-health-card {
+.home2-attn-card {
   background: #ffffff;
   border: 1px solid #eef0f3;
-  border-radius: 12px;
-  padding: 18px 20px;
+  border-radius: 14px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  transition: transform 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.home2-attn-header {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid #f3f4f6;
+  flex-shrink: 0;
+}
+
+.home2-attn-title {
+  font-size: 19px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.015em;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.home2-attn-highlight {
+  color: #9218EA;
+}
+
+.home2-attn-sub {
+  font-size: 12.5px;
+  color: #6b7280;
+  margin: 6px 0 0;
+  line-height: 1.5;
+}
+
+.home2-attn-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.home2-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.home2-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #16a34a;
+  flex-shrink: 0;
+}
+
+.home2-refresh-text {
+  font-size: 11.5px;
+  color: #9ca3af;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.home2-refresh-btn {
+  border: none;
+  background: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 3px;
+  display: inline-flex;
+  border-radius: 5px;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.3s ease;
+}
+
+.home2-refresh-btn:hover {
+  color: #9218EA;
+  background: #f5f0fa;
+}
+
+.home2-refresh-btn.spinning svg {
+  animation: home2RefreshSpin 0.6s linear;
+}
+
+@keyframes home2RefreshSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.home2-attn-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.home2-attn-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.home2-attn-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #f1f5f9;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
   box-sizing: border-box;
 }
 
-.home-health-card:hover {
+.home2-attn-item:hover {
+  background: #faf5ff;
+  border-color: #e4d3fb;
+  box-shadow: 0 3px 10px rgba(146, 24, 234, 0.06);
+}
+
+.home2-attn-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.home2-attn-body {
+  min-width: 0;
+  flex: 1;
+}
+
+.home2-attn-kicker {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 2px;
+}
+
+.home2-attn-item-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.4;
+}
+
+.home2-attn-item-sub {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.5;
+  margin-top: 3px;
+}
+
+.home2-attn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9218EA;
+  margin-top: 7px;
+}
+
+.home2-attn-item:hover .home2-attn-link {
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RIGHT COLUMN — compact KPI row + Digital Twin
+   ═══════════════════════════════════════════════════════════════════ */
+.home2-right-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+
+.home2-kpi-headrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.home2-kpi-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0;
+}
+
+.home2-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 1400px) {
+  .home2-kpi-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+.home2-kpi-card {
+  background: #ffffff;
+  border: 1px solid #eef0f3;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  box-sizing: border-box;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.home2-kpi-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
 }
 
-.home-health-card-top {
+.home2-kpi-card-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
-.health-icon-box {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
+.home2-kpi-icon-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 13px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 
-.health-icon-purple { background: #faf5ff; color: #9218EA; }
-.health-icon-green  { background: #f0fdf4; color: #16a34a; }
-.health-icon-amber  { background: #fffbeb; color: #d97706; }
-.health-icon-blue   { background: #eff6ff; color: #2563eb; }
-
-.health-card-title {
-  font-size: 13px;
+.home2-kpi-name {
+  font-size: 12px;
   font-weight: 600;
-  color: #374151;
+  color: #4b5563;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.health-metric-row {
+.home2-kpi-val-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 2px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.health-metric-val {
-  font-size: 26px;
+.home2-kpi-val {
+  font-size: 22px;
   font-weight: 800;
   color: #111827;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 
-.health-status-badge {
-  font-size: 11px;
+.home2-kpi-pill {
+  font-size: 10.5px;
   font-weight: 700;
-  padding: 2px 9px;
-  border-radius: 12px;
-  line-height: 1.3;
+  padding: 2px 8px;
+  border-radius: 10px;
 }
 
-.badge-high     { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
-.badge-above    { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-.badge-medium   { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-.badge-good     { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.home2-kpi-pill.tone-red   { background: #fee2e2; color: #dc2626; }
+.home2-kpi-pill.tone-amber { background: #fef3c7; color: #b45309; }
+.home2-kpi-pill.tone-green { background: #dcfce7; color: #15803d; }
+.home2-kpi-pill.tone-gray  { background: #f1f5f9; color: #64748b; }
 
-.health-card-sub {
-  font-size: 12px;
-  color: #6b7280;
-  font-weight: 500;
-  margin-top: 1px;
-}
-
-.health-progress-track {
-  height: 5px;
-  background: #f1f5f9;
-  border-radius: 3px;
-  overflow: hidden;
+.home2-kpi-sub {
+  font-size: 11.5px;
+  color: #9ca3af;
   margin-top: 4px;
 }
 
-.health-progress-fill {
+.home2-kpi-progress-track {
+  height: 4px;
+  background: #f1f5f9;
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.home2-kpi-progress-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
-.fill-purple { background: #9218EA; }
-.fill-green  { background: #16a34a; }
-.fill-amber  { background: #f59e0b; }
+.home2-kpi-progress-fill.tone-red   { background: #dc2626; }
+.home2-kpi-progress-fill.tone-amber { background: #f59e0b; }
+.home2-kpi-progress-fill.tone-green { background: #16a34a; }
+.home2-kpi-progress-fill.tone-gray  { background: #94a3b8; }
 
-.health-card-threshold {
-  font-size: 11px;
-  color: #9ca3af;
-  margin-top: 2px;
-  min-height: 14px;
-}
-
-/* ─── Middle Split Row (50% Digital Twin vs 50% Right Stack) ─────── */
-.home-middle-split {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  width: 100%;
-  align-items: stretch;
-}
-
-@media (max-width: 1024px) {
-  .home-middle-split {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* ─── Left Column: Digital Twin Card (Full Height) ────────────────── */
-.home-twin-preview-card {
+/* ─── Digital Twin Card ────────────────────────────────────────────── */
+.home2-twin-card {
   background: #ffffff;
   border: 1px solid #eef0f3;
   border-radius: 14px;
-  padding: 20px 22px;
-  display: flex;
-  flex-direction: column;
+  padding: 18px 20px 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   box-sizing: border-box;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
+.home2-twin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+.home2-twin-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.01em;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.home2-twin-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.home2-twin-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.home2-twin-control select {
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #111827;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 5px 10px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+/* ─── Digital Twin: map + legend (unchanged from the previous layout,
+   just re-parented under .home2-twin-card) ────────────────────────── */
 .home-twin-map-container {
   flex: 1;
-  min-height: 440px;
+  min-height: 360px;
   width: 100%;
   border-radius: 10px;
   overflow: hidden;
@@ -226,7 +471,7 @@
   flex-wrap: wrap;
   padding-top: 10px;
   border-top: 1px solid #f3f4f6;
-  margin-top: auto;
+  flex-shrink: 0;
 }
 
 .legend-dot-item {
@@ -250,267 +495,3 @@
 .dot-low    { background: #10b981; }
 .dot-dc     { background: #9218EA; }
 .dot-plant  { background: #3b82f6; }
-
-/* ─── Right Column: Stacked Insights & Recommendations ───────────── */
-.home-right-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  height: 100%;
-}
-
-/* ─── Right Card 1: Insights Card ─────────────────────────────────── */
-.home-insights-preview-card {
-  background: #ffffff;
-  border: 1px solid #eef0f3;
-  border-radius: 14px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-  box-sizing: border-box;
-}
-
-.home-insights-vlist {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.home-insight-item-row {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #ffffff;
-  border: 1px solid #f1f5f9;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-sizing: border-box;
-}
-
-.home-insight-item-row:hover {
-  background: #faf5ff;
-  border-color: #d8b4fe;
-  transform: translateX(3px);
-  box-shadow: 0 3px 10px rgba(146, 24, 234, 0.06);
-}
-
-.home-insight-top-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.home-insight-icon-box {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.icon-red    { background: #fee2e2; color: #ef4444; }
-.icon-purple { background: #f3e8ff; color: #9218EA; }
-.icon-green  { background: #dcfce7; color: #16a34a; }
-.icon-amber  { background: #fef3c7; color: #d97706; }
-
-.home-insight-item-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #111827;
-  line-height: 1.3;
-  flex: 1;
-}
-
-.home-insight-right-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.home-insight-badge {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 6px;
-}
-
-.badge-critical      { background: #fee2e2; color: #dc2626; border: 1px solid #fecaca; }
-.badge-informational { background: #f3e8ff; color: #7e22ce; border: 1px solid #e9d5ff; }
-.badge-opportunity   { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-.badge-attention     { background: #fef3c7; color: #b45309; border: 1px solid #fde68a; }
-
-.home-insight-arrow {
-  color: #9ca3af;
-  font-size: 15px;
-  font-weight: 700;
-  transition: transform 0.2s, color 0.2s;
-}
-
-.home-insight-item-row:hover .home-insight-arrow {
-  transform: translateX(2px);
-  color: #9218EA;
-}
-
-.home-insight-item-sub {
-  font-size: 11.5px;
-  color: #4b5563;
-  line-height: 1.4;
-  margin: 0;
-}
-
-.home-insight-chips-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.insight-mini-chip {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  color: #475569;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.chip-red    { background: #fef2f2; border-color: #fee2e2; color: #b91c1c; }
-.chip-purple { background: #faf5ff; border-color: #ede9fe; color: #6b21a8; }
-.chip-green  { background: #f0fdf4; border-color: #dcfce7; color: #15803d; }
-.chip-amber  { background: #fffbeb; border-color: #fef3c7; color: #92400e; }
-
-/* ─── Right Card 2: Recommendations Card (Matching Insights Dimensions) */
-.home-recs-preview-card {
-  background: #ffffff;
-  border: 1px solid #eef0f3;
-  border-radius: 14px;
-  padding: 18px 20px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
-  box-sizing: border-box;
-}
-
-.home-recs-vlist {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.home-rec-item-row {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: #ffffff;
-  border: 1px solid #f1f5f9;
-  border-left-width: 3.5px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  box-sizing: border-box;
-}
-
-.home-rec-item-row.rec-border-purple { border-left-color: #9218EA; }
-.home-rec-item-row.rec-border-red    { border-left-color: #ef4444; }
-.home-rec-item-row.rec-border-green  { border-left-color: #16a34a; }
-
-.home-rec-item-row:hover {
-  background: #faf5ff;
-  border-color: #d8b4fe;
-  transform: translateX(3px);
-  box-shadow: 0 3px 10px rgba(146, 24, 234, 0.06);
-}
-
-.home-rec-top-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.home-rec-icon-box {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  flex-shrink: 0;
-}
-
-.home-rec-item-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #111827;
-  line-height: 1.3;
-  flex: 1;
-}
-
-.home-rec-right-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.home-rec-pill {
-  font-size: 10px;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 6px;
-}
-
-.pill-purple { background: #faf5ff; color: #7e22ce; border: 1px solid #ede9fe; }
-.pill-red    { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
-.pill-amber  { background: #fffbeb; color: #b45309; border: 1px solid #fef3c7; }
-.pill-green  { background: #f0fdf4; color: #15803d; border: 1px solid #dcfce7; }
-
-.home-rec-arrow {
-  color: #9ca3af;
-  font-size: 15px;
-  font-weight: 700;
-  transition: transform 0.2s, color 0.2s;
-}
-
-.home-rec-item-row:hover .home-rec-arrow {
-  transform: translateX(2px);
-  color: #9218EA;
-}
-
-.home-rec-item-sub {
-  font-size: 11.5px;
-  color: #4b5563;
-  line-height: 1.4;
-  margin: 0;
-}
-
-.home-rec-chips-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-/* ─── Footer / Disclaimer Note ────────────────────────────────────── */
-.home-footer-disclaimer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font-size: 12px;
-  color: #6b7280;
-  padding: 8px 0 4px;
-  text-align: center;
-}

@@ -44,6 +44,9 @@ export function returnToLanding() {
   if (typeof window.hideProjectPages === 'function') {
     window.hideProjectPages();
   }
+  if (typeof window.hideIngestionPages === 'function') {
+    window.hideIngestionPages();
+  }
 
   // 2. Hide floating chatbot FAB
   const chatbotFab = document.getElementById('floating-chatbot-fab');
