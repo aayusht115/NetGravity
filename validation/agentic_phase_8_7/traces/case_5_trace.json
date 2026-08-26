@@ -1,0 +1,446 @@
+{
+  "execution_id": "58e45a5c-792",
+  "request_id": "09885570-430e-4f56-a304-98f0569ef37f",
+  "actor": {
+    "actor_id": "anonymous",
+    "role": "VIEWER"
+  },
+  "started_at": "2026-08-26T05:38:35.533213+00:00",
+  "completed_at": "2026-08-26T05:38:45.822134+00:00",
+  "input": "Severe flood predicted around Delhi. Update demand forecast accordingly.",
+  "intent": {
+    "interpreted": "EXTERNAL_EVENT",
+    "source": "rules",
+    "confidence": 0.8
+  },
+  "workflow_id": "wf_update_demand_flood_delhi_v1",
+  "plan_steps": [
+    {
+      "step_id": "s1",
+      "capability": "network.load_snapshot",
+      "depends_on": [],
+      "optional": false
+    },
+    {
+      "step_id": "s2",
+      "capability": "external.interpret_signal",
+      "depends_on": [
+        "s1"
+      ],
+      "optional": false
+    },
+    {
+      "step_id": "s3",
+      "capability": "forecast.demand",
+      "depends_on": [
+        "s1",
+        "s2"
+      ],
+      "optional": false
+    }
+  ],
+  "data_references": {
+    "baseline_snapshot_id": "snap_72a48e1a0664",
+    "data_version": "72a48e1a066440af",
+    "scenario_ids": [],
+    "scenario_overrides": []
+  },
+  "state_history": [
+    {
+      "from": "RECEIVED",
+      "to": "UNDERSTANDING",
+      "at": "2026-08-26T05:38:35.533308+00:00",
+      "note": ""
+    },
+    {
+      "from": "UNDERSTANDING",
+      "to": "PLANNED",
+      "at": "2026-08-26T05:38:45.820132+00:00",
+      "note": ""
+    },
+    {
+      "from": "PLANNED",
+      "to": "VALIDATING",
+      "at": "2026-08-26T05:38:45.820210+00:00",
+      "note": ""
+    },
+    {
+      "from": "VALIDATING",
+      "to": "RUNNING",
+      "at": "2026-08-26T05:38:45.820233+00:00",
+      "note": ""
+    },
+    {
+      "from": "RUNNING",
+      "to": "FAILED",
+      "at": "2026-08-26T05:38:45.821985+00:00",
+      "note": "required steps failed or blocked: ['s3']"
+    }
+  ],
+  "tool_invocations": [
+    {
+      "step_id": "s1",
+      "capability": "network.load_snapshot",
+      "success": true,
+      "duration_seconds": 0.0,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:38:45.820584+00:00"
+    },
+    {
+      "step_id": "s2",
+      "capability": "external.interpret_signal",
+      "success": true,
+      "duration_seconds": 0.0001,
+      "attempts": 1,
+      "execution_mode": "PROBABILISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:38:45.820947+00:00"
+    },
+    {
+      "step_id": "s3",
+      "capability": "forecast.demand",
+      "success": false,
+      "duration_seconds": 0.0002,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": "MISSING_DATA",
+      "error_message": "No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot.",
+      "at": "2026-08-26T05:38:45.821583+00:00"
+    }
+  ],
+  "engine_results": {
+    "network.load_snapshot": {
+      "snapshot_id": "snap_72a48e1a0664",
+      "network_id": "PHASE2_DELHI",
+      "data_version": "72a48e1a066440af",
+      "is_hypothetical": false,
+      "n_facilities": 7,
+      "n_demands": 3
+    },
+    "external.interpret_signal": {
+      "schema_version": 2,
+      "event_type": "FLOOD",
+      "location": "DC_DELHI",
+      "severity": "UNKNOWN",
+      "event_probability": 0.85,
+      "probability_basis": "weather warning",
+      "source": "met_dept",
+      "source_quality": null,
+      "timestamp": null,
+      "validity_period": null,
+      "confidence": 0.9,
+      "evidence": "",
+      "affected_entity_ids": [
+        "DC_DELHI"
+      ]
+    }
+  },
+  "risk_calculation": null,
+  "governance_decision": {
+    "action_type": "REPORT",
+    "classification": "AUTO_ACTION",
+    "reason": "'REPORT' produces analysis only and does not modify observed network state.",
+    "triggered_rules": [
+      "R7_ANALYTICAL_ONLY"
+    ],
+    "governing_rule": "R7_ANALYTICAL_ONLY",
+    "evaluated": {
+      "action_type": "REPORT",
+      "is_feasible": true,
+      "cost_impact_pct": null,
+      "unserved_demand_rate": null,
+      "rei": null,
+      "risk_factor": null,
+      "confidence": "LOW",
+      "data_quality_ok": true,
+      "missing_evidence": {
+        "forecast.demand": "UNAVAILABLE: No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot."
+      },
+      "missing_critical_evidence": [],
+      "unresolved_evidence": {},
+      "grounding_failed": false,
+      "action_requires_risk_evidence": true
+    },
+    "blocked_by_missing_evidence": false,
+    "evidence_status": {},
+    "requires_approval": false,
+    "approval_request_id": null,
+    "eligible_approver_roles": []
+  },
+  "llm_outputs": [
+    {
+      "purpose": "planner",
+      "source": "LLM",
+      "output_excerpt": "{\n  \"workflow_id\": \"wf_update_demand_flood_delhi_v1\",\n  \"steps\": [\n    {\n      \"step_id\": \"s1\",\n      \"capability\": \"network.load_snapshot\",\n      \"description\": \"Pin and verify the current network snapshot focused on Delhi region.\",\n      \"depends_on\": [],\n      \"soft_depends_on\": [],\n      \"params\": {\n        \"region\": \"Delhi\",\n        \"snapshot_time\": \"now\"\n      },\n      \"optional\": false\n    },\n    {\n      \"step_id\": \"s2\",\n      \"capability\": \"external.interpret_signal\",\n      \"description\": \"Interpret the reported severe flood prediction into likelihood, timing, and affected areas.\",\n      \"depends_on\": [\n        \"s1\"\n      ],\n      \"soft_depends_on\": [],\n      \"params\": {\n        \"raw_signal\": \"Severe flood predicted around Delhi\",\n        \"region\": \"Delhi\",\n        \"time_horizon\": \"72h\",\n        \"desired_output\": [\"likelihood\", \"affected_areas\", \"confidence\", \"provenance\"]\n      },\n      \"optional\": false\n    },\n    {\n      \"step_id\": \"s3\",\n      \"capability\": \"forecast.demand\",\n      \"description\": \"Re-estimate demand using the observed snapshot and the interpreted flood likelihood/impacts.\",\n      \"depends_on\": [\n        \"s1\",\n        \"s2\"\n      ],\n      \"soft_depends_on\": [],\n      \"params\": {\n        \"region\": \"Delhi\",\n        \"horizon\": \"7d\",\n        \"apply_event_adjustment\": true,\n        \"event_signal_step\": \"s2\",\n        \"adjustment_strategy\": \"probabilistic_impact_on_demand\"\n      },\n      \"optional\": false\n    }\n  ],\n  \"reasoning\": \"Interpret flood signal, t",
+      "at": "2026-08-26T05:38:45.819858+00:00"
+    }
+  ],
+  "errors": [
+    {
+      "step_id": "s3",
+      "capability": "forecast.demand",
+      "code": "MISSING_DATA",
+      "message": "No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot.",
+      "failure_class": "REQUIRES_HUMAN"
+    }
+  ],
+  "events": [
+    {
+      "sequence": 1,
+      "at": "2026-08-26T05:38:35.533247+00:00",
+      "type": "execution_started",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": null,
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "(pending interpretation)"
+      }
+    },
+    {
+      "sequence": 2,
+      "at": "2026-08-26T05:38:35.534263+00:00",
+      "type": "intent_resolved",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": null,
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "EXTERNAL_EVENT",
+        "source": "rules",
+        "confidence": 0.8
+      }
+    },
+    {
+      "sequence": 3,
+      "at": "2026-08-26T05:38:45.820151+00:00",
+      "type": "plan_built",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "steps": 3,
+        "origin": "LLM"
+      }
+    },
+    {
+      "sequence": 4,
+      "at": "2026-08-26T05:38:45.820197+00:00",
+      "type": "workflow_started",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "EXTERNAL_EVENT",
+        "steps": [
+          "s1",
+          "s2",
+          "s3"
+        ],
+        "layers": [
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "sequence": 5,
+      "at": "2026-08-26T05:38:45.820224+00:00",
+      "type": "snapshot_validated",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "data_version": "72a48e1a066440af"
+      }
+    },
+    {
+      "sequence": 6,
+      "at": "2026-08-26T05:38:45.820308+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s1",
+        "capability": "network.load_snapshot"
+      }
+    },
+    {
+      "sequence": 7,
+      "at": "2026-08-26T05:38:45.820595+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s1",
+        "capability": "network.load_snapshot",
+        "duration_seconds": 0.0,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 8,
+      "at": "2026-08-26T05:38:45.820709+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s2",
+        "capability": "external.interpret_signal"
+      }
+    },
+    {
+      "sequence": 9,
+      "at": "2026-08-26T05:38:45.820958+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s2",
+        "capability": "external.interpret_signal",
+        "duration_seconds": 0.0001,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 10,
+      "at": "2026-08-26T05:38:45.821058+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s3",
+        "capability": "forecast.demand"
+      }
+    },
+    {
+      "sequence": 11,
+      "at": "2026-08-26T05:38:45.821605+00:00",
+      "type": "step_failed",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s3",
+        "capability": "forecast.demand",
+        "code": "MISSING_DATA"
+      }
+    },
+    {
+      "sequence": 12,
+      "at": "2026-08-26T05:38:45.821615+00:00",
+      "type": "evidence_unavailable",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s3",
+        "capability": "forecast.demand",
+        "reason": "No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot."
+      }
+    },
+    {
+      "sequence": 13,
+      "at": "2026-08-26T05:38:45.821952+00:00",
+      "type": "governance_decision",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "classification": "AUTO_ACTION",
+        "action_type": "REPORT",
+        "rules": [
+          "R7_ANALYTICAL_ONLY"
+        ],
+        "governing_rule": "R7_ANALYTICAL_ONLY",
+        "rei": null,
+        "risk_factor": null,
+        "missing_evidence": [
+          "forecast.demand"
+        ],
+        "evidence_status": {},
+        "blocked_by_missing_evidence": false,
+        "grounding_failed": false
+      }
+    },
+    {
+      "sequence": 14,
+      "at": "2026-08-26T05:38:45.821964+00:00",
+      "type": "governance_applied",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "classification": "AUTO_ACTION",
+        "rules": [
+          "R7_ANALYTICAL_ONLY"
+        ]
+      }
+    },
+    {
+      "sequence": 15,
+      "at": "2026-08-26T05:38:45.822127+00:00",
+      "type": "twin_state_published",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "state_id": "tws_snap_72a48e1a0664_optimized",
+        "state_type": "OPTIMIZED",
+        "scenario_id": null,
+        "calculation_status": "FAILED",
+        "n_facilities": 0,
+        "n_flows": 0
+      }
+    },
+    {
+      "sequence": 16,
+      "at": "2026-08-26T05:38:45.822189+00:00",
+      "type": "workflow_completed",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "status": "FAILED",
+        "completed_steps": 2,
+        "failed_steps": 1,
+        "blocked_steps": 0
+      }
+    },
+    {
+      "sequence": 17,
+      "at": "2026-08-26T05:38:45.822195+00:00",
+      "type": "execution_completed",
+      "detail": {
+        "execution_id": "58e45a5c-792",
+        "workflow_id": "wf_update_demand_flood_delhi_v1",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "status": "FAILED"
+      }
+    }
+  ],
+  "outcome": {
+    "status": "FAILED",
+    "summary": "",
+    "action_taken": null,
+    "approval": null
+  }
+}

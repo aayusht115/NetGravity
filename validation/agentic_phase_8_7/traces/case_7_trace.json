@@ -1,0 +1,840 @@
+{
+  "execution_id": "62c630a6-80f",
+  "request_id": "62e2291c-8beb-484e-8948-b35d4cc6d98a",
+  "actor": {
+    "actor_id": "anonymous",
+    "role": "VIEWER"
+  },
+  "started_at": "2026-08-26T05:39:37.368613+00:00",
+  "completed_at": "2026-08-26T05:40:20.154130+00:00",
+  "input": "Review resilience and exposure for Delhi facilities.",
+  "intent": {
+    "interpreted": "RESILIENCE_QUERY",
+    "source": "explicit",
+    "confidence": 1.0
+  },
+  "workflow_id": "resilience_delhi_001",
+  "plan_steps": [
+    {
+      "step_id": "load_snapshot",
+      "capability": "network.load_snapshot",
+      "depends_on": [],
+      "optional": false
+    },
+    {
+      "step_id": "assess_resilience",
+      "capability": "resilience.assess",
+      "depends_on": [
+        "load_snapshot"
+      ],
+      "optional": false
+    },
+    {
+      "step_id": "interpret_signals",
+      "capability": "external.interpret_signal",
+      "depends_on": [
+        "load_snapshot"
+      ],
+      "optional": true
+    },
+    {
+      "step_id": "compute_risk_factor",
+      "capability": "risk.compute_rf",
+      "depends_on": [
+        "assess_resilience",
+        "interpret_signals"
+      ],
+      "optional": true
+    },
+    {
+      "step_id": "synthesise_explanation",
+      "capability": "reasoning.synthesise",
+      "depends_on": [
+        "assess_resilience",
+        "compute_risk_factor"
+      ],
+      "optional": false
+    }
+  ],
+  "data_references": {
+    "baseline_snapshot_id": "snap_72a48e1a0664",
+    "data_version": "72a48e1a066440af",
+    "scenario_ids": [],
+    "scenario_overrides": []
+  },
+  "state_history": [
+    {
+      "from": "RECEIVED",
+      "to": "UNDERSTANDING",
+      "at": "2026-08-26T05:39:37.368741+00:00",
+      "note": ""
+    },
+    {
+      "from": "UNDERSTANDING",
+      "to": "PLANNED",
+      "at": "2026-08-26T05:39:53.606485+00:00",
+      "note": ""
+    },
+    {
+      "from": "PLANNED",
+      "to": "VALIDATING",
+      "at": "2026-08-26T05:39:53.606540+00:00",
+      "note": ""
+    },
+    {
+      "from": "VALIDATING",
+      "to": "RUNNING",
+      "at": "2026-08-26T05:39:53.606593+00:00",
+      "note": ""
+    },
+    {
+      "from": "RUNNING",
+      "to": "COMPLETED",
+      "at": "2026-08-26T05:40:20.154025+00:00",
+      "note": ""
+    }
+  ],
+  "tool_invocations": [
+    {
+      "step_id": "load_snapshot",
+      "capability": "network.load_snapshot",
+      "success": true,
+      "duration_seconds": 0.0,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:39:53.606925+00:00"
+    },
+    {
+      "step_id": "assess_resilience",
+      "capability": "resilience.assess",
+      "success": true,
+      "duration_seconds": 0.0251,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:39:53.632279+00:00"
+    },
+    {
+      "step_id": "interpret_signals",
+      "capability": "external.interpret_signal",
+      "success": true,
+      "duration_seconds": 4.4358,
+      "attempts": 1,
+      "execution_mode": "PROBABILISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:39:58.068756+00:00"
+    },
+    {
+      "step_id": "compute_risk_factor",
+      "capability": "risk.compute_rf",
+      "success": true,
+      "duration_seconds": 0.0004,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:39:58.069948+00:00"
+    },
+    {
+      "step_id": "synthesise_explanation",
+      "capability": "reasoning.synthesise",
+      "success": true,
+      "duration_seconds": 22.0835,
+      "attempts": 1,
+      "execution_mode": "PROBABILISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:40:20.153890+00:00"
+    }
+  ],
+  "engine_results": {
+    "network.load_snapshot": {
+      "snapshot_id": "snap_72a48e1a0664",
+      "network_id": "PHASE2_DELHI",
+      "data_version": "72a48e1a066440af",
+      "is_hypothetical": false,
+      "n_facilities": 7,
+      "n_demands": 3
+    },
+    "resilience.assess": {
+      "network_id": "PHASE2_DELHI",
+      "data_version": "72a48e1a066440af",
+      "batch_id": "rei_60b8c0a54140",
+      "batch_status": "COMPLETED_WITH_ERRORS",
+      "network_snapshot_id": "snap_72a48e1a0664",
+      "computed_for_snapshot_id": null,
+      "material_fingerprint": "fp1_34ab4fd8199c2adc",
+      "model_version": "1.2.0",
+      "served_from_cache": false,
+      "n_milp_solves": 6,
+      "baseline_business_cost": 1200.0,
+      "baseline_solver_status": "OPTIMAL",
+      "rei_status": "COMPUTED",
+      "max_performance_impact": 500.0,
+      "n_facilities_assessed": 4,
+      "n_successful": 3,
+      "n_failed": 0,
+      "n_infeasible": 1,
+      "highest_exposure_facility": "DC_MUMBAI",
+      "max_rei": 1.0,
+      "facilities": [
+        {
+          "facility_id": "DC_MUMBAI",
+          "facility_name": "Mumbai DC",
+          "facility_role": "DC",
+          "rank": 1,
+          "rei": 1.0,
+          "performance_impact": 500.0,
+          "economic_impact": 500.0,
+          "cost_impact_pct": 41.666667,
+          "unserved_demand": 0.0,
+          "unserved_demand_rate": 0.0,
+          "service_loss": 0.0,
+          "rerouted_volume": 200.0,
+          "is_feasible": true,
+          "solver_status": "OPTIMAL",
+          "calculation_status": "OK",
+          "failure_reason": null,
+          "risk_classification": "NOT_CLASSIFIED",
+          "diagnostics": [
+            "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+          ]
+        },
+        {
+          "facility_id": "DC_DELHI",
+          "facility_name": "Delhi NCR DC",
+          "facility_role": "DC",
+          "rank": 2,
+          "rei": 0.8,
+          "performance_impact": 400.0,
+          "economic_impact": 400.0,
+          "cost_impact_pct": 33.333333,
+          "unserved_demand": 0.0,
+          "unserved_demand_rate": 0.0,
+          "service_loss": 0.0,
+          "rerouted_volume": 200.0,
+          "is_feasible": true,
+          "solver_status": "OPTIMAL",
+          "calculation_status": "OK",
+          "failure_reason": null,
+          "risk_classification": "NOT_CLASSIFIED",
+          "diagnostics": [
+            "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+          ]
+        },
+        {
+          "facility_id": "DC_KOLKATA",
+          "facility_name": "Kolkata DC",
+          "facility_role": "DC",
+          "rank": 3,
+          "rei": 0.4,
+          "performance_impact": 200.0,
+          "economic_impact": 200.0,
+          "cost_impact_pct": 16.666667,
+          "unserved_demand": 0.0,
+          "unserved_demand_rate": 0.0,
+          "service_loss": 0.0,
+          "rerouted_volume": 200.0,
+          "is_feasible": true,
+          "solver_status": "OPTIMAL",
+          "calculation_status": "OK",
+          "failure_reason": null,
+          "risk_classification": "NOT_CLASSIFIED",
+          "diagnostics": [
+            "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+          ]
+        },
+        {
+          "facility_id": "PLANT_N",
+          "facility_name": "North Plant",
+          "facility_role": "PLANT",
+          "rank": null,
+          "rei": null,
+          "performance_impact": null,
+          "economic_impact": null,
+          "cost_impact_pct": null,
+          "unserved_demand": 300.0,
+          "unserved_demand_rate": 1.0,
+          "service_loss": 1.0,
+          "rerouted_volume": 300.0,
+          "is_feasible": false,
+          "solver_status": "INFEASIBLE",
+          "calculation_status": "INFEASIBLE",
+          "failure_reason": "disruption produced solver status INFEASIBLE",
+          "risk_classification": "CRITICAL",
+          "diagnostics": [
+            "Disruption of 'PLANT_N' left the network without a feasible solution (solver status: INFEASIBLE). The network cannot absorb this disruption under the current constraints. Performance Impact and REI are undefined and reported as None rather than estimated.",
+            "Service diagnostic: re-solved 'PLANT_N' with shortage enabled to quantify the damage. 300.00 units (100.00% of demand) cannot be served. These service figures are diagnostic only \u2014 cost, Performance Impact and REI remain undefined for this facility."
+          ]
+        }
+      ],
+      "rei_by_facility": {
+        "DC_MUMBAI": 1.0,
+        "DC_DELHI": 0.8,
+        "DC_KOLKATA": 0.4,
+        "PLANT_N": null
+      },
+      "disruption_summary": "FACILITY_FAILURE for the modelled planning period (allow_shortage=False)",
+      "warnings": [
+        "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+        "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE"
+      ]
+    },
+    "external.interpret_signal": {
+      "schema_version": 2,
+      "event_type": "OTHER",
+      "location": "Delhi",
+      "severity": "UNKNOWN",
+      "event_probability": null,
+      "probability_basis": null,
+      "source": "user_report",
+      "source_quality": null,
+      "timestamp": "2026-08-26T05:39:58.067171+00:00",
+      "validity_period": null,
+      "confidence": 0.9,
+      "evidence": "Review resilience and exposure for Delhi facilities.",
+      "affected_entity_ids": [
+        "DC_DELHI"
+      ]
+    },
+    "risk.compute_rf": {
+      "results": [],
+      "not_computable": [
+        {
+          "status": "NOT_COMPUTABLE",
+          "not_computable_reason": "NO_EVENT_PROBABILITY",
+          "likelihood": null,
+          "rei": 0.8,
+          "risk_factor": null,
+          "formula": "RF = P + REI - P*REI",
+          "provenance": {
+            "likelihood": "external_signal:user_report|basis=none",
+            "rei": "rei_registry:rei_60b8c0a54140@snap_72a48e1a0664"
+          },
+          "facility_id": "DC_DELHI",
+          "notes": [
+            "No defensible event probability (P) was available. Severity, confidence and source quality are NOT probabilities and are never substituted for one."
+          ]
+        }
+      ],
+      "max_risk_factor": null,
+      "highest_risk_entity": null,
+      "network_id": "PHASE2_DELHI",
+      "data_version": "72a48e1a066440af",
+      "warnings": [
+        "DC_DELHI: RF NOT_COMPUTABLE (NO_EVENT_PROBABILITY)"
+      ]
+    },
+    "reasoning.synthesise": {
+      "summary": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I see external evidence for OTHER affecting Delhi, severity UNKNOWN, with NO defensible probability available (source: user_report).",
+      "key_drivers": [
+        "DC_MUMBAI carries the greatest disruption exposure"
+      ],
+      "risks": [
+        "Combined risk factor unavailable \u2014 see reason above."
+      ],
+      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "confidence": "LOW",
+      "evidence": [
+        "highest_exposure_facility = DC_MUMBAI"
+      ],
+      "briefing": {
+        "schema_version": "2.0",
+        "scope": "NETWORK",
+        "entity_id": null,
+        "opening": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00).",
+        "context": "I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I see external evidence for OTHER affecting Delhi, severity UNKNOWN, with NO defensible probability available (source: user_report).",
+        "kpi_insights": [],
+        "key_drivers": [
+          "DC_MUMBAI carries the greatest disruption exposure"
+        ],
+        "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+        "limitation": "Combined risk factor unavailable \u2014 see reason above.",
+        "missing_information": [],
+        "suggested_questions": [
+          "What is driving this result?",
+          "Which node or lane should I examine?"
+        ],
+        "evidence_completeness": "COMPLETE"
+      },
+      "source": "template",
+      "validation_warnings": [
+        "LLM reasoning output could not be parsed; deterministic template used. Cause: the response exhausted the gateway's 2000-token output budget (output_tokens=2000), so the JSON was truncated mid-structure. This is a response-length problem, not malformed model behaviour: a reasoning model spends part of that budget on internal reasoning before emitting text."
+      ],
+      "grounding_status": "GROUNDED",
+      "grounded_claims": [
+        {
+          "claim": "1.00",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "rei.max_rei",
+          "authoritative_value": 1.0,
+          "source": "rei_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "62c630a6-80f",
+            "snapshot_id": "snap_72a48e1a0664",
+            "scenario_id": "",
+            "source": "rei_engine",
+            "fact": "rei.max_rei"
+          }
+        },
+        {
+          "claim": "1.00",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "rei.max_rei",
+          "authoritative_value": 1.0,
+          "source": "rei_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "62c630a6-80f",
+            "snapshot_id": "snap_72a48e1a0664",
+            "scenario_id": "",
+            "source": "rei_engine",
+            "fact": "rei.max_rei"
+          }
+        }
+      ],
+      "unavailable_evidence": {}
+    }
+  },
+  "risk_calculation": {
+    "results": [],
+    "not_computable": [
+      {
+        "status": "NOT_COMPUTABLE",
+        "not_computable_reason": "NO_EVENT_PROBABILITY",
+        "likelihood": null,
+        "rei": 0.8,
+        "risk_factor": null,
+        "formula": "RF = P + REI - P*REI",
+        "provenance": {
+          "likelihood": "external_signal:user_report|basis=none",
+          "rei": "rei_registry:rei_60b8c0a54140@snap_72a48e1a0664"
+        },
+        "facility_id": "DC_DELHI",
+        "notes": [
+          "No defensible event probability (P) was available. Severity, confidence and source quality are NOT probabilities and are never substituted for one."
+        ]
+      }
+    ],
+    "max_risk_factor": null,
+    "highest_risk_entity": null,
+    "network_id": "PHASE2_DELHI",
+    "data_version": "72a48e1a066440af",
+    "warnings": [
+      "DC_DELHI: RF NOT_COMPUTABLE (NO_EVENT_PROBABILITY)"
+    ]
+  },
+  "governance_decision": {
+    "action_type": "REPORT",
+    "classification": "AUTO_ACTION",
+    "reason": "'REPORT' produces analysis only and does not modify observed network state.",
+    "triggered_rules": [
+      "R7_ANALYTICAL_ONLY"
+    ],
+    "governing_rule": "R7_ANALYTICAL_ONLY",
+    "evaluated": {
+      "action_type": "REPORT",
+      "is_feasible": true,
+      "cost_impact_pct": null,
+      "unserved_demand_rate": null,
+      "rei": 1.0,
+      "risk_factor": null,
+      "confidence": "LOW",
+      "data_quality_ok": true,
+      "missing_evidence": {},
+      "missing_critical_evidence": [],
+      "unresolved_evidence": {},
+      "grounding_failed": false,
+      "action_requires_risk_evidence": true
+    },
+    "blocked_by_missing_evidence": false,
+    "evidence_status": {},
+    "requires_approval": false,
+    "approval_request_id": null,
+    "eligible_approver_roles": []
+  },
+  "llm_outputs": [
+    {
+      "purpose": "planner",
+      "source": "LLM",
+      "output_excerpt": "{\n  \"workflow_id\": \"resilience_delhi_001\",\n  \"steps\": [\n    {\n      \"step_id\": \"load_snapshot\",\n      \"capability\": \"network.load_snapshot\",\n      \"description\": \"Pin and verify observed network snapshot restricted to Delhi facilities.\",\n      \"depends_on\": [],\n      \"soft_depends_on\": [],\n      \"params\": {\n        \"region\": \"Delhi\",\n        \"scope\": \"facilities\"\n      },\n      \"optional\": false\n    },\n    {\n      \"step_id\": \"assess_resilience\",\n      \"capability\": \"resilience.assess\",\n      \"description\": \"Assess facility resilience exposure (REI) for Delhi facilities.\",\n      \"depends_on\": [\n        \"load_snapshot\"\n      ],\n      \"soft_depends_on\": [],\n      \"params\": {\n        \"region\": \"Delhi\",\n        \"facility_filter\": \"all\"\n      },\n      \"optional\": false\n    },\n    {\n      \"step_id\": \"interpret_signals\",\n      \"capability\": \"external.interpret_signal\",\n      \"description\": \"Interpret external evidence (weather, incidents) relevant to Delhi to estimate likelihoods.\",\n      \"depends_on\": [\n        \"load_snapshot\"\n      ],\n      \"soft_depends_on\": [],\n      \"params\": {\n        \"region\": \"Delhi\",\n        \"sources\": [\n          \"weather\",\n          \"incident_reports\"\n        ],\n        \"time_window\": \"30d\"\n      },\n      \"optional\": true\n    },\n    {\n      \"step_id\": \"compute_risk_factor\",\n      \"capability\": \"risk.compute_rf\",\n      \"description\": \"Combine exposure and signal likelihood into risk factors for Delhi facilities.\",\n      \"depends_on\": [\n        \"assess_resil",
+      "at": "2026-08-26T05:39:53.606289+00:00"
+    },
+    {
+      "purpose": "reasoning",
+      "source": "template",
+      "output_excerpt": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I see external evidence for OTHER affecting Delhi, severity UNKNOWN, with NO defensible probability available (source: user_report).",
+      "at": "2026-08-26T05:40:20.154192+00:00"
+    }
+  ],
+  "errors": [],
+  "events": [
+    {
+      "sequence": 1,
+      "at": "2026-08-26T05:39:37.368658+00:00",
+      "type": "execution_started",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": null,
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "(pending interpretation)"
+      }
+    },
+    {
+      "sequence": 2,
+      "at": "2026-08-26T05:39:37.368875+00:00",
+      "type": "intent_resolved",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": null,
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "RESILIENCE_QUERY",
+        "source": "explicit",
+        "confidence": 1.0
+      }
+    },
+    {
+      "sequence": 3,
+      "at": "2026-08-26T05:39:53.606497+00:00",
+      "type": "plan_built",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "steps": 5,
+        "origin": "LLM"
+      }
+    },
+    {
+      "sequence": 4,
+      "at": "2026-08-26T05:39:53.606532+00:00",
+      "type": "workflow_started",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "RESILIENCE_QUERY",
+        "steps": [
+          "load_snapshot",
+          "assess_resilience",
+          "interpret_signals",
+          "compute_risk_factor",
+          "synthesise_explanation"
+        ],
+        "layers": [
+          1,
+          2,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "sequence": 5,
+      "at": "2026-08-26T05:39:53.606548+00:00",
+      "type": "snapshot_validated",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "data_version": "72a48e1a066440af"
+      }
+    },
+    {
+      "sequence": 6,
+      "at": "2026-08-26T05:39:53.606686+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "load_snapshot",
+        "capability": "network.load_snapshot"
+      }
+    },
+    {
+      "sequence": 7,
+      "at": "2026-08-26T05:39:53.606935+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "load_snapshot",
+        "capability": "network.load_snapshot",
+        "duration_seconds": 0.0,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 8,
+      "at": "2026-08-26T05:39:53.607053+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "assess_resilience",
+        "capability": "resilience.assess"
+      }
+    },
+    {
+      "sequence": 9,
+      "at": "2026-08-26T05:39:53.632169+00:00",
+      "type": "rei_lookup",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "resilience.assess",
+        "batch_id": "rei_60b8c0a54140",
+        "batch_status": "COMPLETED_WITH_ERRORS",
+        "rei_snapshot_id": "snap_72a48e1a0664",
+        "served_from_cache": false,
+        "milp_solves": 6,
+        "nodes_assessed": 4,
+        "nodes_failed": 0
+      }
+    },
+    {
+      "sequence": 10,
+      "at": "2026-08-26T05:39:53.632285+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "assess_resilience",
+        "capability": "resilience.assess",
+        "duration_seconds": 0.0251,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 11,
+      "at": "2026-08-26T05:39:53.632356+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "interpret_signals",
+        "capability": "external.interpret_signal"
+      }
+    },
+    {
+      "sequence": 12,
+      "at": "2026-08-26T05:39:58.068796+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "interpret_signals",
+        "capability": "external.interpret_signal",
+        "duration_seconds": 4.4358,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 13,
+      "at": "2026-08-26T05:39:58.069156+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "compute_risk_factor",
+        "capability": "risk.compute_rf"
+      }
+    },
+    {
+      "sequence": 14,
+      "at": "2026-08-26T05:39:58.069596+00:00",
+      "type": "rf_not_computable",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "risk.compute_rf",
+        "node_id": "DC_DELHI",
+        "reason": "NO_EVENT_PROBABILITY",
+        "event_probability": null,
+        "rei": 0.8
+      }
+    },
+    {
+      "sequence": 15,
+      "at": "2026-08-26T05:39:58.069978+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "compute_risk_factor",
+        "capability": "risk.compute_rf",
+        "duration_seconds": 0.0004,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 16,
+      "at": "2026-08-26T05:39:58.070204+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "synthesise_explanation",
+        "capability": "reasoning.synthesise"
+      }
+    },
+    {
+      "sequence": 17,
+      "at": "2026-08-26T05:40:20.153723+00:00",
+      "type": "reasoning_completed",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "reasoning.synthesise",
+        "source": "template",
+        "confidence": "LOW",
+        "evidence_cited": 1,
+        "unavailable_evidence": []
+      }
+    },
+    {
+      "sequence": 18,
+      "at": "2026-08-26T05:40:20.153741+00:00",
+      "type": "grounding_completed",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "reasoning.synthesise",
+        "grounding_status": "GROUNDED",
+        "claims_checked": 2,
+        "claims_grounded": 2,
+        "claims_contradicted": 0,
+        "claims_unsupported": 0
+      }
+    },
+    {
+      "sequence": 19,
+      "at": "2026-08-26T05:40:20.153896+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "synthesise_explanation",
+        "capability": "reasoning.synthesise",
+        "duration_seconds": 22.0835,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 20,
+      "at": "2026-08-26T05:40:20.154010+00:00",
+      "type": "governance_decision",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "classification": "AUTO_ACTION",
+        "action_type": "REPORT",
+        "rules": [
+          "R7_ANALYTICAL_ONLY"
+        ],
+        "governing_rule": "R7_ANALYTICAL_ONLY",
+        "rei": 1.0,
+        "risk_factor": null,
+        "missing_evidence": [],
+        "evidence_status": {},
+        "blocked_by_missing_evidence": false,
+        "grounding_failed": false
+      }
+    },
+    {
+      "sequence": 21,
+      "at": "2026-08-26T05:40:20.154015+00:00",
+      "type": "governance_applied",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "classification": "AUTO_ACTION",
+        "rules": [
+          "R7_ANALYTICAL_ONLY"
+        ]
+      }
+    },
+    {
+      "sequence": 22,
+      "at": "2026-08-26T05:40:20.154126+00:00",
+      "type": "twin_state_published",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "state_id": "tws_snap_72a48e1a0664_optimized",
+        "state_type": "OPTIMIZED",
+        "scenario_id": null,
+        "calculation_status": "PARTIAL",
+        "n_facilities": 0,
+        "n_flows": 0
+      }
+    },
+    {
+      "sequence": 23,
+      "at": "2026-08-26T05:40:20.154202+00:00",
+      "type": "workflow_completed",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "status": "COMPLETED",
+        "completed_steps": 5,
+        "failed_steps": 0,
+        "blocked_steps": 0
+      }
+    },
+    {
+      "sequence": 24,
+      "at": "2026-08-26T05:40:20.154207+00:00",
+      "type": "execution_completed",
+      "detail": {
+        "execution_id": "62c630a6-80f",
+        "workflow_id": "resilience_delhi_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "status": "COMPLETED"
+      }
+    }
+  ],
+  "outcome": {
+    "status": "COMPLETED",
+    "summary": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I see external evidence for OTHER affecting Delhi, severity UNKNOWN, with NO defensible probability available (source: user_report).",
+    "action_taken": null,
+    "approval": null
+  }
+}

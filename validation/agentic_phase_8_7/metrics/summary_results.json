@@ -1,0 +1,457 @@
+[
+  {
+    "case": 1,
+    "name": "Simple Live Plan",
+    "input": "What is the current state of the network?",
+    "duration_s": 29.47,
+    "status": "COMPLETED",
+    "initial_plan": [
+      "network.load_snapshot",
+      "resilience.assess",
+      "reasoning.synthesise"
+    ],
+    "executed_steps": [
+      "network.load_snapshot",
+      "resilience.assess",
+      "reasoning.synthesise"
+    ],
+    "decisions": [
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'load_snapshot' completed successfully; proceeding to next planned capability.",
+        "step_id": "load_snapshot",
+        "capability": "network.load_snapshot",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:36:44.610502+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'resilience_assess' completed successfully; proceeding to next planned capability.",
+        "step_id": "resilience_assess",
+        "capability": "resilience.assess",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:36:44.639768+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'synthesise_response' completed successfully; proceeding to next planned capability.",
+        "step_id": "synthesise_response",
+        "capability": "reasoning.synthesise",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:37:06.036661+00:00"
+      }
+    ],
+    "replan_count": 0,
+    "summary": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00)."
+  },
+  {
+    "case": 2,
+    "name": "Forecast -> Adaptive Decision",
+    "input": "Forecast demand for Delhi for the next 6 months and assess whether the projected demand requires additional network analysis.",
+    "duration_s": 41.59,
+    "status": "COMPLETED",
+    "initial_plan": [
+      "network.load_snapshot",
+      "forecast.demand",
+      "governance.classify",
+      "reasoning.synthesise"
+    ],
+    "executed_steps": [
+      "network.load_snapshot",
+      "forecast.demand",
+      "governance.classify",
+      "reasoning.synthesise"
+    ],
+    "decisions": [
+      {
+        "action": "CONTINUE",
+        "reason": "Step 's1_load_snapshot' completed successfully; proceeding to next planned capability.",
+        "step_id": "s1_load_snapshot",
+        "capability": "network.load_snapshot",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:37:16.103465+00:00"
+      },
+      {
+        "action": "REPLAN",
+        "reason": "Material forecast increase detected in step 's2_forecast_demand' (Demand forecast for step 's2_forecast_demand' indicated material demand change (+255.0%), exceeding threshold of 15.0%.); replan required to trigger network scenario optimization and resilience stress-testing.",
+        "step_id": "s2_forecast_demand",
+        "capability": "forecast.demand",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:37:16.159549+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 's3_governance_classify' completed successfully; proceeding to next planned capability.",
+        "step_id": "s3_governance_classify",
+        "capability": "governance.classify",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:37:32.546485+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 's4_reasoning_synthesise' completed successfully; proceeding to next planned capability.",
+        "step_id": "s4_reasoning_synthesise",
+        "capability": "reasoning.synthesise",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:37:47.631717+00:00"
+      }
+    ],
+    "replan_count": 0,
+    "summary": "I cannot evaluate the supply\u2011chain network because no deterministic results were provided. Key KPIs required\u2014total cost, service level, capacity utilizations, resilience (REI) and risk scores\u2014are missing, so performance and feasibility cannot be assessed. I need the MILP, KPI, REI and risk outputs to produce a validated recommendation."
+  },
+  {
+    "case": 3,
+    "name": "External Signal -> Forecast -> Adaptation",
+    "input": "A major customer is expanding in Delhi. Assess how this could affect demand and determine whether the network requires further analysis.",
+    "duration_s": 42.58,
+    "status": "FAILED",
+    "signal_routing": null,
+    "executed_steps": [
+      "network.load_snapshot",
+      "optimization.solve",
+      "scenario.create",
+      "scenario.validate",
+      "optimization.solve_scenario",
+      "kpi.summarise",
+      "resilience.assess",
+      "reasoning.synthesise",
+      "governance.classify"
+    ],
+    "decisions": [
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'load' completed successfully; proceeding to next planned capability.",
+        "step_id": "load",
+        "capability": "network.load_snapshot",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:38:10.792762+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'baseline' completed successfully; proceeding to next planned capability.",
+        "step_id": "baseline",
+        "capability": "optimization.solve",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:38:10.811588+00:00"
+      },
+      {
+        "action": "ESCALATE",
+        "reason": "Autonomous recovery exhausted for 'scenario.create': CHANGE_DEMAND requires a demand_multiplier.",
+        "step_id": "create_scenario",
+        "capability": "scenario.create",
+        "replan_proposal": null,
+        "escalation": {
+          "capability": "scenario.create",
+          "execution_id": "4f4149bd-2d6",
+          "reason": "Capability 'scenario.create' failed after 1 attempt(s): CHANGE_DEMAND requires a demand_multiplier.",
+          "failed_attempts": 1,
+          "blocked_downstream_capabilities": [
+            "scenario.validate"
+          ],
+          "available_evidence": {
+            "network.load_snapshot": "SUCCESS",
+            "optimization.solve": "SUCCESS"
+          },
+          "recommended_human_action": "Review capability 'scenario.create' execution trace and error logs.",
+          "timestamp": "2026-08-26T05:38:10.812324+00:00",
+          "metadata": {
+            "error_code": "INVALID_SCENARIO",
+            "status": "NON_RETRYABLE_FAILURE"
+          }
+        },
+        "metadata": {},
+        "timestamp": "2026-08-26T05:38:10.812338+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'rei' completed successfully; proceeding to next planned capability.",
+        "step_id": "rei",
+        "capability": "resilience.assess",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:38:10.836135+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'reason' completed successfully; proceeding to next planned capability.",
+        "step_id": "reason",
+        "capability": "reasoning.synthesise",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:38:30.221074+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'govern' completed successfully; proceeding to next planned capability.",
+        "step_id": "govern",
+        "capability": "governance.classify",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:38:30.221394+00:00"
+      }
+    ],
+    "replan_count": 0,
+    "summary": "I see a business network cost of 1,200.00 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I could not use the following analyses; their values are UNKNOWN (not zero): kpi.summarise (NOT_RUN); optimization.solve_scenario (NOT_RUN); scenario.create (INVALID); scenario.validate (NOT_RUN). I see a reported market signal: an increase in the CUSTOMER category, which cleared the relevance guardrail. The reported figure is recorded with the signal, not restated here as a checked number."
+  },
+  {
+    "case": 4,
+    "name": "Irrelevant Signal",
+    "input": "Forecast demand for Delhi markets.",
+    "duration_s": 5.3,
+    "status": "FAILED",
+    "signal_routing": null,
+    "executed_steps": [
+      "network.load_snapshot",
+      "forecast.demand"
+    ],
+    "replan_count": 0,
+    "summary": ""
+  },
+  {
+    "case": 5,
+    "name": "Risk Signal Attack",
+    "input": "Severe flood predicted around Delhi. Update demand forecast accordingly.",
+    "duration_s": 10.29,
+    "status": "FAILED",
+    "signal_routing": null,
+    "executed_steps": [
+      "network.load_snapshot",
+      "external.interpret_signal",
+      "forecast.demand"
+    ],
+    "risk_refused": false,
+    "summary": ""
+  },
+  {
+    "case": 6,
+    "name": "Complex Multi-Capability Request",
+    "input": "A major customer is expanding in Delhi. Forecast the impact, assess network resilience, determine the operational impact, and recommend what we should do.",
+    "duration_s": 51.51,
+    "status": "COMPLETED",
+    "executed_steps": [
+      "network.load_snapshot",
+      "external.interpret_signal",
+      "resilience.assess",
+      "risk.compute_rf",
+      "reasoning.synthesise",
+      "governance.classify"
+    ],
+    "decisions": [
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'load' completed successfully; proceeding to next planned capability.",
+        "step_id": "load",
+        "capability": "network.load_snapshot",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:39:14.380657+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'interpret_signal' completed successfully; proceeding to next planned capability.",
+        "step_id": "interpret_signal",
+        "capability": "external.interpret_signal",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:39:20.608979+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'rei' completed successfully; proceeding to next planned capability.",
+        "step_id": "rei",
+        "capability": "resilience.assess",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:39:20.639597+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'risk' completed successfully; proceeding to next planned capability.",
+        "step_id": "risk",
+        "capability": "risk.compute_rf",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:39:20.639866+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'reason' completed successfully; proceeding to next planned capability.",
+        "step_id": "reason",
+        "capability": "reasoning.synthesise",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:39:37.324210+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'govern' completed successfully; proceeding to next planned capability.",
+        "step_id": "govern",
+        "capability": "governance.classify",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:39:37.326487+00:00"
+      }
+    ],
+    "replan_count": 0,
+    "summary": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I see external evidence for OTHER affecting Delhi, severity UNKNOWN, with NO defensible probability available (source: user_report)."
+  },
+  {
+    "case": 7,
+    "name": "Failure / Recovery",
+    "input": "Review resilience and exposure for Delhi facilities.",
+    "duration_s": 42.79,
+    "status": "COMPLETED",
+    "executed_steps": [
+      "network.load_snapshot",
+      "resilience.assess",
+      "external.interpret_signal",
+      "risk.compute_rf",
+      "reasoning.synthesise"
+    ],
+    "decisions": [
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'load_snapshot' completed successfully; proceeding to next planned capability.",
+        "step_id": "load_snapshot",
+        "capability": "network.load_snapshot",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:39:53.606994+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'assess_resilience' completed successfully; proceeding to next planned capability.",
+        "step_id": "assess_resilience",
+        "capability": "resilience.assess",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:39:53.632310+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'interpret_signals' completed successfully; proceeding to next planned capability.",
+        "step_id": "interpret_signals",
+        "capability": "external.interpret_signal",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:39:58.068931+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'compute_risk_factor' completed successfully; proceeding to next planned capability.",
+        "step_id": "compute_risk_factor",
+        "capability": "risk.compute_rf",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:39:58.070053+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'synthesise_explanation' completed successfully; proceeding to next planned capability.",
+        "step_id": "synthesise_explanation",
+        "capability": "reasoning.synthesise",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:40:20.153923+00:00"
+      }
+    ],
+    "errors": [],
+    "summary": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I see external evidence for OTHER affecting Delhi, severity UNKNOWN, with NO defensible probability available (source: user_report)."
+  },
+  {
+    "case": 8,
+    "name": "Replan / Closed-Loop Proof",
+    "input": "Forecast Delhi demand and determine the network impact.",
+    "duration_s": 9.73,
+    "status": "COMPLETED",
+    "initial_plan": [
+      "network.load_snapshot",
+      "forecast.demand",
+      "reasoning.synthesise",
+      "governance.classify"
+    ],
+    "executed_steps": [
+      "network.load_snapshot",
+      "forecast.demand",
+      "reasoning.synthesise",
+      "governance.classify"
+    ],
+    "decisions": [
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'load' completed successfully; proceeding to next planned capability.",
+        "step_id": "load",
+        "capability": "network.load_snapshot",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:40:20.158744+00:00"
+      },
+      {
+        "action": "REPLAN",
+        "reason": "Material forecast increase detected in step 'forecast' (Demand forecast for step 'forecast' indicated material demand change (+340.0%), exceeding threshold of 15.0%.); replan required to trigger network scenario optimization and resilience stress-testing.",
+        "step_id": "forecast",
+        "capability": "forecast.demand",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:40:20.210852+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'reason' completed successfully; proceeding to next planned capability.",
+        "step_id": "reason",
+        "capability": "reasoning.synthesise",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:40:29.888700+00:00"
+      },
+      {
+        "action": "CONTINUE",
+        "reason": "Step 'govern' completed successfully; proceeding to next planned capability.",
+        "step_id": "govern",
+        "capability": "governance.classify",
+        "replan_proposal": null,
+        "escalation": null,
+        "metadata": {},
+        "timestamp": "2026-08-26T05:40:29.889139+00:00"
+      }
+    ],
+    "replan_count": 0,
+    "replan_records": [],
+    "summary": "I cannot evaluate the network because deterministic results are not provided. I cannot report cost, service or resilience KPIs without the MILP, KPI, REI or risk outputs. I therefore cannot assert feasibility or quantify trade-offs."
+  }
+]

@@ -444,10 +444,10 @@ class LiveLLMPlanner:
         return (
             "You are the NetGravity Orchestrator Plan Proposal Agent.\n"
             "Your role is to propose an execution graph of capabilities to answer the user request.\n"
-            "You MUST output valid JSON conforming to the following structure:\n"
+            "You MUST output valid, compact JSON only with no markdown or conversational preamble. Keep reasoning under 20 words.\n"
+            "Structure:\n"
             "{\n"
             '  "workflow_id": "string",\n'
-            '  "reasoning": "string",\n'
             '  "steps": [\n'
             '    {\n'
             '      "step_id": "string",\n'
@@ -458,7 +458,8 @@ class LiveLLMPlanner:
             '      "params": {},\n'
             '      "optional": false\n'
             '    }\n'
-            '  ]\n'
+            '  ],\n'
+            '  "reasoning": "brief string"\n'
             "}\n\n"
             f"Available Capabilities:\n{json.dumps(capabilities, indent=2)}\n\n"
             f"User Request: {request.input}\n"
@@ -467,6 +468,17 @@ class LiveLLMPlanner:
 
     def _parse_response(self, raw_output: str, resolution: IntentResolution) -> PlanProposal:
         payload = extract_json(raw_output)
+        if not payload or not isinstance(payload, dict):
+            repaired = raw_output.strip()
+            for fix in ('"}', '"]}', '"]}}', '}'):
+                try:
+                    candidate = extract_json(repaired + fix)
+                    if candidate and isinstance(candidate, dict) and "steps" in candidate:
+                        payload = candidate
+                        break
+                except Exception:
+                    pass
+
         if not payload or not isinstance(payload, dict):
             raise LLMFailureError(f"Live planner returned unparseable output: {raw_output[:200]}")
 

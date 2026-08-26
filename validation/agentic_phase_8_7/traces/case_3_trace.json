@@ -1,0 +1,1184 @@
+{
+  "execution_id": "4f4149bd-2d6",
+  "request_id": "9429e136-faaa-4fea-8766-eb5daf0b56bd",
+  "actor": {
+    "actor_id": "anonymous",
+    "role": "VIEWER"
+  },
+  "started_at": "2026-08-26T05:37:47.640960+00:00",
+  "completed_at": "2026-08-26T05:38:30.221724+00:00",
+  "input": "A major customer is expanding in Delhi. Assess how this could affect demand and determine whether the network requires further analysis.",
+  "intent": {
+    "interpreted": "SCENARIO_ANALYSIS",
+    "source": "llm",
+    "confidence": 0.88
+  },
+  "workflow_id": "wf_scenario_analysis",
+  "plan_steps": [
+    {
+      "step_id": "load",
+      "capability": "network.load_snapshot",
+      "depends_on": [],
+      "optional": false
+    },
+    {
+      "step_id": "baseline",
+      "capability": "optimization.solve",
+      "depends_on": [
+        "load"
+      ],
+      "optional": false
+    },
+    {
+      "step_id": "create_scenario",
+      "capability": "scenario.create",
+      "depends_on": [
+        "load"
+      ],
+      "optional": false
+    },
+    {
+      "step_id": "validate_scenario",
+      "capability": "scenario.validate",
+      "depends_on": [
+        "create_scenario"
+      ],
+      "optional": false
+    },
+    {
+      "step_id": "optimize_scenario",
+      "capability": "optimization.solve_scenario",
+      "depends_on": [
+        "validate_scenario",
+        "baseline"
+      ],
+      "optional": false
+    },
+    {
+      "step_id": "kpi",
+      "capability": "kpi.summarise",
+      "depends_on": [
+        "optimize_scenario"
+      ],
+      "optional": false
+    },
+    {
+      "step_id": "rei",
+      "capability": "resilience.assess",
+      "depends_on": [
+        "load"
+      ],
+      "optional": true
+    },
+    {
+      "step_id": "reason",
+      "capability": "reasoning.synthesise",
+      "depends_on": [
+        "optimize_scenario",
+        "kpi",
+        "rei"
+      ],
+      "optional": true
+    },
+    {
+      "step_id": "govern",
+      "capability": "governance.classify",
+      "depends_on": [
+        "optimize_scenario",
+        "kpi",
+        "rei",
+        "reason"
+      ],
+      "optional": false
+    }
+  ],
+  "data_references": {
+    "baseline_snapshot_id": "snap_72a48e1a0664",
+    "data_version": "72a48e1a066440af",
+    "scenario_ids": [],
+    "scenario_overrides": []
+  },
+  "state_history": [
+    {
+      "from": "RECEIVED",
+      "to": "UNDERSTANDING",
+      "at": "2026-08-26T05:37:47.640981+00:00",
+      "note": ""
+    },
+    {
+      "from": "UNDERSTANDING",
+      "to": "PLANNED",
+      "at": "2026-08-26T05:38:10.792240+00:00",
+      "note": ""
+    },
+    {
+      "from": "PLANNED",
+      "to": "VALIDATING",
+      "at": "2026-08-26T05:38:10.792331+00:00",
+      "note": ""
+    },
+    {
+      "from": "VALIDATING",
+      "to": "RUNNING",
+      "at": "2026-08-26T05:38:10.792349+00:00",
+      "note": ""
+    },
+    {
+      "from": "RUNNING",
+      "to": "FAILED",
+      "at": "2026-08-26T05:38:30.221456+00:00",
+      "note": "required steps failed or blocked: ['create_scenario', 'validate_scenario', 'optimize_scenario', 'kpi']"
+    }
+  ],
+  "tool_invocations": [
+    {
+      "step_id": "load",
+      "capability": "network.load_snapshot",
+      "success": true,
+      "duration_seconds": 0.0,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:38:10.792703+00:00"
+    },
+    {
+      "step_id": "baseline",
+      "capability": "optimization.solve",
+      "success": true,
+      "duration_seconds": 0.0186,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:38:10.811547+00:00"
+    },
+    {
+      "step_id": "create_scenario",
+      "capability": "scenario.create",
+      "success": false,
+      "duration_seconds": 0.0005,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": "INVALID_SCENARIO",
+      "error_message": "CHANGE_DEMAND requires a demand_multiplier.",
+      "at": "2026-08-26T05:38:10.812266+00:00"
+    },
+    {
+      "step_id": "rei",
+      "capability": "resilience.assess",
+      "success": true,
+      "duration_seconds": 0.0236,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:38:10.836105+00:00"
+    },
+    {
+      "step_id": "reason",
+      "capability": "reasoning.synthesise",
+      "success": true,
+      "duration_seconds": 19.3846,
+      "attempts": 1,
+      "execution_mode": "PROBABILISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:38:30.221033+00:00"
+    },
+    {
+      "step_id": "govern",
+      "capability": "governance.classify",
+      "success": true,
+      "duration_seconds": 0.0001,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:38:30.221365+00:00"
+    }
+  ],
+  "engine_results": {
+    "network.load_snapshot": {
+      "snapshot_id": "snap_72a48e1a0664",
+      "network_id": "PHASE2_DELHI",
+      "data_version": "72a48e1a066440af",
+      "is_hypothetical": false,
+      "n_facilities": 7,
+      "n_demands": 3
+    },
+    "optimization.solve": {
+      "network_id": "PHASE2_DELHI",
+      "data_version": "72a48e1a066440af",
+      "optimization_mode": "BROWNFIELD_SCENARIO_OPTIMIZATION",
+      "is_hypothetical": false,
+      "solver_status": "OPTIMAL",
+      "is_feasible": true,
+      "solver_objective": 1200.0,
+      "business_network_cost": 1200.0,
+      "cost_components": {
+        "facility_cost": 0.0,
+        "opening_cost": 0.0,
+        "closure_cost": 0.0,
+        "transport_cost": 1200.0,
+        "handling_cost": 0.0,
+        "inventory_cost": 0.0,
+        "carbon_cost": 0.0
+      },
+      "shortage_penalty_cost": 0.0,
+      "reconciliation_is_closed": true,
+      "total_demand": 300.0,
+      "served_demand": 300.0,
+      "unserved_demand": 0.0,
+      "demand_fill_rate": 1.0,
+      "unserved_demand_rate": 0.0,
+      "open_facilities": [
+        "DC_DELHI",
+        "DC_KOLKATA",
+        "DC_MUMBAI",
+        "PLANT_N"
+      ],
+      "closed_facilities": [],
+      "avg_utilization_pct": 1.57,
+      "total_carbon_kg": 3.72,
+      "pct_demand_in_sla": 100.0,
+      "sla_mode": "LAST_MILE",
+      "service_unsupported_features": [],
+      "run_id": "c1303659",
+      "result_kind": "OBSERVED_RESULT",
+      "baseline_snapshot_id": "snap_72a48e1a0664",
+      "model_version": "1.2.0",
+      "execution_id": "4f4149bd-2d6"
+    },
+    "resilience.assess": {
+      "network_id": "PHASE2_DELHI",
+      "data_version": "72a48e1a066440af",
+      "batch_id": "rei_448bc1704ff3",
+      "batch_status": "COMPLETED_WITH_ERRORS",
+      "network_snapshot_id": "snap_72a48e1a0664",
+      "computed_for_snapshot_id": null,
+      "material_fingerprint": "fp1_34ab4fd8199c2adc",
+      "model_version": "1.2.0",
+      "served_from_cache": false,
+      "n_milp_solves": 6,
+      "baseline_business_cost": 1200.0,
+      "baseline_solver_status": "OPTIMAL",
+      "rei_status": "COMPUTED",
+      "max_performance_impact": 500.0,
+      "n_facilities_assessed": 4,
+      "n_successful": 3,
+      "n_failed": 0,
+      "n_infeasible": 1,
+      "highest_exposure_facility": "DC_MUMBAI",
+      "max_rei": 1.0,
+      "facilities": [
+        {
+          "facility_id": "DC_MUMBAI",
+          "facility_name": "Mumbai DC",
+          "facility_role": "DC",
+          "rank": 1,
+          "rei": 1.0,
+          "performance_impact": 500.0,
+          "economic_impact": 500.0,
+          "cost_impact_pct": 41.666667,
+          "unserved_demand": 0.0,
+          "unserved_demand_rate": 0.0,
+          "service_loss": 0.0,
+          "rerouted_volume": 200.0,
+          "is_feasible": true,
+          "solver_status": "OPTIMAL",
+          "calculation_status": "OK",
+          "failure_reason": null,
+          "risk_classification": "NOT_CLASSIFIED",
+          "diagnostics": [
+            "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+          ]
+        },
+        {
+          "facility_id": "DC_DELHI",
+          "facility_name": "Delhi NCR DC",
+          "facility_role": "DC",
+          "rank": 2,
+          "rei": 0.8,
+          "performance_impact": 400.0,
+          "economic_impact": 400.0,
+          "cost_impact_pct": 33.333333,
+          "unserved_demand": 0.0,
+          "unserved_demand_rate": 0.0,
+          "service_loss": 0.0,
+          "rerouted_volume": 200.0,
+          "is_feasible": true,
+          "solver_status": "OPTIMAL",
+          "calculation_status": "OK",
+          "failure_reason": null,
+          "risk_classification": "NOT_CLASSIFIED",
+          "diagnostics": [
+            "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+          ]
+        },
+        {
+          "facility_id": "DC_KOLKATA",
+          "facility_name": "Kolkata DC",
+          "facility_role": "DC",
+          "rank": 3,
+          "rei": 0.4,
+          "performance_impact": 200.0,
+          "economic_impact": 200.0,
+          "cost_impact_pct": 16.666667,
+          "unserved_demand": 0.0,
+          "unserved_demand_rate": 0.0,
+          "service_loss": 0.0,
+          "rerouted_volume": 200.0,
+          "is_feasible": true,
+          "solver_status": "OPTIMAL",
+          "calculation_status": "OK",
+          "failure_reason": null,
+          "risk_classification": "NOT_CLASSIFIED",
+          "diagnostics": [
+            "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+          ]
+        },
+        {
+          "facility_id": "PLANT_N",
+          "facility_name": "North Plant",
+          "facility_role": "PLANT",
+          "rank": null,
+          "rei": null,
+          "performance_impact": null,
+          "economic_impact": null,
+          "cost_impact_pct": null,
+          "unserved_demand": 300.0,
+          "unserved_demand_rate": 1.0,
+          "service_loss": 1.0,
+          "rerouted_volume": 300.0,
+          "is_feasible": false,
+          "solver_status": "INFEASIBLE",
+          "calculation_status": "INFEASIBLE",
+          "failure_reason": "disruption produced solver status INFEASIBLE",
+          "risk_classification": "CRITICAL",
+          "diagnostics": [
+            "Disruption of 'PLANT_N' left the network without a feasible solution (solver status: INFEASIBLE). The network cannot absorb this disruption under the current constraints. Performance Impact and REI are undefined and reported as None rather than estimated.",
+            "Service diagnostic: re-solved 'PLANT_N' with shortage enabled to quantify the damage. 300.00 units (100.00% of demand) cannot be served. These service figures are diagnostic only \u2014 cost, Performance Impact and REI remain undefined for this facility."
+          ]
+        }
+      ],
+      "rei_by_facility": {
+        "DC_MUMBAI": 1.0,
+        "DC_DELHI": 0.8,
+        "DC_KOLKATA": 0.4,
+        "PLANT_N": null
+      },
+      "disruption_summary": "FACILITY_FAILURE for the modelled planning period (allow_shortage=False)",
+      "warnings": [
+        "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+        "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE"
+      ]
+    },
+    "reasoning.synthesise": {
+      "summary": "I see a business network cost of 1,200.00 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I could not use the following analyses; their values are UNKNOWN (not zero): kpi.summarise (NOT_RUN); optimization.solve_scenario (NOT_RUN); scenario.create (INVALID); scenario.validate (NOT_RUN). I see a reported market signal: an increase in the CUSTOMER category, which cleared the relevance guardrail. The reported figure is recorded with the signal, not restated here as a checked number.",
+      "key_drivers": [
+        "DC_MUMBAI carries the greatest disruption exposure"
+      ],
+      "risks": [
+        "Incomplete evidence: kpi.summarise (NOT_RUN); optimization.solve_scenario (NOT_RUN); scenario.create (INVALID); scenario.validate (NOT_RUN)."
+      ],
+      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "confidence": "MEDIUM",
+      "evidence": [
+        "business_network_cost = 1,200.00",
+        "highest_exposure_facility = DC_MUMBAI"
+      ],
+      "briefing": {
+        "schema_version": "2.0",
+        "scope": "NETWORK",
+        "entity_id": null,
+        "opening": "I see a business network cost of 1,200.00 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty.",
+        "context": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I could not use the following analyses; their values are UNKNOWN (not zero): kpi.summarise (NOT_RUN); optimization.solve_scenario (NOT_RUN); scenario.create (INVALID); scenario.validate (NOT_RUN). I see a reported market signal: an increase in the CUSTOMER category, which cleared the relevance guardrail. The reported figure is recorded with the signal, not restated here as a checked number.",
+        "kpi_insights": [
+          {
+            "theme": "Cost",
+            "headline": "I see the current cost position clearly",
+            "narrative": "I see business network cost at 1,200.00 per period. I use this as the decision baseline for comparing any scenario.",
+            "metric_refs": [
+              "network_state.business_network_cost"
+            ],
+            "comparison_refs": [],
+            "driver_refs": []
+          }
+        ],
+        "key_drivers": [
+          "DC_MUMBAI carries the greatest disruption exposure"
+        ],
+        "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+        "limitation": "Incomplete evidence: kpi.summarise (NOT_RUN); optimization.solve_scenario (NOT_RUN); scenario.create (INVALID); scenario.validate (NOT_RUN).",
+        "missing_information": [
+          {
+            "question_ref": "kpi.summarise",
+            "question": "Can you provide the missing kpi.summarise evidence?",
+            "impact": "It would let me strengthen or complete this briefing.",
+            "blocking": false
+          },
+          {
+            "question_ref": "optimization.solve_scenario",
+            "question": "Can you provide the missing optimization.solve_scenario evidence?",
+            "impact": "It would let me strengthen or complete this briefing.",
+            "blocking": false
+          }
+        ],
+        "suggested_questions": [
+          "What is driving this result?",
+          "Which node or lane should I examine?"
+        ],
+        "evidence_completeness": "PARTIAL"
+      },
+      "source": "template",
+      "validation_warnings": [
+        "LLM reasoning output could not be parsed; deterministic template used. Cause: the gateway returned an empty body; no output to parse (output_tokens=1984)"
+      ],
+      "grounding_status": "GROUNDED",
+      "grounded_claims": [
+        {
+          "claim": "1,200.00",
+          "value": 1200.0,
+          "kind": "UNKNOWN",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.solver_objective",
+          "authoritative_value": 1200.0,
+          "source": "optimization_result",
+          "detail": "",
+          "provenance": {
+            "execution_id": "4f4149bd-2d6",
+            "snapshot_id": "snap_72a48e1a0664",
+            "scenario_id": "",
+            "source": "optimization_result",
+            "fact": "network_state.solver_objective"
+          }
+        },
+        {
+          "claim": "1.00",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.demand_fill_rate",
+          "authoritative_value": 1.0,
+          "source": "kpi_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "4f4149bd-2d6",
+            "snapshot_id": "snap_72a48e1a0664",
+            "scenario_id": "",
+            "source": "kpi_engine",
+            "fact": "network_state.demand_fill_rate"
+          }
+        },
+        {
+          "claim": "1,200.00",
+          "value": 1200.0,
+          "kind": "UNKNOWN",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.solver_objective",
+          "authoritative_value": 1200.0,
+          "source": "optimization_result",
+          "detail": "",
+          "provenance": {
+            "execution_id": "4f4149bd-2d6",
+            "snapshot_id": "snap_72a48e1a0664",
+            "scenario_id": "",
+            "source": "optimization_result",
+            "fact": "network_state.solver_objective"
+          }
+        },
+        {
+          "claim": "1.00",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.demand_fill_rate",
+          "authoritative_value": 1.0,
+          "source": "kpi_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "4f4149bd-2d6",
+            "snapshot_id": "snap_72a48e1a0664",
+            "scenario_id": "",
+            "source": "kpi_engine",
+            "fact": "network_state.demand_fill_rate"
+          }
+        },
+        {
+          "claim": "1,200.00",
+          "value": 1200.0,
+          "kind": "UNKNOWN",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.solver_objective",
+          "authoritative_value": 1200.0,
+          "source": "optimization_result",
+          "detail": "",
+          "provenance": {
+            "execution_id": "4f4149bd-2d6",
+            "snapshot_id": "snap_72a48e1a0664",
+            "scenario_id": "",
+            "source": "optimization_result",
+            "fact": "network_state.solver_objective"
+          }
+        }
+      ],
+      "unavailable_evidence": {
+        "scenario.create": {
+          "status": "INVALID",
+          "reason": "CHANGE_DEMAND requires a demand_multiplier."
+        },
+        "scenario.validate": {
+          "status": "NOT_RUN",
+          "reason": "blocked by ['create_scenario']"
+        },
+        "optimization.solve_scenario": {
+          "status": "NOT_RUN",
+          "reason": "blocked by ['validate_scenario']"
+        },
+        "kpi.summarise": {
+          "status": "NOT_RUN",
+          "reason": "blocked by ['optimize_scenario']"
+        }
+      }
+    },
+    "governance.classify": {
+      "action_type": "NONE",
+      "classification": "NO_ACTION",
+      "reason": "No action was proposed by this run.",
+      "triggered_rules": [
+        "R0_NO_ACTION_PROPOSED"
+      ],
+      "governing_rule": "R0_NO_ACTION_PROPOSED",
+      "evaluated": {
+        "action_type": "NONE",
+        "is_feasible": true,
+        "cost_impact_pct": null,
+        "unserved_demand_rate": 0.0,
+        "rei": 1.0,
+        "risk_factor": null,
+        "confidence": "MEDIUM",
+        "data_quality_ok": true,
+        "missing_evidence": {
+          "scenario.create": "INVALID: CHANGE_DEMAND requires a demand_multiplier.",
+          "scenario.validate": "NOT_RUN: blocked by ['create_scenario']",
+          "optimization.solve_scenario": "NOT_RUN: blocked by ['validate_scenario']",
+          "kpi.summarise": "NOT_RUN: blocked by ['optimize_scenario']"
+        },
+        "missing_critical_evidence": [
+          "optimization.solve_scenario"
+        ],
+        "unresolved_evidence": {},
+        "grounding_failed": false,
+        "action_requires_risk_evidence": false
+      },
+      "blocked_by_missing_evidence": false,
+      "evidence_status": {
+        "optimization.solve_scenario": "UNAVAILABLE"
+      },
+      "requires_approval": false,
+      "approval_request_id": null,
+      "eligible_approver_roles": []
+    }
+  },
+  "risk_calculation": null,
+  "governance_decision": {
+    "action_type": "NONE",
+    "classification": "NO_ACTION",
+    "reason": "No action was proposed by this run.",
+    "triggered_rules": [
+      "R0_NO_ACTION_PROPOSED"
+    ],
+    "governing_rule": "R0_NO_ACTION_PROPOSED",
+    "evaluated": {
+      "action_type": "NONE",
+      "is_feasible": true,
+      "cost_impact_pct": null,
+      "unserved_demand_rate": 0.0,
+      "rei": 1.0,
+      "risk_factor": null,
+      "confidence": "MEDIUM",
+      "data_quality_ok": true,
+      "missing_evidence": {
+        "scenario.create": "INVALID: CHANGE_DEMAND requires a demand_multiplier.",
+        "scenario.validate": "NOT_RUN: blocked by ['create_scenario']",
+        "optimization.solve_scenario": "NOT_RUN: blocked by ['validate_scenario']",
+        "kpi.summarise": "NOT_RUN: blocked by ['optimize_scenario']"
+      },
+      "missing_critical_evidence": [
+        "optimization.solve_scenario"
+      ],
+      "unresolved_evidence": {},
+      "grounding_failed": false,
+      "action_requires_risk_evidence": false
+    },
+    "blocked_by_missing_evidence": false,
+    "evidence_status": {
+      "optimization.solve_scenario": "UNAVAILABLE"
+    },
+    "requires_approval": false,
+    "approval_request_id": null,
+    "eligible_approver_roles": []
+  },
+  "llm_outputs": [
+    {
+      "purpose": "intent",
+      "source": "llm",
+      "output_excerpt": "{\n  \"intent\": \"SCENARIO_ANALYSIS\",\n  \"confidence\": 0.88,\n  \"facility_ids\": [\n    \"DC_DELHI\"\n  ],\n  \"scenarios\": [\n    {\n      \"action\": \"CHANGE_DEMAND\",\n      \"facility_ids\": [\n        \"DC_DELHI\"\n      ],\n      \"target_facility_id\": null,\n      \"capacity_multiplier\": null,\n      \"capacity_delta_units\": null,\n      \"capacity_set_units\": null,\n      \"demand_multiplier\": null,\n      \"label\": \"customer expansion in Delhi\"\n    }\n  ],\n  \"rationale\": \"Customer expansion in Delhi likely increases demand at DC_DELHI and warrants scenario-based impact analysis.\"\n}",
+      "at": "2026-08-26T05:37:53.659084+00:00"
+    },
+    {
+      "purpose": "reasoning",
+      "source": "template",
+      "output_excerpt": "I see a business network cost of 1,200.00 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I could not use the following analyses; their values are UNKNOWN (not zero): kpi.summarise (NOT_RUN); optimization.solve_scenario (NOT_RUN); scenario.create (INVALID); scenario.validate (NOT_RUN). I see a reported market signal: an increase in the CUSTOMER category, which cleared the relevance guardrail. The reported figure is recorded with the signal, not restated here as a checked number.",
+      "at": "2026-08-26T05:38:30.221745+00:00"
+    }
+  ],
+  "errors": [
+    {
+      "step_id": "create_scenario",
+      "capability": "scenario.create",
+      "code": "INVALID_SCENARIO",
+      "message": "CHANGE_DEMAND requires a demand_multiplier.",
+      "failure_class": "NON_RETRYABLE"
+    }
+  ],
+  "events": [
+    {
+      "sequence": 1,
+      "at": "2026-08-26T05:37:47.640967+00:00",
+      "type": "execution_started",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": null,
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "(pending interpretation)"
+      }
+    },
+    {
+      "sequence": 2,
+      "at": "2026-08-26T05:37:53.659139+00:00",
+      "type": "intent_resolved",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": null,
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "SCENARIO_ANALYSIS",
+        "source": "llm",
+        "confidence": 0.88
+      }
+    },
+    {
+      "sequence": 3,
+      "at": "2026-08-26T05:38:10.792266+00:00",
+      "type": "plan_built",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "steps": 9,
+        "origin": "TEMPLATE"
+      }
+    },
+    {
+      "sequence": 4,
+      "at": "2026-08-26T05:38:10.792321+00:00",
+      "type": "workflow_started",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "SCENARIO_ANALYSIS",
+        "steps": [
+          "load",
+          "baseline",
+          "create_scenario",
+          "validate_scenario",
+          "optimize_scenario",
+          "kpi",
+          "rei",
+          "reason",
+          "govern"
+        ],
+        "layers": [
+          1,
+          3,
+          1,
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "sequence": 5,
+      "at": "2026-08-26T05:38:10.792342+00:00",
+      "type": "snapshot_validated",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "data_version": "72a48e1a066440af"
+      }
+    },
+    {
+      "sequence": 6,
+      "at": "2026-08-26T05:38:10.792437+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "load",
+        "capability": "network.load_snapshot"
+      }
+    },
+    {
+      "sequence": 7,
+      "at": "2026-08-26T05:38:10.792715+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "load",
+        "capability": "network.load_snapshot",
+        "duration_seconds": 0.0,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 8,
+      "at": "2026-08-26T05:38:10.792841+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "baseline",
+        "capability": "optimization.solve"
+      }
+    },
+    {
+      "sequence": 9,
+      "at": "2026-08-26T05:38:10.811554+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "baseline",
+        "capability": "optimization.solve",
+        "duration_seconds": 0.0186,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 10,
+      "at": "2026-08-26T05:38:10.811648+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "create_scenario",
+        "capability": "scenario.create"
+      }
+    },
+    {
+      "sequence": 11,
+      "at": "2026-08-26T05:38:10.812279+00:00",
+      "type": "step_failed",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "create_scenario",
+        "capability": "scenario.create",
+        "code": "INVALID_SCENARIO"
+      }
+    },
+    {
+      "sequence": 12,
+      "at": "2026-08-26T05:38:10.812284+00:00",
+      "type": "evidence_unavailable",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "create_scenario",
+        "capability": "scenario.create",
+        "reason": "CHANGE_DEMAND requires a demand_multiplier."
+      }
+    },
+    {
+      "sequence": 13,
+      "at": "2026-08-26T05:38:10.812430+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "rei",
+        "capability": "resilience.assess"
+      }
+    },
+    {
+      "sequence": 14,
+      "at": "2026-08-26T05:38:10.836011+00:00",
+      "type": "rei_lookup",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "resilience.assess",
+        "batch_id": "rei_448bc1704ff3",
+        "batch_status": "COMPLETED_WITH_ERRORS",
+        "rei_snapshot_id": "snap_72a48e1a0664",
+        "served_from_cache": false,
+        "milp_solves": 6,
+        "nodes_assessed": 4,
+        "nodes_failed": 0
+      }
+    },
+    {
+      "sequence": 15,
+      "at": "2026-08-26T05:38:10.836110+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "rei",
+        "capability": "resilience.assess",
+        "duration_seconds": 0.0236,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 16,
+      "at": "2026-08-26T05:38:10.836189+00:00",
+      "type": "step_blocked",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "validate_scenario",
+        "capability": "scenario.validate",
+        "blocked_by": [
+          "create_scenario"
+        ]
+      }
+    },
+    {
+      "sequence": 17,
+      "at": "2026-08-26T05:38:10.836195+00:00",
+      "type": "evidence_unavailable",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "validate_scenario",
+        "capability": "scenario.validate",
+        "reason": "blocked by ['create_scenario']"
+      }
+    },
+    {
+      "sequence": 18,
+      "at": "2026-08-26T05:38:10.836212+00:00",
+      "type": "step_blocked",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "optimize_scenario",
+        "capability": "optimization.solve_scenario",
+        "blocked_by": [
+          "validate_scenario"
+        ]
+      }
+    },
+    {
+      "sequence": 19,
+      "at": "2026-08-26T05:38:10.836215+00:00",
+      "type": "evidence_unavailable",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "optimize_scenario",
+        "capability": "optimization.solve_scenario",
+        "reason": "blocked by ['validate_scenario']"
+      }
+    },
+    {
+      "sequence": 20,
+      "at": "2026-08-26T05:38:10.836227+00:00",
+      "type": "step_blocked",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "kpi",
+        "capability": "kpi.summarise",
+        "blocked_by": [
+          "optimize_scenario"
+        ]
+      }
+    },
+    {
+      "sequence": 21,
+      "at": "2026-08-26T05:38:10.836229+00:00",
+      "type": "evidence_unavailable",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "kpi",
+        "capability": "kpi.summarise",
+        "reason": "blocked by ['optimize_scenario']"
+      }
+    },
+    {
+      "sequence": 22,
+      "at": "2026-08-26T05:38:10.836245+00:00",
+      "type": "step_degraded",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "reason",
+        "capability": "reasoning.synthesise",
+        "soft_deps_failed": [
+          "optimize_scenario",
+          "kpi"
+        ],
+        "missing_capabilities": [
+          "optimization.solve_scenario",
+          "kpi.summarise"
+        ]
+      }
+    },
+    {
+      "sequence": 23,
+      "at": "2026-08-26T05:38:10.836251+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "reason",
+        "capability": "reasoning.synthesise"
+      }
+    },
+    {
+      "sequence": 24,
+      "at": "2026-08-26T05:38:30.220823+00:00",
+      "type": "reasoning_completed",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "reasoning.synthesise",
+        "source": "template",
+        "confidence": "MEDIUM",
+        "evidence_cited": 2,
+        "unavailable_evidence": [
+          "kpi.summarise",
+          "optimization.solve_scenario",
+          "scenario.create",
+          "scenario.validate"
+        ]
+      }
+    },
+    {
+      "sequence": 25,
+      "at": "2026-08-26T05:38:30.220844+00:00",
+      "type": "grounding_completed",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "reasoning.synthesise",
+        "grounding_status": "GROUNDED",
+        "claims_checked": 5,
+        "claims_grounded": 5,
+        "claims_contradicted": 0,
+        "claims_unsupported": 0
+      }
+    },
+    {
+      "sequence": 26,
+      "at": "2026-08-26T05:38:30.221040+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "reason",
+        "capability": "reasoning.synthesise",
+        "duration_seconds": 19.3846,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 27,
+      "at": "2026-08-26T05:38:30.221151+00:00",
+      "type": "step_degraded",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "govern",
+        "capability": "governance.classify",
+        "soft_deps_failed": [
+          "optimize_scenario",
+          "kpi"
+        ],
+        "missing_capabilities": [
+          "optimization.solve_scenario",
+          "kpi.summarise"
+        ]
+      }
+    },
+    {
+      "sequence": 28,
+      "at": "2026-08-26T05:38:30.221161+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "govern",
+        "capability": "governance.classify"
+      }
+    },
+    {
+      "sequence": 29,
+      "at": "2026-08-26T05:38:30.221273+00:00",
+      "type": "governance_decision",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "classification": "NO_ACTION",
+        "action_type": "NONE",
+        "rules": [
+          "R0_NO_ACTION_PROPOSED"
+        ],
+        "governing_rule": "R0_NO_ACTION_PROPOSED",
+        "rei": 1.0,
+        "risk_factor": null,
+        "missing_evidence": [
+          "kpi.summarise",
+          "optimization.solve_scenario",
+          "scenario.create",
+          "scenario.validate"
+        ],
+        "evidence_status": {
+          "optimization.solve_scenario": "UNAVAILABLE"
+        },
+        "blocked_by_missing_evidence": false,
+        "grounding_failed": false
+      }
+    },
+    {
+      "sequence": 30,
+      "at": "2026-08-26T05:38:30.221278+00:00",
+      "type": "governance_applied",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "classification": "NO_ACTION",
+        "rules": [
+          "R0_NO_ACTION_PROPOSED"
+        ]
+      }
+    },
+    {
+      "sequence": 31,
+      "at": "2026-08-26T05:38:30.221370+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "govern",
+        "capability": "governance.classify",
+        "duration_seconds": 0.0001,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 32,
+      "at": "2026-08-26T05:38:30.221438+00:00",
+      "type": "governance_applied",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "classification": "NO_ACTION"
+      }
+    },
+    {
+      "sequence": 33,
+      "at": "2026-08-26T05:38:30.221718+00:00",
+      "type": "twin_state_published",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "state_id": "tws_snap_72a48e1a0664_optimized",
+        "state_type": "OPTIMIZED",
+        "scenario_id": null,
+        "calculation_status": "PARTIAL",
+        "n_facilities": 4,
+        "n_flows": 6
+      }
+    },
+    {
+      "sequence": 34,
+      "at": "2026-08-26T05:38:30.221749+00:00",
+      "type": "workflow_completed",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "status": "FAILED",
+        "completed_steps": 5,
+        "failed_steps": 1,
+        "blocked_steps": 3
+      }
+    },
+    {
+      "sequence": 35,
+      "at": "2026-08-26T05:38:30.221752+00:00",
+      "type": "execution_completed",
+      "detail": {
+        "execution_id": "4f4149bd-2d6",
+        "workflow_id": "wf_scenario_analysis",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "status": "FAILED"
+      }
+    }
+  ],
+  "outcome": {
+    "status": "FAILED",
+    "summary": "I see a business network cost of 1,200.00 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I could not use the following analyses; their values are UNKNOWN (not zero): kpi.summarise (NOT_RUN); optimization.solve_scenario (NOT_RUN); scenario.create (INVALID); scenario.validate (NOT_RUN). I see a reported market signal: an increase in the CUSTOMER category, which cleared the relevance guardrail. The reported figure is recorded with the signal, not restated here as a checked number.",
+    "action_taken": null,
+    "approval": null
+  }
+}

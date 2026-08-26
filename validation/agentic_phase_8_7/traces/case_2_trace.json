@@ -1,0 +1,892 @@
+{
+  "execution_id": "a68c5e51-c28",
+  "request_id": "f4273b30-1056-4af4-96c5-6a1d374d41f3",
+  "actor": {
+    "actor_id": "anonymous",
+    "role": "VIEWER"
+  },
+  "started_at": "2026-08-26T05:37:06.041973+00:00",
+  "completed_at": "2026-08-26T05:37:47.632052+00:00",
+  "input": "Forecast demand for Delhi for the next 6 months and assess whether the projected demand requires additional network analysis.",
+  "intent": {
+    "interpreted": "FORECAST",
+    "source": "explicit",
+    "confidence": 1.0
+  },
+  "workflow_id": "forecast_delhi_6m_001",
+  "plan_steps": [
+    {
+      "step_id": "s1_load_snapshot",
+      "capability": "network.load_snapshot",
+      "depends_on": [],
+      "optional": false
+    },
+    {
+      "step_id": "s2_forecast_demand",
+      "capability": "forecast.demand",
+      "depends_on": [
+        "s1_load_snapshot"
+      ],
+      "optional": false
+    },
+    {
+      "step_id": "s3_governance_classify",
+      "capability": "governance.classify",
+      "depends_on": [
+        "s2_forecast_demand"
+      ],
+      "optional": false
+    },
+    {
+      "step_id": "s4_reasoning_synthesise",
+      "capability": "reasoning.synthesise",
+      "depends_on": [
+        "s2_forecast_demand",
+        "s3_governance_classify"
+      ],
+      "optional": false
+    }
+  ],
+  "data_references": {
+    "baseline_snapshot_id": "snap_72a48e1a0664",
+    "data_version": "72a48e1a066440af",
+    "scenario_ids": [],
+    "scenario_overrides": []
+  },
+  "state_history": [
+    {
+      "from": "RECEIVED",
+      "to": "UNDERSTANDING",
+      "at": "2026-08-26T05:37:06.042000+00:00",
+      "note": ""
+    },
+    {
+      "from": "UNDERSTANDING",
+      "to": "PLANNED",
+      "at": "2026-08-26T05:37:16.102893+00:00",
+      "note": ""
+    },
+    {
+      "from": "PLANNED",
+      "to": "VALIDATING",
+      "at": "2026-08-26T05:37:16.102972+00:00",
+      "note": ""
+    },
+    {
+      "from": "VALIDATING",
+      "to": "RUNNING",
+      "at": "2026-08-26T05:37:16.102999+00:00",
+      "note": ""
+    },
+    {
+      "from": "RUNNING",
+      "to": "COMPLETED",
+      "at": "2026-08-26T05:37:47.631839+00:00",
+      "note": ""
+    }
+  ],
+  "tool_invocations": [
+    {
+      "step_id": "s1_load_snapshot",
+      "capability": "network.load_snapshot",
+      "success": true,
+      "duration_seconds": 0.0,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:37:16.103356+00:00"
+    },
+    {
+      "step_id": "s2_forecast_demand",
+      "capability": "forecast.demand",
+      "success": true,
+      "duration_seconds": 0.0558,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:37:16.159475+00:00"
+    },
+    {
+      "step_id": "s3_governance_classify",
+      "capability": "governance.classify",
+      "success": true,
+      "duration_seconds": 0.0002,
+      "attempts": 1,
+      "execution_mode": "DETERMINISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:37:32.546436+00:00"
+    },
+    {
+      "step_id": "s4_reasoning_synthesise",
+      "capability": "reasoning.synthesise",
+      "success": true,
+      "duration_seconds": 15.0848,
+      "attempts": 1,
+      "execution_mode": "PROBABILISTIC",
+      "error_code": null,
+      "error_message": null,
+      "at": "2026-08-26T05:37:47.631644+00:00"
+    }
+  ],
+  "engine_results": {
+    "network.load_snapshot": {
+      "snapshot_id": "snap_72a48e1a0664",
+      "network_id": "PHASE2_DELHI",
+      "data_version": "72a48e1a066440af",
+      "is_hypothetical": false,
+      "n_facilities": 7,
+      "n_demands": 3
+    },
+    "forecast.demand": {
+      "status": "OK",
+      "target": "DEMAND",
+      "horizon": 6,
+      "frequency": "MONTH",
+      "snapshot_id": "snap_72a48e1a0664",
+      "data_version": "72a48e1a066440af",
+      "model_version": "1.0.0",
+      "engines_used": [
+        "QuantileRegression_HiGHS"
+      ],
+      "selection_mode": "PATTERN",
+      "signal_ids": [],
+      "adapted_series": [],
+      "generated_at": "2026-08-26T05:37:16.158997+00:00",
+      "n_series": 3,
+      "n_successful": 3,
+      "n_failed": 0,
+      "status_counts": {
+        "OK": 3
+      },
+      "series": [
+        {
+          "market_id": "MKT_EAST",
+          "product_id": "P1",
+          "status": "OK",
+          "reason": "",
+          "engine": "QuantileRegression_HiGHS",
+          "pattern": "SMOOTH",
+          "n_history_periods": 12,
+          "points": [
+            {
+              "period": 1,
+              "mean": 280.0,
+              "std_dev": 28.0,
+              "p10": 280.0,
+              "p50": 280.0,
+              "p90": 280.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 2,
+              "mean": 295.0,
+              "std_dev": 29.5,
+              "p10": 295.0,
+              "p50": 295.0,
+              "p90": 295.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 3,
+              "mean": 310.0,
+              "std_dev": 31.0,
+              "p10": 310.0,
+              "p50": 310.0,
+              "p90": 310.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 4,
+              "mean": 325.0,
+              "std_dev": 32.5,
+              "p10": 325.0,
+              "p50": 325.0,
+              "p90": 325.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 5,
+              "mean": 340.0,
+              "std_dev": 34.0,
+              "p10": 340.0,
+              "p50": 340.0,
+              "p90": 340.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 6,
+              "mean": 355.0,
+              "std_dev": 35.5,
+              "p10": 355.0,
+              "p50": 355.0,
+              "p90": 355.0,
+              "baseline_mean": null
+            }
+          ],
+          "accuracy": {
+            "mae": 0.0,
+            "rmse": 0.0,
+            "wape": 0.0,
+            "mase": 0.0,
+            "n_folds": 3,
+            "beat_naive": true
+          },
+          "signal_adjustments": [],
+          "structural_break": {
+            "detected": false,
+            "status": "NO_BREAK",
+            "change_period": null,
+            "pre_break_level": null,
+            "post_break_level": null,
+            "magnitude": null,
+            "sup_f": null,
+            "threshold": 8.85,
+            "detection_method": "SUP_F_LEVEL_SHIFT",
+            "reason": "a smooth trend-and-seasonality model fits the series exactly; there is no unexplained variation for a level shift to explain."
+          },
+          "regime": {
+            "strategy": "FULL_HISTORY",
+            "basis": "NO_BREAK",
+            "window_start": 0,
+            "n_periods_used": 12,
+            "full_history_mae": null,
+            "recent_regime_mae": null,
+            "n_folds": 0,
+            "reason": "no structural break detected; forecasting from the full history, which is the unchanged default path."
+          },
+          "warnings": []
+        },
+        {
+          "market_id": "MKT_NORTH",
+          "product_id": "P1",
+          "status": "OK",
+          "reason": "",
+          "engine": "QuantileRegression_HiGHS",
+          "pattern": "SMOOTH",
+          "n_history_periods": 12,
+          "points": [
+            {
+              "period": 1,
+              "mean": 280.0,
+              "std_dev": 28.0,
+              "p10": 280.0,
+              "p50": 280.0,
+              "p90": 280.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 2,
+              "mean": 295.0,
+              "std_dev": 29.5,
+              "p10": 295.0,
+              "p50": 295.0,
+              "p90": 295.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 3,
+              "mean": 310.0,
+              "std_dev": 31.0,
+              "p10": 310.0,
+              "p50": 310.0,
+              "p90": 310.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 4,
+              "mean": 325.0,
+              "std_dev": 32.5,
+              "p10": 325.0,
+              "p50": 325.0,
+              "p90": 325.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 5,
+              "mean": 340.0,
+              "std_dev": 34.0,
+              "p10": 340.0,
+              "p50": 340.0,
+              "p90": 340.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 6,
+              "mean": 355.0,
+              "std_dev": 35.5,
+              "p10": 355.0,
+              "p50": 355.0,
+              "p90": 355.0,
+              "baseline_mean": null
+            }
+          ],
+          "accuracy": {
+            "mae": 0.0,
+            "rmse": 0.0,
+            "wape": 0.0,
+            "mase": 0.0,
+            "n_folds": 3,
+            "beat_naive": true
+          },
+          "signal_adjustments": [],
+          "structural_break": {
+            "detected": false,
+            "status": "NO_BREAK",
+            "change_period": null,
+            "pre_break_level": null,
+            "post_break_level": null,
+            "magnitude": null,
+            "sup_f": null,
+            "threshold": 8.85,
+            "detection_method": "SUP_F_LEVEL_SHIFT",
+            "reason": "a smooth trend-and-seasonality model fits the series exactly; there is no unexplained variation for a level shift to explain."
+          },
+          "regime": {
+            "strategy": "FULL_HISTORY",
+            "basis": "NO_BREAK",
+            "window_start": 0,
+            "n_periods_used": 12,
+            "full_history_mae": null,
+            "recent_regime_mae": null,
+            "n_folds": 0,
+            "reason": "no structural break detected; forecasting from the full history, which is the unchanged default path."
+          },
+          "warnings": []
+        },
+        {
+          "market_id": "MKT_WEST",
+          "product_id": "P1",
+          "status": "OK",
+          "reason": "",
+          "engine": "QuantileRegression_HiGHS",
+          "pattern": "SMOOTH",
+          "n_history_periods": 12,
+          "points": [
+            {
+              "period": 1,
+              "mean": 280.0,
+              "std_dev": 28.0,
+              "p10": 280.0,
+              "p50": 280.0,
+              "p90": 280.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 2,
+              "mean": 295.0,
+              "std_dev": 29.5,
+              "p10": 295.0,
+              "p50": 295.0,
+              "p90": 295.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 3,
+              "mean": 310.0,
+              "std_dev": 31.0,
+              "p10": 310.0,
+              "p50": 310.0,
+              "p90": 310.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 4,
+              "mean": 325.0,
+              "std_dev": 32.5,
+              "p10": 325.0,
+              "p50": 325.0,
+              "p90": 325.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 5,
+              "mean": 340.0,
+              "std_dev": 34.0,
+              "p10": 340.0,
+              "p50": 340.0,
+              "p90": 340.0,
+              "baseline_mean": null
+            },
+            {
+              "period": 6,
+              "mean": 355.0,
+              "std_dev": 35.5,
+              "p10": 355.0,
+              "p50": 355.0,
+              "p90": 355.0,
+              "baseline_mean": null
+            }
+          ],
+          "accuracy": {
+            "mae": 0.0,
+            "rmse": 0.0,
+            "wape": 0.0,
+            "mase": 0.0,
+            "n_folds": 3,
+            "beat_naive": true
+          },
+          "signal_adjustments": [],
+          "structural_break": {
+            "detected": false,
+            "status": "NO_BREAK",
+            "change_period": null,
+            "pre_break_level": null,
+            "post_break_level": null,
+            "magnitude": null,
+            "sup_f": null,
+            "threshold": 8.85,
+            "detection_method": "SUP_F_LEVEL_SHIFT",
+            "reason": "a smooth trend-and-seasonality model fits the series exactly; there is no unexplained variation for a level shift to explain."
+          },
+          "regime": {
+            "strategy": "FULL_HISTORY",
+            "basis": "NO_BREAK",
+            "window_start": 0,
+            "n_periods_used": 12,
+            "full_history_mae": null,
+            "recent_regime_mae": null,
+            "n_folds": 0,
+            "reason": "no structural break detected; forecasting from the full history, which is the unchanged default path."
+          },
+          "warnings": []
+        }
+      ],
+      "warnings": [],
+      "errors": []
+    },
+    "governance.classify": {
+      "action_type": "NONE",
+      "classification": "NO_ACTION",
+      "reason": "No action was proposed by this run.",
+      "triggered_rules": [
+        "R0_NO_ACTION_PROPOSED"
+      ],
+      "governing_rule": "R0_NO_ACTION_PROPOSED",
+      "evaluated": {
+        "action_type": "NONE",
+        "is_feasible": true,
+        "cost_impact_pct": null,
+        "unserved_demand_rate": null,
+        "rei": null,
+        "risk_factor": null,
+        "confidence": "LOW",
+        "data_quality_ok": true,
+        "missing_evidence": {},
+        "missing_critical_evidence": [],
+        "unresolved_evidence": {},
+        "grounding_failed": false,
+        "action_requires_risk_evidence": false
+      },
+      "blocked_by_missing_evidence": false,
+      "evidence_status": {},
+      "requires_approval": false,
+      "approval_request_id": null,
+      "eligible_approver_roles": []
+    },
+    "reasoning.synthesise": {
+      "summary": "I cannot evaluate the supply\u2011chain network because no deterministic results were provided. Key KPIs required\u2014total cost, service level, capacity utilizations, resilience (REI) and risk scores\u2014are missing, so performance and feasibility cannot be assessed. I need the MILP, KPI, REI and risk outputs to produce a validated recommendation.",
+      "key_drivers": [
+        "No deterministic KPIs provided",
+        "Missing MILP, KPI, REI and risk outputs"
+      ],
+      "risks": [
+        "Decision delay due to missing results",
+        "Operational changes made without validated KPIs may increase exposure"
+      ],
+      "recommendation": "I recommend requesting the full deterministic outputs from the MILP optimizer and the KPI/REI/risk engine (total cost, service level, capacity utilizations, REI and risk scores) and then re-run the analysis.",
+      "confidence": "LOW",
+      "evidence": [
+        "Deterministic results block is empty: {}",
+        "No authoritative figures were provided in DETERMINISTIC RESULTS"
+      ],
+      "briefing": null,
+      "source": "llm",
+      "validation_warnings": [],
+      "grounding_status": "NO_CLAIMS",
+      "grounded_claims": [],
+      "unavailable_evidence": {}
+    }
+  },
+  "risk_calculation": null,
+  "governance_decision": {
+    "action_type": "NONE",
+    "classification": "NO_ACTION",
+    "reason": "No action was proposed by this run.",
+    "triggered_rules": [
+      "R0_NO_ACTION_PROPOSED"
+    ],
+    "governing_rule": "R0_NO_ACTION_PROPOSED",
+    "evaluated": {
+      "action_type": "NONE",
+      "is_feasible": true,
+      "cost_impact_pct": null,
+      "unserved_demand_rate": null,
+      "rei": null,
+      "risk_factor": null,
+      "confidence": "LOW",
+      "data_quality_ok": true,
+      "missing_evidence": {},
+      "missing_critical_evidence": [],
+      "unresolved_evidence": {},
+      "grounding_failed": false,
+      "action_requires_risk_evidence": false
+    },
+    "blocked_by_missing_evidence": false,
+    "evidence_status": {},
+    "requires_approval": false,
+    "approval_request_id": null,
+    "eligible_approver_roles": []
+  },
+  "llm_outputs": [
+    {
+      "purpose": "planner",
+      "source": "LLM",
+      "output_excerpt": "{\n  \"workflow_id\": \"forecast_delhi_6m_001\",\n  \"steps\": [\n    {\n      \"step_id\": \"s1_load_snapshot\",\n      \"capability\": \"network.load_snapshot\",\n      \"description\": \"Pin and verify current observed network state for Delhi region.\",\n      \"depends_on\": [],\n      \"soft_depends_on\": [],\n      \"params\": {\n        \"region\": \"Delhi\",\n        \"scope\": \"regional\",\n        \"timestamp\": \"latest\"\n      },\n      \"optional\": false\n    },\n    {\n      \"step_id\": \"s2_forecast_demand\",\n      \"capability\": \"forecast.demand\",\n      \"description\": \"Estimate monthly demand for Delhi for the next 6 months.\",\n      \"depends_on\": [\n        \"s1_load_snapshot\"\n      ],\n      \"soft_depends_on\": [],\n      \"params\": {\n        \"region\": \"Delhi\",\n        \"horizon_months\": 6,\n        \"granularity\": \"monthly\",\n        \"confidence_intervals\": [\n          0.5,\n          0.9\n        ]\n      },\n      \"optional\": false\n    },\n    {\n      \"step_id\": \"s3_governance_classify\",\n      \"capability\": \"governance.classify\",\n      \"description\": \"Apply deterministic rules to decide if forecasted demand triggers further network analysis.\",\n      \"depends_on\": [\n        \"s2_forecast_demand\"\n      ],\n      \"soft_depends_on\": [],\n      \"params\": {\n        \"rule_set\": \"demand_thresholds_and_trigger_policy\",\n        \"inputs\": [\n          \"s2_forecast_demand.results\"\n        ],\n        \"output_action\": \"requires_additional_network_analysis_boolean\"\n      },\n      \"optional\": false\n    },\n    {\n      \"step_id\": \"s4_reasoning_syn",
+      "at": "2026-08-26T05:37:16.102622+00:00"
+    },
+    {
+      "purpose": "reasoning",
+      "source": "llm",
+      "output_excerpt": "I cannot evaluate the supply\u2011chain network because no deterministic results were provided. Key KPIs required\u2014total cost, service level, capacity utilizations, resilience (REI) and risk scores\u2014are missing, so performance and feasibility cannot be assessed. I need the MILP, KPI, REI and risk outputs to produce a validated recommendation.",
+      "at": "2026-08-26T05:37:47.632104+00:00"
+    }
+  ],
+  "errors": [],
+  "events": [
+    {
+      "sequence": 1,
+      "at": "2026-08-26T05:37:06.041982+00:00",
+      "type": "execution_started",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": null,
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "(pending interpretation)"
+      }
+    },
+    {
+      "sequence": 2,
+      "at": "2026-08-26T05:37:06.042024+00:00",
+      "type": "intent_resolved",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": null,
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "FORECAST",
+        "source": "explicit",
+        "confidence": 1.0
+      }
+    },
+    {
+      "sequence": 3,
+      "at": "2026-08-26T05:37:16.102913+00:00",
+      "type": "plan_built",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "steps": 4,
+        "origin": "LLM"
+      }
+    },
+    {
+      "sequence": 4,
+      "at": "2026-08-26T05:37:16.102962+00:00",
+      "type": "workflow_started",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "intent": "FORECAST",
+        "steps": [
+          "s1_load_snapshot",
+          "s2_forecast_demand",
+          "s3_governance_classify",
+          "s4_reasoning_synthesise"
+        ],
+        "layers": [
+          1,
+          1,
+          1,
+          1
+        ]
+      }
+    },
+    {
+      "sequence": 5,
+      "at": "2026-08-26T05:37:16.102991+00:00",
+      "type": "snapshot_validated",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "data_version": "72a48e1a066440af"
+      }
+    },
+    {
+      "sequence": 6,
+      "at": "2026-08-26T05:37:16.103082+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s1_load_snapshot",
+        "capability": "network.load_snapshot"
+      }
+    },
+    {
+      "sequence": 7,
+      "at": "2026-08-26T05:37:16.103366+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s1_load_snapshot",
+        "capability": "network.load_snapshot",
+        "duration_seconds": 0.0,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 8,
+      "at": "2026-08-26T05:37:16.103556+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s2_forecast_demand",
+        "capability": "forecast.demand"
+      }
+    },
+    {
+      "sequence": 9,
+      "at": "2026-08-26T05:37:16.159297+00:00",
+      "type": "forecast_completed",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "forecast.demand",
+        "status": "OK",
+        "horizon": 6,
+        "series": 3,
+        "status_counts": {
+          "OK": 3
+        },
+        "engines": [
+          "QuantileRegression_HiGHS"
+        ],
+        "signals_applied": [],
+        "model_version": "1.0.0"
+      }
+    },
+    {
+      "sequence": 10,
+      "at": "2026-08-26T05:37:16.159480+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s2_forecast_demand",
+        "capability": "forecast.demand",
+        "duration_seconds": 0.0558,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 11,
+      "at": "2026-08-26T05:37:32.546030+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s3_governance_classify",
+        "capability": "governance.classify"
+      }
+    },
+    {
+      "sequence": 12,
+      "at": "2026-08-26T05:37:32.546218+00:00",
+      "type": "governance_decision",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "classification": "NO_ACTION",
+        "action_type": "NONE",
+        "rules": [
+          "R0_NO_ACTION_PROPOSED"
+        ],
+        "governing_rule": "R0_NO_ACTION_PROPOSED",
+        "rei": null,
+        "risk_factor": null,
+        "missing_evidence": [],
+        "evidence_status": {},
+        "blocked_by_missing_evidence": false,
+        "grounding_failed": false
+      }
+    },
+    {
+      "sequence": 13,
+      "at": "2026-08-26T05:37:32.546228+00:00",
+      "type": "governance_applied",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "classification": "NO_ACTION",
+        "rules": [
+          "R0_NO_ACTION_PROPOSED"
+        ]
+      }
+    },
+    {
+      "sequence": 14,
+      "at": "2026-08-26T05:37:32.546444+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s3_governance_classify",
+        "capability": "governance.classify",
+        "duration_seconds": 0.0002,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 15,
+      "at": "2026-08-26T05:37:32.546541+00:00",
+      "type": "step_started",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s4_reasoning_synthesise",
+        "capability": "reasoning.synthesise"
+      }
+    },
+    {
+      "sequence": 16,
+      "at": "2026-08-26T05:37:47.631313+00:00",
+      "type": "reasoning_completed",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "reasoning.synthesise",
+        "source": "llm",
+        "confidence": "LOW",
+        "evidence_cited": 2,
+        "unavailable_evidence": []
+      }
+    },
+    {
+      "sequence": 17,
+      "at": "2026-08-26T05:37:47.631352+00:00",
+      "type": "grounding_completed",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "reasoning.synthesise",
+        "grounding_status": "NO_CLAIMS",
+        "claims_checked": 0,
+        "claims_grounded": 0,
+        "claims_contradicted": 0,
+        "claims_unsupported": 0
+      }
+    },
+    {
+      "sequence": 18,
+      "at": "2026-08-26T05:37:47.631658+00:00",
+      "type": "step_completed",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": "s4_reasoning_synthesise",
+        "capability": "reasoning.synthesise",
+        "duration_seconds": 15.0848,
+        "status": "SUCCESS"
+      }
+    },
+    {
+      "sequence": 19,
+      "at": "2026-08-26T05:37:47.631805+00:00",
+      "type": "governance_applied",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "classification": "NO_ACTION"
+      }
+    },
+    {
+      "sequence": 20,
+      "at": "2026-08-26T05:37:47.632043+00:00",
+      "type": "twin_state_published",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "state_id": "tws_snap_72a48e1a0664_optimized",
+        "state_type": "OPTIMIZED",
+        "scenario_id": null,
+        "calculation_status": "PARTIAL",
+        "n_facilities": 0,
+        "n_flows": 0
+      }
+    },
+    {
+      "sequence": 21,
+      "at": "2026-08-26T05:37:47.632115+00:00",
+      "type": "workflow_completed",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "status": "COMPLETED",
+        "completed_steps": 4,
+        "failed_steps": 0,
+        "blocked_steps": 0
+      }
+    },
+    {
+      "sequence": 22,
+      "at": "2026-08-26T05:37:47.632122+00:00",
+      "type": "execution_completed",
+      "detail": {
+        "execution_id": "a68c5e51-c28",
+        "workflow_id": "forecast_delhi_6m_001",
+        "snapshot_id": "snap_72a48e1a0664",
+        "step_id": null,
+        "status": "COMPLETED"
+      }
+    }
+  ],
+  "outcome": {
+    "status": "COMPLETED",
+    "summary": "I cannot evaluate the supply\u2011chain network because no deterministic results were provided. Key KPIs required\u2014total cost, service level, capacity utilizations, resilience (REI) and risk scores\u2014are missing, so performance and feasibility cannot be assessed. I need the MILP, KPI, REI and risk outputs to produce a validated recommendation.",
+    "action_taken": null,
+    "approval": null
+  }
+}

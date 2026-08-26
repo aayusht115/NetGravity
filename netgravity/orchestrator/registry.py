@@ -447,9 +447,18 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
         from netgravity.forecasting.history import series_for_network
         from netgravity.forecasting.schemas import ForecastRequest, SelectionMode
 
-        snapshot = orch.snapshots.get(ctx.baseline_snapshot_id or "")
-        horizon = int(req.params.get("horizon", 1))
+        raw_h = req.params.get("horizon", 6)
+        try:
+            if isinstance(raw_h, str):
+                import re
+                m = re.search(r'\d+', raw_h)
+                horizon = int(m.group()) if m else 6
+            else:
+                horizon = int(raw_h)
+        except Exception:
+            horizon = 6
 
+        snapshot = orch.snapshots.get(ctx.baseline_snapshot_id or "")
         pairs = {(d.market_id, d.product_id) for d in snapshot.network.demands}
 
         provider = svc.get("history_provider")
