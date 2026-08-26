@@ -240,6 +240,139 @@ class FailureManager:
     # 3. Single-Step Execution with Recovery
     # ==================================================================
 
+    async def execute_step(
+        self,
+        step: PlanStep,
+        context: Any,
+        plan: Optional[ExecutionPlan] = None,
+        *,
+        trace: Optional[Any] = None,
+        upstream: Optional[Dict[str, Any]] = None,
+        unavailable: Optional[Dict[str, UnavailableEvidence]] = None,
+    ) -> AgentResult:
+        """
+        Execute a single plan step with recovery policy, updating step status and bookkeeping.
+        """
+        if upstream is None:
+            upstream = {
+                dep: context.step_output(dep)
+                for dep in step.depends_on
+                if context.step_output(dep) is not None
+            }
+        if unavailable is None:
+            unavailable = dict(context.unavailable_evidence)
+
+        if trace is not None:
+            trace.record(
+                events.STEP_STARTED,
+                step_id=step.step_id,
+                capability=step.capability,
+            )
+
+        step.status = StepStatus.RUNNING
+        try:
+            outcome = await self.execute_step_with_recovery(
+                step, context, plan=plan, upstream=upstream, unavailable=unavailable,
+            )
+        except Exception as exc:
+            if trace is not None:
+                trace.record(
+                    events.STEP_EXCEPTION,
+                    step_id=step.step_id,
+                    capability=step.capability,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                )
+            first_err = AgentError(
+                code=getattr(exc, "code", "UNEXPECTED_ERROR") if not hasattr(getattr(exc, "code", None), "value") else exc.code.value,
+                message=str(exc),
+                failure_class="NON_RETRYABLE",
+            )
+            outcome = AgentResult(
+                capability=step.capability,
+                status=AgentStatus.NON_RETRYABLE_FAILURE,
+                errors=[first_err],
+                execution_id=context.execution_id,
+            )
+
+        first_err = outcome.errors[0] if outcome.errors else None
+        step.status = (
+            StepStatus.COMPLETED if outcome.is_usable else StepStatus.FAILED
+        )
+
+        if trace is not None:
+            trace.record_tool(
+                step_id=step.step_id,
+                capability=outcome.capability,
+                success=outcome.is_usable,
+                duration_seconds=outcome.provenance.duration_seconds,
+                attempts=outcome.provenance.attempts,
+                execution_mode=outcome.provenance.execution_mode.value,
+                error_code=first_err.code if first_err else None,
+                error_message=first_err.message if first_err else None,
+            )
+
+        if outcome.is_usable:
+            if step.step_id not in context.completed_steps:
+                context.completed_steps.append(step.step_id)
+            if trace is not None:
+                trace.engine_results[outcome.capability] = (
+                    context.output_of(outcome.capability) or {}
+                )
+                trace.record(
+                    events.STEP_COMPLETED,
+                    step_id=step.step_id,
+                    capability=step.capability,
+                    duration_seconds=outcome.provenance.duration_seconds,
+                    status=outcome.status.value,
+                )
+        else:
+            if step.step_id not in context.failed_steps:
+                context.failed_steps.append(step.step_id)
+
+            ev_status = EvidenceStatus.UNAVAILABLE
+            if first_err is not None:
+                err_code = (first_err.code or "").upper()
+                err_msg = (first_err.message or "").upper()
+                if "TIMEOUT" in err_code or "TIMEOUT" in err_msg or "600S" in err_msg:
+                    ev_status = EvidenceStatus.TIMEOUT
+                elif "VALIDATION" in err_code or "INVALID" in err_code or "MALFORMED" in err_msg:
+                    ev_status = EvidenceStatus.INVALID
+
+            context.record_unavailable(
+                step.capability,
+                reason=first_err.message if first_err else "Failed",
+                status=ev_status,
+                step_id=step.step_id,
+            )
+            if trace is not None:
+                trace.record(
+                    events.STEP_FAILED,
+                    step_id=step.step_id,
+                    capability=step.capability,
+                    code=first_err.code if first_err else "FAILED",
+                )
+                trace.record(
+                    events.EVIDENCE_UNAVAILABLE,
+                    step_id=step.step_id,
+                    capability=step.capability,
+                    reason=first_err.message if first_err else "Failed",
+                )
+
+            if first_err is not None and "INFEASIBLE" in (first_err.code or "").upper():
+                context.audit_metadata["infeasible_step"] = step.step_id
+                context.audit_metadata["infeasible_detail"] = (
+                    first_err.context or outcome.metadata.get("error_context", {})
+                )
+                if trace is not None:
+                    trace.record(
+                        events.SOLVER_INFEASIBLE,
+                        step_id=step.step_id,
+                        capability=outcome.capability,
+                    )
+
+        return outcome
+
     async def execute_step_with_recovery(
         self,
         step: PlanStep,

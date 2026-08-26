@@ -28,11 +28,16 @@ from netgravity.schemas.network import CanonicalNetwork
 from netgravity.orchestrator.agents.llm_gateway import LLMGateway
 from netgravity.orchestrator.audit import events
 from netgravity.orchestrator.audit.audit_logger import AuditLogger, ExecutionTrace
+from netgravity.orchestrator.core.adaptive_policy import (
+    AdaptiveDecisionPolicy,
+    ReplanGuard,
+)
 from netgravity.orchestrator.core.execution_context import ExecutionContext
 from netgravity.orchestrator.core.execution_state import ExecutionState
 from netgravity.orchestrator.core.executor import CapabilityExecutor
 from netgravity.orchestrator.core.failure_manager import FailureManager
 from netgravity.orchestrator.core.planner import WorkflowPlanner
+from netgravity.orchestrator.core.result_observer import ResultObserver
 from netgravity.orchestrator.exceptions import (
     FailureClass,
     OrchestratorError,
@@ -47,6 +52,13 @@ from netgravity.orchestrator.governance.action_classifier import (
 )
 from netgravity.orchestrator.planner.llm_planner import LLMPlannerProtocol, MockPlanner
 from netgravity.orchestrator.routing.capability_registry import CapabilityRegistry
+from netgravity.orchestrator.schemas.adaptive import (
+    AdaptiveAction,
+    AdaptiveDecision,
+    AdaptiveExecutionConfig,
+    ReplanRecord,
+    ResultObservation,
+)
 from netgravity.orchestrator.schemas.agent_result import AgentResult
 from netgravity.orchestrator.schemas.actions import (
     ActionClassification,
@@ -62,7 +74,13 @@ from netgravity.orchestrator.schemas.planner_contract import (
     plan_proposal_to_execution_plan,
 )
 from netgravity.orchestrator.schemas.plan_validation import PlanOrigin
-from netgravity.orchestrator.schemas.plans import ExecutionPlan, StepStatus, ToolRequest, ToolResult
+from netgravity.orchestrator.schemas.plans import (
+    EvidenceStatus,
+    ExecutionPlan,
+    StepStatus,
+    ToolRequest,
+    ToolResult,
+)
 from netgravity.orchestrator.schemas.requests import (
     Intent,
     IntentResolution,
@@ -141,6 +159,7 @@ class Orchestrator:
         governance_policy: Optional[GovernancePolicy] = None,
         twin: Optional["DigitalTwinService"] = None,
         llm_planner: Optional[LLMPlannerProtocol] = None,
+        adaptive_config: Optional[AdaptiveExecutionConfig] = None,
     ) -> None:
         from netgravity.orchestrator.twin.service import DigitalTwinService
 
@@ -163,6 +182,13 @@ class Orchestrator:
         self.executor = CapabilityExecutor(registry)
         # Phase 8.4 — Failure management layer with retry, reroute, and circuit breaker
         self.failure_manager = FailureManager(executor=self.executor, registry=registry)
+
+        # Phase 8.6 — Adaptive execution and deterministic decision policy
+        self.adaptive_config = adaptive_config or AdaptiveExecutionConfig()
+        self.result_observer = ResultObserver(config=self.adaptive_config, snapshots=self.snapshots)
+        self.adaptive_policy = AdaptiveDecisionPolicy(
+            failure_manager=self.failure_manager, config=self.adaptive_config
+        )
 
         self.planner = WorkflowPlanner(registry)
         self.request_validator = RequestValidator()
@@ -295,7 +321,7 @@ class Orchestrator:
 
         # ---- EXECUTE / COLLECT / CALCULATE / REASON ----------------------
         context.transition(ExecutionState.RUNNING)
-        await self._execute_plan(context, trace)
+        await self._execute_plan_adaptively(request, context, trace)
 
         # ---- GOVERN ------------------------------------------------------
         self._govern(context, trace)
@@ -430,19 +456,296 @@ class Orchestrator:
         return fallback_plan
 
     # ------------------------------------------------------------------
-    # EXECUTE — dependency-aware, layer-parallel
+    # EXECUTE — Closed-loop adaptive execution with observation & decision policy
     # ------------------------------------------------------------------
 
     async def _execute_plan(self, context: ExecutionContext, trace: ExecutionTrace) -> None:
         """
-        Run the plan layer by layer with failure management and recovery policy.
+        Backwards-compatible wrapper delegating to adaptive execution.
+        """
+        req = OrchestratorRequest(input=context.raw_input, request_id=context.request_id)
+        await self._execute_plan_adaptively(req, context, trace)
 
-        Delegated to FailureManager, which coordinates bounded retries, rerouting,
-        dependency failure propagation, circuit breaking, and escalation above
-        CapabilityExecutor.
+    async def _execute_plan_adaptively(
+        self,
+        request: OrchestratorRequest,
+        context: ExecutionContext,
+        trace: ExecutionTrace,
+    ) -> None:
+        """
+        Run the plan in a closed-loop adaptive control model.
+
+        Flow per step:
+          1. FailureManager coordinates single-shot execution via CapabilityExecutor.
+          2. ResultObserver inspects AgentResult and ExecutionContext.
+          3. AdaptiveDecisionPolicy evaluates next action (Continue, Replan, Retry, Reroute, Block, Escalate, Terminate).
+          4. Loop repeats until completion, replan convergence, or safe termination.
         """
         assert context.plan is not None
-        await self.failure_manager.execute_plan(context.plan, context, trace=trace)
+        context.initial_plan = context.plan
+        context.plan_history.append(context.plan)
+        past_signatures: Set[str] = {self.adaptive_policy.guard.plan_signature(context.plan)}
+
+        while True:
+            current_plan = context.plan
+            assert current_plan is not None
+
+            # Check total execution step budget guard
+            total_steps = len(context.completed_steps) + len(context.failed_steps) + len(context.blocked_steps)
+            if total_steps >= self.adaptive_config.max_execution_steps:
+                logger.warning(
+                    "orchestrator.adaptive.max_steps_exceeded execution_id=%s total=%d",
+                    context.execution_id, total_steps,
+                )
+                context.add_warning(
+                    f"Maximum execution steps limit ({self.adaptive_config.max_execution_steps}) reached."
+                )
+                break
+
+            # Find next layer that contains unfinished steps
+            layers = current_plan.execution_layers()
+            next_step_id: Optional[str] = None
+
+            for layer in layers:
+                unfinished = [
+                    s_id for s_id in layer
+                    if (
+                        s_id not in context.completed_steps
+                        and s_id not in context.failed_steps
+                        and s_id not in context.blocked_steps
+                        and s_id not in context.skipped_steps
+                    )
+                ]
+                if not unfinished:
+                    continue
+
+                for s_id in unfinished:
+                    step_obj = current_plan.step(s_id)
+                    if step_obj is None:
+                        continue
+
+                    resolution = current_plan.classify_dependencies(
+                        step_obj, set(context.completed_steps)
+                    )
+                    if not resolution.runnable:
+                        step_obj.status = StepStatus.BLOCKED
+                        context.record_blocked(s_id, step_obj.capability, resolution.blocking)
+                        trace.record(
+                            events.STEP_BLOCKED,
+                            step_id=s_id,
+                            capability=step_obj.capability,
+                            blocked_by=resolution.blocking,
+                        )
+                        trace.record(
+                            events.EVIDENCE_UNAVAILABLE,
+                            step_id=s_id,
+                            capability=step_obj.capability,
+                            reason=f"blocked by {resolution.blocking}",
+                        )
+                        context.record_unavailable(
+                            step_obj.capability,
+                            reason=f"blocked by {resolution.blocking}",
+                            status=EvidenceStatus.NOT_RUN,
+                            step_id=s_id,
+                        )
+                        continue
+
+                    next_step_id = s_id
+                    break
+
+                if next_step_id is not None:
+                    break
+
+            if next_step_id is None:
+                # No more unexecuted runnable steps in current plan
+                break
+
+            step = current_plan.step(next_step_id)
+            assert step is not None
+
+            step_res = current_plan.classify_dependencies(step, set(context.completed_steps))
+            if step_res.is_degraded:
+                missing_caps = [
+                    (current_plan.step(d).capability if current_plan.step(d) else d)
+                    for d in step_res.degraded
+                ]
+                context.add_warning(
+                    f"step '{step.step_id}' running with degraded evidence; unavailable: "
+                    f"{', '.join(missing_caps)}"
+                )
+                if trace is not None:
+                    trace.record(
+                        events.STEP_DEGRADED,
+                        step_id=step.step_id,
+                        capability=step.capability,
+                        soft_deps_failed=step_res.degraded,
+                        missing_capabilities=missing_caps,
+                    )
+
+            # Execute single step through FailureManager / CapabilityExecutor
+            result = await self.failure_manager.execute_step(
+                step, context, plan=current_plan, trace=trace
+            )
+
+            # Observe step result deterministically
+            observation = self.result_observer.observe(step, result, context)
+
+            # Determine next action deterministically
+            decision = self.adaptive_policy.decide(
+                step=step,
+                observation=observation,
+                result=result,
+                attempt=len(context.step_attempts.get(step.step_id, [])),
+                context=context,
+                current_plan=current_plan,
+            )
+            context.record_decision(decision)
+
+            # Process decision action
+            if decision.action == AdaptiveAction.CONTINUE:
+                continue
+
+            elif decision.action == AdaptiveAction.REPLAN:
+                logger.info(
+                    "orchestrator.adaptive.replan_triggered execution_id=%s reason=%s",
+                    context.execution_id, decision.reason,
+                )
+                replan_proposal: Optional[PlanProposal] = None
+                try:
+                    if self.llm_planner is not None and hasattr(self.llm_planner, "propose_replan"):
+                        replan_proposal = await self.llm_planner.propose_replan(
+                            request=request,
+                            resolution=context.intent_resolution,
+                            context=context,
+                            trigger_reason=decision.reason,
+                        )
+                except Exception as exc:
+                    logger.warning(
+                        "orchestrator.adaptive.replan_proposal_failed execution_id=%s exc=%s",
+                        context.execution_id, exc,
+                    )
+                    context.add_warning(f"Replan proposal generation failed ({exc}).")
+
+                if replan_proposal is not None and replan_proposal.steps:
+                    candidate_plan = plan_proposal_to_execution_plan(
+                        replan_proposal, origin=replan_proposal.planner_source
+                    )
+                    candidate_plan.request_id = context.request_id
+                    candidate_plan.execution_id = context.execution_id
+
+                    can_replan, guard_msg = self.adaptive_policy.guard.check_replan_eligibility(
+                        current_replan_count=context.replan_count,
+                        proposed_plan=candidate_plan,
+                        past_plan_signatures=past_signatures,
+                        total_steps_executed=total_steps,
+                    )
+                    if not can_replan:
+                        logger.warning(
+                            "orchestrator.adaptive.replan_blocked_by_guard execution_id=%s reason=%s",
+                            context.execution_id, guard_msg,
+                        )
+                        context.add_warning(f"Replan blocked by guard: {guard_msg}")
+                        esc = EscalationOutcome(
+                            capability=step.capability,
+                            execution_id=context.execution_id,
+                            reason=guard_msg,
+                            failed_attempts=1,
+                            recommended_human_action="Operator review required: replan limit or cycle guard tripped.",
+                        )
+                        context.record_escalation(esc)
+                        break
+
+                    validation = self.planner.validator.validate(candidate_plan, context=context)
+                    if validation.valid:
+                        candidate_plan.validation = validation
+                        sig = self.adaptive_policy.guard.plan_signature(candidate_plan)
+                        past_signatures.add(sig)
+                        replan_rec = ReplanRecord(
+                            replan_index=context.replan_count + 1,
+                            trigger_step_id=step.step_id,
+                            trigger_capability=step.capability,
+                            trigger_reason=decision.reason,
+                            previous_plan_id=current_plan.plan_id,
+                            new_plan_id=candidate_plan.plan_id,
+                            plan_signature=sig,
+                            approved=True,
+                        )
+                        context.record_replan(replan_rec)
+                        context.plan = candidate_plan
+                        context.plan_history.append(candidate_plan)
+                        context.required_capabilities = [s.capability for s in candidate_plan.steps]
+                        trace.record(
+                            events.PLAN_BUILT,
+                            steps=len(candidate_plan.steps),
+                            origin="REPLAN",
+                        )
+                        context.add_warning(
+                            f"Workflow dynamically replanned (replan #{context.replan_count}) "
+                            f"following trigger: {decision.reason}"
+                        )
+                        continue
+                    else:
+                        reasons = [r.value for r in validation.reasons()]
+                        logger.warning(
+                            "orchestrator.adaptive.replan_refused_validation execution_id=%s reasons=%s",
+                            context.execution_id, reasons,
+                        )
+                        context.add_warning(
+                            f"Replanned proposal failed validation ({', '.join(reasons)}); continuing with active plan."
+                        )
+                        continue
+                else:
+                    context.add_warning("Replanner produced no usable proposal; continuing with active plan.")
+                    continue
+
+            elif decision.action == AdaptiveAction.ESCALATE:
+                logger.warning(
+                    "orchestrator.adaptive.escalated execution_id=%s reason=%s",
+                    context.execution_id, decision.reason,
+                )
+                if decision.escalation is not None:
+                    context.record_escalation(decision.escalation)
+                if observation.domain_outcome == "INFEASIBLE_OPTIMIZATION":
+                    break
+                continue
+
+            elif decision.action == AdaptiveAction.TERMINATE:
+                logger.info(
+                    "orchestrator.adaptive.terminated execution_id=%s reason=%s",
+                    context.execution_id, decision.reason,
+                )
+                break
+
+            elif decision.action == AdaptiveAction.BLOCK:
+                continue
+
+        # Post-loop sweep: mark any remaining pending steps with unmet hard dependencies as blocked
+        for s in (context.plan.steps if context.plan else []):
+            if s.status == StepStatus.PENDING:
+                resolution = context.plan.classify_dependencies(s, set(context.completed_steps))
+                if not resolution.runnable:
+                    s.status = StepStatus.BLOCKED
+                    context.record_blocked(s.step_id, s.capability, resolution.blocking)
+                    if trace is not None:
+                        trace.record(
+                            events.STEP_BLOCKED,
+                            step_id=s.step_id,
+                            capability=s.capability,
+                            blocked_by=resolution.blocking,
+                        )
+                        trace.record(
+                            events.EVIDENCE_UNAVAILABLE,
+                            step_id=s.step_id,
+                            capability=s.capability,
+                            status="NOT_RUN",
+                            reason=f"hard dependency failed: {resolution.blocking}",
+                        )
+                    context.record_unavailable(
+                        s.capability,
+                        reason=f"hard dependency failed: {resolution.blocking}",
+                        status=EvidenceStatus.NOT_RUN,
+                        step_id=s.step_id,
+                    )
 
     async def _run_step(self, context: ExecutionContext, step_id: str) -> AgentResult:
         """

@@ -69,6 +69,16 @@ class LLMPlannerProtocol(Protocol):
         """Propose an execution plan for the resolved intent."""
         ...
 
+    async def propose_replan(
+        self,
+        request: OrchestratorRequest,
+        resolution: IntentResolution,
+        context: Any,
+        trigger_reason: str = "",
+    ) -> PlanProposal:
+        """Propose a replanned execution plan following a dynamic trigger."""
+        ...
+
     def propose_plan_sync(
         self,
         request: OrchestratorRequest,
@@ -261,16 +271,55 @@ class MockPlanner:
             planner_source=PlanOrigin.MOCK_LLM,
         )
 
-        # Default fallback proposal
+    async def propose_replan(
+        self,
+        request: OrchestratorRequest,
+        resolution: IntentResolution,
+        context: Any,
+        trigger_reason: str = "",
+    ) -> PlanProposal:
+        """Propose an adapted plan in response to a dynamic runtime trigger."""
+        self.call_count += 1
+        scenario = self.simulated_scenario
+
+        if scenario == "REPLAN_REPEATED_CYCLE":
+            # Return identical proposal to trigger cycle guard
+            return PlanProposal(
+                workflow_id="wf_cycle_attempt",
+                intent=resolution.intent.value,
+                steps=[
+                    ProposedPlanStep(step_id="load", capability=CAP_LOAD_NETWORK),
+                    ProposedPlanStep(step_id="forecast", capability=CAP_FORECAST, depends_on=["load"]),
+                    ProposedPlanStep(step_id="reason", capability=CAP_REASON, depends_on=["forecast"], soft_depends_on=["forecast"]),
+                    ProposedPlanStep(step_id="govern", capability=CAP_GOVERN, depends_on=["forecast", "reason"], soft_depends_on=["forecast", "reason"]),
+                ],
+                reasoning="Proposal identical to initial plan to verify cycle detection.",
+                planner_source=PlanOrigin.MOCK_LLM,
+            )
+
+        if scenario == "REPLAN_MALFORMED":
+            return PlanProposal(
+                workflow_id="wf_replan_malformed",
+                intent=resolution.intent.value,
+                steps=[ProposedPlanStep(step_id="", capability="")],
+                reasoning="Malformed replan proposal for fallback testing.",
+                planner_source=PlanOrigin.MOCK_LLM,
+            )
+
+        # Default material demand expansion replan
         return PlanProposal(
-            workflow_id="wf_default_proposed",
+            workflow_id="wf_replanned_material_demand",
             intent=resolution.intent.value,
             steps=[
                 ProposedPlanStep(step_id="load", capability=CAP_LOAD_NETWORK),
-                ProposedPlanStep(step_id="reason", capability=CAP_REASON, depends_on=["load"], soft_depends_on=["load"], optional=True),
-                ProposedPlanStep(step_id="govern", capability=CAP_GOVERN, depends_on=["load", "reason"], soft_depends_on=["load", "reason"]),
+                ProposedPlanStep(step_id="forecast", capability=CAP_FORECAST, depends_on=["load"]),
+                ProposedPlanStep(step_id="optimize", capability=CAP_OPTIMIZE, depends_on=["load"]),
+                ProposedPlanStep(step_id="resilience", capability=CAP_REI, depends_on=["load"], optional=True),
+                ProposedPlanStep(step_id="kpi", capability=CAP_KPI, depends_on=["optimize"]),
+                ProposedPlanStep(step_id="reason", capability=CAP_REASON, depends_on=["optimize", "kpi", "resilience"], soft_depends_on=["optimize", "kpi", "resilience"], optional=True),
+                ProposedPlanStep(step_id="govern", capability=CAP_GOVERN, depends_on=["optimize", "kpi", "resilience", "reason"], soft_depends_on=["optimize", "kpi", "resilience", "reason"]),
             ],
-            reasoning="Default minimal proposal.",
+            reasoning=f"Adaptive replan proposal for trigger: {trigger_reason}",
             planner_source=PlanOrigin.MOCK_LLM,
         )
 
@@ -347,6 +396,42 @@ class LiveLLMPlanner:
         except Exception as exc:
             self.calls_failed += 1
             raise LLMFailureError(f"Live planner request failed: {exc}") from exc
+
+        return self._parse_response(resp.output, resolution)
+
+    async def propose_replan(
+        self,
+        request: OrchestratorRequest,
+        resolution: IntentResolution,
+        context: Any,
+        trigger_reason: str = "",
+    ) -> PlanProposal:
+        """Propose an adapted plan in response to a dynamic runtime trigger."""
+        if self.calls_attempted >= self.max_calls:
+            raise LLMNonRetryableError(
+                f"Phase 8.5/8.6 hard call limit of {self.max_calls} reached ({self.calls_attempted} attempted)."
+            )
+        if not self.gateway.available:
+            raise LLMNonRetryableError(
+                f"LLM Gateway is not available: {self.gateway.unavailable_reason()}"
+            )
+
+        prompt = (
+            f"{self._build_prompt(request, resolution)}\n\n"
+            f"DYNAMIC REPLAN TRIGGER:\n"
+            f"{trigger_reason}\n"
+            f"Propose an updated capability graph taking into account the observed findings above."
+        )
+        self.calls_attempted += 1
+
+        try:
+            resp = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: self.gateway.generate(prompt, purpose="live_replan_proposal")
+            )
+            self.calls_successful += 1
+        except Exception as exc:
+            self.calls_failed += 1
+            raise LLMFailureError(f"Live planner replan request failed: {exc}") from exc
 
         return self._parse_response(resp.output, resolution)
 

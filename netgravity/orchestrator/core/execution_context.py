@@ -27,6 +27,10 @@ from netgravity.orchestrator.schemas.actions import (
     ApprovalRequest,
     GovernanceDecision,
 )
+from netgravity.orchestrator.schemas.adaptive import (
+    AdaptiveDecision,
+    ReplanRecord,
+)
 from netgravity.orchestrator.schemas.agent_result import AgentResult
 from netgravity.orchestrator.schemas.plans import (
     AgentStatus,
@@ -194,6 +198,13 @@ class ExecutionContext:
     step_attempts: Dict[str, List[StepAttemptRecord]] = field(default_factory=dict)
     # Explicit records of unrecoverable or safety escalations.
     escalations: List[EscalationOutcome] = field(default_factory=list)
+
+    # --- adaptive closed-loop execution ---
+    initial_plan: Optional[ExecutionPlan] = None
+    plan_history: List[ExecutionPlan] = field(default_factory=list)
+    replan_history: List[ReplanRecord] = field(default_factory=list)
+    decision_history: List[AdaptiveDecision] = field(default_factory=list)
+    replan_count: int = 0
 
     # Set when the run must not perform model calls.
     llm_enabled: bool = True
@@ -400,6 +411,15 @@ class ExecutionContext:
         self.add_warning(
             f"Escalation on capability '{escalation.capability}': {escalation.reason}"
         )
+
+    def record_decision(self, decision: AdaptiveDecision) -> None:
+        """Record an adaptive next-action decision."""
+        self.decision_history.append(decision)
+
+    def record_replan(self, record: ReplanRecord) -> None:
+        """Record an approved replan event."""
+        self.replan_history.append(record)
+        self.replan_count += 1
 
     # ------------------------------------------------------------------
     # Accessors

@@ -26,6 +26,7 @@ from netgravity.orchestrator.audit import events
 from netgravity.orchestrator.audit.audit_logger import AuditLogger
 from netgravity.orchestrator.core.execution_context import ExecutionContext
 from netgravity.orchestrator.core.orchestrator import Orchestrator
+from netgravity.orchestrator.schemas.adaptive import AdaptiveExecutionConfig
 from netgravity.orchestrator.core.planner import (
     CAP_CREATE_SCEN,
     CAP_EXTRACT,
@@ -97,6 +98,7 @@ def build_orchestrator(
     history_provider: Optional[Any] = None,
     signal_provider: Optional[Any] = None,
     llm_planner: Optional[Any] = None,
+    adaptive_config: Optional[AdaptiveExecutionConfig] = None,
 ) -> Orchestrator:
     """
     Construct a fully wired orchestrator.
@@ -144,6 +146,7 @@ def build_orchestrator(
         gateway=gateway,
         governance_policy=governance_policy,
         llm_planner=llm_planner,
+        adaptive_config=adaptive_config,
     )
 
     optimization = OptimizationClient()
