@@ -118,19 +118,19 @@ function bindLandingEvents() {
     });
   });
 
-  // Sign In Form Submission
+  // Sign In Form Submission — existing user, goes to Select Project
   document.getElementById('form-panel-signin')?.addEventListener('submit', (e) => {
     e.preventDefault();
     if (typeof window.completeAuth === 'function') {
-      window.completeAuth();
+      window.completeAuth('signin');
     }
   });
 
-  // Sign Up Form Submission
+  // Sign Up Form Submission — new user, goes to Create Project
   document.getElementById('form-panel-signup')?.addEventListener('submit', (e) => {
     e.preventDefault();
     if (typeof window.completeAuth === 'function') {
-      window.completeAuth();
+      window.completeAuth('signup');
     }
   });
 

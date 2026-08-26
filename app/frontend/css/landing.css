@@ -1,17 +1,37 @@
 /* ═════════════════════════════════════════════════════════════
    Netgravity — Landing Page Design System
-   Exact replication of landinag-updated.png
-   - No double elements (Left = Pure HTML UI, Right = Pristine Map Asset)
-   - Strict 100vh single-page layout with ZERO scroll
-   - In-place auth switching (Sign In / Sign Up / Reset Password)
-   - Minimal, elegant ambient digital-twin animation
+   Proportional replication of Dump/landinag-updated.png
+   (reference frame: 1672 × 941 CSS px)
+
+   Sizing model
+   ------------
+   Every measurement below is written in *reference pixels* and
+   multiplied by --u, one scale unit pinned to the smaller of the
+   width / height ratio against the reference frame. The whole
+   composition therefore keeps the reference proportions at any
+   viewport instead of only at 1672 × 941.
+
+   Artwork blending
+   ----------------
+   The India illustration is an opaque 952 × 941 raster with its
+   own lavender ambient field (~#e8e4f5 at the rim). Previously it
+   was inset (94vh tall, 20px from the right) and carried a
+   rectangular drop-shadow, so it read as a white card floating on
+   the page. It is now bled to full viewport height and flush to
+   the right edge — top / right / bottom land off-canvas — and its
+   left edge is dissolved with a mask across the empty part of the
+   canvas. The page gradient is tuned to the artwork's own ambient
+   field so the dissolve has nothing to reveal.
+
+   Auth form rules are scoped under #landing-page because auth.css
+   is cascaded after this file and would otherwise win.
    ═════════════════════════════════════════════════════════════ */
 
 :root {
   --brand-purple: #9218EA;
   --brand-purple-dark: #7c14c7;
   --brand-purple-light: #f5edfc;
-  --landing-bg: #f1f0f8;
+  --landing-bg: #f2f1f8;
   --landing-text-main: #111827;
   --landing-text-sub: #4b5563;
   --landing-text-muted: #6b7280;
@@ -20,19 +40,36 @@
 
 /* ─── Root Viewport (Strict 100vh, No Scroll) ─────────────── */
 #landing-page {
+  /* 1 reference pixel. 100/1672 = 0.0598vw · 100/941 = 0.1063vh */
+  --u: clamp(0.5px, min(0.0598vw, 0.1063vh), 1.32px);
+
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
   max-height: 100vh;
+
+  /* Ambient field matched to the artwork: near-neutral #f3f2f8 on
+     the far left, drifting to the illustration's own #e7e3f4 under
+     the seam, with a soft lavender bloom centred on the map. */
   background-color: var(--landing-bg);
-  background-image: 
-    radial-gradient(circle at 80% 50%, rgba(220, 205, 252, 0.45) 0%, rgba(241, 240, 248, 0) 60%),
-    radial-gradient(circle at 10% 15%, rgba(255, 255, 255, 0.9) 0%, rgba(241, 240, 248, 0.4) 50%);
+  background-image:
+    radial-gradient(78% 92% at 74% 50%,
+      rgba(203, 186, 246, 0.34) 0%,
+      rgba(221, 211, 247, 0.24) 40%,
+      rgba(238, 236, 248, 0.05) 74%,
+      rgba(242, 241, 249, 0) 100%),
+    linear-gradient(101deg,
+      #f6f5fb 0%,
+      #f4f3fa 30%,
+      #f0eef8 55%,
+      #ebe7f6 80%,
+      #e7e3f4 100%);
+
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   z-index: 10000;
   overflow: hidden;
   box-sizing: border-box;
@@ -46,33 +83,39 @@
 }
 
 /* ─── Left Hero Column (Auth & Headline) ──────────────────── */
-.landing-hero-left {
-  flex: 0 0 460px;
-  max-width: 480px;
-  height: 100vh;
-  max-height: 100vh;
+#landing-page .landing-hero-left {
+  position: relative;
+  flex: 0 0 auto;
+  width: calc(720 * var(--u));
+  max-width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 0 0 0 72px;
+  /* The column is centred, so its total flow height must not depend on
+     which panel is showing — otherwise the brand and headline drift as
+     the user switches. .landing-auth-panel reserves a constant slot for
+     that; this top padding then lands the centred result on the
+     reference position (brand ink at y=54 of the 941 frame). */
+  padding: calc(28 * var(--u)) 0 0 calc(72 * var(--u));
   box-sizing: border-box;
   z-index: 5;
   user-select: text;
 }
 
 /* Brand Lockup */
-.landing-brand {
+#landing-page .landing-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 28px;
+  gap: calc(23 * var(--u));
+  margin-bottom: calc(96 * var(--u));
   cursor: pointer;
   width: fit-content;
 }
 
-.landing-logo-svg {
-  width: 46px;
-  height: 46px;
+#landing-page .landing-logo-svg {
+  width: calc(54 * var(--u));
+  height: calc(54 * var(--u));
   flex-shrink: 0;
 }
 
@@ -81,45 +124,52 @@
   flex-direction: column;
 }
 
-.landing-brand-title {
-  font-size: 27px;
+#landing-page .landing-brand-title {
+  font-size: calc(33 * var(--u));
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--landing-text-main);
-  line-height: 1.1;
+  line-height: 1.05;
 }
 
-.landing-brand-sub {
-  font-size: 13.5px;
+#landing-page .landing-brand-sub {
+  font-size: calc(16 * var(--u));
   font-weight: 600;
   color: var(--brand-purple);
   letter-spacing: -0.01em;
-  margin-top: 1px;
+  margin-top: calc(2 * var(--u));
 }
 
 /* Headline */
-.landing-headline {
-  font-size: 42px;
+#landing-page .landing-headline {
+  font-size: calc(56 * var(--u));
   font-weight: 800;
-  line-height: 1.12;
+  line-height: 1.18;
   letter-spacing: -0.035em;
   color: var(--landing-text-main);
-  margin: 0 0 32px 0;
-  max-width: 440px;
+  margin: 0 0 calc(72 * var(--u)) 0;
+  width: calc(640 * var(--u));
+  max-width: 100%;
 }
 
-.landing-headline .highlight-purple {
+#landing-page .landing-headline .highlight-purple {
   color: var(--brand-purple);
 }
 
 /* ─── In-Place Auth Panels ────────────────────────────────── */
-.landing-auth-panel {
+/* Reserved panel slot. Every panel occupies the same vertical space
+   whatever its content height (sign-in ~436, sign-up ~505, reset ~303,
+   reset-confirmation ~354 ref-px), so the brand and headline above it
+   never move when switching. Panels fill from the top of the slot, and
+   the reserve is set by the tallest of them. */
+#landing-page .landing-auth-panel {
   display: none;
-  width: 100%;
-  max-width: 390px;
+  width: calc(398 * var(--u));
+  max-width: 100%;
+  min-height: calc(506 * var(--u));
 }
 
-.landing-auth-panel.active {
+#landing-page .landing-auth-panel.active {
   display: block;
   animation: panelFadeIn 0.2s ease forwards;
 }
@@ -129,46 +179,50 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.auth-panel-header {
-  margin-bottom: 14px;
+#landing-page .auth-panel-header {
+  margin-bottom: calc(24 * var(--u));
 }
 
-.auth-panel-title {
-  font-size: 19px;
+#landing-page .auth-panel-title {
+  font-size: calc(24 * var(--u));
   font-weight: 700;
   color: var(--landing-text-main);
   letter-spacing: -0.02em;
-  margin-bottom: 3px;
+  line-height: 1.3;
+  margin-bottom: calc(9 * var(--u));
 }
 
-.auth-panel-subtitle {
-  font-size: 13px;
+#landing-page .auth-panel-subtitle {
+  font-size: calc(15 * var(--u));
+  line-height: 1.4;
   color: var(--landing-text-muted);
   font-weight: 400;
 }
 
 /* Form Controls */
-.auth-field-group {
-  margin-bottom: 12px;
+#landing-page .auth-field-group {
+  margin-bottom: calc(22 * var(--u));
 }
 
-.auth-label {
+#landing-page .auth-label {
   display: block;
-  font-size: 12.5px;
+  font-size: calc(15 * var(--u));
   font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--landing-text-main);
-  margin-bottom: 5px;
+  margin-bottom: calc(10 * var(--u));
 }
 
-.auth-input-wrap {
+#landing-page .auth-input-wrap {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.auth-input-icon {
+#landing-page .auth-input-icon {
   position: absolute;
-  left: 14px;
+  left: calc(16 * var(--u));
   display: flex;
   align-items: center;
   color: #9ca3af;
@@ -176,14 +230,20 @@
   transition: color 0.15s ease;
 }
 
-.auth-input {
+#landing-page .auth-input-icon svg,
+#landing-page .auth-password-toggle svg {
+  width: calc(18 * var(--u));
+  height: calc(18 * var(--u));
+}
+
+#landing-page .auth-input {
   width: 100%;
-  height: 44px;
-  padding: 0 40px 0 42px;
+  height: calc(52 * var(--u));
+  padding: 0 calc(46 * var(--u)) 0 calc(48 * var(--u));
   background: #ffffff;
   border: 1px solid var(--landing-border);
-  border-radius: 10px;
-  font-size: 13.5px;
+  border-radius: calc(12 * var(--u));
+  font-size: calc(16 * var(--u));
   color: var(--landing-text-main);
   font-family: inherit;
   outline: none;
@@ -191,42 +251,42 @@
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.auth-input:focus {
+#landing-page .auth-input:focus {
   border-color: var(--brand-purple);
-  box-shadow: 0 0 0 3px rgba(146, 24, 234, 0.12);
+  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(146, 24, 234, 0.12);
 }
 
-.auth-input-wrap:focus-within .auth-input-icon {
+#landing-page .auth-input-wrap:focus-within .auth-input-icon {
   color: var(--brand-purple);
 }
 
-.auth-password-toggle {
+#landing-page .auth-password-toggle {
   position: absolute;
-  right: 10px;
+  right: calc(13 * var(--u));
   background: none;
   border: none;
   color: #9ca3af;
   cursor: pointer;
-  padding: 6px;
+  padding: calc(6 * var(--u));
   display: flex;
   align-items: center;
-  border-radius: 6px;
+  border-radius: calc(6 * var(--u));
   transition: color 0.15s ease;
 }
 
-.auth-password-toggle:hover {
+#landing-page .auth-password-toggle:hover {
   color: var(--brand-purple);
 }
 
 /* Actions Row */
-.signin-actions-row {
+#landing-page .signin-actions-row {
   display: flex;
   justify-content: flex-end;
-  margin: -2px 0 16px 0;
+  margin: calc(-1 * var(--u)) 0 calc(19 * var(--u)) 0;
 }
 
-.auth-forgot-link {
-  font-size: 12.5px;
+#landing-page .auth-forgot-link {
+  font-size: calc(14 * var(--u));
   font-weight: 500;
   color: var(--brand-purple);
   cursor: pointer;
@@ -234,226 +294,276 @@
   transition: color 0.15s ease;
 }
 
-.auth-forgot-link:hover {
+#landing-page .auth-forgot-link:hover {
   color: var(--brand-purple-dark);
   text-decoration: underline;
 }
 
 /* Buttons */
-.btn-landing-primary {
+#landing-page .btn-landing-primary {
   width: 100%;
-  height: 48px;
-  background: linear-gradient(135deg, #9218EA 0%, #6a0dad 50%, #9218EA 100%);
+  height: calc(55 * var(--u));
+  background: linear-gradient(100deg, #7b0fd0 0%, #9218EA 46%, #a63bf2 100%);
   color: #ffffff;
   border: none;
-  border-radius: 12px;
-  font-size: 15px;
+  border-radius: calc(14 * var(--u));
+  font-size: calc(17 * var(--u));
   font-weight: 600;
+  letter-spacing: -0.01em;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: calc(14 * var(--u));
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(146, 24, 234, 0.32);
+  box-shadow: 0 calc(8 * var(--u)) calc(22 * var(--u)) rgba(146, 24, 234, 0.30);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.btn-landing-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(146, 24, 234, 0.42);
+#landing-page .btn-landing-primary svg {
+  width: calc(20 * var(--u));
+  height: calc(20 * var(--u));
 }
 
-.btn-landing-primary:active {
+#landing-page .btn-landing-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 calc(11 * var(--u)) calc(28 * var(--u)) rgba(146, 24, 234, 0.40);
+}
+
+#landing-page .btn-landing-primary:active {
   transform: translateY(0);
 }
 
-.btn-landing-secondary {
+#landing-page .btn-landing-secondary {
   width: 100%;
-  height: 42px;
+  height: calc(48 * var(--u));
   background: #ffffff;
   color: var(--landing-text-main);
   border: 1px solid var(--landing-border);
-  border-radius: 10px;
-  font-size: 13.5px;
+  border-radius: calc(12 * var(--u));
+  font-size: calc(15 * var(--u));
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: calc(9 * var(--u));
   cursor: pointer;
-  margin-top: 10px;
+  margin-top: calc(12 * var(--u));
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.btn-landing-secondary:hover {
+#landing-page .btn-landing-secondary svg {
+  width: calc(16 * var(--u));
+  height: calc(16 * var(--u));
+}
+
+#landing-page .btn-landing-secondary:hover {
   border-color: var(--brand-purple);
   color: var(--brand-purple);
 }
 
 /* Footer Link */
-.auth-panel-footer {
+#landing-page .auth-panel-footer {
   text-align: center;
-  margin-top: 14px;
-  font-size: 13px;
+  margin-top: calc(26 * var(--u));
+  font-size: calc(15 * var(--u));
   color: var(--landing-text-sub);
 }
 
-.auth-panel-footer a {
+#landing-page .auth-panel-footer a {
   color: var(--brand-purple);
   font-weight: 600;
   cursor: pointer;
-  margin-left: 3px;
+  margin-left: calc(4 * var(--u));
   text-decoration: none;
 }
 
-.auth-panel-footer a:hover {
+#landing-page .auth-panel-footer a:hover {
   text-decoration: underline;
 }
 
 /* Signup Specifics */
-.auth-requirements-box {
+#landing-page .auth-requirements-box {
   background: #ffffff;
   border: 1px solid #e8e4f2;
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin-bottom: 10px;
+  border-radius: calc(10 * var(--u));
+  padding: calc(10 * var(--u)) calc(14 * var(--u));
+  margin-bottom: calc(12 * var(--u));
 }
 
-.auth-requirements-header {
+#landing-page .auth-requirements-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
+  gap: calc(7 * var(--u));
+  font-size: calc(13 * var(--u));
   font-weight: 600;
   color: var(--brand-purple);
-  margin-bottom: 4px;
+  margin-bottom: calc(5 * var(--u));
 }
 
-.auth-requirements-list {
+#landing-page .auth-requirements-list {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 3px;
+  gap: calc(4 * var(--u));
 }
 
-.auth-req-item {
+#landing-page .auth-req-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
+  gap: calc(5 * var(--u));
+  font-size: calc(12 * var(--u));
   color: #16a34a;
   font-weight: 500;
 }
 
-.auth-checkbox-row {
+#landing-page .auth-checkbox-row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 14px;
-  font-size: 12px;
+  gap: calc(9 * var(--u));
+  margin-bottom: calc(16 * var(--u));
+  font-size: calc(13.5 * var(--u));
   color: var(--landing-text-sub);
   line-height: 1.35;
   cursor: pointer;
 }
 
-.auth-checkbox-row input {
-  margin-top: 2px;
+#landing-page .auth-checkbox-row input {
+  margin-top: calc(2 * var(--u));
   accent-color: var(--brand-purple);
-  width: 14px;
-  height: 14px;
+  width: calc(16 * var(--u));
+  height: calc(16 * var(--u));
 }
 
-.auth-checkbox-row a {
+#landing-page .auth-checkbox-row a {
   color: var(--brand-purple);
   font-weight: 500;
   text-decoration: underline;
 }
 
 /* Confirmation Box */
-.auth-confirmation-box {
+#landing-page .auth-confirmation-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 10px 0;
+  padding: calc(12 * var(--u)) 0;
 }
 
-.auth-conf-icon {
-  width: 48px;
-  height: 48px;
+#landing-page .auth-conf-icon {
+  width: calc(54 * var(--u));
+  height: calc(54 * var(--u));
   border-radius: 50%;
   background: var(--brand-purple-light);
   color: var(--brand-purple);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
+  margin-bottom: calc(14 * var(--u));
 }
 
-.auth-conf-title {
-  font-size: 18px;
+#landing-page .auth-conf-title {
+  font-size: calc(21 * var(--u));
   font-weight: 700;
   color: var(--landing-text-main);
-  margin-bottom: 6px;
+  margin-bottom: calc(7 * var(--u));
 }
 
-.auth-conf-desc {
-  font-size: 12.5px;
+#landing-page .auth-conf-desc {
+  font-size: calc(14.5 * var(--u));
   color: var(--landing-text-sub);
   line-height: 1.45;
-  margin-bottom: 16px;
+  margin-bottom: calc(18 * var(--u));
 }
 
-.auth-conf-email {
+#landing-page .auth-conf-email {
   font-weight: 600;
   color: var(--brand-purple);
 }
 
-/* ─── Right Hero Column (Map Visual Art & Minimal Animation) ─ */
-.landing-hero-right {
-  flex: 1;
-  height: 100vh;
-  max-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  position: relative;
-  overflow: hidden;
+/* The signup panel carries three fields plus the requirements box and
+   consent row, so it is the tallest of the three. Only its own interior
+   is tightened — never the brand or headline above it, which must not
+   move between panels (see the reserved panel height above). */
+#landing-page:has(#panel-signup.active) .auth-panel-header { margin-bottom: calc(18 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-field-group { margin-bottom: calc(8 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-label { margin-bottom: calc(6 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-input { height: calc(42 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-requirements-box { margin-bottom: calc(7 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-checkbox-row { margin-bottom: calc(9 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-panel-footer { margin-top: calc(21 * var(--u)); }
+
+/* ─── Right Hero Column (Full-bleed Map Artwork) ───────────── */
+/* Anchored to the viewport edges so the raster's own top, right
+   and bottom borders sit off-canvas — there is no rectangle left
+   to see. Only the left edge meets the page, and it is dissolved
+   below. Absolute rather than a flex sibling so a tall/narrow
+   viewport lets the artwork slide under the text column instead
+   of being clipped against it. */
+#landing-page .landing-hero-right {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  aspect-ratio: 952 / 941;
+  display: block;
   z-index: 1;
   pointer-events: none;
-  padding-right: 20px;
-  box-sizing: border-box;
+
+  /* Dissolve the left edge across the artwork's empty margin. The
+     India outline starts at ~18% of the raster, so the mask is
+     fully opaque by 18.5% and never eats into the subject. */
+  --map-edge-fade: linear-gradient(to right,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.06) 3%,
+    rgba(0, 0, 0, 0.22) 6.5%,
+    rgba(0, 0, 0, 0.48) 10%,
+    rgba(0, 0, 0, 0.74) 13%,
+    rgba(0, 0, 0, 0.92) 15.5%,
+    rgba(0, 0, 0, 1) 18.5%);
+  -webkit-mask-image: var(--map-edge-fade);
+  mask-image: var(--map-edge-fade);
 }
 
-.landing-map-container {
+#landing-page .landing-map-container {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  max-height: 94vh;
-  animation: mapAmbientGlow 7s ease-in-out infinite alternate;
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
-@keyframes mapAmbientGlow {
-  0% {
-    filter: drop-shadow(0 0 10px rgba(146, 24, 234, 0.12));
-  }
-  100% {
-    filter: drop-shadow(0 0 24px rgba(146, 24, 234, 0.35));
-  }
-}
-
-.landing-map-art {
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 94vh;
-  object-fit: contain;
-  object-position: right center;
+#landing-page .landing-map-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
   display: block;
   pointer-events: none;
 }
 
-.landing-map-overlay-svg {
+/* Ambient bloom. Replaces the former drop-shadow animation, which
+   traced the raster's rectangle and drew the card outline itself. */
+#landing-page .landing-map-container::after {
+  content: '';
+  position: absolute;
+  left: 6%;
+  top: 8%;
+  width: 88%;
+  height: 84%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side,
+    rgba(168, 60, 245, 0.16) 0%,
+    rgba(168, 60, 245, 0.06) 52%,
+    rgba(168, 60, 245, 0) 78%);
+  animation: mapAmbientGlow 7s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes mapAmbientGlow {
+  from { opacity: 0.35; }
+  to   { opacity: 1; }
+}
+
+#landing-page .landing-map-overlay-svg {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -501,19 +611,22 @@
   }
 }
 
-/* ─── Responsive Scaling ──────────────────────────────────── */
-@media (max-height: 800px) {
-  .landing-brand { margin-bottom: 18px; }
-  .landing-headline { font-size: 34px; margin-bottom: 20px; }
-  .auth-field-group { margin-bottom: 8px; }
-  .auth-input { height: 38px; font-size: 13px; }
-  .btn-landing-primary { height: 42px; }
+/* ─── Narrow / squat viewports ─────────────────────────────── */
+/* Below the reference's 16:9-ish frame the artwork is wide enough
+   to reach under the copy. Trim the type scale and slide the map
+   right so the subject stays clear of the headline. */
+@media (max-aspect-ratio: 8/5) {
+  #landing-page {
+    --u: clamp(0.5px, min(0.0525vw, 0.1063vh), 1.32px);
+  }
+  #landing-page .landing-hero-right {
+    transform: translateX(7%);
+  }
 }
 
-@media (max-width: 1100px) {
-  .landing-hero-left {
-    padding-left: 36px;
-    flex: 0 0 390px;
+@media (max-aspect-ratio: 5/4) {
+  #landing-page .landing-hero-right {
+    transform: translateX(14%);
+    opacity: 0.85;
   }
-  .landing-headline { font-size: 32px; }
 }

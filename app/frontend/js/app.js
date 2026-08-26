@@ -19,6 +19,7 @@ import { initLandingPage } from './landing.js';
 import { initInsightsPage } from './insights.js';
 import { initRecommendationsPage } from './recommendations.js';
 import { initAuth } from './auth.js';
+import { initProjects } from './projects.js';
 import { initChatbot } from './chatbot.js';
 import { triggerAgentReasoning } from './agent-reasoning.js';
 
@@ -44,6 +45,7 @@ if (typeof window !== 'undefined') {
 
 // ─── Boot ───────────────────────────────────────────────────
 function bootApp() {
+  try { initProjects(); } catch (e) { console.error('initProjects error:', e); }
   try { initAuth();
   initChatbot(); } catch (e) { console.error('initAuth error:', e); }
   try { initLandingPage(); } catch (e) { console.error('initLandingPage error:', e); }

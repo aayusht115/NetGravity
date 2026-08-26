@@ -3,9 +3,11 @@
  * =====================================
  * Single-page in-place authentication manager:
  * - Direct on-page Sign In, Create Account, and Password Reset
- * - Seamless transition to Home application
+ * - Hand-off to the project workspace screens (see projects.js)
  * - Chatbot FAB display management
  */
+
+import { showSelectProject, showCreateProject, enterApp } from './projects.js';
 
 export function navigateToAuth(view) {
   if (typeof window.switchAuthPanel === 'function') {
@@ -13,45 +15,34 @@ export function navigateToAuth(view) {
   }
 }
 
-export function completeAuth() {
-  // 1. Hide landing page
-  const landing = document.getElementById('landing-page');
-  if (landing) {
-    landing.classList.add('hidden');
-    landing.style.display = 'none';
+/**
+ * Authentication succeeded. Neither path drops straight into the app —
+ * a project has to be picked or created first:
+ *
+ *   'signup' (new user)      → Create Project  ("Create your first project")
+ *   'signin' (existing user) → Select Project  (with a create option)
+ */
+export function completeAuth(origin) {
+  if (origin === 'signup') {
+    showCreateProject('first');
+  } else {
+    showSelectProject();
   }
+}
 
-  // 2. Ensure app-shell is visible
-  const appShell = document.querySelector('.app-shell');
-  if (appShell) {
-    appShell.style.display = 'flex';
-  }
-
-  // 3. Show floating chatbot FAB inside authenticated application
-  const chatbotFab = document.getElementById('floating-chatbot-fab');
-  if (chatbotFab) {
-    chatbotFab.style.display = 'flex';
-  }
-
-  // 4. Navigate to Home Cockpit
-  if (typeof window.navigateToTab === 'function') {
-    window.navigateToTab('home');
-  }
-
-  // 5. Trigger resize and full render of Home components
-  setTimeout(() => {
-    if (typeof window.renderHome === 'function') {
-      window.renderHome();
-    }
-    window.dispatchEvent(new Event('resize'));
-  }, 60);
+/** Direct hand-off to the app shell, bypassing project selection. */
+export function completeAuthDirect() {
+  enterApp();
 }
 
 export function returnToLanding() {
-  // 1. Hide app-shell
+  // 1. Hide app-shell and the project screens
   const appShell = document.querySelector('.app-shell');
   if (appShell) {
     appShell.style.display = 'none';
+  }
+  if (typeof window.hideProjectPages === 'function') {
+    window.hideProjectPages();
   }
 
   // 2. Hide floating chatbot FAB
@@ -80,6 +71,7 @@ export function initAuth() {
   if (typeof window !== 'undefined') {
     window.navigateToAuth = navigateToAuth;
     window.completeAuth = completeAuth;
+    window.completeAuthDirect = completeAuthDirect;
     window.returnToLanding = returnToLanding;
   }
 }

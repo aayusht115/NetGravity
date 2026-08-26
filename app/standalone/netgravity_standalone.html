@@ -2862,18 +2862,38 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 /* ═════════ landing.css ═════════ */
 /* ═════════════════════════════════════════════════════════════
    Netgravity — Landing Page Design System
-   Exact replication of landinag-updated.png
-   - No double elements (Left = Pure HTML UI, Right = Pristine Map Asset)
-   - Strict 100vh single-page layout with ZERO scroll
-   - In-place auth switching (Sign In / Sign Up / Reset Password)
-   - Minimal, elegant ambient digital-twin animation
+   Proportional replication of Dump/landinag-updated.png
+   (reference frame: 1672 × 941 CSS px)
+
+   Sizing model
+   ------------
+   Every measurement below is written in *reference pixels* and
+   multiplied by --u, one scale unit pinned to the smaller of the
+   width / height ratio against the reference frame. The whole
+   composition therefore keeps the reference proportions at any
+   viewport instead of only at 1672 × 941.
+
+   Artwork blending
+   ----------------
+   The India illustration is an opaque 952 × 941 raster with its
+   own lavender ambient field (~#e8e4f5 at the rim). Previously it
+   was inset (94vh tall, 20px from the right) and carried a
+   rectangular drop-shadow, so it read as a white card floating on
+   the page. It is now bled to full viewport height and flush to
+   the right edge — top / right / bottom land off-canvas — and its
+   left edge is dissolved with a mask across the empty part of the
+   canvas. The page gradient is tuned to the artwork's own ambient
+   field so the dissolve has nothing to reveal.
+
+   Auth form rules are scoped under #landing-page because auth.css
+   is cascaded after this file and would otherwise win.
    ═════════════════════════════════════════════════════════════ */
 
 :root {
   --brand-purple: #9218EA;
   --brand-purple-dark: #7c14c7;
   --brand-purple-light: #f5edfc;
-  --landing-bg: #f1f0f8;
+  --landing-bg: #f2f1f8;
   --landing-text-main: #111827;
   --landing-text-sub: #4b5563;
   --landing-text-muted: #6b7280;
@@ -2882,19 +2902,36 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 /* ─── Root Viewport (Strict 100vh, No Scroll) ─────────────── */
 #landing-page {
+  /* 1 reference pixel. 100/1672 = 0.0598vw · 100/941 = 0.1063vh */
+  --u: clamp(0.5px, min(0.0598vw, 0.1063vh), 1.32px);
+
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
   max-height: 100vh;
+
+  /* Ambient field matched to the artwork: near-neutral #f3f2f8 on
+     the far left, drifting to the illustration's own #e7e3f4 under
+     the seam, with a soft lavender bloom centred on the map. */
   background-color: var(--landing-bg);
-  background-image: 
-    radial-gradient(circle at 80% 50%, rgba(220, 205, 252, 0.45) 0%, rgba(241, 240, 248, 0) 60%),
-    radial-gradient(circle at 10% 15%, rgba(255, 255, 255, 0.9) 0%, rgba(241, 240, 248, 0.4) 50%);
+  background-image:
+    radial-gradient(78% 92% at 74% 50%,
+      rgba(203, 186, 246, 0.34) 0%,
+      rgba(221, 211, 247, 0.24) 40%,
+      rgba(238, 236, 248, 0.05) 74%,
+      rgba(242, 241, 249, 0) 100%),
+    linear-gradient(101deg,
+      #f6f5fb 0%,
+      #f4f3fa 30%,
+      #f0eef8 55%,
+      #ebe7f6 80%,
+      #e7e3f4 100%);
+
   display: flex;
   flex-direction: row;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   z-index: 10000;
   overflow: hidden;
   box-sizing: border-box;
@@ -2908,33 +2945,39 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 /* ─── Left Hero Column (Auth & Headline) ──────────────────── */
-.landing-hero-left {
-  flex: 0 0 460px;
-  max-width: 480px;
-  height: 100vh;
-  max-height: 100vh;
+#landing-page .landing-hero-left {
+  position: relative;
+  flex: 0 0 auto;
+  width: calc(720 * var(--u));
+  max-width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 0 0 0 72px;
+  /* The column is centred, so its total flow height must not depend on
+     which panel is showing — otherwise the brand and headline drift as
+     the user switches. .landing-auth-panel reserves a constant slot for
+     that; this top padding then lands the centred result on the
+     reference position (brand ink at y=54 of the 941 frame). */
+  padding: calc(28 * var(--u)) 0 0 calc(72 * var(--u));
   box-sizing: border-box;
   z-index: 5;
   user-select: text;
 }
 
 /* Brand Lockup */
-.landing-brand {
+#landing-page .landing-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 28px;
+  gap: calc(23 * var(--u));
+  margin-bottom: calc(96 * var(--u));
   cursor: pointer;
   width: fit-content;
 }
 
-.landing-logo-svg {
-  width: 46px;
-  height: 46px;
+#landing-page .landing-logo-svg {
+  width: calc(54 * var(--u));
+  height: calc(54 * var(--u));
   flex-shrink: 0;
 }
 
@@ -2943,45 +2986,52 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   flex-direction: column;
 }
 
-.landing-brand-title {
-  font-size: 27px;
+#landing-page .landing-brand-title {
+  font-size: calc(33 * var(--u));
   font-weight: 700;
   letter-spacing: -0.03em;
   color: var(--landing-text-main);
-  line-height: 1.1;
+  line-height: 1.05;
 }
 
-.landing-brand-sub {
-  font-size: 13.5px;
+#landing-page .landing-brand-sub {
+  font-size: calc(16 * var(--u));
   font-weight: 600;
   color: var(--brand-purple);
   letter-spacing: -0.01em;
-  margin-top: 1px;
+  margin-top: calc(2 * var(--u));
 }
 
 /* Headline */
-.landing-headline {
-  font-size: 42px;
+#landing-page .landing-headline {
+  font-size: calc(56 * var(--u));
   font-weight: 800;
-  line-height: 1.12;
+  line-height: 1.18;
   letter-spacing: -0.035em;
   color: var(--landing-text-main);
-  margin: 0 0 32px 0;
-  max-width: 440px;
+  margin: 0 0 calc(72 * var(--u)) 0;
+  width: calc(640 * var(--u));
+  max-width: 100%;
 }
 
-.landing-headline .highlight-purple {
+#landing-page .landing-headline .highlight-purple {
   color: var(--brand-purple);
 }
 
 /* ─── In-Place Auth Panels ────────────────────────────────── */
-.landing-auth-panel {
+/* Reserved panel slot. Every panel occupies the same vertical space
+   whatever its content height (sign-in ~436, sign-up ~505, reset ~303,
+   reset-confirmation ~354 ref-px), so the brand and headline above it
+   never move when switching. Panels fill from the top of the slot, and
+   the reserve is set by the tallest of them. */
+#landing-page .landing-auth-panel {
   display: none;
-  width: 100%;
-  max-width: 390px;
+  width: calc(398 * var(--u));
+  max-width: 100%;
+  min-height: calc(506 * var(--u));
 }
 
-.landing-auth-panel.active {
+#landing-page .landing-auth-panel.active {
   display: block;
   animation: panelFadeIn 0.2s ease forwards;
 }
@@ -2991,46 +3041,50 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.auth-panel-header {
-  margin-bottom: 14px;
+#landing-page .auth-panel-header {
+  margin-bottom: calc(24 * var(--u));
 }
 
-.auth-panel-title {
-  font-size: 19px;
+#landing-page .auth-panel-title {
+  font-size: calc(24 * var(--u));
   font-weight: 700;
   color: var(--landing-text-main);
   letter-spacing: -0.02em;
-  margin-bottom: 3px;
+  line-height: 1.3;
+  margin-bottom: calc(9 * var(--u));
 }
 
-.auth-panel-subtitle {
-  font-size: 13px;
+#landing-page .auth-panel-subtitle {
+  font-size: calc(15 * var(--u));
+  line-height: 1.4;
   color: var(--landing-text-muted);
   font-weight: 400;
 }
 
 /* Form Controls */
-.auth-field-group {
-  margin-bottom: 12px;
+#landing-page .auth-field-group {
+  margin-bottom: calc(22 * var(--u));
 }
 
-.auth-label {
+#landing-page .auth-label {
   display: block;
-  font-size: 12.5px;
+  font-size: calc(15 * var(--u));
   font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
   color: var(--landing-text-main);
-  margin-bottom: 5px;
+  margin-bottom: calc(10 * var(--u));
 }
 
-.auth-input-wrap {
+#landing-page .auth-input-wrap {
   position: relative;
   display: flex;
   align-items: center;
 }
 
-.auth-input-icon {
+#landing-page .auth-input-icon {
   position: absolute;
-  left: 14px;
+  left: calc(16 * var(--u));
   display: flex;
   align-items: center;
   color: #9ca3af;
@@ -3038,14 +3092,20 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   transition: color 0.15s ease;
 }
 
-.auth-input {
+#landing-page .auth-input-icon svg,
+#landing-page .auth-password-toggle svg {
+  width: calc(18 * var(--u));
+  height: calc(18 * var(--u));
+}
+
+#landing-page .auth-input {
   width: 100%;
-  height: 44px;
-  padding: 0 40px 0 42px;
+  height: calc(52 * var(--u));
+  padding: 0 calc(46 * var(--u)) 0 calc(48 * var(--u));
   background: #ffffff;
   border: 1px solid var(--landing-border);
-  border-radius: 10px;
-  font-size: 13.5px;
+  border-radius: calc(12 * var(--u));
+  font-size: calc(16 * var(--u));
   color: var(--landing-text-main);
   font-family: inherit;
   outline: none;
@@ -3053,42 +3113,42 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.auth-input:focus {
+#landing-page .auth-input:focus {
   border-color: var(--brand-purple);
-  box-shadow: 0 0 0 3px rgba(146, 24, 234, 0.12);
+  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(146, 24, 234, 0.12);
 }
 
-.auth-input-wrap:focus-within .auth-input-icon {
+#landing-page .auth-input-wrap:focus-within .auth-input-icon {
   color: var(--brand-purple);
 }
 
-.auth-password-toggle {
+#landing-page .auth-password-toggle {
   position: absolute;
-  right: 10px;
+  right: calc(13 * var(--u));
   background: none;
   border: none;
   color: #9ca3af;
   cursor: pointer;
-  padding: 6px;
+  padding: calc(6 * var(--u));
   display: flex;
   align-items: center;
-  border-radius: 6px;
+  border-radius: calc(6 * var(--u));
   transition: color 0.15s ease;
 }
 
-.auth-password-toggle:hover {
+#landing-page .auth-password-toggle:hover {
   color: var(--brand-purple);
 }
 
 /* Actions Row */
-.signin-actions-row {
+#landing-page .signin-actions-row {
   display: flex;
   justify-content: flex-end;
-  margin: -2px 0 16px 0;
+  margin: calc(-1 * var(--u)) 0 calc(19 * var(--u)) 0;
 }
 
-.auth-forgot-link {
-  font-size: 12.5px;
+#landing-page .auth-forgot-link {
+  font-size: calc(14 * var(--u));
   font-weight: 500;
   color: var(--brand-purple);
   cursor: pointer;
@@ -3096,226 +3156,276 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   transition: color 0.15s ease;
 }
 
-.auth-forgot-link:hover {
+#landing-page .auth-forgot-link:hover {
   color: var(--brand-purple-dark);
   text-decoration: underline;
 }
 
 /* Buttons */
-.btn-landing-primary {
+#landing-page .btn-landing-primary {
   width: 100%;
-  height: 48px;
-  background: linear-gradient(135deg, #9218EA 0%, #6a0dad 50%, #9218EA 100%);
+  height: calc(55 * var(--u));
+  background: linear-gradient(100deg, #7b0fd0 0%, #9218EA 46%, #a63bf2 100%);
   color: #ffffff;
   border: none;
-  border-radius: 12px;
-  font-size: 15px;
+  border-radius: calc(14 * var(--u));
+  font-size: calc(17 * var(--u));
   font-weight: 600;
+  letter-spacing: -0.01em;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: calc(14 * var(--u));
   cursor: pointer;
-  box-shadow: 0 6px 18px rgba(146, 24, 234, 0.32);
+  box-shadow: 0 calc(8 * var(--u)) calc(22 * var(--u)) rgba(146, 24, 234, 0.30);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.btn-landing-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 24px rgba(146, 24, 234, 0.42);
+#landing-page .btn-landing-primary svg {
+  width: calc(20 * var(--u));
+  height: calc(20 * var(--u));
 }
 
-.btn-landing-primary:active {
+#landing-page .btn-landing-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 calc(11 * var(--u)) calc(28 * var(--u)) rgba(146, 24, 234, 0.40);
+}
+
+#landing-page .btn-landing-primary:active {
   transform: translateY(0);
 }
 
-.btn-landing-secondary {
+#landing-page .btn-landing-secondary {
   width: 100%;
-  height: 42px;
+  height: calc(48 * var(--u));
   background: #ffffff;
   color: var(--landing-text-main);
   border: 1px solid var(--landing-border);
-  border-radius: 10px;
-  font-size: 13.5px;
+  border-radius: calc(12 * var(--u));
+  font-size: calc(15 * var(--u));
   font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: calc(9 * var(--u));
   cursor: pointer;
-  margin-top: 10px;
+  margin-top: calc(12 * var(--u));
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.btn-landing-secondary:hover {
+#landing-page .btn-landing-secondary svg {
+  width: calc(16 * var(--u));
+  height: calc(16 * var(--u));
+}
+
+#landing-page .btn-landing-secondary:hover {
   border-color: var(--brand-purple);
   color: var(--brand-purple);
 }
 
 /* Footer Link */
-.auth-panel-footer {
+#landing-page .auth-panel-footer {
   text-align: center;
-  margin-top: 14px;
-  font-size: 13px;
+  margin-top: calc(26 * var(--u));
+  font-size: calc(15 * var(--u));
   color: var(--landing-text-sub);
 }
 
-.auth-panel-footer a {
+#landing-page .auth-panel-footer a {
   color: var(--brand-purple);
   font-weight: 600;
   cursor: pointer;
-  margin-left: 3px;
+  margin-left: calc(4 * var(--u));
   text-decoration: none;
 }
 
-.auth-panel-footer a:hover {
+#landing-page .auth-panel-footer a:hover {
   text-decoration: underline;
 }
 
 /* Signup Specifics */
-.auth-requirements-box {
+#landing-page .auth-requirements-box {
   background: #ffffff;
   border: 1px solid #e8e4f2;
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin-bottom: 10px;
+  border-radius: calc(10 * var(--u));
+  padding: calc(10 * var(--u)) calc(14 * var(--u));
+  margin-bottom: calc(12 * var(--u));
 }
 
-.auth-requirements-header {
+#landing-page .auth-requirements-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
+  gap: calc(7 * var(--u));
+  font-size: calc(13 * var(--u));
   font-weight: 600;
   color: var(--brand-purple);
-  margin-bottom: 4px;
+  margin-bottom: calc(5 * var(--u));
 }
 
-.auth-requirements-list {
+#landing-page .auth-requirements-list {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 3px;
+  gap: calc(4 * var(--u));
 }
 
-.auth-req-item {
+#landing-page .auth-req-item {
   display: flex;
   align-items: center;
-  gap: 4px;
-  font-size: 10.5px;
+  gap: calc(5 * var(--u));
+  font-size: calc(12 * var(--u));
   color: #16a34a;
   font-weight: 500;
 }
 
-.auth-checkbox-row {
+#landing-page .auth-checkbox-row {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 14px;
-  font-size: 12px;
+  gap: calc(9 * var(--u));
+  margin-bottom: calc(16 * var(--u));
+  font-size: calc(13.5 * var(--u));
   color: var(--landing-text-sub);
   line-height: 1.35;
   cursor: pointer;
 }
 
-.auth-checkbox-row input {
-  margin-top: 2px;
+#landing-page .auth-checkbox-row input {
+  margin-top: calc(2 * var(--u));
   accent-color: var(--brand-purple);
-  width: 14px;
-  height: 14px;
+  width: calc(16 * var(--u));
+  height: calc(16 * var(--u));
 }
 
-.auth-checkbox-row a {
+#landing-page .auth-checkbox-row a {
   color: var(--brand-purple);
   font-weight: 500;
   text-decoration: underline;
 }
 
 /* Confirmation Box */
-.auth-confirmation-box {
+#landing-page .auth-confirmation-box {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  padding: 10px 0;
+  padding: calc(12 * var(--u)) 0;
 }
 
-.auth-conf-icon {
-  width: 48px;
-  height: 48px;
+#landing-page .auth-conf-icon {
+  width: calc(54 * var(--u));
+  height: calc(54 * var(--u));
   border-radius: 50%;
   background: var(--brand-purple-light);
   color: var(--brand-purple);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 12px;
+  margin-bottom: calc(14 * var(--u));
 }
 
-.auth-conf-title {
-  font-size: 18px;
+#landing-page .auth-conf-title {
+  font-size: calc(21 * var(--u));
   font-weight: 700;
   color: var(--landing-text-main);
-  margin-bottom: 6px;
+  margin-bottom: calc(7 * var(--u));
 }
 
-.auth-conf-desc {
-  font-size: 12.5px;
+#landing-page .auth-conf-desc {
+  font-size: calc(14.5 * var(--u));
   color: var(--landing-text-sub);
   line-height: 1.45;
-  margin-bottom: 16px;
+  margin-bottom: calc(18 * var(--u));
 }
 
-.auth-conf-email {
+#landing-page .auth-conf-email {
   font-weight: 600;
   color: var(--brand-purple);
 }
 
-/* ─── Right Hero Column (Map Visual Art & Minimal Animation) ─ */
-.landing-hero-right {
-  flex: 1;
-  height: 100vh;
-  max-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  position: relative;
-  overflow: hidden;
+/* The signup panel carries three fields plus the requirements box and
+   consent row, so it is the tallest of the three. Only its own interior
+   is tightened — never the brand or headline above it, which must not
+   move between panels (see the reserved panel height above). */
+#landing-page:has(#panel-signup.active) .auth-panel-header { margin-bottom: calc(18 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-field-group { margin-bottom: calc(8 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-label { margin-bottom: calc(6 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-input { height: calc(42 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-requirements-box { margin-bottom: calc(7 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-checkbox-row { margin-bottom: calc(9 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-panel-footer { margin-top: calc(21 * var(--u)); }
+
+/* ─── Right Hero Column (Full-bleed Map Artwork) ───────────── */
+/* Anchored to the viewport edges so the raster's own top, right
+   and bottom borders sit off-canvas — there is no rectangle left
+   to see. Only the left edge meets the page, and it is dissolved
+   below. Absolute rather than a flex sibling so a tall/narrow
+   viewport lets the artwork slide under the text column instead
+   of being clipped against it. */
+#landing-page .landing-hero-right {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  height: 100%;
+  aspect-ratio: 952 / 941;
+  display: block;
   z-index: 1;
   pointer-events: none;
-  padding-right: 20px;
-  box-sizing: border-box;
+
+  /* Dissolve the left edge across the artwork's empty margin. The
+     India outline starts at ~18% of the raster, so the mask is
+     fully opaque by 18.5% and never eats into the subject. */
+  --map-edge-fade: linear-gradient(to right,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.06) 3%,
+    rgba(0, 0, 0, 0.22) 6.5%,
+    rgba(0, 0, 0, 0.48) 10%,
+    rgba(0, 0, 0, 0.74) 13%,
+    rgba(0, 0, 0, 0.92) 15.5%,
+    rgba(0, 0, 0, 1) 18.5%);
+  -webkit-mask-image: var(--map-edge-fade);
+  mask-image: var(--map-edge-fade);
 }
 
-.landing-map-container {
+#landing-page .landing-map-container {
   position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  max-height: 94vh;
-  animation: mapAmbientGlow 7s ease-in-out infinite alternate;
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
-@keyframes mapAmbientGlow {
-  0% {
-    filter: drop-shadow(0 0 10px rgba(146, 24, 234, 0.12));
-  }
-  100% {
-    filter: drop-shadow(0 0 24px rgba(146, 24, 234, 0.35));
-  }
-}
-
-.landing-map-art {
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 94vh;
-  object-fit: contain;
-  object-position: right center;
+#landing-page .landing-map-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
   display: block;
   pointer-events: none;
 }
 
-.landing-map-overlay-svg {
+/* Ambient bloom. Replaces the former drop-shadow animation, which
+   traced the raster's rectangle and drew the card outline itself. */
+#landing-page .landing-map-container::after {
+  content: '';
+  position: absolute;
+  left: 6%;
+  top: 8%;
+  width: 88%;
+  height: 84%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side,
+    rgba(168, 60, 245, 0.16) 0%,
+    rgba(168, 60, 245, 0.06) 52%,
+    rgba(168, 60, 245, 0) 78%);
+  animation: mapAmbientGlow 7s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes mapAmbientGlow {
+  from { opacity: 0.35; }
+  to   { opacity: 1; }
+}
+
+#landing-page .landing-map-overlay-svg {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -3363,21 +3473,24 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   }
 }
 
-/* ─── Responsive Scaling ──────────────────────────────────── */
-@media (max-height: 800px) {
-  .landing-brand { margin-bottom: 18px; }
-  .landing-headline { font-size: 34px; margin-bottom: 20px; }
-  .auth-field-group { margin-bottom: 8px; }
-  .auth-input { height: 38px; font-size: 13px; }
-  .btn-landing-primary { height: 42px; }
+/* ─── Narrow / squat viewports ─────────────────────────────── */
+/* Below the reference's 16:9-ish frame the artwork is wide enough
+   to reach under the copy. Trim the type scale and slide the map
+   right so the subject stays clear of the headline. */
+@media (max-aspect-ratio: 8/5) {
+  #landing-page {
+    --u: clamp(0.5px, min(0.0525vw, 0.1063vh), 1.32px);
+  }
+  #landing-page .landing-hero-right {
+    transform: translateX(7%);
+  }
 }
 
-@media (max-width: 1100px) {
-  .landing-hero-left {
-    padding-left: 36px;
-    flex: 0 0 390px;
+@media (max-aspect-ratio: 5/4) {
+  #landing-page .landing-hero-right {
+    transform: translateX(14%);
+    opacity: 0.85;
   }
-  .landing-headline { font-size: 32px; }
 }
 
 /* ═════════ auth.css ═════════ */
@@ -6702,7 +6815,873 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   color: #9ca3af;
 }
 
-  </style>
+/* ═════════ projects.css ═════════ */
+/* ═════════════════════════════════════════════════════════════
+   Netgravity — Project Workspace Screens
+   Select Project · Create Project
+
+   Two full-viewport screens that sit between authentication and
+   the app shell:
+
+     new user      landing → create account → CREATE PROJECT → app
+     existing user landing → sign in        → SELECT PROJECT → app
+                                              └→ create new → CREATE PROJECT
+
+   Design references: Dump/Select Project.jpeg, Dump/Create Project.jpeg.
+
+   Sizing reuses the landing page's --u reference-pixel unit so type
+   and spacing scale identically across all three screens, and the
+   brand lockup sits at the same 72 × 54 origin as on the landing.
+   Everything is scoped under the two page ids because style.css and
+   auth.css both define generic form and card classes.
+   ═════════════════════════════════════════════════════════════ */
+
+.proj-page {
+  /* Same reference unit as #landing-page — see landing.css */
+  --u: clamp(0.5px, min(0.0598vw, 0.1063vh), 1.32px);
+
+  --proj-surface: #ffffff;
+  --proj-border: #ebe6f3;
+  --proj-border-soft: #f1eef7;
+  --proj-tint: #f5f1fb;
+  --proj-tint-deep: #efe8fa;
+  --proj-text-1: #111827;
+  --proj-text-2: #4b5563;
+  --proj-text-3: #6b7280;
+  --proj-text-4: #9ca3af;
+
+  position: fixed;
+  inset: 0;
+  z-index: 9990;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+
+  /* Lighter sibling of the landing gradient: same lavender bloom,
+     pulled back so the content cards carry the page. */
+  background-color: #fbfafd;
+  background-image:
+    radial-gradient(80% 70% at 88% 92%,
+      rgba(206, 190, 246, 0.30) 0%,
+      rgba(232, 226, 248, 0.14) 45%,
+      rgba(251, 250, 253, 0) 78%),
+    linear-gradient(160deg, #fdfdfe 0%, #fbfafd 45%, #f6f3fb 100%);
+
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: var(--proj-text-1);
+}
+
+.proj-page.hidden {
+  display: none !important;
+}
+
+/* Decorative flow-lines, bottom right — the mockups' network wash. */
+.proj-decor {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: calc(760 * var(--u));
+  height: calc(520 * var(--u));
+  pointer-events: none;
+  opacity: 0.75;
+  z-index: 0;
+}
+
+/* ─── Shared chrome ───────────────────────────────────────── */
+.proj-brand {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: calc(23 * var(--u));
+  width: fit-content;
+  cursor: pointer;
+}
+
+.proj-logo-svg {
+  width: calc(54 * var(--u));
+  height: calc(54 * var(--u));
+  flex-shrink: 0;
+}
+
+.proj-brand-title {
+  font-size: calc(33 * var(--u));
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  color: var(--proj-text-1);
+}
+
+.proj-brand-sub {
+  font-size: calc(16 * var(--u));
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--brand-purple);
+  margin-top: calc(2 * var(--u));
+}
+
+.proj-help-btn {
+  position: absolute;
+  top: calc(58 * var(--u));
+  right: calc(72 * var(--u));
+  width: calc(34 * var(--u));
+  height: calc(34 * var(--u));
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--proj-text-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  transition: color 0.15s ease;
+}
+
+.proj-help-btn:hover { color: var(--brand-purple); }
+.proj-help-btn svg { width: 100%; height: 100%; }
+
+/* Primary / secondary actions, matched to the landing buttons. */
+.proj-btn-primary {
+  height: calc(50 * var(--u));
+  padding: 0 calc(26 * var(--u));
+  background: linear-gradient(100deg, #7b0fd0 0%, #9218EA 46%, #a63bf2 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: calc(12 * var(--u));
+  font-family: inherit;
+  font-size: calc(16 * var(--u));
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(11 * var(--u));
+  cursor: pointer;
+  box-shadow: 0 calc(8 * var(--u)) calc(22 * var(--u)) rgba(146, 24, 234, 0.28);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.proj-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 calc(11 * var(--u)) calc(28 * var(--u)) rgba(146, 24, 234, 0.38);
+}
+
+.proj-btn-primary:active { transform: translateY(0); }
+
+.proj-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.proj-btn-primary svg {
+  width: calc(19 * var(--u));
+  height: calc(19 * var(--u));
+}
+
+.proj-link-btn {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: calc(15 * var(--u));
+  font-weight: 600;
+  color: var(--brand-purple);
+  cursor: pointer;
+  padding: calc(6 * var(--u));
+}
+
+.proj-link-btn:hover { text-decoration: underline; }
+
+/* ═══════════════════════════════════════════════════════════
+   CREATE PROJECT
+   ═══════════════════════════════════════════════════════════ */
+/* Column flex + `margin: auto` on the body centres the content in
+   whatever space is left under the brand, and collapses back to
+   top-anchored (scrolling) the moment the content outgrows it. */
+#create-project-page {
+  display: flex;
+  flex-direction: column;
+  /* 50, not 54: the logo's own ink starts ~4u in, which lands the mark
+     on the landing page's y=54 origin. */
+  padding: calc(50 * var(--u)) calc(72 * var(--u)) calc(40 * var(--u));
+}
+
+.proj-create-body {
+  position: relative;
+  z-index: 2;
+  width: calc(1002 * var(--u));
+  max-width: 100%;
+  margin: auto;
+  padding-top: calc(20 * var(--u));
+}
+
+.proj-create-head {
+  text-align: center;
+  margin-bottom: calc(30 * var(--u));
+}
+
+.proj-create-title {
+  font-size: calc(38 * var(--u));
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  color: var(--proj-text-1);
+}
+
+.proj-create-sub {
+  margin-top: calc(12 * var(--u));
+  font-size: calc(16 * var(--u));
+  color: var(--proj-text-3);
+  line-height: 1.45;
+}
+
+/* Mode chooser */
+.proj-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(17 * var(--u));
+  margin-bottom: calc(20 * var(--u));
+}
+
+.proj-mode-card {
+  background: var(--proj-surface);
+  border: 1px solid var(--proj-border-soft);
+  border-radius: calc(14 * var(--u));
+  padding: calc(28 * var(--u)) calc(16 * var(--u)) calc(24 * var(--u));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(18 * var(--u));
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.proj-mode-card:hover {
+  border-color: #ddd0f0;
+  transform: translateY(calc(-2 * var(--u)));
+  box-shadow: 0 calc(10 * var(--u)) calc(26 * var(--u)) rgba(87, 24, 195, 0.09);
+}
+
+.proj-mode-card.selected {
+  border-color: var(--brand-purple);
+  box-shadow: 0 0 0 calc(2 * var(--u)) rgba(146, 24, 234, 0.14);
+}
+
+.proj-mode-icon {
+  width: calc(86 * var(--u));
+  height: calc(86 * var(--u));
+  border-radius: 50%;
+  background: var(--proj-tint);
+  color: var(--brand-purple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.proj-mode-card.selected .proj-mode-icon { background: var(--proj-tint-deep); }
+
+.proj-mode-icon svg {
+  width: calc(36 * var(--u));
+  height: calc(36 * var(--u));
+}
+
+.proj-mode-label {
+  font-size: calc(17 * var(--u));
+  font-weight: 500;
+  color: var(--proj-text-1);
+  letter-spacing: -0.01em;
+}
+
+/* Detail form */
+.proj-form-card {
+  background: var(--proj-surface);
+  border: 1px solid var(--proj-border-soft);
+  border-radius: calc(14 * var(--u));
+  padding: calc(22 * var(--u)) calc(28 * var(--u)) calc(24 * var(--u));
+  margin-bottom: calc(24 * var(--u));
+}
+
+/* Each row is [leading icon] [field(s)] so the icon column stays
+   aligned whether the row holds one field or two. */
+.proj-form-row {
+  display: grid;
+  grid-template-columns: calc(38 * var(--u)) 1fr;
+  column-gap: calc(20 * var(--u));
+  align-items: start;
+  margin-bottom: calc(14 * var(--u));
+}
+
+.proj-form-row:last-child { margin-bottom: 0; }
+
+.proj-form-row.split > .proj-field-pair {
+  display: grid;
+  grid-template-columns: 1fr calc(38 * var(--u)) 1fr;
+  column-gap: calc(20 * var(--u));
+  align-items: start;
+}
+
+.proj-row-icon {
+  width: calc(38 * var(--u));
+  height: calc(38 * var(--u));
+  border-radius: calc(10 * var(--u));
+  background: var(--proj-tint);
+  color: var(--brand-purple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: calc(21 * var(--u));
+}
+
+.proj-row-icon svg {
+  width: calc(19 * var(--u));
+  height: calc(19 * var(--u));
+}
+
+.proj-field-label {
+  display: block;
+  font-size: calc(15 * var(--u));
+  font-weight: 500;
+  color: var(--proj-text-2);
+  margin-bottom: calc(8 * var(--u));
+  letter-spacing: -0.01em;
+}
+
+.proj-input,
+.proj-select {
+  width: 100%;
+  height: calc(44 * var(--u));
+  padding: 0 calc(15 * var(--u));
+  background: #ffffff;
+  border: 1px solid var(--proj-border);
+  border-radius: calc(10 * var(--u));
+  font-family: inherit;
+  font-size: calc(15 * var(--u));
+  color: var(--proj-text-1);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.proj-input::placeholder { color: var(--proj-text-4); }
+
+.proj-input:focus,
+.proj-select:focus {
+  border-color: var(--brand-purple);
+  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(146, 24, 234, 0.12);
+}
+
+/* Native arrow replaced so the control matches the mock in both engines. */
+.proj-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: calc(38 * var(--u));
+  color: var(--proj-text-1);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right calc(13 * var(--u)) center;
+  background-size: calc(17 * var(--u));
+  cursor: pointer;
+}
+
+.proj-select:invalid,
+.proj-select.placeholder { color: var(--proj-text-4); }
+
+/* Upload */
+.proj-dropzone {
+  border: 1.5px dashed #dcd5ea;
+  border-radius: calc(12 * var(--u));
+  background: rgba(252, 251, 254, 0.7);
+  padding: calc(22 * var(--u)) calc(18 * var(--u));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(16 * var(--u));
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.proj-dropzone:hover,
+.proj-dropzone.dragover {
+  border-color: var(--brand-purple);
+  background: rgba(245, 241, 251, 0.9);
+}
+
+.proj-dropzone.has-file {
+  border-style: solid;
+  border-color: #c9b3ec;
+  background: rgba(245, 241, 251, 0.75);
+}
+
+.proj-dropzone-icon {
+  color: var(--proj-text-4);
+  display: flex;
+  flex-shrink: 0;
+}
+
+.proj-dropzone.has-file .proj-dropzone-icon { color: var(--brand-purple); }
+
+.proj-dropzone-icon svg {
+  width: calc(28 * var(--u));
+  height: calc(28 * var(--u));
+}
+
+.proj-dropzone-main {
+  font-size: calc(15 * var(--u));
+  color: var(--proj-text-2);
+}
+
+.proj-dropzone-main b {
+  color: var(--brand-purple);
+  font-weight: 600;
+}
+
+.proj-dropzone-sub {
+  margin-top: calc(4 * var(--u));
+  font-size: calc(13.5 * var(--u));
+  color: var(--proj-text-4);
+}
+
+.proj-create-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(14 * var(--u));
+}
+
+.proj-create-actions .proj-btn-primary { width: calc(325 * var(--u)); }
+
+.proj-error {
+  font-size: calc(13.5 * var(--u));
+  color: #dc2626;
+}
+
+.proj-error:empty { display: none; }
+
+/* ═══════════════════════════════════════════════════════════
+   SELECT PROJECT
+   ═══════════════════════════════════════════════════════════ */
+#select-project-page {
+  display: flex;
+  flex-direction: column;
+  /* 50, not 54: the logo's own ink starts ~4u in, which lands the mark
+     on the landing page's y=54 origin. */
+  padding: calc(50 * var(--u)) calc(72 * var(--u)) calc(40 * var(--u));
+}
+
+.proj-select-body {
+  position: relative;
+  z-index: 2;
+  width: calc(1274 * var(--u));
+  max-width: 100%;
+  margin: auto;
+  padding-top: calc(24 * var(--u));
+}
+
+.proj-select-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(40 * var(--u));
+  margin-bottom: calc(24 * var(--u));
+}
+
+.proj-select-title {
+  font-size: calc(36 * var(--u));
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  color: var(--proj-text-1);
+}
+
+.proj-select-sub {
+  margin-top: calc(12 * var(--u));
+  font-size: calc(16 * var(--u));
+  line-height: 1.5;
+  color: var(--proj-text-2);
+  max-width: calc(460 * var(--u));
+}
+
+.proj-section-title {
+  font-size: calc(18 * var(--u));
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--proj-text-1);
+  margin-bottom: calc(14 * var(--u));
+}
+
+/* Recent projects */
+.proj-recent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(17 * var(--u));
+  margin-bottom: calc(26 * var(--u));
+}
+
+.proj-recent-card {
+  background: var(--proj-surface);
+  border: 1px solid var(--proj-border-soft);
+  border-radius: calc(14 * var(--u));
+  padding: calc(20 * var(--u)) calc(22 * var(--u)) calc(16 * var(--u));
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.proj-recent-card:hover {
+  border-color: #ddd0f0;
+  transform: translateY(calc(-2 * var(--u)));
+  box-shadow: 0 calc(10 * var(--u)) calc(26 * var(--u)) rgba(87, 24, 195, 0.09);
+}
+
+.proj-recent-top {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(16 * var(--u));
+  margin-bottom: calc(16 * var(--u));
+}
+
+.proj-folder-tile {
+  width: calc(52 * var(--u));
+  height: calc(52 * var(--u));
+  border-radius: 50%;
+  background: var(--proj-tint);
+  color: var(--brand-purple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.proj-folder-tile svg {
+  width: calc(24 * var(--u));
+  height: calc(24 * var(--u));
+}
+
+.proj-recent-meta { flex: 1; min-width: 0; }
+
+.proj-recent-name {
+  font-size: calc(19 * var(--u));
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--proj-text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.proj-recent-when {
+  margin-top: calc(6 * var(--u));
+  font-size: calc(14 * var(--u));
+  color: var(--proj-text-3);
+}
+
+.proj-kebab {
+  background: none;
+  border: none;
+  color: var(--proj-text-3);
+  cursor: pointer;
+  padding: calc(4 * var(--u));
+  border-radius: calc(6 * var(--u));
+  display: flex;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.proj-kebab:hover {
+  background: var(--proj-tint);
+  color: var(--brand-purple);
+}
+
+.proj-kebab svg {
+  width: calc(18 * var(--u));
+  height: calc(18 * var(--u));
+}
+
+.proj-open-btn {
+  width: 100%;
+  height: calc(44 * var(--u));
+  border: none;
+  border-radius: calc(10 * var(--u));
+  background: var(--proj-tint);
+  color: var(--brand-purple);
+  font-family: inherit;
+  font-size: calc(15 * var(--u));
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(10 * var(--u));
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.proj-open-btn:hover { background: var(--proj-tint-deep); }
+
+.proj-open-btn svg {
+  width: calc(17 * var(--u));
+  height: calc(17 * var(--u));
+}
+
+/* All projects toolbar */
+.proj-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(20 * var(--u));
+  margin-bottom: calc(16 * var(--u));
+}
+
+.proj-search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: calc(323 * var(--u));
+  max-width: 100%;
+}
+
+.proj-search-icon {
+  position: absolute;
+  left: calc(14 * var(--u));
+  display: flex;
+  color: var(--proj-text-4);
+  pointer-events: none;
+}
+
+.proj-search-icon svg {
+  width: calc(17 * var(--u));
+  height: calc(17 * var(--u));
+}
+
+.proj-search {
+  width: 100%;
+  height: calc(44 * var(--u));
+  padding: 0 calc(14 * var(--u)) 0 calc(42 * var(--u));
+  background: #ffffff;
+  border: 1px solid var(--proj-border);
+  border-radius: calc(10 * var(--u));
+  font-family: inherit;
+  font-size: calc(15 * var(--u));
+  color: var(--proj-text-1);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.proj-search::placeholder { color: var(--proj-text-4); }
+
+.proj-search:focus {
+  border-color: var(--brand-purple);
+  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(146, 24, 234, 0.12);
+}
+
+.proj-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: calc(18 * var(--u));
+}
+
+.proj-sort {
+  display: flex;
+  align-items: center;
+  gap: calc(7 * var(--u));
+  font-size: calc(15 * var(--u));
+  color: var(--proj-text-2);
+}
+
+.proj-sort select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: calc(15 * var(--u));
+  font-weight: 600;
+  color: var(--proj-text-1);
+  cursor: pointer;
+  outline: none;
+  padding-right: calc(20 * var(--u));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111827' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: calc(15 * var(--u));
+}
+
+.proj-view-toggle {
+  display: flex;
+  border: 1px solid var(--proj-border);
+  border-radius: calc(10 * var(--u));
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.proj-view-btn {
+  width: calc(44 * var(--u));
+  height: calc(42 * var(--u));
+  border: none;
+  background: none;
+  color: var(--proj-text-3);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.proj-view-btn + .proj-view-btn { border-left: 1px solid var(--proj-border); }
+
+.proj-view-btn.active {
+  background: var(--proj-tint);
+  color: var(--brand-purple);
+}
+
+.proj-view-btn svg {
+  width: calc(18 * var(--u));
+  height: calc(18 * var(--u));
+}
+
+/* Table view */
+.proj-table-wrap {
+  background: var(--proj-surface);
+  border: 1px solid var(--proj-border-soft);
+  border-radius: calc(14 * var(--u));
+  overflow: hidden;
+}
+
+.proj-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: calc(14.5 * var(--u));
+}
+
+.proj-table th {
+  background: var(--proj-tint);
+  text-align: left;
+  font-size: calc(14 * var(--u));
+  font-weight: 600;
+  color: var(--proj-text-2);
+  padding: calc(12 * var(--u)) calc(18 * var(--u));
+  white-space: nowrap;
+}
+
+.proj-table th:first-child { padding-left: calc(24 * var(--u)); }
+.proj-table th:last-child { width: calc(56 * var(--u)); }
+
+.proj-table td {
+  padding: calc(12 * var(--u)) calc(18 * var(--u));
+  border-top: 1px solid #f0eef4;
+  color: var(--proj-text-2);
+  vertical-align: middle;
+}
+
+.proj-table td:first-child { padding-left: calc(24 * var(--u)); }
+
+.proj-table tbody tr {
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.proj-table tbody tr:hover { background: #fbf9fe; }
+
+.proj-row-name {
+  display: flex;
+  align-items: center;
+  gap: calc(14 * var(--u));
+  font-weight: 600;
+  color: var(--proj-text-1);
+}
+
+.proj-row-name svg {
+  width: calc(20 * var(--u));
+  height: calc(20 * var(--u));
+  color: #b794e8;
+  flex-shrink: 0;
+}
+
+.proj-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: calc(5 * var(--u)) calc(12 * var(--u));
+  border-radius: calc(20 * var(--u));
+  font-size: calc(13 * var(--u));
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.proj-chip-owner { background: #f3f4f6; color: var(--proj-text-2); }
+.proj-chip-progress { background: #e7f7ec; color: #157f3c; }
+.proj-chip-draft { background: #f1f1f4; color: #61616e; }
+
+/* Grid view of the same list */
+.proj-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: calc(17 * var(--u));
+}
+
+.proj-grid-card {
+  background: var(--proj-surface);
+  border: 1px solid var(--proj-border-soft);
+  border-radius: calc(14 * var(--u));
+  padding: calc(20 * var(--u));
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.proj-grid-card:hover {
+  border-color: #ddd0f0;
+  transform: translateY(calc(-2 * var(--u)));
+  box-shadow: 0 calc(10 * var(--u)) calc(26 * var(--u)) rgba(87, 24, 195, 0.09);
+}
+
+.proj-grid-card .proj-recent-top { margin-bottom: calc(14 * var(--u)); }
+
+.proj-grid-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(10 * var(--u));
+  font-size: calc(13.5 * var(--u));
+  color: var(--proj-text-3);
+}
+
+.proj-empty {
+  padding: calc(48 * var(--u)) calc(20 * var(--u));
+  text-align: center;
+  color: var(--proj-text-3);
+  font-size: calc(15 * var(--u));
+}
+
+/* ─── Narrow viewports ────────────────────────────────────── */
+@media (max-width: 1080px) {
+  .proj-mode-grid,
+  .proj-recent-grid,
+  .proj-card-grid { grid-template-columns: 1fr 1fr; }
+
+  .proj-select-head { flex-direction: column; }
+
+  .proj-form-row.split > .proj-field-pair {
+    grid-template-columns: 1fr;
+    row-gap: calc(20 * var(--u));
+  }
+
+  .proj-form-row.split > .proj-field-pair > .proj-row-icon { display: none; }
+}
+
+@media (max-width: 760px) {
+  .proj-mode-grid,
+  .proj-recent-grid,
+  .proj-card-grid { grid-template-columns: 1fr; }
+
+  .proj-toolbar { flex-direction: column; align-items: stretch; }
+  .proj-search-wrap { width: 100%; }
+}
+
+</style>
   <script>
     window.switchAuthPanel = function(view) {
       document.querySelectorAll('.landing-auth-panel').forEach(function(p) { p.classList.remove('active'); });
@@ -6729,7 +7708,22 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
     window.navigateToAuth = window.switchAuthPanel;
 
-    window.completeAuth = function() {
+    /* Pre-module fallback. projects.js/auth.js replace this on boot; until
+       then, route sign-in to Select Project and sign-up to Create Project
+       so the flow is the same whenever the form is submitted. */
+    window.completeAuth = function(origin) {
+      if (origin === 'signup' && typeof window.showCreateProject === 'function') {
+        window.showCreateProject('first');
+        return;
+      }
+      if (origin !== 'signup' && typeof window.showSelectProject === 'function') {
+        window.showSelectProject();
+        return;
+      }
+      if (typeof window.enterApp === 'function') {
+        window.enterApp();
+        return;
+      }
       var landing = document.getElementById('landing-page');
       if (landing) {
         landing.classList.add('hidden');
@@ -6756,6 +7750,14 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
       var appShell = document.querySelector('.app-shell');
       if (appShell) {
         appShell.style.display = 'none';
+      }
+      if (typeof window.hideProjectPages === 'function') {
+        window.hideProjectPages();
+      } else {
+        ['select-project-page', 'create-project-page'].forEach(function(id) {
+          var el = document.getElementById(id);
+          if (el) el.classList.add('hidden');
+        });
       }
       var fab = document.getElementById('floating-chatbot-fab');
       if (fab) {
@@ -6944,6 +7946,11 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
       </div>
     </div>
   </div>
+
+  <!-- Project workspace screens. Rendered by projects.js; see the flow note
+       at the top of that module. Placeholders stay empty in the bundle. -->
+  <div id="select-project-page" class="proj-page hidden"></div>
+  <div id="create-project-page" class="proj-page hidden"></div>
 
 <div class="app-shell">
     <div class="app-body">
@@ -13490,19 +14497,19 @@ function bindLandingEvents() {
     });
   });
 
-  // Sign In Form Submission
+  // Sign In Form Submission — existing user, goes to Select Project
   document.getElementById('form-panel-signin')?.addEventListener('submit', (e) => {
     e.preventDefault();
     if (typeof window.completeAuth === 'function') {
-      window.completeAuth();
+      window.completeAuth('signin');
     }
   });
 
-  // Sign Up Form Submission
+  // Sign Up Form Submission — new user, goes to Create Project
   document.getElementById('form-panel-signup')?.addEventListener('submit', (e) => {
     e.preventDefault();
     if (typeof window.completeAuth === 'function') {
-      window.completeAuth();
+      window.completeAuth('signup');
     }
   });
 
@@ -13532,7 +14539,6 @@ function initLandingPage() {
   renderNetworkVisualization();
   bindLandingEvents();
 }
-
 
 /* ═════════ insights.js ═════════ */
 /**
@@ -14698,15 +15704,562 @@ if (typeof window !== 'undefined') {
 }
 
 
+/* ═════════ projects.js ═════════ */
+/**
+ * Netgravity — Project Workspace Controller
+ * =========================================
+ * Owns the two screens that sit between authentication and the app shell:
+ *
+ *   new user       landing → create account → CREATE PROJECT → app
+ *   existing user  landing → sign in        → SELECT PROJECT → app
+ *                                             └→ create new  → CREATE PROJECT
+ *
+ * Both screens render into empty placeholder divs in index.html, the same
+ * way landing.js renders the map stage, so the bundled HTML stays thin.
+ *
+ * STATUS: PROTOTYPE / MOCKED — project records are in-memory only.
+ */
+
+/* ─── Mock workspace data (mirrors Dump/Select Project.jpeg) ─── */
+const PROJECTS = [
+  { id: 'pr-india-2024',   name: 'India Network 2024',    region: 'India',                updated: '2 hours ago', rank: 1, owner: 'You', status: 'In progress' },
+  { id: 'pr-north-revamp', name: 'North Region Revamp',   region: 'North India',          updated: '3 days ago',  rank: 2, owner: 'You', status: 'In progress' },
+  { id: 'pr-cost-q2',      name: 'Cost Optimization Q2',  region: 'Pan India',            updated: '1 week ago',  rank: 3, owner: 'You', status: 'In progress' },
+  { id: 'pr-dc-consol',    name: 'DC Consolidation Study', region: 'West India',          updated: '2 weeks ago', rank: 4, owner: 'You', status: 'Draft' },
+  { id: 'pr-demand-surge', name: 'Demand Surge Planning', region: 'Central & South India', updated: '3 weeks ago', rank: 5, owner: 'You', status: 'Draft' },
+];
+
+const REGIONS = [
+  'India', 'North India', 'South India', 'East India', 'West India',
+  'Central & South India', 'Pan India', 'South Asia',
+];
+
+const OBJECTIVES = [
+  'Cost optimization',
+  'Service level improvement',
+  'Network resilience',
+  'Capacity planning',
+  'Carbon footprint reduction',
+];
+
+const CREATE_MODES = [
+  { id: 'scratch',  label: 'Start from scratch' },
+  { id: 'import',   label: 'Import network data' },
+  { id: 'template', label: 'Use starter template' },
+];
+
+/* ─── View state ─────────────────────────────────────────────── */
+const ui = {
+  /* 'first' when the user has just created an account (no projects yet),
+     'existing' when they arrived from the select screen. Drives the
+     create screen's wording and where Cancel goes back to. */
+  createOrigin: 'first',
+  mode: 'scratch',
+  search: '',
+  sort: 'updated',
+  view: 'list',
+  file: null,
+};
+
+/* ─── Icons ──────────────────────────────────────────────────── */
+const ICONS = {
+  logo: `<svg class="proj-logo-svg" viewBox="0 0 48 48" fill="none">
+      <line x1="10" y1="10" x2="38" y2="10" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="10" y1="38" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="12" y1="12" x2="36" y2="36" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="10" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+      <circle cx="38" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+      <circle cx="10" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+      <circle cx="38" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+    </svg>`,
+  scratch: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
+  import: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.5a4 4 0 0 0-1-7.87 6 6 0 0 0-11.6 1.5A3.5 3.5 0 0 0 6 17"/><polyline points="9 13 12 10 15 13"/><line x1="12" y1="10" x2="12" y2="19"/></svg>`,
+  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>`,
+  file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+  globe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>`,
+  target: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg>`,
+  sheet: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`,
+  upload: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.5a4 4 0 0 0-1-7.87 6 6 0 0 0-11.6 1.5A3.5 3.5 0 0 0 6 17"/><polyline points="9 13 12 10 15 13"/><line x1="12" y1="10" x2="12" y2="19"/></svg>`,
+  folder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`,
+  arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
+  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  kebab: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>`,
+  search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>`,
+  grid: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></svg>`,
+  list: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>`,
+  help: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.85.83c0 1.67-2.45 2.5-2.45 2.5"/><line x1="12" y1="17" x2="12" y2="17"/></svg>`,
+};
+
+/* Decorative flow-lines wash, bottom right of both screens. */
+function decorSvg() {
+  const curves = [0, 1, 2, 3, 4, 5, 6, 7].map(i => {
+    const off = i * 26;
+    return `<path d="M ${40 + off} 520 C ${240 + off} ${430 - i * 12}, ${430 + off} ${330 - i * 16}, ${760} ${250 - i * 22}"
+             fill="none" stroke="#9218EA" stroke-opacity="${(0.16 - i * 0.012).toFixed(3)}" stroke-width="1"/>`;
+  }).join('');
+  const dots = [[120, 470], [232, 402], [356, 356], [470, 300], [598, 268], [688, 214], [300, 462], [520, 380]]
+    .map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="${i % 3 === 0 ? 3.4 : 2.2}" fill="#9218EA" fill-opacity="${i % 3 === 0 ? 0.22 : 0.14}"/>`)
+    .join('');
+  return `<svg class="proj-decor" viewBox="0 0 760 520" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${curves}${dots}</svg>`;
+}
+
+function brandLockup() {
+  return `<div class="proj-brand" onclick="window.returnToLanding && window.returnToLanding()" title="Back to Netgravity">
+      ${ICONS.logo}
+      <div>
+        <div class="proj-brand-title">Netgravity</div>
+        <div class="proj-brand-sub">by Kearney</div>
+      </div>
+    </div>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CREATE PROJECT
+   ═══════════════════════════════════════════════════════════════ */
+function renderCreateProject() {
+  const page = document.getElementById('create-project-page');
+  if (!page) return;
+
+  const first = ui.createOrigin === 'first';
+  const title = first ? 'Create your first project' : 'Create a new project';
+  const cancelLabel = first ? 'Back to sign in' : 'Cancel';
+
+  const modes = CREATE_MODES.map(m => `
+    <button type="button" class="proj-mode-card${m.id === ui.mode ? ' selected' : ''}" data-mode="${m.id}">
+      <span class="proj-mode-icon">${ICONS[m.id]}</span>
+      <span class="proj-mode-label">${m.label}</span>
+    </button>`).join('');
+
+  const regionOpts = REGIONS.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
+  const objectiveOpts = OBJECTIVES.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
+
+  page.innerHTML = `
+    ${decorSvg()}
+    ${brandLockup()}
+    <div class="proj-create-body">
+      <div class="proj-create-head">
+        <h1 class="proj-create-title">${title}</h1>
+        <p class="proj-create-sub">Set up a logistics network workspace to analyze, simulate, and optimize decisions.</p>
+      </div>
+
+      <div class="proj-mode-grid" id="proj-mode-grid">${modes}</div>
+
+      <form class="proj-form-card" id="proj-create-form" novalidate>
+        <div class="proj-form-row split">
+          <span class="proj-row-icon">${ICONS.file}</span>
+          <div class="proj-field-pair">
+            <div>
+              <label class="proj-field-label" for="proj-name">Project name</label>
+              <input class="proj-input" id="proj-name" type="text" placeholder="Enter project name" autocomplete="off" />
+            </div>
+            <span class="proj-row-icon">${ICONS.globe}</span>
+            <div>
+              <label class="proj-field-label" for="proj-region">Region / Scope</label>
+              <select class="proj-select placeholder" id="proj-region">
+                <option value="">Select region or scope</option>
+                ${regionOpts}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="proj-form-row">
+          <span class="proj-row-icon">${ICONS.target}</span>
+          <div>
+            <label class="proj-field-label" for="proj-objective">Primary objective</label>
+            <select class="proj-select placeholder" id="proj-objective">
+              <option value="">Select primary objective</option>
+              ${objectiveOpts}
+            </select>
+          </div>
+        </div>
+
+        <div class="proj-form-row">
+          <span class="proj-row-icon">${ICONS.sheet}</span>
+          <div>
+            <label class="proj-field-label">Upload data (Excel / CSV)</label>
+            <div class="proj-dropzone" id="proj-dropzone" tabindex="0" role="button">
+              <span class="proj-dropzone-icon">${ICONS.upload}</span>
+              <div>
+                <div class="proj-dropzone-main" id="proj-drop-main">Drag and drop a file here, or <b>browse</b></div>
+                <div class="proj-dropzone-sub" id="proj-drop-sub">Supports .xlsx, .xls, .csv up to 25MB</div>
+              </div>
+            </div>
+            <input type="file" id="proj-file-input" accept=".xlsx,.xls,.csv" hidden />
+          </div>
+        </div>
+      </form>
+
+      <div class="proj-create-actions">
+        <button type="button" class="proj-btn-primary" id="proj-create-submit">Create project</button>
+        <div class="proj-error" id="proj-create-error"></div>
+        <button type="button" class="proj-link-btn" id="proj-create-cancel">${cancelLabel}</button>
+      </div>
+    </div>`;
+
+  bindCreateProject();
+}
+
+function bindCreateProject() {
+  const grid = document.getElementById('proj-mode-grid');
+  const dropzone = document.getElementById('proj-dropzone');
+  const fileInput = document.getElementById('proj-file-input');
+  const nameInput = document.getElementById('proj-name');
+  const errorEl = document.getElementById('proj-create-error');
+
+  grid?.querySelectorAll('.proj-mode-card').forEach(card => {
+    card.addEventListener('click', () => {
+      ui.mode = card.dataset.mode;
+      grid.querySelectorAll('.proj-mode-card').forEach(c => c.classList.toggle('selected', c === card));
+      // "Import network data" is only meaningful with a file attached.
+      if (ui.mode === 'import') {
+        dropzone?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        dropzone?.focus({ preventScroll: true });
+      }
+    });
+  });
+
+  // Keep the select's placeholder colour until a real option is chosen.
+  ['proj-region', 'proj-objective'].forEach(id => {
+    const sel = document.getElementById(id);
+    sel?.addEventListener('change', () => sel.classList.toggle('placeholder', !sel.value));
+  });
+
+  function showFile(file) {
+    ui.file = file;
+    const main = document.getElementById('proj-drop-main');
+    const sub = document.getElementById('proj-drop-sub');
+    if (!file) {
+      dropzone.classList.remove('has-file');
+      if (main) main.innerHTML = 'Drag and drop a file here, or <b>browse</b>';
+      if (sub) sub.textContent = 'Supports .xlsx, .xls, .csv up to 25MB';
+      return;
+    }
+    dropzone.classList.add('has-file');
+    if (main) main.innerHTML = `<b>${escapeHtml(file.name)}</b> ready to import`;
+    if (sub) sub.textContent = `${(file.size / 1024 / 1024).toFixed(2)} MB · click to replace`;
+  }
+
+  dropzone?.addEventListener('click', () => fileInput?.click());
+  dropzone?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput?.click(); }
+  });
+  ['dragenter', 'dragover'].forEach(ev =>
+    dropzone?.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.add('dragover'); }));
+  ['dragleave', 'drop'].forEach(ev =>
+    dropzone?.addEventListener(ev, e => { e.preventDefault(); dropzone.classList.remove('dragover'); }));
+  dropzone?.addEventListener('drop', e => {
+    const file = e.dataTransfer?.files?.[0];
+    if (file) showFile(file);
+  });
+  fileInput?.addEventListener('change', () => showFile(fileInput.files?.[0] || null));
+
+  nameInput?.addEventListener('input', () => { if (errorEl) errorEl.textContent = ''; });
+
+  document.getElementById('proj-create-submit')?.addEventListener('click', () => {
+    const name = (nameInput?.value || '').trim();
+    if (!name) {
+      if (errorEl) errorEl.textContent = 'Give the project a name to continue.';
+      nameInput?.focus();
+      return;
+    }
+    if (ui.mode === 'import' && !ui.file) {
+      if (errorEl) errorEl.textContent = 'Attach an Excel or CSV file, or choose a different starting point.';
+      return;
+    }
+
+    PROJECTS.unshift({
+      id: 'pr-' + Date.now().toString(36),
+      name,
+      region: document.getElementById('proj-region')?.value || 'India',
+      updated: 'Just now',
+      rank: 0,
+      owner: 'You',
+      status: 'Draft',
+    });
+    PROJECTS.forEach((p, i) => { p.rank = i + 1; });
+
+    enterApp();
+  });
+
+  document.getElementById('proj-create-cancel')?.addEventListener('click', () => {
+    if (ui.createOrigin === 'first') {
+      hideProjectPages();
+      if (typeof window.returnToLanding === 'function') window.returnToLanding();
+    } else {
+      showSelectProject();
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SELECT PROJECT
+   ═══════════════════════════════════════════════════════════════ */
+function visibleProjects() {
+  const q = ui.search.trim().toLowerCase();
+  const list = PROJECTS.filter(p =>
+    !q || p.name.toLowerCase().includes(q) || p.region.toLowerCase().includes(q));
+
+  const sorters = {
+    updated: (a, b) => a.rank - b.rank,
+    name: (a, b) => a.name.localeCompare(b.name),
+    status: (a, b) => a.status.localeCompare(b.status) || a.rank - b.rank,
+  };
+  return list.slice().sort(sorters[ui.sort] || sorters.updated);
+}
+
+function statusChip(status) {
+  const cls = status === 'In progress' ? 'proj-chip-progress' : 'proj-chip-draft';
+  return `<span class="proj-chip ${cls}">${escapeHtml(status)}</span>`;
+}
+
+function recentCard(p) {
+  return `<div class="proj-recent-card">
+      <div class="proj-recent-top">
+        <span class="proj-folder-tile">${ICONS.folder}</span>
+        <div class="proj-recent-meta">
+          <div class="proj-recent-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
+          <div class="proj-recent-when">Last opened &nbsp;·&nbsp; ${escapeHtml(p.updated)}</div>
+        </div>
+        <button class="proj-kebab" type="button" title="More options" data-noopen="1">${ICONS.kebab}</button>
+      </div>
+      <button class="proj-open-btn" type="button" data-open="${p.id}">
+        <span>Open project</span>${ICONS.arrowRight}
+      </button>
+    </div>`;
+}
+
+function listBody(rows) {
+  if (!rows.length) {
+    return `<div class="proj-table-wrap"><div class="proj-empty">No projects match “${escapeHtml(ui.search)}”.</div></div>`;
+  }
+
+  if (ui.view === 'grid') {
+    return `<div class="proj-card-grid">${rows.map(p => `
+      <div class="proj-grid-card" data-open="${p.id}">
+        <div class="proj-recent-top">
+          <span class="proj-folder-tile">${ICONS.folder}</span>
+          <div class="proj-recent-meta">
+            <div class="proj-recent-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
+            <div class="proj-recent-when">${escapeHtml(p.region)}</div>
+          </div>
+        </div>
+        <div class="proj-grid-foot"><span>${escapeHtml(p.updated)}</span>${statusChip(p.status)}</div>
+      </div>`).join('')}</div>`;
+  }
+
+  return `<div class="proj-table-wrap">
+      <table class="proj-table">
+        <thead>
+          <tr>
+            <th>Project name</th><th>Region / Scope</th><th>Last updated</th>
+            <th>Owner</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(p => `
+            <tr data-open="${p.id}">
+              <td><span class="proj-row-name">${ICONS.folder}${escapeHtml(p.name)}</span></td>
+              <td>${escapeHtml(p.region)}</td>
+              <td>${escapeHtml(p.updated)}</td>
+              <td><span class="proj-chip proj-chip-owner">${escapeHtml(p.owner)}</span></td>
+              <td>${statusChip(p.status)}</td>
+              <td><button class="proj-kebab" type="button" title="More options" data-noopen="1">${ICONS.kebab}</button></td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function renderSelectProject() {
+  const page = document.getElementById('select-project-page');
+  if (!page) return;
+
+  const recents = PROJECTS.slice().sort((a, b) => a.rank - b.rank).slice(0, 3);
+
+  page.innerHTML = `
+    ${decorSvg()}
+    ${brandLockup()}
+    <button class="proj-help-btn" type="button" title="Help">${ICONS.help}</button>
+
+    <div class="proj-select-body">
+      <div class="proj-select-head">
+        <div>
+          <h1 class="proj-select-title">Select or create a project</h1>
+          <p class="proj-select-sub">Work on your logistics networks, analyze performance, and run AI-powered scenarios.</p>
+        </div>
+        <button class="proj-btn-primary" type="button" id="proj-new-btn">${ICONS.plus}<span>Create new project</span></button>
+      </div>
+
+      <div class="proj-section-title">Recent projects</div>
+      <div class="proj-recent-grid">${recents.map(recentCard).join('')}</div>
+
+      <div class="proj-section-title">All projects</div>
+      <div class="proj-toolbar">
+        <div class="proj-search-wrap">
+          <span class="proj-search-icon">${ICONS.search}</span>
+          <input class="proj-search" id="proj-search" type="search" placeholder="Search projects" value="${escapeHtml(ui.search)}" autocomplete="off" />
+        </div>
+        <div class="proj-toolbar-right">
+          <label class="proj-sort">Sort by:
+            <select id="proj-sort">
+              <option value="updated"${ui.sort === 'updated' ? ' selected' : ''}>Last updated</option>
+              <option value="name"${ui.sort === 'name' ? ' selected' : ''}>Name</option>
+              <option value="status"${ui.sort === 'status' ? ' selected' : ''}>Status</option>
+            </select>
+          </label>
+          <div class="proj-view-toggle">
+            <button class="proj-view-btn${ui.view === 'grid' ? ' active' : ''}" type="button" data-view="grid" title="Grid view">${ICONS.grid}</button>
+            <button class="proj-view-btn${ui.view === 'list' ? ' active' : ''}" type="button" data-view="list" title="List view">${ICONS.list}</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="proj-list-slot">${listBody(visibleProjects())}</div>
+    </div>`;
+
+  bindSelectProject();
+}
+
+function refreshList() {
+  const slot = document.getElementById('proj-list-slot');
+  if (slot) slot.innerHTML = listBody(visibleProjects());
+}
+
+function bindSelectProject() {
+  const page = document.getElementById('select-project-page');
+  if (!page) return;
+
+  document.getElementById('proj-new-btn')?.addEventListener('click', () => showCreateProject('existing'));
+
+  const search = document.getElementById('proj-search');
+  search?.addEventListener('input', () => { ui.search = search.value; refreshList(); });
+
+  const sort = document.getElementById('proj-sort');
+  sort?.addEventListener('change', () => { ui.sort = sort.value; refreshList(); });
+
+  page.querySelectorAll('.proj-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      ui.view = btn.dataset.view;
+      page.querySelectorAll('.proj-view-btn').forEach(b => b.classList.toggle('active', b === btn));
+      refreshList();
+    });
+  });
+
+  // One delegated handler covers recent cards, table rows and grid cards.
+  page.addEventListener('click', e => {
+    if (e.target.closest('[data-noopen]')) return;
+    const opener = e.target.closest('[data-open]');
+    if (opener) openProject(opener.dataset.open);
+  });
+}
+
+function openProject(id) {
+  const p = PROJECTS.find(x => x.id === id);
+  if (p) {
+    // Opening promotes the project to the top of "recent".
+    PROJECTS.forEach(x => { if (x.rank < p.rank) x.rank += 1; });
+    p.rank = 1;
+    p.updated = 'Just now';
+  }
+  enterApp();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Navigation
+   ═══════════════════════════════════════════════════════════════ */
+function hideProjectPages() {
+  ['select-project-page', 'create-project-page'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+}
+
+function hideLanding() {
+  const landing = document.getElementById('landing-page');
+  if (landing) {
+    landing.classList.add('hidden');
+    landing.style.display = 'none';
+  }
+  const fab = document.getElementById('floating-chatbot-fab');
+  if (fab) fab.style.display = 'none';
+  const shell = document.querySelector('.app-shell');
+  if (shell) shell.style.display = 'none';
+}
+
+function showSelectProject() {
+  hideLanding();
+  hideProjectPages();
+  renderSelectProject();
+  const page = document.getElementById('select-project-page');
+  if (page) {
+    page.classList.remove('hidden');
+    page.scrollTop = 0;
+  }
+}
+
+function showCreateProject(origin) {
+  ui.createOrigin = origin === 'existing' ? 'existing' : 'first';
+  ui.mode = 'scratch';
+  ui.file = null;
+  hideLanding();
+  hideProjectPages();
+  renderCreateProject();
+  const page = document.getElementById('create-project-page');
+  if (page) {
+    page.classList.remove('hidden');
+    page.scrollTop = 0;
+  }
+}
+
+/** Leave the project screens and hand off to the authenticated app shell. */
+function enterApp() {
+  hideProjectPages();
+
+  const landing = document.getElementById('landing-page');
+  if (landing) {
+    landing.classList.add('hidden');
+    landing.style.display = 'none';
+  }
+  const shell = document.querySelector('.app-shell');
+  if (shell) shell.style.display = 'flex';
+  const fab = document.getElementById('floating-chatbot-fab');
+  if (fab) fab.style.display = 'flex';
+
+  if (typeof window.navigateToTab === 'function') window.navigateToTab('home');
+
+  setTimeout(() => {
+    if (typeof window.renderHome === 'function') window.renderHome();
+    window.dispatchEvent(new Event('resize'));
+  }, 60);
+}
+
+function initProjects() {
+  if (typeof window !== 'undefined') {
+    window.showSelectProject = showSelectProject;
+    window.showCreateProject = showCreateProject;
+    window.hideProjectPages = hideProjectPages;
+    window.enterApp = enterApp;
+  }
+}
+
 /* ═════════ auth.js ═════════ */
 /**
  * Netgravity Authentication Controller
  * =====================================
  * Single-page in-place authentication manager:
  * - Direct on-page Sign In, Create Account, and Password Reset
- * - Seamless transition to Home application
+ * - Hand-off to the project workspace screens (see projects.js)
  * - Chatbot FAB display management
  */
+
+
 
 function navigateToAuth(view) {
   if (typeof window.switchAuthPanel === 'function') {
@@ -14714,45 +16267,34 @@ function navigateToAuth(view) {
   }
 }
 
-function completeAuth() {
-  // 1. Hide landing page
-  const landing = document.getElementById('landing-page');
-  if (landing) {
-    landing.classList.add('hidden');
-    landing.style.display = 'none';
+/**
+ * Authentication succeeded. Neither path drops straight into the app —
+ * a project has to be picked or created first:
+ *
+ *   'signup' (new user)      → Create Project  ("Create your first project")
+ *   'signin' (existing user) → Select Project  (with a create option)
+ */
+function completeAuth(origin) {
+  if (origin === 'signup') {
+    showCreateProject('first');
+  } else {
+    showSelectProject();
   }
+}
 
-  // 2. Ensure app-shell is visible
-  const appShell = document.querySelector('.app-shell');
-  if (appShell) {
-    appShell.style.display = 'flex';
-  }
-
-  // 3. Show floating chatbot FAB inside authenticated application
-  const chatbotFab = document.getElementById('floating-chatbot-fab');
-  if (chatbotFab) {
-    chatbotFab.style.display = 'flex';
-  }
-
-  // 4. Navigate to Home Cockpit
-  if (typeof window.navigateToTab === 'function') {
-    window.navigateToTab('home');
-  }
-
-  // 5. Trigger resize and full render of Home components
-  setTimeout(() => {
-    if (typeof window.renderHome === 'function') {
-      window.renderHome();
-    }
-    window.dispatchEvent(new Event('resize'));
-  }, 60);
+/** Direct hand-off to the app shell, bypassing project selection. */
+function completeAuthDirect() {
+  enterApp();
 }
 
 function returnToLanding() {
-  // 1. Hide app-shell
+  // 1. Hide app-shell and the project screens
   const appShell = document.querySelector('.app-shell');
   if (appShell) {
     appShell.style.display = 'none';
+  }
+  if (typeof window.hideProjectPages === 'function') {
+    window.hideProjectPages();
   }
 
   // 2. Hide floating chatbot FAB
@@ -14781,10 +16323,10 @@ function initAuth() {
   if (typeof window !== 'undefined') {
     window.navigateToAuth = navigateToAuth;
     window.completeAuth = completeAuth;
+    window.completeAuthDirect = completeAuthDirect;
     window.returnToLanding = returnToLanding;
   }
 }
-
 
 /* ═════════ chatbot.js ═════════ */
 /**
@@ -15171,6 +16713,7 @@ if (typeof window !== 'undefined') {
 
 
 
+
 // ─── State ──────────────────────────────────────────────────
 const state = {
   activeTab: 'home',
@@ -15193,6 +16736,7 @@ if (typeof window !== 'undefined') {
 
 // ─── Boot ───────────────────────────────────────────────────
 function bootApp() {
+  try { initProjects(); } catch (e) { console.error('initProjects error:', e); }
   try { initAuth();
   initChatbot(); } catch (e) { console.error('initAuth error:', e); }
   try { initLandingPage(); } catch (e) { console.error('initLandingPage error:', e); }
@@ -16389,6 +17933,6 @@ if (typeof window !== 'undefined') {
   window.triggerAgentReasoning = triggerAgentReasoning;
 }
 
-  </script>
+</script>
 </body>
 </html>
