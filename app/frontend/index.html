@@ -567,6 +567,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   gap: 12px;
 }
 
+.project-select-btn { transition: border-color 0.15s ease, background 0.15s ease; }
+.project-select-btn:hover { border-color: #9218EA !important; background: #f5f1fb !important; }
+
+/* Facility/Period controls when relocated into the global topbar's left
+   area (Home Overview only) — same look as .topbar-controls in the
+   sub-topbar row, just without the auto left-margin that positions it
+   there. */
+#home-top-controls { margin-left: 0; }
+
 .topbar-right-area {
   display: flex;
   align-items: center;
@@ -629,6 +638,10 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   border: 1.5px solid #ffffff;
 }
 
+.topbar-profile-wrap {
+  position: relative;
+}
+
 .topbar-profile-btn {
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -636,6 +649,53 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 .topbar-profile-btn:hover {
   transform: scale(1.05);
+}
+
+.profile-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 172px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(17, 24, 39, 0.14);
+  padding: 6px;
+  display: none;
+  z-index: 200;
+}
+
+.profile-dropdown-menu.open {
+  display: block;
+}
+
+.profile-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.profile-dropdown-item:hover {
+  background: #f5f1fb;
+  color: #9218EA;
+}
+
+.profile-dropdown-item.danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.profile-dropdown-sep {
+  height: 1px;
+  background: #f1eef7;
+  margin: 4px 3px;
 }
 
 /* Sub-Topbar (Page Title / Greeting + Facility & Period Selectors in Parallel) */
@@ -2858,7 +2918,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   transform: translateX(0) !important;
 }
 
-
 /* ═════════ landing.css ═════════ */
 /* ═════════════════════════════════════════════════════════════
    Netgravity — Landing Page Design System
@@ -4026,9 +4085,13 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   gap: 20px;
   width: 100%;
   align-items: start;
+  /* A little breathing room below the global topbar, since Home hides the
+     generic sub-topbar row every other tab uses for that spacing. */
+  margin-top: 16px;
   /* Full-height columns: viewport minus the global topbar above this
-     section. Both children scroll internally rather than the page. */
-  height: calc(100vh - 132px);
+     section and the margin-top just added. Both children scroll
+     internally rather than the page. */
+  height: calc(100vh - 148px);
   min-height: 520px;
 }
 
@@ -4298,10 +4361,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   flex-shrink: 0;
-}
-
-@media (max-width: 1400px) {
-  .home2-kpi-row { grid-template-columns: repeat(2, 1fr); }
 }
 
 .home2-kpi-card {
@@ -6686,6 +6745,10 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   cursor: pointer;
 }
 
+.proj-brand-static {
+  cursor: default;
+}
+
 .proj-logo-svg {
   width: calc(54 * var(--u));
   height: calc(54 * var(--u));
@@ -6728,6 +6791,30 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 .proj-help-btn:hover { color: var(--brand-purple); }
 .proj-help-btn svg { width: 100%; height: 100%; }
+
+.proj-back-btn {
+  position: absolute;
+  top: calc(52 * var(--u));
+  right: calc(122 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(3 * var(--u));
+  height: calc(34 * var(--u));
+  padding: 0 calc(13 * var(--u)) 0 calc(7 * var(--u));
+  border: 1px solid var(--proj-border);
+  border-radius: calc(17 * var(--u));
+  background: #ffffff;
+  color: var(--proj-text-2);
+  font-family: inherit;
+  font-size: calc(14 * var(--u));
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 3;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.proj-back-btn svg { width: calc(17 * var(--u)); height: calc(17 * var(--u)); }
+.proj-back-btn:hover { border-color: var(--brand-purple); color: var(--brand-purple); }
 
 /* Primary / secondary actions, matched to the landing buttons. */
 .proj-btn-primary {
@@ -6823,66 +6910,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   font-size: calc(16 * var(--u));
   color: var(--proj-text-3);
   line-height: 1.45;
-}
-
-/* Mode chooser */
-.proj-mode-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: calc(17 * var(--u));
-  margin-bottom: calc(20 * var(--u));
-}
-
-.proj-mode-card {
-  background: var(--proj-surface);
-  border: 1px solid var(--proj-border-soft);
-  border-radius: calc(14 * var(--u));
-  padding: calc(28 * var(--u)) calc(16 * var(--u)) calc(24 * var(--u));
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: calc(18 * var(--u));
-  cursor: pointer;
-  font-family: inherit;
-  text-align: center;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-.proj-mode-card:hover {
-  border-color: #ddd0f0;
-  transform: translateY(calc(-2 * var(--u)));
-  box-shadow: 0 calc(10 * var(--u)) calc(26 * var(--u)) rgba(87, 24, 195, 0.09);
-}
-
-.proj-mode-card.selected {
-  border-color: var(--brand-purple);
-  box-shadow: 0 0 0 calc(2 * var(--u)) rgba(146, 24, 234, 0.14);
-}
-
-.proj-mode-icon {
-  width: calc(86 * var(--u));
-  height: calc(86 * var(--u));
-  border-radius: 50%;
-  background: var(--proj-tint);
-  color: var(--brand-purple);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s ease;
-}
-
-.proj-mode-card.selected .proj-mode-icon { background: var(--proj-tint-deep); }
-
-.proj-mode-icon svg {
-  width: calc(36 * var(--u));
-  height: calc(36 * var(--u));
-}
-
-.proj-mode-label {
-  font-size: calc(17 * var(--u));
-  font-weight: 500;
-  color: var(--proj-text-1);
-  letter-spacing: -0.01em;
 }
 
 /* Detail form */
@@ -7389,7 +7416,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 /* ─── Narrow viewports ────────────────────────────────────── */
 @media (max-width: 1080px) {
-  .proj-mode-grid,
   .proj-recent-grid,
   .proj-card-grid { grid-template-columns: 1fr 1fr; }
 
@@ -7404,7 +7430,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 @media (max-width: 760px) {
-  .proj-mode-grid,
   .proj-recent-grid,
   .proj-card-grid { grid-template-columns: 1fr; }
 
@@ -7449,7 +7474,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   padding: calc(42 * var(--u)) calc(72 * var(--u)) calc(56 * var(--u));
 }
 
-/* ─── Shared top bar: breadcrumb + help + avatar ─────────────── */
+/* ─── Shared top bar: brand + help + avatar ──────────────────── */
 .ing-topbar {
   display: flex;
   align-items: center;
@@ -7457,42 +7482,59 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   margin-bottom: calc(34 * var(--u));
 }
 
-.ing-breadcrumb {
+.ing-topbar-left {
   display: flex;
   align-items: center;
-  gap: calc(8 * var(--u));
-  font-size: calc(15 * var(--u));
+  gap: calc(22 * var(--u));
 }
 
-.ing-crumb-link {
-  background: none;
-  border: none;
-  padding: 0;
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: 600;
-  color: var(--brand-purple);
-  cursor: pointer;
-}
-
-.ing-crumb-link:hover { text-decoration: underline; }
-
-.ing-crumb-sep {
-  color: var(--proj-text-4);
+/* Decorative only — no click-to-navigate, unlike the sidebar lockup. */
+.ing-brand {
   display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
 }
 
-.ing-crumb-sep svg { width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
+.ing-brand-logo {
+  width: calc(28 * var(--u));
+  height: calc(28 * var(--u));
+  flex-shrink: 0;
+}
 
-.ing-crumb-current {
-  color: var(--proj-text-2);
-  font-weight: 500;
+.ing-brand-name {
+  font-size: calc(18 * var(--u));
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--proj-text-1);
 }
 
 .ing-topbar-right {
   display: flex;
   align-items: center;
   gap: calc(14 * var(--u));
+}
+
+.ing-back-home-btn {
+  display: flex;
+  align-items: center;
+  gap: calc(4 * var(--u));
+  background: none;
+  border: 1px solid var(--proj-border);
+  border-radius: calc(8 * var(--u));
+  padding: calc(7 * var(--u)) calc(12 * var(--u)) calc(7 * var(--u)) calc(6 * var(--u));
+  font-family: inherit;
+  font-size: calc(14 * var(--u));
+  font-weight: 600;
+  color: var(--proj-text-2);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.ing-back-home-btn svg { width: calc(16 * var(--u)); height: calc(16 * var(--u)); }
+
+.ing-back-home-btn:hover {
+  border-color: var(--brand-purple);
+  color: var(--brand-purple);
 }
 
 /* Reuse the app shell's own topbar-icon-btn / user-avatar-ak classes
@@ -8771,15 +8813,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     };
   </script>
 </head>
-<body style="margin:0;padding:0;overflow:hidden;">
+<body style="margin:0;padding:0;">
   <div id="landing-page">
     <!-- Left Hero Column: Pure HTML UI -->
     <div class="landing-hero-left">
       <!-- Brand Lockup -->
       <div class="landing-brand" onclick="window.switchAuthPanel && window.switchAuthPanel('signin')">
         <svg class="landing-logo-svg" viewBox="0 0 48 48" fill="none">
-          <line x1="10" y1="10" x2="38" y2="10" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
-          <line x1="10" y1="38" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+          <line x1="10" y1="10" x2="10" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+          <line x1="38" y1="10" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
           <line x1="12" y1="12" x2="36" y2="36" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
           <circle cx="10" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
           <circle cx="38" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
@@ -8974,14 +9016,14 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
           </button>
         </div>
 
-        <!-- Approved Netgravity Logo Lockup (Identical to Landing Page) -->
-        <div class="sidebar-brand-netgravity" id="sidebar-brand-lockup" onclick="window.returnToLanding ? window.returnToLanding() : (document.getElementById('landing-page').style.display='flex')" title="Return to Netgravity Landing Page">
+        <!-- Netgravity Logo Lockup — clicking it returns to Home (not the landing page) since this only appears once the user is signed in. -->
+        <div class="sidebar-brand-netgravity" id="sidebar-brand-lockup" title="Back to Home">
           <div class="sidebar-logo-mark">
             <svg viewBox="0 0 38 38" width="34" height="34" fill="none">
-              <!-- Top bar -->
-              <line x1="8" y1="9" x2="30" y2="9" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
-              <!-- Bottom bar -->
-              <line x1="8" y1="29" x2="30" y2="29" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+              <!-- Left bar -->
+              <line x1="8" y1="9" x2="8" y2="29" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+              <!-- Right bar -->
+              <line x1="30" y1="9" x2="30" y2="29" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
               <!-- Diagonal link -->
               <line x1="10" y1="10" x2="28" y2="28" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
               <!-- Nodes -->
@@ -9075,11 +9117,33 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
         <!-- Top Row: Upload Data (Home Overview Only) + Notification, Help, Profile (Across All Pages) -->
         <header class="app-global-topbar">
           <div class="topbar-left-area">
-            <div class="project-select-btn" style="border-radius:20px;padding:5px 14px;border:1px solid #e5e7eb;background:#fff;display:flex;align-items:center;gap:6px;font-size:12.5px;color:#374151;font-weight:500;">
+            <button type="button" class="project-select-btn" id="project-select-btn" title="Select or create a project" style="border-radius:20px;padding:5px 14px;border:1px solid #e5e7eb;background:#fff;display:flex;align-items:center;gap:6px;font-size:12.5px;color:#374151;font-weight:500;font-family:inherit;cursor:pointer;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
               </svg>
               <span>Current Project: <strong id="topbar-current-project-name">India Logistics Network</strong></span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+
+            <!-- Facility & Period (Home Overview only — other tabs keep their own copy in the sub-topbar row) -->
+            <div class="topbar-controls" id="home-top-controls">
+              <div class="topbar-control-group">
+                <span class="control-label">Facility</span>
+                <select class="control-select topbar-facility-select" id="home-top-facility">
+                  <option value="ALL">All Facilities</option>
+                  <option value="DC_DELHI">Delhi NCR DC</option>
+                  <option value="DC_MUMBAI">Mumbai DC</option>
+                  <option value="DC_BENGALURU">Bengaluru DC</option>
+                  <option value="DC_KOLKATA">Kolkata DC</option>
+                  <option value="DC_GUWAHATI">Guwahati DC</option>
+                </select>
+              </div>
+              <div class="topbar-control-group">
+                <span class="control-label">Period</span>
+                <select class="control-select topbar-period-select" id="home-top-period">
+                  <!-- Populated by JS -->
+                </select>
+              </div>
             </div>
           </div>
 
@@ -9110,8 +9174,21 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
               </svg>
             </button>
 
-            <div class="topbar-profile-btn" id="btn-topbar-profile" title="User Profile: Amit Kumar">
-              <div class="user-avatar-ak">AK</div>
+            <div class="topbar-profile-wrap">
+              <div class="topbar-profile-btn" id="btn-topbar-profile" title="User Profile: Amit Kumar">
+                <div class="user-avatar-ak">AK</div>
+              </div>
+              <div class="profile-dropdown-menu" id="profile-dropdown-menu">
+                <div class="profile-dropdown-item" id="profile-menu-profile">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+                  <span>Profile</span>
+                </div>
+                <div class="profile-dropdown-sep"></div>
+                <div class="profile-dropdown-item danger" id="profile-menu-signout">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  <span>Sign out</span>
+                </div>
+              </div>
             </div>
           </div>
         </header>
@@ -9190,23 +9267,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
                 <div class="home2-twin-header">
                   <h2 class="home2-twin-title">Digital Twin &mdash; <span id="home2-twin-network-name">India Logistics Network</span></h2>
                   <div class="home2-twin-controls">
-                    <label class="home2-twin-control">
-                      <span>Facility</span>
-                      <select id="home2-twin-facility">
-                        <option>All Facilities</option>
-                        <option>Delhi NCR DC</option>
-                        <option>Mumbai DC</option>
-                        <option>Bengaluru DC</option>
-                        <option>Kolkata DC</option>
-                        <option>Guwahati DC</option>
-                      </select>
-                    </label>
-                    <label class="home2-twin-control">
-                      <span>Period</span>
-                      <select id="home2-twin-period">
-                        <!-- Populated by JS -->
-                      </select>
-                    </label>
                     <button class="home-section-link" id="btn-open-digital-twin" onclick="window.navigateToTab && window.navigateToTab('twin')">
                       <span>Open Digital Twin</span>
                       <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
@@ -16213,18 +16273,14 @@ const REGIONS = [
   'Central & South India', 'Pan India', 'South Asia',
 ];
 
-const OBJECTIVES = [
-  'Cost optimization',
-  'Service level improvement',
-  'Network resilience',
-  'Capacity planning',
-  'Carbon footprint reduction',
-];
-
-const CREATE_MODES = [
-  { id: 'scratch',  label: 'Start from scratch' },
-  { id: 'import',   label: 'Import network data' },
-  { id: 'template', label: 'Use starter template' },
+const CLIENTS = [
+  'Reliance Retail',
+  'Tata Steel',
+  'Flipkart',
+  'Amazon India',
+  'Hindustan Unilever',
+  'ITC Limited',
+  'Asian Paints',
 ];
 
 /* ─── View state ─────────────────────────────────────────────── */
@@ -16233,7 +16289,6 @@ const ui = {
      'existing' when they arrived from the select screen. Drives the
      create screen's wording and where Cancel goes back to. */
   createOrigin: 'first',
-  mode: 'scratch',
   search: '',
   sort: 'updated',
   view: 'list',
@@ -16247,22 +16302,20 @@ let currentProject = null;
 /* ─── Icons ──────────────────────────────────────────────────── */
 const ICONS = {
   logo: `<svg class="proj-logo-svg" viewBox="0 0 48 48" fill="none">
-      <line x1="10" y1="10" x2="38" y2="10" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
-      <line x1="10" y1="38" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="10" y1="10" x2="10" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="38" y1="10" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
       <line x1="12" y1="12" x2="36" y2="36" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
       <circle cx="10" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
       <circle cx="38" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
       <circle cx="10" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
       <circle cx="38" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
     </svg>`,
-  scratch: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
-  import: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.5a4 4 0 0 0-1-7.87 6 6 0 0 0-11.6 1.5A3.5 3.5 0 0 0 6 17"/><polyline points="9 13 12 10 15 13"/><line x1="12" y1="10" x2="12" y2="19"/></svg>`,
-  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>`,
   file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
   globe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>`,
-  target: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg>`,
+  client: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V6a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15"/><path d="M13 10h6a1 1 0 0 1 1 1v10"/><line x1="8" y1="9" x2="8" y2="9.01"/><line x1="8" y1="13" x2="8" y2="13.01"/><line x1="8" y1="17" x2="8" y2="17.01"/><line x1="17" y1="14" x2="17" y2="14.01"/><line x1="17" y1="18" x2="17" y2="18.01"/></svg>`,
   folder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`,
   arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
+  chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>`,
   plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
   kebab: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>`,
   search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>`,
@@ -16294,6 +16347,18 @@ function brandLockup() {
     </div>`;
 }
 
+/* Decorative-only lockup (no click-to-landing) — used on screens reachable
+   mid-session, where the logo shouldn't double as a sign-out shortcut. */
+function brandLockupStatic() {
+  return `<div class="proj-brand proj-brand-static">
+      ${ICONS.logo}
+      <div>
+        <div class="proj-brand-title">Netgravity</div>
+        <div class="proj-brand-sub">by Kearney</div>
+      </div>
+    </div>`;
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -16308,28 +16373,19 @@ function renderCreateProject() {
   if (!page) return;
 
   const first = ui.createOrigin === 'first';
-  const title = first ? 'Create your first project' : 'Create a new project';
   const cancelLabel = first ? 'Back to sign in' : 'Cancel';
 
-  const modes = CREATE_MODES.map(m => `
-    <button type="button" class="proj-mode-card${m.id === ui.mode ? ' selected' : ''}" data-mode="${m.id}">
-      <span class="proj-mode-icon">${ICONS[m.id]}</span>
-      <span class="proj-mode-label">${m.label}</span>
-    </button>`).join('');
-
   const regionOpts = REGIONS.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
-  const objectiveOpts = OBJECTIVES.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
+  const clientOpts = CLIENTS.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
 
   page.innerHTML = `
     ${decorSvg()}
     ${brandLockup()}
     <div class="proj-create-body">
       <div class="proj-create-head">
-        <h1 class="proj-create-title">${title}</h1>
+        <h1 class="proj-create-title">Create Project</h1>
         <p class="proj-create-sub">Set up a logistics network workspace to analyze, simulate, and optimize decisions.</p>
       </div>
-
-      <div class="proj-mode-grid" id="proj-mode-grid">${modes}</div>
 
       <form class="proj-form-card" id="proj-create-form" novalidate>
         <div class="proj-form-row split">
@@ -16351,19 +16407,17 @@ function renderCreateProject() {
         </div>
 
         <div class="proj-form-row">
-          <span class="proj-row-icon">${ICONS.target}</span>
+          <span class="proj-row-icon">${ICONS.client}</span>
           <div>
-            <label class="proj-field-label" for="proj-objective">Primary objective</label>
-            <select class="proj-select placeholder" id="proj-objective">
-              <option value="">Select primary objective</option>
-              ${objectiveOpts}
-            </select>
+            <label class="proj-field-label" for="proj-client">Client</label>
+            <input class="proj-input" id="proj-client" type="text" list="proj-client-list" placeholder="Select or type a client name" autocomplete="off" />
+            <datalist id="proj-client-list">${clientOpts}</datalist>
           </div>
         </div>
       </form>
 
       <div class="proj-create-actions">
-        <button type="button" class="proj-btn-primary" id="proj-create-submit">Create project</button>
+        <button type="button" class="proj-btn-primary" id="proj-create-submit">Proceed to upload data</button>
         <div class="proj-error" id="proj-create-error"></div>
         <button type="button" class="proj-link-btn" id="proj-create-cancel">${cancelLabel}</button>
       </div>
@@ -16373,19 +16427,11 @@ function renderCreateProject() {
 }
 
 function bindCreateProject() {
-  const grid = document.getElementById('proj-mode-grid');
   const nameInput = document.getElementById('proj-name');
   const errorEl = document.getElementById('proj-create-error');
 
-  grid?.querySelectorAll('.proj-mode-card').forEach(card => {
-    card.addEventListener('click', () => {
-      ui.mode = card.dataset.mode;
-      grid.querySelectorAll('.proj-mode-card').forEach(c => c.classList.toggle('selected', c === card));
-    });
-  });
-
   // Keep the select's placeholder colour until a real option is chosen.
-  ['proj-region', 'proj-objective'].forEach(id => {
+  ['proj-region'].forEach(id => {
     const sel = document.getElementById(id);
     sel?.addEventListener('change', () => sel.classList.toggle('placeholder', !sel.value));
   });
@@ -16404,6 +16450,7 @@ function bindCreateProject() {
       id: 'pr-' + Date.now().toString(36),
       name,
       region: document.getElementById('proj-region')?.value || 'India',
+      client: (document.getElementById('proj-client')?.value || '').trim(),
       updated: 'Just now',
       rank: 0,
       owner: 'You',
@@ -16516,7 +16563,8 @@ function renderSelectProject() {
 
   page.innerHTML = `
     ${decorSvg()}
-    ${brandLockup()}
+    ${brandLockupStatic()}
+    <button class="proj-back-btn" type="button" id="proj-select-back">${ICONS.chevronLeft}<span>Back</span></button>
     <button class="proj-help-btn" type="button" title="Help">${ICONS.help}</button>
 
     <div class="proj-select-body">
@@ -16568,6 +16616,7 @@ function bindSelectProject() {
   if (!page) return;
 
   document.getElementById('proj-new-btn')?.addEventListener('click', () => showCreateProject('existing'));
+  document.getElementById('proj-select-back')?.addEventListener('click', backFromSelectProject);
 
   const search = document.getElementById('proj-search');
   search?.addEventListener('input', () => { ui.search = search.value; refreshList(); });
@@ -16632,7 +16681,17 @@ function hideLanding() {
   if (shell) shell.style.display = 'none';
 }
 
+/* True when Select Project was opened mid-session (the "Current Project"
+   pill on Home), so Back should restore the app shell rather than sign out. */
+let selectCameFromApp = false;
+
 function showSelectProject() {
+  const shell = document.querySelector('.app-shell');
+  // Only 'flex' means the app was actually showing — a fresh page load
+  // never explicitly sets this style at all, so checking "!== 'none'"
+  // would wrongly treat that empty string as "was showing".
+  selectCameFromApp = !!(shell && shell.style.display === 'flex');
+
   hideLanding();
   hideProjectPages();
   if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
@@ -16644,9 +16703,29 @@ function showSelectProject() {
   }
 }
 
+function backFromSelectProject() {
+  if (selectCameFromApp) {
+    enterAppAsIs();
+    return;
+  }
+  if (typeof window.returnToLanding === 'function') window.returnToLanding();
+}
+
+/* Restore the app shell exactly as it was, without forcing a Home
+   redirect — used when Back should return to whatever tab was active. */
+function enterAppAsIs() {
+  hideProjectPages();
+  if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
+  const landing = document.getElementById('landing-page');
+  if (landing) landing.style.display = 'none';
+  const shell = document.querySelector('.app-shell');
+  if (shell) shell.style.display = 'flex';
+  const fab = document.getElementById('floating-chatbot-fab');
+  if (fab) fab.style.display = 'flex';
+}
+
 function showCreateProject(origin) {
   ui.createOrigin = origin === 'existing' ? 'existing' : 'first';
-  ui.mode = 'scratch';
   hideLanding();
   hideProjectPages();
   if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
@@ -16692,6 +16771,7 @@ function initProjects() {
     window.enterApp = enterApp;
     window.markProjectInProgress = markProjectInProgress;
     window.getCurrentProject = () => currentProject;
+    window.getCreateOrigin = () => ui.createOrigin;
   }
 }
 
@@ -16790,6 +16870,7 @@ const flow = {
   mapping: {},         // fileId -> row[] (mutable copy of baseMappingRows())
   mapStats: {},        // fileId -> { detected, auto, review, ignored }
   pdfReview: {},       // fileId -> { expanded: bool, reviewed: Set<termId> }
+  cameFromApp: false,  // true when entered mid-session (app shell was showing), so Back should return there rather than to Create Project
 };
 
 let uidCounter = 0;
@@ -16809,25 +16890,52 @@ function classifyExt(filename) {
   return { ext, kind: null };
 }
 
+const LOGO_SVG = `<svg class="ing-brand-logo" viewBox="0 0 48 48" fill="none">
+      <line x1="10" y1="10" x2="10" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="38" y1="10" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="12" y1="12" x2="36" y2="36" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="10" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+      <circle cx="38" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+      <circle cx="10" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+      <circle cx="38" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+    </svg>`;
+
 /* ─── Shared chrome ──────────────────────────────────────────── */
-function topbar(currentLabel) {
+function topbar() {
   return `<div class="ing-topbar">
-      <div class="ing-breadcrumb">
-        <button class="ing-crumb-link" type="button" id="ing-crumb-create">Create Project</button>
-        <span class="ing-crumb-sep">${I.chevronRight}</span>
-        <span class="ing-crumb-current">${ingEsc(currentLabel)}</span>
+      <div class="ing-topbar-left">
+        <div class="ing-brand">
+          ${LOGO_SVG}
+          <span class="ing-brand-name">Netgravity</span>
+        </div>
       </div>
       <div class="ing-topbar-right">
+        <button class="ing-back-home-btn" type="button">${I.chevronLeft}<span>Back</span></button>
         <button class="topbar-icon-btn" type="button" title="Help & Documentation">${I.help}</button>
         <div class="user-avatar-ak" title="Amit Kumar">AK</div>
       </div>
     </div>`;
 }
 
-function bindCrumb() {
-  document.getElementById('ing-crumb-create')?.addEventListener('click', () => {
-    if (typeof window.showCreateProject === 'function') window.showCreateProject('existing');
-  });
+/* Returns to whichever screen led into this flow: the app shell, exactly
+   as it was, if this was a mid-session upload; otherwise Create Project.
+   Used by the Upload Data screen — the first step, so "back" leaves the
+   ingestion flow entirely. */
+function goBack() {
+  if (flow.cameFromApp) {
+    hideIngestionPages();
+    const landing = document.getElementById('landing-page');
+    if (landing) landing.style.display = 'none';
+    const shell = document.querySelector('.app-shell');
+    if (shell) shell.style.display = 'flex';
+    const fab = document.getElementById('floating-chatbot-fab');
+    if (fab) fab.style.display = 'flex';
+    return;
+  }
+  if (typeof window.showCreateProject === 'function') {
+    const origin = typeof window.getCreateOrigin === 'function' ? window.getCreateOrigin() : 'existing';
+    window.showCreateProject(origin);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -16868,7 +16976,7 @@ function renderUploadData() {
 
   page.innerHTML = `
     <div class="ing-body">
-      ${topbar('Upload Data')}
+      ${topbar()}
       <h1 class="ing-title">Upload &amp; Align Network Datasets</h1>
       <p class="ing-subtitle">Upload CSVs, Excel order books, or Rate Card PDFs. NetGravity's AI will automatically align and prepare your data.</p>
 
@@ -16901,7 +17009,6 @@ function renderUploadData() {
       </div>
     </div>`;
 
-  bindCrumb();
   bindUploadData();
 }
 
@@ -16948,6 +17055,8 @@ function addFiles(fileList) {
 }
 
 function bindUploadData() {
+  document.querySelector('#upload-data-page .ing-back-home-btn')?.addEventListener('click', goBack);
+
   const dropzone = document.getElementById('ing-dropzone');
   const fileInput = document.getElementById('ing-file-input');
 
@@ -17245,7 +17354,7 @@ function renderExcelIngestion(file) {
 
   page.innerHTML = `
     <div class="ing-body">
-      ${topbar('Excel Ingestion')}
+      ${topbar()}
 
       <div class="ing-mapping-head">
         <div>
@@ -17301,13 +17410,11 @@ function renderExcelIngestion(file) {
       </div>
 
       <div class="ing-footer-row">
-        <button type="button" class="ing-btn-secondary" id="ing-back-btn">${I.chevronLeft}<span>Back</span></button>
         <button type="button" class="ing-footer-link" id="ing-review-flagged-btn">Review flagged only</button>
         <button type="button" class="proj-btn-primary" id="ing-confirm-mapping-btn"><span>Confirm mapping &amp; continue</span>${I.arrowRight}</button>
       </div>
     </div>`;
 
-  bindCrumb();
   bindExcelIngestion(file);
 }
 
@@ -17357,7 +17464,7 @@ function bindExcelIngestion(file) {
     document.getElementById('ing-map-table-slot').innerHTML = mappingTableHtml(flow.mapping[file.id], reviewOnly);
   });
 
-  document.getElementById('ing-back-btn')?.addEventListener('click', goBackInFlow);
+  document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', goBackInFlow);
   document.getElementById('ing-confirm-mapping-btn')?.addEventListener('click', () => {
     file.status = 'mapped';
     advanceQueue();
@@ -17417,7 +17524,7 @@ function renderPdfIngestion(file) {
 
   page.innerHTML = `
     <div class="ing-body">
-      ${topbar('PDF Ingestion')}
+      ${topbar()}
 
       <div class="ing-pdf-layout">
         <div>
@@ -17466,7 +17573,6 @@ function renderPdfIngestion(file) {
       </div>
 
       <div class="ing-footer-row">
-        <button type="button" class="ing-btn-secondary" id="ing-back-btn">${I.chevronLeft}<span>Back</span></button>
         <div class="ing-pdf-actions" style="margin-top:0;flex:1;max-width:calc(560*var(--u));margin-left:auto">
           <div class="ing-pdf-actions-col">
             <button type="button" class="proj-btn-primary" id="ing-pdf-continue-btn"><span>Continue &amp; confirm</span>${I.arrowRight}</button>
@@ -17480,7 +17586,6 @@ function renderPdfIngestion(file) {
       </div>
     </div>`;
 
-  bindCrumb();
   bindPdfIngestion(file);
 }
 
@@ -17493,6 +17598,8 @@ function bindPdfIngestion(file) {
     if (el) el.textContent = String(countdown);
     else clearInterval(timer);
   }, 1000);
+
+  document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', () => { clearInterval(timer); goBackInFlow(); });
 
   function refreshFindings() {
     document.getElementById('ing-findings-slot').innerHTML = findingCardsHtml(file, review);
@@ -17520,7 +17627,6 @@ function bindPdfIngestion(file) {
     document.getElementById('ing-warn-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 
-  document.getElementById('ing-back-btn')?.addEventListener('click', () => { clearInterval(timer); goBackInFlow(); });
   document.getElementById('ing-pdf-continue-btn')?.addEventListener('click', () => {
     clearInterval(timer);
     file.status = 'extracted';
@@ -17540,10 +17646,15 @@ function showUploadData(project) {
   flow.mapStats = {};
   flow.pdfReview = {};
 
+  const shell = document.querySelector('.app-shell');
+  // Only 'flex' means the app was actually showing — a fresh page load
+  // never explicitly sets this style at all, so checking "!== 'none'"
+  // would wrongly treat that empty string as "was showing".
+  flow.cameFromApp = !!(shell && shell.style.display === 'flex');
+
   if (typeof window.hideProjectPages === 'function') window.hideProjectPages();
   const landing = document.getElementById('landing-page');
   if (landing) { landing.classList.add('hidden'); landing.style.display = 'none'; }
-  const shell = document.querySelector('.app-shell');
   if (shell) shell.style.display = 'none';
   const fab = document.getElementById('floating-chatbot-fab');
   if (fab) fab.style.display = 'none';
@@ -18092,6 +18203,13 @@ function updateTopBarLayout(tab) {
     btnUpload.style.display = isHomeOverview ? 'flex' : 'none';
   }
 
+  // Facility/Period controls: live in the global topbar's left area only
+  // on Home Overview; every other tab keeps its copy in the sub-topbar row.
+  const homeTopControls = document.getElementById('home-top-controls');
+  if (homeTopControls) {
+    homeTopControls.style.display = isHomeOverview ? 'flex' : 'none';
+  }
+
   // Home's redesign (Dump/Home Overview-updated.png) has no generic
   // greeting/selector row — its own headers (attention feed, Digital
   // Twin card) carry that context instead, and the Digital Twin card has
@@ -18261,6 +18379,12 @@ function initTabs() {
     });
   });
 
+  // Sidebar logo lockup: returns to Home, not the landing page — this is
+  // only ever visible once the user is signed in.
+  document.getElementById('sidebar-brand-lockup')?.addEventListener('click', () => {
+    navigateToTab('home');
+  });
+
   // Topbar Global Action Handlers
 
   // Upload Data: same ingestion flow used during onboarding
@@ -18291,8 +18415,27 @@ function initTabs() {
     alert('Netgravity Help & Documentation\n\nAI Decision Intelligence for Logistics Networks.\n• Overview: Network telemetry & KPIs\n• Insights: AI-generated observations & diagnosis\n• Recommendations: Prescriptive optimization actions\n• Digital Twin: 2D/3D network topology\n• Scenarios: What-if decision planning');
   });
 
-  document.getElementById('btn-topbar-profile')?.addEventListener('click', () => {
+  // Profile menu: Profile (stub) / Sign out (back to landing sign-in)
+  document.getElementById('btn-topbar-profile')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('profile-dropdown-menu')?.classList.toggle('open');
+  });
+  document.addEventListener('click', () => {
+    document.getElementById('profile-dropdown-menu')?.classList.remove('open');
+  });
+  document.getElementById('profile-menu-profile')?.addEventListener('click', () => {
+    document.getElementById('profile-dropdown-menu')?.classList.remove('open');
     alert('User Profile\n\nLogged in as: Amit Kumar\nRole: Lead Supply Chain Architect (Admin)\nOrganization: Kearney Decision Systems');
+  });
+  document.getElementById('profile-menu-signout')?.addEventListener('click', () => {
+    document.getElementById('profile-dropdown-menu')?.classList.remove('open');
+    if (typeof window.returnToLanding === 'function') window.returnToLanding();
+  });
+
+  // "Current Project" pill: opens Select Project so the user can switch
+  // or create a project mid-session.
+  document.getElementById('project-select-btn')?.addEventListener('click', () => {
+    if (typeof window.showSelectProject === 'function') window.showSelectProject();
   });
 
   // 2D / 3D View Toggle (Digital Twin Tab)
@@ -18394,6 +18537,7 @@ function initHomeSelectors() {
     selFacility.addEventListener('change', () => {
       state.selectedFacility = selFacility.value;
       if (selFacilityPicker) selFacilityPicker.value = state.selectedFacility;
+      if (homeTopFacility) homeTopFacility.value = state.selectedFacility;
       renderHome();
     });
   }
@@ -18407,22 +18551,35 @@ function initHomeSelectors() {
 
     selPeriod.addEventListener('change', () => {
       state.selectedPeriod = selPeriod.value;
+      if (homeTopPeriod) homeTopPeriod.value = state.selectedPeriod;
       renderHome();
     });
   }
 
-  // Digital Twin card's own Period selector (Home's redesign hides the
-  // generic topbar row, so this is the visible period control there —
-  // see updateTopBarLayout). Kept in sync with the same global state.
-  const selTwinPeriod = document.getElementById('home2-twin-period');
-  if (selTwinPeriod) {
-    selTwinPeriod.innerHTML = (PERIODS || []).map(p =>
+  // Home Overview's own Facility/Period controls, relocated into the
+  // global topbar's left area (see updateTopBarLayout — the generic
+  // sub-topbar row is hidden on this tab). Kept in sync with the same
+  // global state as every other tab's selectors.
+  const homeTopFacility = document.getElementById('home-top-facility');
+  if (homeTopFacility) {
+    homeTopFacility.value = state.selectedFacility || 'DC_DELHI';
+    homeTopFacility.addEventListener('change', () => {
+      state.selectedFacility = homeTopFacility.value;
+      if (selFacility) selFacility.value = state.selectedFacility;
+      if (selFacilityPicker) selFacilityPicker.value = state.selectedFacility;
+      renderHome();
+    });
+  }
+
+  const homeTopPeriod = document.getElementById('home-top-period');
+  if (homeTopPeriod) {
+    homeTopPeriod.innerHTML = (PERIODS || []).map(p =>
       `<option value="${p.id}">${p.label}</option>`
     ).join('');
-    selTwinPeriod.value = state.selectedPeriod;
+    homeTopPeriod.value = state.selectedPeriod;
 
-    selTwinPeriod.addEventListener('change', () => {
-      state.selectedPeriod = selTwinPeriod.value;
+    homeTopPeriod.addEventListener('change', () => {
+      state.selectedPeriod = homeTopPeriod.value;
       if (selPeriod) selPeriod.value = state.selectedPeriod;
       renderHome();
     });

@@ -92,6 +92,7 @@ const flow = {
   mapping: {},         // fileId -> row[] (mutable copy of baseMappingRows())
   mapStats: {},        // fileId -> { detected, auto, review, ignored }
   pdfReview: {},       // fileId -> { expanded: bool, reviewed: Set<termId> }
+  cameFromApp: false,  // true when entered mid-session (app shell was showing), so Back should return there rather than to Create Project
 };
 
 let uidCounter = 0;
@@ -111,25 +112,52 @@ function classifyExt(filename) {
   return { ext, kind: null };
 }
 
+const LOGO_SVG = `<svg class="ing-brand-logo" viewBox="0 0 48 48" fill="none">
+      <line x1="10" y1="10" x2="10" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="38" y1="10" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="12" y1="12" x2="36" y2="36" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
+      <circle cx="10" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+      <circle cx="38" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+      <circle cx="10" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+      <circle cx="38" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+    </svg>`;
+
 /* ─── Shared chrome ──────────────────────────────────────────── */
-function topbar(currentLabel) {
+function topbar() {
   return `<div class="ing-topbar">
-      <div class="ing-breadcrumb">
-        <button class="ing-crumb-link" type="button" id="ing-crumb-create">Create Project</button>
-        <span class="ing-crumb-sep">${I.chevronRight}</span>
-        <span class="ing-crumb-current">${ingEsc(currentLabel)}</span>
+      <div class="ing-topbar-left">
+        <div class="ing-brand">
+          ${LOGO_SVG}
+          <span class="ing-brand-name">Netgravity</span>
+        </div>
       </div>
       <div class="ing-topbar-right">
+        <button class="ing-back-home-btn" type="button">${I.chevronLeft}<span>Back</span></button>
         <button class="topbar-icon-btn" type="button" title="Help & Documentation">${I.help}</button>
         <div class="user-avatar-ak" title="Amit Kumar">AK</div>
       </div>
     </div>`;
 }
 
-function bindCrumb() {
-  document.getElementById('ing-crumb-create')?.addEventListener('click', () => {
-    if (typeof window.showCreateProject === 'function') window.showCreateProject('existing');
-  });
+/* Returns to whichever screen led into this flow: the app shell, exactly
+   as it was, if this was a mid-session upload; otherwise Create Project.
+   Used by the Upload Data screen — the first step, so "back" leaves the
+   ingestion flow entirely. */
+function goBack() {
+  if (flow.cameFromApp) {
+    hideIngestionPages();
+    const landing = document.getElementById('landing-page');
+    if (landing) landing.style.display = 'none';
+    const shell = document.querySelector('.app-shell');
+    if (shell) shell.style.display = 'flex';
+    const fab = document.getElementById('floating-chatbot-fab');
+    if (fab) fab.style.display = 'flex';
+    return;
+  }
+  if (typeof window.showCreateProject === 'function') {
+    const origin = typeof window.getCreateOrigin === 'function' ? window.getCreateOrigin() : 'existing';
+    window.showCreateProject(origin);
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -170,7 +198,7 @@ function renderUploadData() {
 
   page.innerHTML = `
     <div class="ing-body">
-      ${topbar('Upload Data')}
+      ${topbar()}
       <h1 class="ing-title">Upload &amp; Align Network Datasets</h1>
       <p class="ing-subtitle">Upload CSVs, Excel order books, or Rate Card PDFs. NetGravity's AI will automatically align and prepare your data.</p>
 
@@ -203,7 +231,6 @@ function renderUploadData() {
       </div>
     </div>`;
 
-  bindCrumb();
   bindUploadData();
 }
 
@@ -250,6 +277,8 @@ function addFiles(fileList) {
 }
 
 function bindUploadData() {
+  document.querySelector('#upload-data-page .ing-back-home-btn')?.addEventListener('click', goBack);
+
   const dropzone = document.getElementById('ing-dropzone');
   const fileInput = document.getElementById('ing-file-input');
 
@@ -547,7 +576,7 @@ function renderExcelIngestion(file) {
 
   page.innerHTML = `
     <div class="ing-body">
-      ${topbar('Excel Ingestion')}
+      ${topbar()}
 
       <div class="ing-mapping-head">
         <div>
@@ -603,13 +632,11 @@ function renderExcelIngestion(file) {
       </div>
 
       <div class="ing-footer-row">
-        <button type="button" class="ing-btn-secondary" id="ing-back-btn">${I.chevronLeft}<span>Back</span></button>
         <button type="button" class="ing-footer-link" id="ing-review-flagged-btn">Review flagged only</button>
         <button type="button" class="proj-btn-primary" id="ing-confirm-mapping-btn"><span>Confirm mapping &amp; continue</span>${I.arrowRight}</button>
       </div>
     </div>`;
 
-  bindCrumb();
   bindExcelIngestion(file);
 }
 
@@ -659,7 +686,7 @@ function bindExcelIngestion(file) {
     document.getElementById('ing-map-table-slot').innerHTML = mappingTableHtml(flow.mapping[file.id], reviewOnly);
   });
 
-  document.getElementById('ing-back-btn')?.addEventListener('click', goBackInFlow);
+  document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', goBackInFlow);
   document.getElementById('ing-confirm-mapping-btn')?.addEventListener('click', () => {
     file.status = 'mapped';
     advanceQueue();
@@ -719,7 +746,7 @@ function renderPdfIngestion(file) {
 
   page.innerHTML = `
     <div class="ing-body">
-      ${topbar('PDF Ingestion')}
+      ${topbar()}
 
       <div class="ing-pdf-layout">
         <div>
@@ -768,7 +795,6 @@ function renderPdfIngestion(file) {
       </div>
 
       <div class="ing-footer-row">
-        <button type="button" class="ing-btn-secondary" id="ing-back-btn">${I.chevronLeft}<span>Back</span></button>
         <div class="ing-pdf-actions" style="margin-top:0;flex:1;max-width:calc(560*var(--u));margin-left:auto">
           <div class="ing-pdf-actions-col">
             <button type="button" class="proj-btn-primary" id="ing-pdf-continue-btn"><span>Continue &amp; confirm</span>${I.arrowRight}</button>
@@ -782,7 +808,6 @@ function renderPdfIngestion(file) {
       </div>
     </div>`;
 
-  bindCrumb();
   bindPdfIngestion(file);
 }
 
@@ -795,6 +820,8 @@ function bindPdfIngestion(file) {
     if (el) el.textContent = String(countdown);
     else clearInterval(timer);
   }, 1000);
+
+  document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', () => { clearInterval(timer); goBackInFlow(); });
 
   function refreshFindings() {
     document.getElementById('ing-findings-slot').innerHTML = findingCardsHtml(file, review);
@@ -822,7 +849,6 @@ function bindPdfIngestion(file) {
     document.getElementById('ing-warn-card')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   });
 
-  document.getElementById('ing-back-btn')?.addEventListener('click', () => { clearInterval(timer); goBackInFlow(); });
   document.getElementById('ing-pdf-continue-btn')?.addEventListener('click', () => {
     clearInterval(timer);
     file.status = 'extracted';
@@ -842,10 +868,15 @@ export function showUploadData(project) {
   flow.mapStats = {};
   flow.pdfReview = {};
 
+  const shell = document.querySelector('.app-shell');
+  // Only 'flex' means the app was actually showing — a fresh page load
+  // never explicitly sets this style at all, so checking "!== 'none'"
+  // would wrongly treat that empty string as "was showing".
+  flow.cameFromApp = !!(shell && shell.style.display === 'flex');
+
   if (typeof window.hideProjectPages === 'function') window.hideProjectPages();
   const landing = document.getElementById('landing-page');
   if (landing) { landing.classList.add('hidden'); landing.style.display = 'none'; }
-  const shell = document.querySelector('.app-shell');
   if (shell) shell.style.display = 'none';
   const fab = document.getElementById('floating-chatbot-fab');
   if (fab) fab.style.display = 'none';

@@ -34,7 +34,7 @@
   padding: calc(42 * var(--u)) calc(72 * var(--u)) calc(56 * var(--u));
 }
 
-/* ─── Shared top bar: breadcrumb + help + avatar ─────────────── */
+/* ─── Shared top bar: brand + help + avatar ──────────────────── */
 .ing-topbar {
   display: flex;
   align-items: center;
@@ -42,42 +42,59 @@
   margin-bottom: calc(34 * var(--u));
 }
 
-.ing-breadcrumb {
+.ing-topbar-left {
   display: flex;
   align-items: center;
-  gap: calc(8 * var(--u));
-  font-size: calc(15 * var(--u));
+  gap: calc(22 * var(--u));
 }
 
-.ing-crumb-link {
-  background: none;
-  border: none;
-  padding: 0;
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: 600;
-  color: var(--brand-purple);
-  cursor: pointer;
-}
-
-.ing-crumb-link:hover { text-decoration: underline; }
-
-.ing-crumb-sep {
-  color: var(--proj-text-4);
+/* Decorative only — no click-to-navigate, unlike the sidebar lockup. */
+.ing-brand {
   display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
 }
 
-.ing-crumb-sep svg { width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
+.ing-brand-logo {
+  width: calc(28 * var(--u));
+  height: calc(28 * var(--u));
+  flex-shrink: 0;
+}
 
-.ing-crumb-current {
-  color: var(--proj-text-2);
-  font-weight: 500;
+.ing-brand-name {
+  font-size: calc(18 * var(--u));
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--proj-text-1);
 }
 
 .ing-topbar-right {
   display: flex;
   align-items: center;
   gap: calc(14 * var(--u));
+}
+
+.ing-back-home-btn {
+  display: flex;
+  align-items: center;
+  gap: calc(4 * var(--u));
+  background: none;
+  border: 1px solid var(--proj-border);
+  border-radius: calc(8 * var(--u));
+  padding: calc(7 * var(--u)) calc(12 * var(--u)) calc(7 * var(--u)) calc(6 * var(--u));
+  font-family: inherit;
+  font-size: calc(14 * var(--u));
+  font-weight: 600;
+  color: var(--proj-text-2);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.ing-back-home-btn svg { width: calc(16 * var(--u)); height: calc(16 * var(--u)); }
+
+.ing-back-home-btn:hover {
+  border-color: var(--brand-purple);
+  color: var(--brand-purple);
 }
 
 /* Reuse the app shell's own topbar-icon-btn / user-avatar-ak classes

@@ -17,9 +17,13 @@
   gap: 20px;
   width: 100%;
   align-items: start;
+  /* A little breathing room below the global topbar, since Home hides the
+     generic sub-topbar row every other tab uses for that spacing. */
+  margin-top: 16px;
   /* Full-height columns: viewport minus the global topbar above this
-     section. Both children scroll internally rather than the page. */
-  height: calc(100vh - 132px);
+     section and the margin-top just added. Both children scroll
+     internally rather than the page. */
+  height: calc(100vh - 148px);
   min-height: 520px;
 }
 
@@ -289,10 +293,6 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 14px;
   flex-shrink: 0;
-}
-
-@media (max-width: 1400px) {
-  .home2-kpi-row { grid-template-columns: repeat(2, 1fr); }
 }
 
 .home2-kpi-card {

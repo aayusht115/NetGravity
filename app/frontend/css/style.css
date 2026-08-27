@@ -552,6 +552,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   gap: 12px;
 }
 
+.project-select-btn { transition: border-color 0.15s ease, background 0.15s ease; }
+.project-select-btn:hover { border-color: #9218EA !important; background: #f5f1fb !important; }
+
+/* Facility/Period controls when relocated into the global topbar's left
+   area (Home Overview only) — same look as .topbar-controls in the
+   sub-topbar row, just without the auto left-margin that positions it
+   there. */
+#home-top-controls { margin-left: 0; }
+
 .topbar-right-area {
   display: flex;
   align-items: center;
@@ -614,6 +623,10 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   border: 1.5px solid #ffffff;
 }
 
+.topbar-profile-wrap {
+  position: relative;
+}
+
 .topbar-profile-btn {
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -621,6 +634,53 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 .topbar-profile-btn:hover {
   transform: scale(1.05);
+}
+
+.profile-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  min-width: 172px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(17, 24, 39, 0.14);
+  padding: 6px;
+  display: none;
+  z-index: 200;
+}
+
+.profile-dropdown-menu.open {
+  display: block;
+}
+
+.profile-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.profile-dropdown-item:hover {
+  background: #f5f1fb;
+  color: #9218EA;
+}
+
+.profile-dropdown-item.danger:hover {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.profile-dropdown-sep {
+  height: 1px;
+  background: #f1eef7;
+  margin: 4px 3px;
 }
 
 /* Sub-Topbar (Page Title / Greeting + Facility & Period Selectors in Parallel) */

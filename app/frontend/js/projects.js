@@ -27,18 +27,14 @@ const REGIONS = [
   'Central & South India', 'Pan India', 'South Asia',
 ];
 
-const OBJECTIVES = [
-  'Cost optimization',
-  'Service level improvement',
-  'Network resilience',
-  'Capacity planning',
-  'Carbon footprint reduction',
-];
-
-const CREATE_MODES = [
-  { id: 'scratch',  label: 'Start from scratch' },
-  { id: 'import',   label: 'Import network data' },
-  { id: 'template', label: 'Use starter template' },
+const CLIENTS = [
+  'Reliance Retail',
+  'Tata Steel',
+  'Flipkart',
+  'Amazon India',
+  'Hindustan Unilever',
+  'ITC Limited',
+  'Asian Paints',
 ];
 
 /* ─── View state ─────────────────────────────────────────────── */
@@ -47,7 +43,6 @@ const ui = {
      'existing' when they arrived from the select screen. Drives the
      create screen's wording and where Cancel goes back to. */
   createOrigin: 'first',
-  mode: 'scratch',
   search: '',
   sort: 'updated',
   view: 'list',
@@ -61,22 +56,20 @@ let currentProject = null;
 /* ─── Icons ──────────────────────────────────────────────────── */
 const ICONS = {
   logo: `<svg class="proj-logo-svg" viewBox="0 0 48 48" fill="none">
-      <line x1="10" y1="10" x2="38" y2="10" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
-      <line x1="10" y1="38" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="10" y1="10" x2="10" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
+      <line x1="38" y1="10" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
       <line x1="12" y1="12" x2="36" y2="36" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
       <circle cx="10" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
       <circle cx="38" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
       <circle cx="10" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
       <circle cx="38" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
     </svg>`,
-  scratch: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>`,
-  import: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.5a4 4 0 0 0-1-7.87 6 6 0 0 0-11.6 1.5A3.5 3.5 0 0 0 6 17"/><polyline points="9 13 12 10 15 13"/><line x1="12" y1="10" x2="12" y2="19"/></svg>`,
-  template: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/></svg>`,
   file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
   globe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>`,
-  target: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg>`,
+  client: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V6a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15"/><path d="M13 10h6a1 1 0 0 1 1 1v10"/><line x1="8" y1="9" x2="8" y2="9.01"/><line x1="8" y1="13" x2="8" y2="13.01"/><line x1="8" y1="17" x2="8" y2="17.01"/><line x1="17" y1="14" x2="17" y2="14.01"/><line x1="17" y1="18" x2="17" y2="18.01"/></svg>`,
   folder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`,
   arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
+  chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>`,
   plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
   kebab: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>`,
   search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>`,
@@ -108,6 +101,18 @@ function brandLockup() {
     </div>`;
 }
 
+/* Decorative-only lockup (no click-to-landing) — used on screens reachable
+   mid-session, where the logo shouldn't double as a sign-out shortcut. */
+function brandLockupStatic() {
+  return `<div class="proj-brand proj-brand-static">
+      ${ICONS.logo}
+      <div>
+        <div class="proj-brand-title">Netgravity</div>
+        <div class="proj-brand-sub">by Kearney</div>
+      </div>
+    </div>`;
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
@@ -122,28 +127,19 @@ export function renderCreateProject() {
   if (!page) return;
 
   const first = ui.createOrigin === 'first';
-  const title = first ? 'Create your first project' : 'Create a new project';
   const cancelLabel = first ? 'Back to sign in' : 'Cancel';
 
-  const modes = CREATE_MODES.map(m => `
-    <button type="button" class="proj-mode-card${m.id === ui.mode ? ' selected' : ''}" data-mode="${m.id}">
-      <span class="proj-mode-icon">${ICONS[m.id]}</span>
-      <span class="proj-mode-label">${m.label}</span>
-    </button>`).join('');
-
   const regionOpts = REGIONS.map(r => `<option value="${escapeHtml(r)}">${escapeHtml(r)}</option>`).join('');
-  const objectiveOpts = OBJECTIVES.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
+  const clientOpts = CLIENTS.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
 
   page.innerHTML = `
     ${decorSvg()}
     ${brandLockup()}
     <div class="proj-create-body">
       <div class="proj-create-head">
-        <h1 class="proj-create-title">${title}</h1>
+        <h1 class="proj-create-title">Create Project</h1>
         <p class="proj-create-sub">Set up a logistics network workspace to analyze, simulate, and optimize decisions.</p>
       </div>
-
-      <div class="proj-mode-grid" id="proj-mode-grid">${modes}</div>
 
       <form class="proj-form-card" id="proj-create-form" novalidate>
         <div class="proj-form-row split">
@@ -165,19 +161,17 @@ export function renderCreateProject() {
         </div>
 
         <div class="proj-form-row">
-          <span class="proj-row-icon">${ICONS.target}</span>
+          <span class="proj-row-icon">${ICONS.client}</span>
           <div>
-            <label class="proj-field-label" for="proj-objective">Primary objective</label>
-            <select class="proj-select placeholder" id="proj-objective">
-              <option value="">Select primary objective</option>
-              ${objectiveOpts}
-            </select>
+            <label class="proj-field-label" for="proj-client">Client</label>
+            <input class="proj-input" id="proj-client" type="text" list="proj-client-list" placeholder="Select or type a client name" autocomplete="off" />
+            <datalist id="proj-client-list">${clientOpts}</datalist>
           </div>
         </div>
       </form>
 
       <div class="proj-create-actions">
-        <button type="button" class="proj-btn-primary" id="proj-create-submit">Create project</button>
+        <button type="button" class="proj-btn-primary" id="proj-create-submit">Proceed to upload data</button>
         <div class="proj-error" id="proj-create-error"></div>
         <button type="button" class="proj-link-btn" id="proj-create-cancel">${cancelLabel}</button>
       </div>
@@ -187,19 +181,11 @@ export function renderCreateProject() {
 }
 
 function bindCreateProject() {
-  const grid = document.getElementById('proj-mode-grid');
   const nameInput = document.getElementById('proj-name');
   const errorEl = document.getElementById('proj-create-error');
 
-  grid?.querySelectorAll('.proj-mode-card').forEach(card => {
-    card.addEventListener('click', () => {
-      ui.mode = card.dataset.mode;
-      grid.querySelectorAll('.proj-mode-card').forEach(c => c.classList.toggle('selected', c === card));
-    });
-  });
-
   // Keep the select's placeholder colour until a real option is chosen.
-  ['proj-region', 'proj-objective'].forEach(id => {
+  ['proj-region'].forEach(id => {
     const sel = document.getElementById(id);
     sel?.addEventListener('change', () => sel.classList.toggle('placeholder', !sel.value));
   });
@@ -218,6 +204,7 @@ function bindCreateProject() {
       id: 'pr-' + Date.now().toString(36),
       name,
       region: document.getElementById('proj-region')?.value || 'India',
+      client: (document.getElementById('proj-client')?.value || '').trim(),
       updated: 'Just now',
       rank: 0,
       owner: 'You',
@@ -330,7 +317,8 @@ export function renderSelectProject() {
 
   page.innerHTML = `
     ${decorSvg()}
-    ${brandLockup()}
+    ${brandLockupStatic()}
+    <button class="proj-back-btn" type="button" id="proj-select-back">${ICONS.chevronLeft}<span>Back</span></button>
     <button class="proj-help-btn" type="button" title="Help">${ICONS.help}</button>
 
     <div class="proj-select-body">
@@ -382,6 +370,7 @@ function bindSelectProject() {
   if (!page) return;
 
   document.getElementById('proj-new-btn')?.addEventListener('click', () => showCreateProject('existing'));
+  document.getElementById('proj-select-back')?.addEventListener('click', backFromSelectProject);
 
   const search = document.getElementById('proj-search');
   search?.addEventListener('input', () => { ui.search = search.value; refreshList(); });
@@ -446,7 +435,17 @@ function hideLanding() {
   if (shell) shell.style.display = 'none';
 }
 
+/* True when Select Project was opened mid-session (the "Current Project"
+   pill on Home), so Back should restore the app shell rather than sign out. */
+let selectCameFromApp = false;
+
 export function showSelectProject() {
+  const shell = document.querySelector('.app-shell');
+  // Only 'flex' means the app was actually showing — a fresh page load
+  // never explicitly sets this style at all, so checking "!== 'none'"
+  // would wrongly treat that empty string as "was showing".
+  selectCameFromApp = !!(shell && shell.style.display === 'flex');
+
   hideLanding();
   hideProjectPages();
   if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
@@ -458,9 +457,29 @@ export function showSelectProject() {
   }
 }
 
+function backFromSelectProject() {
+  if (selectCameFromApp) {
+    enterAppAsIs();
+    return;
+  }
+  if (typeof window.returnToLanding === 'function') window.returnToLanding();
+}
+
+/* Restore the app shell exactly as it was, without forcing a Home
+   redirect — used when Back should return to whatever tab was active. */
+function enterAppAsIs() {
+  hideProjectPages();
+  if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
+  const landing = document.getElementById('landing-page');
+  if (landing) landing.style.display = 'none';
+  const shell = document.querySelector('.app-shell');
+  if (shell) shell.style.display = 'flex';
+  const fab = document.getElementById('floating-chatbot-fab');
+  if (fab) fab.style.display = 'flex';
+}
+
 export function showCreateProject(origin) {
   ui.createOrigin = origin === 'existing' ? 'existing' : 'first';
-  ui.mode = 'scratch';
   hideLanding();
   hideProjectPages();
   if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
@@ -506,5 +525,6 @@ export function initProjects() {
     window.enterApp = enterApp;
     window.markProjectInProgress = markProjectInProgress;
     window.getCurrentProject = () => currentProject;
+    window.getCreateOrigin = () => ui.createOrigin;
   }
 }

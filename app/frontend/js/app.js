@@ -77,6 +77,13 @@ function updateTopBarLayout(tab) {
     btnUpload.style.display = isHomeOverview ? 'flex' : 'none';
   }
 
+  // Facility/Period controls: live in the global topbar's left area only
+  // on Home Overview; every other tab keeps its copy in the sub-topbar row.
+  const homeTopControls = document.getElementById('home-top-controls');
+  if (homeTopControls) {
+    homeTopControls.style.display = isHomeOverview ? 'flex' : 'none';
+  }
+
   // Home's redesign (Dump/Home Overview-updated.png) has no generic
   // greeting/selector row — its own headers (attention feed, Digital
   // Twin card) carry that context instead, and the Digital Twin card has
@@ -246,6 +253,12 @@ function initTabs() {
     });
   });
 
+  // Sidebar logo lockup: returns to Home, not the landing page — this is
+  // only ever visible once the user is signed in.
+  document.getElementById('sidebar-brand-lockup')?.addEventListener('click', () => {
+    navigateToTab('home');
+  });
+
   // Topbar Global Action Handlers
 
   // Upload Data: same ingestion flow used during onboarding
@@ -276,8 +289,27 @@ function initTabs() {
     alert('Netgravity Help & Documentation\n\nAI Decision Intelligence for Logistics Networks.\n• Overview: Network telemetry & KPIs\n• Insights: AI-generated observations & diagnosis\n• Recommendations: Prescriptive optimization actions\n• Digital Twin: 2D/3D network topology\n• Scenarios: What-if decision planning');
   });
 
-  document.getElementById('btn-topbar-profile')?.addEventListener('click', () => {
+  // Profile menu: Profile (stub) / Sign out (back to landing sign-in)
+  document.getElementById('btn-topbar-profile')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('profile-dropdown-menu')?.classList.toggle('open');
+  });
+  document.addEventListener('click', () => {
+    document.getElementById('profile-dropdown-menu')?.classList.remove('open');
+  });
+  document.getElementById('profile-menu-profile')?.addEventListener('click', () => {
+    document.getElementById('profile-dropdown-menu')?.classList.remove('open');
     alert('User Profile\n\nLogged in as: Amit Kumar\nRole: Lead Supply Chain Architect (Admin)\nOrganization: Kearney Decision Systems');
+  });
+  document.getElementById('profile-menu-signout')?.addEventListener('click', () => {
+    document.getElementById('profile-dropdown-menu')?.classList.remove('open');
+    if (typeof window.returnToLanding === 'function') window.returnToLanding();
+  });
+
+  // "Current Project" pill: opens Select Project so the user can switch
+  // or create a project mid-session.
+  document.getElementById('project-select-btn')?.addEventListener('click', () => {
+    if (typeof window.showSelectProject === 'function') window.showSelectProject();
   });
 
   // 2D / 3D View Toggle (Digital Twin Tab)
@@ -379,6 +411,7 @@ function initHomeSelectors() {
     selFacility.addEventListener('change', () => {
       state.selectedFacility = selFacility.value;
       if (selFacilityPicker) selFacilityPicker.value = state.selectedFacility;
+      if (homeTopFacility) homeTopFacility.value = state.selectedFacility;
       renderHome();
     });
   }
@@ -392,22 +425,35 @@ function initHomeSelectors() {
 
     selPeriod.addEventListener('change', () => {
       state.selectedPeriod = selPeriod.value;
+      if (homeTopPeriod) homeTopPeriod.value = state.selectedPeriod;
       renderHome();
     });
   }
 
-  // Digital Twin card's own Period selector (Home's redesign hides the
-  // generic topbar row, so this is the visible period control there —
-  // see updateTopBarLayout). Kept in sync with the same global state.
-  const selTwinPeriod = document.getElementById('home2-twin-period');
-  if (selTwinPeriod) {
-    selTwinPeriod.innerHTML = (PERIODS || []).map(p =>
+  // Home Overview's own Facility/Period controls, relocated into the
+  // global topbar's left area (see updateTopBarLayout — the generic
+  // sub-topbar row is hidden on this tab). Kept in sync with the same
+  // global state as every other tab's selectors.
+  const homeTopFacility = document.getElementById('home-top-facility');
+  if (homeTopFacility) {
+    homeTopFacility.value = state.selectedFacility || 'DC_DELHI';
+    homeTopFacility.addEventListener('change', () => {
+      state.selectedFacility = homeTopFacility.value;
+      if (selFacility) selFacility.value = state.selectedFacility;
+      if (selFacilityPicker) selFacilityPicker.value = state.selectedFacility;
+      renderHome();
+    });
+  }
+
+  const homeTopPeriod = document.getElementById('home-top-period');
+  if (homeTopPeriod) {
+    homeTopPeriod.innerHTML = (PERIODS || []).map(p =>
       `<option value="${p.id}">${p.label}</option>`
     ).join('');
-    selTwinPeriod.value = state.selectedPeriod;
+    homeTopPeriod.value = state.selectedPeriod;
 
-    selTwinPeriod.addEventListener('change', () => {
-      state.selectedPeriod = selTwinPeriod.value;
+    homeTopPeriod.addEventListener('change', () => {
+      state.selectedPeriod = homeTopPeriod.value;
       if (selPeriod) selPeriod.value = state.selectedPeriod;
       renderHome();
     });
