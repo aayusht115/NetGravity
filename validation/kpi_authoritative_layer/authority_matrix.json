@@ -1,0 +1,135 @@
+{
+  "schema_version": "1.0",
+  "description": "Which module/class owns the authoritative calculation for each metric domain, verified against source (not assumed from the pre-existing audit).",
+  "domains": [
+    {
+      "domain": "Optimization / Cost / Flow / Feasibility",
+      "owner_module": "netgravity.optimization.milp",
+      "owner_class_or_function": "milp_solve (no OR-Tools — verified: solver library is pulp, default backend HiGHS)",
+      "owns": ["total_cost (solver_objective)", "facility_cost", "transport_cost", "handling_cost", "inventory_cost (via InventoryCoefficientEngine)", "shortage_cost", "allocation", "flow", "feasibility (SolverStatus)"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "wrap only"
+    },
+    {
+      "domain": "Business Network Cost",
+      "owner_module": "netgravity.costs.business_cost",
+      "owner_class_or_function": "compute_business_network_cost",
+      "owns": ["business_network_cost (solver_objective minus shortage penalty, per configured ResilienceCostBasis)"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "wrap only"
+    },
+    {
+      "domain": "Network / Facility KPIs",
+      "owner_module": "netgravity.metrics.kpis",
+      "owner_class_or_function": "compute_kpis, compute_flow_analytics",
+      "owns": ["demand_fill_rate", "utilization (avg/max/min/per-facility)", "weighted/inbound/outbound distance", "pct_demand_in_sla", "total_carbon_kg", "carbon_per_unit", "overutilized/underutilized counts"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "wrap only (some metrics blocked by a documented contract-bridge data gap — see data_gap_inventory.json)"
+    },
+    {
+      "domain": "Cost Reconciliation (internal audit)",
+      "owner_module": "netgravity.costs.reconciliation",
+      "owner_class_or_function": "reconcile_costs, reconcile_kpis_and_objective",
+      "owns": ["independent cross-check of every cost/KPI figure against raw decision vectors — this module IS the codebase's own internal formula audit"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "not consumed in Phase 9.1; a genuine candidate for a future 'formula health' KPI"
+    },
+    {
+      "domain": "Resilience (REI)",
+      "owner_module": "netgravity.resilience.rei",
+      "owner_class_or_function": "normalize_rei, assess_facility_resilience, assess_network_resilience, classify_risk (free functions — no REICalculator class exists)",
+      "owns": ["rei", "performance_impact", "cost_impact_pct", "risk_classification", "service_loss (diagnostic only, never fed into rei)"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "wrap only"
+    },
+    {
+      "domain": "Risk (RF)",
+      "owner_module": "netgravity.orchestrator.risk.risk_factor",
+      "owner_class_or_function": "compute_risk_factor, assess_network_risk",
+      "owns": ["risk_factor (RF = P + REI - P*REI)", "RFStatus/RFNotComputableReason classification"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "wrap only"
+    },
+    {
+      "domain": "Risk — event-to-node mapping",
+      "owner_module": "netgravity.orchestrator.risk.risk_assessment",
+      "owner_class_or_function": "map_event_to_nodes, lookup_rei, assess_event_risk",
+      "owns": ["which facility(ies) an external event applies to", "snapshot-staleness validation of a looked-up REI"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "not directly consumed — RiskAssessment (the output) is wrapped instead"
+    },
+    {
+      "domain": "Forecasting",
+      "owner_module": "netgravity.forecasting (engines/, validation.py, change_point.py, regime.py, characterizer.py)",
+      "owner_class_or_function": "ETSForecaster, IntermittentForecaster, QuantileForecaster, ColdStartForecaster, EngineSelector, backtest, ChangePointDetector, select_regime, compute_demand_metrics",
+      "owns": ["forecast point/quantile values", "MAE/MASE/WAPE/RMSE", "structural break detection (sup-F, NOT CUSUM)", "regime selection", "demand pattern classification"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "wrap only"
+    },
+    {
+      "domain": "Carbon",
+      "owner_module": "netgravity.carbon.module",
+      "owner_class_or_function": "CarbonModule (compute, compute_total_co2)",
+      "owns": ["co2_kg per flow", "total_carbon_kg (network aggregate, via metrics.kpis)"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "wrap only"
+    },
+    {
+      "domain": "Inventory",
+      "owner_module": "netgravity.inventory.coefficient_engine",
+      "owner_class_or_function": "InventoryCoefficientEngine.compute_coefficients (static method — no InventoryEngine class exists)",
+      "owns": ["safety stock", "cycle stock", "per-pair inventory cost fed into the MILP"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "not exposed in Phase 9.1 — no ExecutionContext access point exists (data gap)"
+    },
+    {
+      "domain": "Center of Gravity",
+      "owner_module": "netgravity.cog.screener",
+      "owner_class_or_function": "weiszfeld_cog, multi_cog (free functions — no COGScreener class exists)",
+      "owns": ["geographic facility-siting screen (explicitly documented as screening-only, never a MILP input)"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "not exposed in Phase 9.1 — standalone, no orchestrator integration point (data gap)"
+    },
+    {
+      "domain": "Service / SLA diagnostics",
+      "owner_module": "netgravity.service.cumulative, netgravity.service.module",
+      "owner_class_or_function": "compute_min_cumulative_lead_times, check_cumulative_sla, ServiceModule.check_service_compliance",
+      "owns": ["multi-echelon cumulative lead-time SLA warnings (diagnostic only — NOT weighted distance, NOT pct_demand_in_sla, contra the pre-existing audit)"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "not consumed in Phase 9.1"
+    },
+    {
+      "domain": "Sensitivity Analysis",
+      "owner_module": "netgravity.sensitivity.engine",
+      "owner_class_or_function": "SensitivityEngine (one_way_sweep, two_way_sweep, tornado_analysis)",
+      "owns": ["sensitivity_pct", "tornado pct_of_baseline — computed by repeated MILP solves + compute_kpis"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "not consumed in Phase 9.1; SensitivityResult already typed and could be wrapped in Phase 9.2"
+    },
+    {
+      "domain": "Governance / Action Classification",
+      "owner_module": "netgravity.orchestrator.governance.action_classifier",
+      "owner_class_or_function": "ActionClassifier.classify, GovernancePolicy",
+      "owns": ["AUTO_ACTION/APPROVAL_REQUIRED/HUMAN_ONLY/NO_ACTION classification and its exact threshold values (NOT a rupee-valued Tier system)"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "read-only source for the threshold catalogue (metrics/thresholds.py imports GovernancePolicy live)"
+    },
+    {
+      "domain": "Digital Twin comparison",
+      "owner_module": "netgravity.orchestrator.twin.service",
+      "owner_class_or_function": "DigitalTwinService.compare (_kpi_deltas, _facility_changes, _lane_changes)",
+      "owns": ["MetricDelta for TwinKPIs fields (business_network_cost, demand_fill_rate, utilization, carbon, etc.) — but NOT REI/RF, which live in a separate RiskContext it never diffs"],
+      "kpi_layer_may_compute": false,
+      "kpi_layer_role": "pattern reused (not duplicated) for a genuinely new comparison the twin does not cover (risk_factor)"
+    },
+    {
+      "domain": "Network / KPI layer — legitimate derived metrics (this phase)",
+      "owner_module": "netgravity.orchestrator.metrics.registry (KPIRegistry — Phase 9.1)",
+      "owner_class_or_function": "KPIRegistry.scenario_comparison",
+      "owns": ["scenario-vs-baseline deltas for fill rate / utilization / carbon / SLA (generic diff over two already-authoritative NetworkStateResults, mirroring the Digital Twin's own pattern)", "cost delta (READ from the existing ScenarioResult fields, never recomputed)"],
+      "kpi_layer_may_compute": true,
+      "kpi_layer_role": "the one place in this phase that performs new arithmetic — documented per-metric in registry.py, never duplicating an existing formula"
+    }
+  ],
+  "verified_conclusion": "Every metric-bearing domain the phase brief lists (Optimization, Forecasting, Resilience, Risk) is owned by a real, verified specialist module. The KPI layer introduced in Phase 9.1 computes exactly one new thing: generic scenario-vs-baseline deltas for metrics the Digital Twin's existing comparison mechanism does not already cover (risk_factor), using the same NOT_COMPARABLE-on-missing-data pattern already proven there. Everything else is a verbatim wrap."
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "rule_id": "ACT-01",
+    "input_signal": "Disruption Alert P >= 0.70 at DC node j",
+    "kpi_condition": "RF_j = P + REI_j - P * REI_j >= 0.70",
+    "threshold": "HIGH_RISK (RF >= 0.70)",
+    "insight_generated": "Severe compound disruption vulnerability detected at DC {node_j}. High risk of customer SLA failure.",
+    "recommendation": "Reroute volume to secondary backup DC; activate emergency stock buffer; evaluate dynamic MILP rebalancing.",
+    "action_tier": "Tier 2 (Operational Lead Approval required) or Tier 3 if financial exposure >= \u20b925L",
+    "human_approval_required": true,
+    "code_implementation": "netgravity/orchestrator/governance/action_classifier.py:classify_action",
+    "test_coverage": "tests/test_phase1_risk_chain.py, tests/integration/test_external_risk_workflow.py"
+  },
+  {
+    "rule_id": "ACT-02",
+    "input_signal": "DC Throughput Volume approaching rated ceiling",
+    "kpi_condition": "Utilization_j = Volume_j / Cap_j >= 85.0%",
+    "threshold": "CAPACITY_STRESS (Utilization >= 85%)",
+    "insight_generated": "DC {node_j} is operating at {utilization}% capacity, creating network throughput bottleneck.",
+    "recommendation": "Rebalance destination market assignments to adjacent low-utilization facility; adjust plant dispatch allocations.",
+    "action_tier": "Tier 1 if cost impact < \u20b95L, else Tier 2",
+    "human_approval_required": "Conditional (True if cost variance >= \u20b95L or SLA degradation > 0)",
+    "code_implementation": "netgravity/orchestrator/reasoning/runtime.py:generate_insights",
+    "test_coverage": "tests/test_hardening_v14.py"
+  },
+  {
+    "rule_id": "ACT-03",
+    "input_signal": "External Market Signal (e.g. Diesel price hike +8% or Port Strike)",
+    "kpi_condition": "Signal_Magnitude >= 5.0% and Confidence in {HIGH, MEDIUM}",
+    "threshold": "MATERIAL_SIGNAL_LIFT (>= 5%)",
+    "insight_generated": "External freight cost escalation detected on Lane {origin}->{dest}.",
+    "recommendation": "Re-run MILP optimization solver to identify modal shift (Road to Rail) or alternative sourcing lanes.",
+    "action_tier": "Tier 2",
+    "human_approval_required": true,
+    "code_implementation": "netgravity/orchestrator/routing/signal_router.py:route_signal",
+    "test_coverage": "tests/integration/test_signal_routing.py"
+  },
+  {
+    "rule_id": "ACT-04",
+    "input_signal": "MILP Solver identifies cost reduction topology",
+    "kpi_condition": "Savings_Pct >= 5.0% and Fill_Rate >= 95.0%",
+    "threshold": "MATERIAL_SAVINGS (>= 5.0%)",
+    "insight_generated": "Optimized network topology delivers \u20b9{cost_savings} ({savings_pct}%) cost reduction while maintaining {fill_rate}% SLA.",
+    "recommendation": "Adopt prescriptive dispatch schedule; reassign lane flow allocations.",
+    "action_tier": "Tier 1 if total cost shift < \u20b95L, else Tier 2",
+    "human_approval_required": "Conditional",
+    "code_implementation": "netgravity/orchestrator/reasoning/runtime.py:evaluate_decision",
+    "test_coverage": "tests/test_milp_core.py, tests/integration/test_governance_integration.py"
+  },
+  {
+    "rule_id": "ACT-05",
+    "input_signal": "Statistical Break in Historical Demand detected",
+    "kpi_condition": "CUSUM_Stat > 4.0 * sigma and p_value < 0.05",
+    "threshold": "STRUCTURAL_BREAK (h = 4.0 * std)",
+    "insight_generated": "Permanent demand level shift detected for Product {sku} in Region {mkt}.",
+    "recommendation": "Recalibrate baseline forecasting window; re-evaluate DC inventory safety stock buffers.",
+    "action_tier": "Tier 1 (Automated re-forecast triggered)",
+    "human_approval_required": false,
+    "code_implementation": "netgravity/forecasting/change_point.py:detect_and_adapt",
+    "test_coverage": "tests/integration/test_structural_break.py"
+  }
+]

@@ -1,0 +1,676 @@
+[
+  {
+    "name": "Single Exponential Smoothing (ETS Model)",
+    "category": "Forecasting",
+    "formula": "L_t = alpha * y_t + (1 - alpha) * L_{t-1}, yhat_{t+h} = L_t",
+    "code_expression": "level = alpha * y[t] + (1 - alpha) * level; forecast[h] = level",
+    "source_file": "netgravity/forecasting/engines/ets.py",
+    "function": "ETSEngine._fit_predict",
+    "inputs": [
+      "history_series (y)",
+      "alpha (smoothing factor, default 0.2)",
+      "horizon (h)"
+    ],
+    "units": "Demand Units (Cases / MT / Units)",
+    "owner": "forecasting.engines.ets.ETSEngine",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "alpha in (0.01, 0.99)",
+      "min_history_length >= 4"
+    ],
+    "downstream_consumers": [
+      "ForecastingService",
+      "ScenarioEngine",
+      "MILPSolver",
+      "ReasoningAgent"
+    ],
+    "basis": "Standard industry metric (Exponential Smoothing, Hyndman et al.)",
+    "test_coverage": "tests/integration/test_forecasting.py, tests/test_v13_production_readiness.py",
+    "notes": "Handles non-seasonal, stationary baseline demand series. Level initialization defaults to mean of first 3 periods."
+  },
+  {
+    "name": "Holt's Linear Trend Exponential Smoothing",
+    "category": "Forecasting",
+    "formula": "L_t = alpha * y_t + (1 - alpha) * (L_{t-1} + b_{t-1}); b_t = beta * (L_t - L_{t-1}) + (1 - beta) * b_{t-1}; yhat_{t+h} = L_t + h * b_t",
+    "code_expression": "level = alpha * y[t] + (1 - alpha) * (level + trend); trend = beta * (level - prev_level) + (1 - beta) * trend; forecast[h] = level + (h + 1) * trend",
+    "source_file": "netgravity/forecasting/engines/ets.py",
+    "function": "ETSEngine._fit_predict_trend",
+    "inputs": [
+      "history_series (y)",
+      "alpha (0.2)",
+      "beta (0.1)",
+      "horizon (h)"
+    ],
+    "units": "Demand Units",
+    "owner": "forecasting.engines.ets.ETSEngine",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "alpha, beta in (0.01, 0.99)",
+      "min_history_length >= 6"
+    ],
+    "downstream_consumers": [
+      "ForecastingService",
+      "ScenarioEngine",
+      "MILPSolver"
+    ],
+    "basis": "Standard industry metric (Holt's Linear Method)",
+    "test_coverage": "tests/integration/test_forecasting.py",
+    "notes": "Captures sustained growth or contraction trends across network demand nodes."
+  },
+  {
+    "name": "Croston's Method for Intermittent Demand",
+    "category": "Forecasting",
+    "formula": "If y_t > 0: z_t = alpha * y_t + (1 - alpha) * z_{t-1}, p_t = alpha * q_t + (1 - alpha) * p_{t-1}; yhat = z_t / p_t",
+    "code_expression": "if y[t] > 0: non_zero_demand = alpha * y[t] + (1 - alpha) * non_zero_demand; interval = alpha * periods_since_last + (1 - alpha) * interval; rate = non_zero_demand / max(interval, 1.0)",
+    "source_file": "netgravity/forecasting/engines/intermittent.py",
+    "function": "CrostonEngine.predict",
+    "inputs": [
+      "intermittent demand series (zeros and spikes)",
+      "alpha (default 0.15)"
+    ],
+    "units": "Demand Units per Period",
+    "owner": "forecasting.engines.intermittent.CrostonEngine",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "zero_ratio > 0.35 (triggers intermittent selection)",
+      "alpha in (0.05, 0.5)"
+    ],
+    "downstream_consumers": [
+      "ForecastingService",
+      "MILPSolver",
+      "InventoryEngine"
+    ],
+    "basis": "Standard industry metric (Croston, 1972, JORS)",
+    "test_coverage": "tests/integration/test_forecasting.py",
+    "notes": "Separately tracks non-zero demand size and inter-arrival periods. Prevents overstocking on sporadic demand nodes."
+  },
+  {
+    "name": "Quantile Pinball Loss (P10 / P50 / P90)",
+    "category": "Forecasting",
+    "formula": "L_q(y, yhat) = max(q * (y - yhat), (1 - q) * (yhat - y))",
+    "code_expression": "loss = np.maximum(q * (y - y_hat), (1 - q) * (y_hat - y))",
+    "source_file": "netgravity/forecasting/engines/quantile.py",
+    "function": "QuantileEngine.pinball_loss",
+    "inputs": [
+      "actual_series (y)",
+      "forecast_series (y_hat)",
+      "quantile q in {0.10, 0.50, 0.90}"
+    ],
+    "units": "Demand Units",
+    "owner": "forecasting.engines.quantile.QuantileEngine",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "q in [0.01, 0.99]",
+      "P10 <= P50 <= P90 monotonic constraint"
+    ],
+    "downstream_consumers": [
+      "ForecastingService",
+      "RiskAssessment",
+      "ReasoningAgent",
+      "SensitivityEngine"
+    ],
+    "basis": "Standard industry metric (Koenker & Bassett, 1978)",
+    "test_coverage": "tests/integration/test_forecasting.py, tests/test_v13_production_readiness.py",
+    "notes": "Produces probabilistic uncertainty bands. P10 represents downside risk, P90 represents surge risk."
+  },
+  {
+    "name": "Mean Absolute Scaled Error (MASE)",
+    "category": "Forecasting",
+    "formula": "MASE = MAE / ((1 / (N - 1)) * sum_{t=2}^N |y_t - y_{t-1}|)",
+    "code_expression": "naive_mae = np.mean(np.abs(np.diff(history))); mase = mae / max(naive_mae, 1e-6)",
+    "source_file": "netgravity/forecasting/validation.py",
+    "function": "calculate_mase",
+    "inputs": [
+      "actuals",
+      "predictions",
+      "in-sample history series"
+    ],
+    "units": "Dimensionless Ratio",
+    "owner": "forecasting.validation",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "MASE < 1.0 (Model beats naive random walk benchmark)",
+      "MASE >= 1.5 (High forecast error warning)"
+    ],
+    "downstream_consumers": [
+      "ForecastingService",
+      "ModelSelector",
+      "ReasoningAgent"
+    ],
+    "basis": "Standard industry metric (Hyndman & Koehler, 2006)",
+    "test_coverage": "tests/integration/test_forecasting.py",
+    "notes": "Scale-independent forecast accuracy metric. Essential when comparing multi-echelon products with vastly different volume scales."
+  },
+  {
+    "name": "Mean Absolute Error (MAE)",
+    "category": "Forecasting",
+    "formula": "MAE = (1 / n) * sum_{t=1}^n |y_t - yhat_t|",
+    "code_expression": "mae = float(np.mean(np.abs(actuals - predictions)))",
+    "source_file": "netgravity/forecasting/validation.py",
+    "function": "calculate_mae",
+    "inputs": [
+      "actuals array",
+      "predictions array"
+    ],
+    "units": "Demand Units",
+    "owner": "forecasting.validation",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "MAE >= 0.0"
+    ],
+    "downstream_consumers": [
+      "ForecastingService",
+      "ModelSelector"
+    ],
+    "basis": "Standard industry metric",
+    "test_coverage": "tests/integration/test_forecasting.py",
+    "notes": "Direct absolute error metric across validation hold-out window."
+  },
+  {
+    "name": "CUSUM Change-Point Detection Statistic",
+    "category": "Forecasting",
+    "formula": "S_t = max(0, S_{t-1} + (y_t - mu - k)), S_t^- = min(0, S_{t-1}^- + (y_t - mu + k))",
+    "code_expression": "s_pos = max(0, s_pos + (val - mean - k)); s_neg = min(0, s_neg + (val - mean + k)); if s_pos > h or abs(s_neg) > h: break_detected",
+    "source_file": "netgravity/forecasting/change_point.py",
+    "function": "ChangePointDetector.detect_cusum",
+    "inputs": [
+      "historical demand series",
+      "allowance parameter k (default 0.5 * std)",
+      "decision interval h (default 4.0 * std)"
+    ],
+    "units": "Standard Deviations / Units",
+    "owner": "forecasting.change_point.ChangePointDetector",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "h = 4.0 * std (Structural Break threshold)",
+      "p_value < 0.05 (Mann-Whitney confirmation)"
+    ],
+    "downstream_consumers": [
+      "ForecastingService",
+      "RegimeClassifier",
+      "SignalRouter",
+      "ReasoningAgent"
+    ],
+    "basis": "Standard statistical process control metric (Page, 1954)",
+    "test_coverage": "tests/integration/test_structural_break.py",
+    "notes": "Detects structural shifts in demand level, triggering regime reclassification and model re-selection."
+  },
+  {
+    "name": "Regime Volatility Ratio & Trend Slope",
+    "category": "Forecasting",
+    "formula": "CV = sigma / mu; Trend_Slope = (y_end - y_start) / (N * mu)",
+    "code_expression": "cv = float(np.std(series) / max(np.mean(series), 1e-6)); slope = float((series[-1] - series[0]) / (len(series) * max(np.mean(series), 1e-6)))",
+    "source_file": "netgravity/forecasting/regime.py",
+    "function": "RegimeClassifier.classify_regime",
+    "inputs": [
+      "time series window"
+    ],
+    "units": "Dimensionless Ratio",
+    "owner": "forecasting.regime.RegimeClassifier",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "STABLE: CV < 0.20 and abs(slope) < 0.05",
+      "TRENDING_UP: slope >= 0.05 and CV < 0.40",
+      "TRENDING_DOWN: slope <= -0.05 and CV < 0.40",
+      "VOLATILE: CV >= 0.40",
+      "INTERMITTENT: zero_ratio >= 0.35"
+    ],
+    "downstream_consumers": [
+      "ModelSelector",
+      "ReasoningAgent",
+      "ScenarioEngine"
+    ],
+    "basis": "Empirically calibrated in project validation",
+    "test_coverage": "tests/integration/test_forecasting.py, tests/test_v13_production_readiness.py",
+    "notes": "Maps time series characteristics into discrete operating regimes to drive model selection."
+  },
+  {
+    "name": "External Signal Demand Lift Enrichment",
+    "category": "Forecasting",
+    "formula": "Enriched_Demand_t = Baseline_Demand_t * (1.0 + sum(Signal_Lift_i * Confidence_Weight_i))",
+    "code_expression": "lift_factor = sum(s.magnitude_pct * s.confidence_weight for s in applicable_signals); enriched_forecast = [val * (1.0 + lift_factor) for val in baseline_forecast]",
+    "source_file": "netgravity/forecasting/signals/enrichment.py",
+    "function": "SignalEnricher.apply_signals",
+    "inputs": [
+      "baseline_forecast",
+      "applicable_signals (macro, carrier, supplier, weather)",
+      "confidence_weights (HIGH=1.0, MED=0.6, LOW=0.25)"
+    ],
+    "units": "Demand Units",
+    "owner": "forecasting.signals.SignalEnricher",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "max_compound_lift <= +50%",
+      "max_compound_drop >= -50% (Engineering Safeguard)"
+    ],
+    "downstream_consumers": [
+      "ForecastingService",
+      "MILPSolver",
+      "ScenarioEngine"
+    ],
+    "basis": "Explicitly defined by project/business requirements (Engineering Safeguard bounded)",
+    "test_coverage": "tests/integration/test_signal_routing.py, tests/integration/test_external_risk_workflow.py",
+    "notes": "Applies external market signals to baseline forecast under strict bounding safeguards."
+  },
+  {
+    "name": "MILP Total Network Cost Objective Function",
+    "category": "Optimization",
+    "formula": "Min Z = sum_{i,j} (C_ij * x_ij) + sum_j (F_j * y_j) + sum_k (P_unfulfilled * u_k) + sum_{i,j} (T_sla_penalty * penalty_ij)",
+    "code_expression": "solver.Minimize(solver.Sum(trans_cost[i,j] * flow[i,j] for i,j in lanes) + solver.Sum(fixed_cost[j] * open_dc[j] for j in dcs) + solver.Sum(unmet_penalty * unmet[k] for k in markets) + solver.Sum(sla_penalty * sla_slack[i,j] for i,j in lanes))",
+    "source_file": "netgravity/optimization/milp.py",
+    "function": "MILPSolver.build_model",
+    "inputs": [
+      "lane transportation costs C_ij",
+      "DC fixed facility costs F_j",
+      "unmet demand penalty P_unfulfilled (default 10,000/unit)",
+      "SLA violation penalties"
+    ],
+    "units": "INR (\u20b9) / Local Currency",
+    "owner": "optimization.milp.MILPSolver",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "unmet_penalty = 10,000 (prohibitive penalty to ensure maximum fulfillment)",
+      "solver_time_limit = 60s"
+    ],
+    "downstream_consumers": [
+      "OptimizationService",
+      "ScenarioEngine",
+      "KPIContracts",
+      "ReasoningAgent",
+      "Governance"
+    ],
+    "basis": "Mathematically derived Mixed-Integer Linear Program (MILP)",
+    "test_coverage": "tests/test_milp_core.py, tests/test_formulation.py, tests/test_v13_production_readiness.py",
+    "notes": "Google OR-Tools CBC/SCIP/GLOP linear programming solver formulation. Guaranteed global optimum for convex relaxation."
+  },
+  {
+    "name": "Plant Supply Capacity Constraint",
+    "category": "Optimization",
+    "formula": "sum_j x_ij <= Supply_Cap_i, for all plants i",
+    "code_expression": "solver.Add(solver.Sum(flow[i,j] for j in dcs) <= plant_capacity[i])",
+    "source_file": "netgravity/optimization/milp.py",
+    "function": "MILPSolver._add_capacity_constraints",
+    "inputs": [
+      "outflow variables flow[i,j]",
+      "plant max monthly capacity"
+    ],
+    "units": "Units / Month",
+    "owner": "optimization.milp.MILPSolver",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Hard constraint (non-violation)"
+    ],
+    "downstream_consumers": [
+      "MILPSolver"
+    ],
+    "basis": "Physical Network Capacity Constraint",
+    "test_coverage": "tests/test_milp_core.py",
+    "notes": "Prevents dispatching volume exceeding production plant ceiling."
+  },
+  {
+    "name": "DC Throughput Capacity & Facility Open Indicator",
+    "category": "Optimization",
+    "formula": "sum_k x_jk <= Throughput_Cap_j * y_j, y_j in {0, 1}, for all DCs j",
+    "code_expression": "solver.Add(solver.Sum(flow_dc_market[j,k] for k in markets) <= dc_capacity[j] * open_dc[j])",
+    "source_file": "netgravity/optimization/milp.py",
+    "function": "MILPSolver._add_dc_constraints",
+    "inputs": [
+      "flow_dc_market[j,k]",
+      "dc_capacity[j]",
+      "binary open_dc[j]"
+    ],
+    "units": "Units / Month",
+    "owner": "optimization.milp.MILPSolver",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Hard constraint (Big-M linking constraint)"
+    ],
+    "downstream_consumers": [
+      "MILPSolver",
+      "DiagnosticsEngine"
+    ],
+    "basis": "Standard Operations Research MILP Big-M Formulation",
+    "test_coverage": "tests/test_milp_core.py, tests/test_formulation.py",
+    "notes": "Links binary DC selection with continuous flow throughput."
+  },
+  {
+    "name": "Market Demand Fulfillment Balance Constraint",
+    "category": "Optimization",
+    "formula": "sum_j x_jk + u_k = Demand_k, u_k >= 0, for all markets k",
+    "code_expression": "solver.Add(solver.Sum(flow_dc_market[j,k] for j in dcs) + unmet_demand[k] == demand[k])",
+    "source_file": "netgravity/optimization/milp.py",
+    "function": "MILPSolver._add_demand_constraints",
+    "inputs": [
+      "flow_dc_market[j,k]",
+      "unmet_demand[k] (slack variable)",
+      "market demand"
+    ],
+    "units": "Units / Month",
+    "owner": "optimization.milp.MILPSolver",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "unmet_demand == 0 in feasible solution"
+    ],
+    "downstream_consumers": [
+      "MILPSolver",
+      "KPIContracts",
+      "DiagnosticsEngine"
+    ],
+    "basis": "Standard Mass Balance Demand Constraint",
+    "test_coverage": "tests/test_milp_core.py, tests/test_infeasibility.py",
+    "notes": "Ensures all market demand is routed through DCs or explicitly logged as unfulfilled with high penalty."
+  },
+  {
+    "name": "Network Fill Rate (%)",
+    "category": "Optimization",
+    "formula": "Fill_Rate = (Total_Demand - Total_Unfulfilled) / Total_Demand * 100",
+    "code_expression": "fulfilled = total_demand - total_unmet; fill_rate = (fulfilled / max(total_demand, 1e-6)) * 100.0",
+    "source_file": "netgravity/metrics/kpis.py",
+    "function": "calculate_kpi_summary",
+    "inputs": [
+      "total_demand",
+      "total_unmet"
+    ],
+    "units": "Percentage (%)",
+    "owner": "metrics.kpis",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Target >= 95.0%",
+      "Critical < 90.0%"
+    ],
+    "downstream_consumers": [
+      "KPIContracts",
+      "ReasoningAgent",
+      "Governance",
+      "Dashboard"
+    ],
+    "basis": "Standard industry metric (OTIF / Fill Rate)",
+    "test_coverage": "tests/test_milp_core.py, tests/test_f12_f13_business_validation.py",
+    "notes": "Core service delivery metric across network."
+  },
+  {
+    "name": "DC Capacity Utilization (%)",
+    "category": "Optimization",
+    "formula": "Utilization_j = (Throughput_Volume_j / DC_Capacity_j) * 100",
+    "code_expression": "utilization = (throughput_volume / max(capacity, 1.0)) * 100.0",
+    "source_file": "netgravity/metrics/kpis.py",
+    "function": "calculate_dc_utilization",
+    "inputs": [
+      "throughput_volume (inflow/outflow)",
+      "dc rated capacity"
+    ],
+    "units": "Percentage (%)",
+    "owner": "metrics.kpis",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Over-utilized / Capacity Stress: > 85.0%",
+      "Severe Bottleneck: > 95.0%",
+      "Under-utilized: < 40.0%",
+      "Healthy: 60.0% - 85.0%"
+    ],
+    "downstream_consumers": [
+      "ReasoningAgent",
+      "ScenarioEngine",
+      "AdaptivePolicy",
+      "Dashboard"
+    ],
+    "basis": "Standard industry metric (Capacity Utilization)",
+    "test_coverage": "tests/test_milp_core.py, tests/test_hardening_v14.py",
+    "notes": "Determines bottlenecks and triggers rebalancing or expansion recommendations."
+  },
+  {
+    "name": "Cost Optimization Savings Delta (Absolute & %)",
+    "category": "Optimization",
+    "formula": "Cost_Savings = Baseline_Cost - Optimized_Cost; Savings_Pct = (Cost_Savings / Baseline_Cost) * 100",
+    "code_expression": "cost_diff = baseline_total_cost - optimized_total_cost; savings_pct = (cost_diff / max(baseline_total_cost, 1.0)) * 100.0",
+    "source_file": "netgravity/metrics/kpis.py",
+    "function": "calculate_scenario_comparison",
+    "inputs": [
+      "baseline_total_cost",
+      "optimized_total_cost"
+    ],
+    "units": "INR (\u20b9) and Percentage (%)",
+    "owner": "metrics.kpis",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Material Savings >= 5.0%",
+      "Minor Savings: 1.0% - 5.0%"
+    ],
+    "downstream_consumers": [
+      "ReasoningAgent",
+      "Governance",
+      "Dashboard"
+    ],
+    "basis": "Standard financial variance calculation",
+    "test_coverage": "tests/test_milp_core.py, tests/test_scenarios.py",
+    "notes": "Authoritative financial metric driving business case recommendations."
+  },
+  {
+    "name": "Facility Resilience Exposure Index (REI)",
+    "category": "Resilience",
+    "formula": "REI_j = 0.5 * (Financial_Impact_j / Max_Financial_Impact) + 0.5 * (Service_Loss_j / Max_Service_Loss)",
+    "code_expression": "norm_cost = cost_exposure / max(max_network_cost_exposure, 1e-6); norm_service = service_loss / max(max_network_service_loss, 1e-6); rei = 0.5 * norm_cost + 0.5 * norm_service",
+    "source_file": "netgravity/resilience/rei.py",
+    "function": "REICalculator.calculate_facility_rei",
+    "inputs": [
+      "cost_exposure (rerouting penalty + lost throughput)",
+      "service_loss (unfulfilled demand)",
+      "max network normalization scale"
+    ],
+    "units": "Normalized Score in [0.0, 1.0]",
+    "owner": "resilience.rei.REICalculator",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Low Resilience Risk: REI <= 0.35",
+      "Medium Resilience Risk: 0.35 < REI <= 0.65",
+      "High Resilience Risk: REI > 0.65"
+    ],
+    "downstream_consumers": [
+      "RiskFactorEngine",
+      "ReasoningAgent",
+      "Governance",
+      "Dashboard"
+    ],
+    "basis": "Explicitly defined by project/business requirements (Simchi-Levi Resilience Model)",
+    "test_coverage": "tests/test_resilience_rei.py, tests/test_rei_v1.py, tests/test_rei_performance.py",
+    "notes": "Evaluates the vulnerability of each facility under simulated N-1 node disruption (Time-to-Survive & Time-to-Recover)."
+  },
+  {
+    "name": "Network Aggregate Resilience Score",
+    "category": "Resilience",
+    "formula": "Network_Resilience = 1.0 - max_{j in Facilities} (REI_j)",
+    "code_expression": "max_rei = max((f.rei for f in facility_results), default=0.0); network_resilience = max(0.0, min(1.0, 1.0 - max_rei))",
+    "source_file": "netgravity/resilience/engine.py",
+    "function": "ResilienceEngine.evaluate_network_resilience",
+    "inputs": [
+      "list of facility REI results"
+    ],
+    "units": "Normalized Score in [0.0, 1.0]",
+    "owner": "resilience.engine.ResilienceEngine",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "High Resilience: >= 0.70",
+      "Moderate Resilience: 0.45 - 0.70",
+      "Vulnerable: < 0.45"
+    ],
+    "downstream_consumers": [
+      "KPIContracts",
+      "ReasoningAgent",
+      "Governance",
+      "Dashboard"
+    ],
+    "basis": "Worst-case bottleneck vulnerability formulation",
+    "test_coverage": "tests/test_resilience_rei.py, tests/test_rei_scale_benchmark.py",
+    "notes": "Ensures single points of failure directly dictate the macro resilience posture of the entire network."
+  },
+  {
+    "name": "Governed Risk Factor (RF = P + REI - P * REI)",
+    "category": "Risk",
+    "formula": "RF = P + REI - (P * REI)",
+    "code_expression": "rf = p + rei - (p * rei); rf = max(0.0, min(1.0, rf))",
+    "source_file": "netgravity/orchestrator/risk/risk_factor.py",
+    "function": "calculate_risk_factor",
+    "inputs": [
+      "P: Disruption Probability in [0.0, 1.0] (from External Signals / Historical Telemetry)",
+      "REI: Resilience Exposure Index in [0.0, 1.0] (from Authoritative Resilience Engine)"
+    ],
+    "units": "Normalized Risk Score in [0.0, 1.0]",
+    "owner": "orchestrator.risk.risk_factor",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "LOW_RISK: RF < 0.30",
+      "MEDIUM_RISK: 0.30 <= RF < 0.70",
+      "HIGH_RISK: RF >= 0.70 (Triggers Tier 2 / Tier 3 Governance Escalation)"
+    ],
+    "downstream_consumers": [
+      "ActionClassifier",
+      "ReasoningAgent",
+      "Governance",
+      "Orchestrator",
+      "Dashboard"
+    ],
+    "basis": "Mathematically derived probabilistic union of independent events (P(A U B) = P(A) + P(B) - P(A n B))",
+    "test_coverage": "tests/test_phase1_risk_chain.py, tests/integration/test_external_risk_workflow.py",
+    "notes": "Core mathematical bridge combining external disruption likelihood P with internal structural vulnerability REI."
+  },
+  {
+    "name": "Risk Exposure Financial Value",
+    "category": "Risk",
+    "formula": "Value_at_Risk = RF * Total_Throughput_Value_at_Node",
+    "code_expression": "var_inr = rf * node_throughput_value",
+    "source_file": "netgravity/orchestrator/risk/risk_assessment.py",
+    "function": "RiskAssessor.calculate_value_at_risk",
+    "inputs": [
+      "RF in [0.0, 1.0]",
+      "node_throughput_value in INR"
+    ],
+    "units": "INR (\u20b9)",
+    "owner": "orchestrator.risk.risk_assessment",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Material Risk Exposure >= \u20b910,00,000 (10 Lakhs)"
+    ],
+    "downstream_consumers": [
+      "ReasoningAgent",
+      "ActionClassifier",
+      "Governance"
+    ],
+    "basis": "Expected Value / Value at Risk Formulation",
+    "test_coverage": "tests/test_phase1_risk_chain.py",
+    "notes": "Quantifies monetary risk exposure to inform executive governance authorization."
+  },
+  {
+    "name": "Safety Stock Coefficient & Reorder Point",
+    "category": "Inventory",
+    "formula": "SS = z_score * sqrt(Lead_Time * sigma_d^2 + d_mean^2 * sigma_LT^2); ROP = d_mean * Lead_Time + SS",
+    "code_expression": "safety_stock = z * np.sqrt(lt * (d_std**2) + (d_mean**2) * (lt_std**2)); rop = d_mean * lt + safety_stock",
+    "source_file": "netgravity/inventory/coefficient_engine.py",
+    "function": "InventoryEngine.calculate_safety_stock",
+    "inputs": [
+      "daily demand mean d_mean",
+      "daily demand std sigma_d",
+      "lead time lt",
+      "lead time std lt_std",
+      "service level target z_score (95% -> 1.645)"
+    ],
+    "units": "Units",
+    "owner": "inventory.coefficient_engine.InventoryEngine",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Default SLA = 95% (z = 1.645)",
+      "High SLA = 98% (z = 2.054)"
+    ],
+    "downstream_consumers": [
+      "InventoryModule",
+      "MILPSolver",
+      "ScenarioEngine"
+    ],
+    "basis": "Standard industry metric (Silver-Pyke-Peterson Inventory Theory)",
+    "test_coverage": "tests/test_inventory.py, tests/test_v1_2_direct_inventory.py",
+    "notes": "Determines buffer inventory required at each DC under demand and supply lead time uncertainty."
+  },
+  {
+    "name": "Scope 3 Logistics Carbon Footprint",
+    "category": "Carbon",
+    "formula": "CO2_kg = sum_{i,j} (Flow_ij * Distance_ij * Mode_Emission_Factor_ij) / 1000.0",
+    "code_expression": "total_emissions = sum(flow * dist * emission_factor / 1000.0 for lane in active_lanes)",
+    "source_file": "netgravity/carbon/module.py",
+    "function": "CarbonCalculator.calculate_emissions",
+    "inputs": [
+      "flow (MT)",
+      "distance (km)",
+      "emission_factor (Road Diesel = 62.0 g CO2/t-km, Rail = 18.0 g CO2/t-km, Air = 500.0 g CO2/t-km)"
+    ],
+    "units": "Metric Tonnes CO2 equivalent (tCO2e)",
+    "owner": "carbon.module.CarbonCalculator",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Road Factor: 0.062 kg/t-km",
+      "Rail Factor: 0.018 kg/t-km",
+      "EV Road: 0.015 kg/t-km"
+    ],
+    "downstream_consumers": [
+      "KPIContracts",
+      "ReasoningAgent",
+      "Dashboard"
+    ],
+    "basis": "Standard industry metric (GLEC Framework / IPCC Guidelines)",
+    "test_coverage": "tests/test_carbon.py",
+    "notes": "Computes carbon emissions to evaluate green routing and ESG trade-offs against cost."
+  },
+  {
+    "name": "Center of Gravity (COG) Coordinates",
+    "category": "COG",
+    "formula": "Lat_cog = sum(w_k * Lat_k) / sum(w_k); Lon_cog = sum(w_k * Lon_k) / sum(w_k)",
+    "code_expression": "cog_lat = sum(m.demand * m.lat for m in markets) / max(total_demand, 1e-6); cog_lon = sum(m.demand * m.lon for m in markets) / max(total_demand, 1e-6)",
+    "source_file": "netgravity/cog/screener.py",
+    "function": "COGScreener.calculate_cog",
+    "inputs": [
+      "market locations (lat, lon)",
+      "market demand weights"
+    ],
+    "units": "Geographic Coordinates (Decimal Degrees)",
+    "owner": "cog.screener.COGScreener",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Valid Lat in [-90, 90]",
+      "Valid Lon in [-180, 180]"
+    ],
+    "downstream_consumers": [
+      "COGScreener",
+      "ScenarioBuilder",
+      "ReasoningAgent"
+    ],
+    "basis": "Standard Operations Research Center of Gravity / Weber Problem formulation",
+    "test_coverage": "tests/test_cog.py",
+    "notes": "Screens optimal candidate coordinates for greenfield DC placement."
+  },
+  {
+    "name": "Cumulative Distance & On-Time Service Level",
+    "category": "Service",
+    "formula": "Weighted_Distance = sum(Flow_jk * Distance_jk) / sum(Flow_jk); SLA_Adherence = sum(Flow_within_SLA) / Total_Flow * 100",
+    "code_expression": "weighted_avg_dist = sum(f.volume * f.distance for f in flows) / max(total_volume, 1e-6); sla_pct = (flow_on_time / max(total_volume, 1e-6)) * 100.0",
+    "source_file": "netgravity/service/cumulative.py",
+    "function": "ServiceCalculator.calculate_service_metrics",
+    "inputs": [
+      "flow volumes",
+      "lane distances",
+      "lead times",
+      "market SLA transit thresholds (e.g. 48h)"
+    ],
+    "units": "km and Percentage (%)",
+    "owner": "service.cumulative.ServiceCalculator",
+    "authority": "AUTHORITATIVE",
+    "thresholds": [
+      "Transit SLA: Metro <= 24h, Tier-1 <= 48h, Tier-2 <= 72h"
+    ],
+    "downstream_consumers": [
+      "KPIContracts",
+      "ReasoningAgent",
+      "Dashboard"
+    ],
+    "basis": "Standard logistics customer fulfillment metric",
+    "test_coverage": "tests/test_v1_2_1_sla_hardening.py",
+    "notes": "Tracks lead-time compliance across customer destination zones."
+  }
+]

@@ -1,0 +1,91 @@
+{
+  "schema_version": "1.0",
+  "description": "Every genuine data/wiring gap found during the Phase 9.1 forensic audit, with exact evidence and an explicit disposition. Nothing here was fabricated to fill a gap — per Step 5, a gap with no available input is reported as INSUFFICIENT_EVIDENCE / MISSING / NOT_APPLICABLE, never defaulted to zero or invented.",
+  "gaps": [
+    {
+      "gap_id": "GAP-01",
+      "title": "Distance and per-unit-carbon KPIs dropped at the orchestrator contract bridge",
+      "affected_metrics": ["weighted_avg_distance_km", "inbound_avg_distance_km", "outbound_avg_distance_km", "carbon_per_unit", "min_utilization_pct"],
+      "evidence": "netgravity/metrics/kpis.py::compute_kpis (lines 110-170) computes all five values correctly. netgravity/metrics/contracts.py (lines 194-215), which builds the orchestrator-facing NetworkStateResult from the engine's NetworkKPIs, copies only avg/max_utilization_pct and total_carbon_kg across -- the other five fields are never referenced in the builder function. ExecutionContext.network_states therefore never receives them, in EITHER the typed NetworkStateResult or the flattened transport projection (flatten_network_state derives its output FROM NetworkStateResult, not from the original NetworkKPIs, so the information cannot be recovered downstream at all).",
+      "root_cause": "An incomplete field-mapping in one builder function -- not a missing capability, not a missing formula, not a missing engine.",
+      "disposition": "DOCUMENTED, NOT FIXED in this phase.",
+      "recommended_fix": "Add 5 new Optional[float] fields to NetworkStateResult (netgravity/schemas/contracts.py) with safe defaults, and populate them from the already-available `kpis` object at the existing construction site in metrics/contracts.py (4-6 line change, strictly additive). Low risk: extra=\"forbid\" only affects unrecognized INPUT kwargs, not new schema fields, so no existing construction call breaks.",
+      "why_not_fixed_now": "NetworkStateResult is a widely-shared contract (governance, reasoning/evidence.py, the Digital Twin, and potentially the frontend API all read it). Given the scope already committed to this phase (a from-scratch forensic audit across 5 domains plus the full KPI layer build), the regression-risk-vs-benefit tradeoff favored documenting the gap precisely over touching a shared contract under time pressure. Recommended as the first, lowest-risk follow-up for Phase 9.2.",
+      "current_kpi_layer_behavior": "KPIRegistry.network_kpis() reports these five metrics as KPIStatus.INSUFFICIENT_EVIDENCE with the exact reason quoted above -- never fabricated as 0.0, never silently omitted from the result dict."
+    },
+    {
+      "gap_id": "GAP-02",
+      "title": "AssignmentDecision.safety_stock_units is a dead field",
+      "affected_metrics": ["safety_stock_units (as a per-assignment-pair figure)"],
+      "evidence": "netgravity/schemas/results.py:728 declares AssignmentDecision.safety_stock_units: float = 0.0. netgravity/optimization/milp.py:710-715 constructs each AssignmentDecision but only ever sets inventory_cost -- safety_stock_units is never assigned a computed value, even though the true per-pair figure exists in inv_coeffs at that exact point in the code.",
+      "root_cause": "A field that was added to the schema but never wired up at the one call site that could populate it.",
+      "disposition": "DOCUMENTED, NOT FIXED.",
+      "recommended_fix": "One-line addition at milp.py:710-715: safety_stock_units=inv_coeffs[...].total_safety_stock_units.",
+      "why_not_fixed_now": "Touches optimization/milp.py's output construction, which this phase's constraints instruct not to modify unless a KPI integration defect makes it strictly necessary. Currently latent and harmless -- no code anywhere reads this field, so nothing downstream is presently corrupted. Flagged for a future MILP-adjacent phase rather than fixed opportunistically here.",
+      "current_kpi_layer_behavior": "Not wrapped -- no KPIResult references this field, since it carries no real information today (permanently 0.0)."
+    },
+    {
+      "gap_id": "GAP-03",
+      "title": "FacilityDecision silently drops fixed_cost, status, latitude, longitude",
+      "affected_metrics": ["fixed_cost (per-facility, as distinct from the network-level facility_cost aggregate)"],
+      "evidence": "netgravity/optimization/milp.py:680-694 constructs each FacilityDecision with kwargs status=fac.status, fixed_cost_period=..., latitude=fac.latitude, longitude=fac.longitude -- but FacilityDecision (schemas/results.py:117-140) has no fields of these exact names. Pydantic v2's default extra=\"ignore\" silently drops unrecognized kwargs rather than raising. FacilityDecision.fixed_cost is therefore always 0.0 in every run.",
+      "root_cause": "A field-name mismatch between the constructing code and the schema, silently swallowed by Pydantic's default extra-field policy.",
+      "disposition": "DOCUMENTED, NOT FIXED. Found independently during this audit, not claimed by the pre-existing (unreliable) documentation.",
+      "recommended_fix": "Either rename the schema fields to match the constructor kwargs, or fix the constructor to use the schema's real field names.",
+      "why_not_fixed_now": "The network-level facility_cost aggregate (used by NetworkKPIs.facility_cost and business_network_cost) is summed independently from objective_components, NOT from FacilityDecision.fixed_cost -- so this bug does not currently corrupt any KPI a caller can see. Fixing it touches optimization/milp.py's output construction; deferred for the same reason as GAP-02.",
+      "current_kpi_layer_behavior": "Not wrapped -- KPIRegistry never reads FacilityDecision.fixed_cost."
+    },
+    {
+      "gap_id": "GAP-04",
+      "title": "Center of Gravity has no schema or orchestrator integration",
+      "affected_metrics": ["center_of_gravity"],
+      "evidence": "netgravity/cog/screener.py's weiszfeld_cog/multi_cog return plain @dataclass objects (CogResult, MultiCogResult), never a Pydantic model. Grep confirms these functions are referenced ONLY inside cog/screener.py and its own test file -- no schema, no capability, no ExecutionContext field anywhere touches them.",
+      "root_cause": "The module was built and tested as a genuinely standalone screening tool, by design (its own docstring: \"GEOGRAPHIC SCREENING TOOL ONLY -- NOT AN OPTIMIZATION DECISION\") and was never intended to flow through the orchestrator.",
+      "disposition": "NOT IMPLEMENTED as a KPIResult in this phase.",
+      "recommended_fix": "If a future phase wants this surfaced, it needs a new capability (e.g. `cog.screen`) and a typed Pydantic wrapper around CogResult/MultiCogResult -- both are new integration surface, which this phase's brief explicitly asks NOT to build (\"the objective is consolidation... not architectural expansion\").",
+      "why_not_fixed_now": "Building the integration point would be new capability/architecture work, out of scope for a phase whose brief says 'do not introduce another agent... do not create a new calculation engine.' Wrapping an existing function is legitimate; building it a new entry point into the orchestrator is not, without an explicit ask.",
+      "current_kpi_layer_behavior": "Not exposed. Available on demand by calling weiszfeld_cog/multi_cog directly, exactly as before this phase."
+    },
+    {
+      "gap_id": "GAP-05",
+      "title": "Safety Stock has no ExecutionContext access point",
+      "affected_metrics": ["safety_stock_units (network-facing)"],
+      "evidence": "InventoryCoefficientEngine.compute_coefficients (netgravity/inventory/coefficient_engine.py) computes real, correct, well-tested safety stock figures per facility-market pair -- but the result (FacilityMarketInventoryCoeff, a plain dataclass) is consumed entirely INTERNALLY by optimization/milp.py to build the MILP's inventory cost term, and never exposed via any Pydantic schema or ExecutionContext field.",
+      "root_cause": "Same shape as GAP-04: a real, correct calculation with no external-facing contract.",
+      "disposition": "NOT IMPLEMENTED as a KPIResult in this phase.",
+      "recommended_fix": "Same as GAP-04 -- would require a new schema field and likely a new capability to expose per-pair safety stock; new integration surface, deferred.",
+      "why_not_fixed_now": "Same reasoning as GAP-04.",
+      "current_kpi_layer_behavior": "Not exposed."
+    },
+    {
+      "gap_id": "GAP-06",
+      "title": "Reorder Point does not exist",
+      "affected_metrics": ["reorder_point"],
+      "evidence": "Exhaustive, word-bounded grep for 'ROP' and 'reorder_point' across the entire netgravity/ tree (source and tests) returns zero matches. InventoryCoefficientEngine computes Safety Stock and Cycle Stock only, and combines them into an inventory COST -- it never produces a reorder point (a units-of-inventory trigger level) at all.",
+      "root_cause": "Never built. This is a genuine absence, not a wiring gap -- the pre-existing audit's claimed formula (ROP = d_mean*LT + SS) is pure invention with no partial implementation anywhere.",
+      "disposition": "MISSING. Not implemented.",
+      "recommended_fix": "Would require designing and implementing a new formula from scratch -- explicitly forbidden by this phase's instructions (\"Do NOT invent missing data,\" \"Do not fabricate values\").",
+      "why_not_fixed_now": "Implementing this metric IS inventing a formula this codebase has never had. Out of scope by the phase's own explicit rule.",
+      "current_kpi_layer_behavior": "Not implemented. Reported as MISSING in metric_inventory.json."
+    },
+    {
+      "gap_id": "GAP-07",
+      "title": "Value at Risk (VaR) does not exist and has no computable input",
+      "affected_metrics": ["value_at_risk"],
+      "evidence": "Exhaustive, word-bounded grep for VaR/value_at_risk/ValueAtRisk/Value-at-Risk across the entire netgravity/ tree returns zero matches. The pre-existing audit's claimed formula (VaR = RF * ThroughputValue) also requires a ThroughputValue field, which does not exist on any facility or network schema either -- confirmed by grep.",
+      "root_cause": "Never built, and its claimed input does not exist either.",
+      "disposition": "NOT_APPLICABLE. Not implemented.",
+      "recommended_fix": "Would require (a) inventing a formula and (b) inventing a new input field (a facility's per-unit throughput value) that has no established source in this codebase's data model. Both are explicitly out of scope.",
+      "why_not_fixed_now": "No legitimate input exists to compute this from -- there is nothing to wrap and nothing safe to derive.",
+      "current_kpi_layer_behavior": "Not implemented. Reported as NOT_APPLICABLE in metric_inventory.json."
+    }
+  ],
+  "summary": {
+    "total_gaps": 7,
+    "documented_not_fixed_low_risk_fix_available": 1,
+    "documented_not_fixed_deferred_touches_milp": 2,
+    "not_implemented_new_integration_surface_required": 2,
+    "missing_would_require_inventing_a_formula": 1,
+    "not_applicable_no_input_exists": 1
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "schema_version": "1.0",
+  "description": "Per-formula integrity check (Step 6): numerator, denominator, edge-case behaviour, and whether this phase changed anything. Verified against source; every 'unchanged' means byte-identical to the pre-Phase-9.1 code.",
+  "formulas": [
+    {
+      "formula_id": "FILL_RATE",
+      "formula": "served_demand / total_demand",
+      "zero_denominator": "if total_demand == 0: returns 1.0 (an if/else convention — NOT max(total_demand, 1e-6) as the pre-existing audit claimed)",
+      "missing_input": "not applicable — always computable from a solved NetworkStateResult",
+      "negative_input": "not applicable — both inputs are non-negative by construction (MILP demand/flow are >= 0)",
+      "infeasible_result": "compute_kpis zero-fills the ENTIRE NetworkKPIs (a pre-existing, verified, tested behaviour). The KPI layer does NOT repeat this: KPIRegistry.network_kpis reads NetworkStateResult.solver_status/is_feasible FIRST and reports KPIStatus.INFEASIBLE with value=None, rather than trusting the engine's own zero-fill as a measurement.",
+      "empty_dataset": "a network with zero demand records yields total_demand=0, handled by the same zero-denominator convention above",
+      "partial_dataset": "not applicable — fill rate is computed once per solve, not incrementally",
+      "wrong_unit": "verified: a FRACTION [0,1], never multiplied by 100 anywhere in the KPI layer",
+      "wrong_scope": "NETWORK only — no per-facility or per-market fill rate exists in the codebase today",
+      "changed_by_phase_9_1": false
+    },
+    {
+      "formula_id": "UTILIZATION",
+      "formula": "outbound_flow / capacity_units * 100",
+      "zero_denominator": "if not is_open or capacity_units <= 0: returns 0.0 (verified, milp.py:677-678)",
+      "missing_input": "not applicable",
+      "negative_input": "not possible by construction — capacity and flow are both >= 0",
+      "infeasible_result": "same INFEASIBLE handling as FILL_RATE (network-level); per-facility utilization on an infeasible solve is not produced at all (facility_kpis returns {} when no NetworkStateResult exists)",
+      "empty_dataset": "a network with zero facilities yields an empty facility_kpis dict, never a fabricated entry",
+      "partial_dataset": "not applicable",
+      "wrong_unit": "verified: a PERCENTAGE [0,100]",
+      "wrong_scope": "both NETWORK (avg/max/min) and FACILITY (per-facility) exist as distinct metric_ids in this phase's contract",
+      "changed_by_phase_9_1": false
+    },
+    {
+      "formula_id": "REI_NORMALIZATION",
+      "formula": "REI_i = max(0, PI_i) / max_j(max(0, PI_j))",
+      "zero_denominator": "if max(economic_impact) == 0 for every facility: normalize_rei returns REI=0 for all, REIStatus.NO_RELATIVE_COST_EXPOSURE, explicitly 'no division is performed' (rei.py:480-487) — verified NOT a silent 0/0",
+      "missing_input": "if PI_i is None (infeasible/error): rei stays None, calculation_status reflects why (INFEASIBLE/ERROR/TIME_LIMIT) — the KPI layer reports NOT_COMPUTABLE with that reason, never fabricating a 0",
+      "negative_input": "a negative PI (disruption REDUCES cost) is retained and diagnosed, never silently clamped at the PI level; only the REI-feeding economic_impact is floored to 0",
+      "infeasible_result": "calculation_status=INFEASIBLE, rei stays None, risk_classification=CRITICAL (if infeasible_is_critical, the default) — verified end-to-end via a real infeasible-disruption test case in the resilience test suite",
+      "empty_dataset": "NoEligibleFacilitiesError is raised (rei.py:1006-1013) when no facility qualifies — the KPI layer's resilience_kpis reports INSUFFICIENT_EVIDENCE rather than an empty success",
+      "partial_dataset": "a batch with some facilities OK and some ERROR/INFEASIBLE reports REIBatchStatus.COMPLETED_WITH_ERRORS; each row is wrapped independently, so an ERROR row's rei is NOT_COMPUTABLE while OK rows remain VALID",
+      "wrong_unit": "verified: a dimensionless ratio in [0,1]",
+      "wrong_scope": "FACILITY only",
+      "changed_by_phase_9_1": false
+    },
+    {
+      "formula_id": "RF_COMPOUND",
+      "formula": "RF = P + REI - (P * REI)",
+      "zero_denominator": "not applicable — no division in this formula",
+      "missing_input": "if either P or REI is None: RFStatus.NOT_COMPUTABLE with a specific RFNotComputableReason (NO_EVENT_PROBABILITY / NO_REI / NO_INPUTS) — verified P is NEVER defaulted to 0.0",
+      "negative_input": "P outside [0,1]+-1e-9 raises ValidationFailureError (never silently clamped); REI < -1e-9 is floored to 0 with a note appended (never raises, never silently discarded)",
+      "infeasible_result": "not directly applicable to RF itself — if REI is unavailable because its facility's disruption was infeasible, RF reports NOT_COMPUTABLE(NO_REI)",
+      "empty_dataset": "assess_network_risk SKIPS (does not zero-default) any facility missing either input — verified via its own docstring and code",
+      "partial_dataset": "RiskAssessment.results / .not_computable are two separate lists — a caller sees exactly which facilities computed and which did not, never a merged list with fabricated zeros",
+      "wrong_unit": "verified: a dimensionless ratio in [0,1]",
+      "wrong_scope": "FACILITY only (network-level max_risk_factor is a simple max() over the facility rows, not a separately-computed formula)",
+      "changed_by_phase_9_1": false
+    },
+    {
+      "formula_id": "CARBON_TOTAL",
+      "formula": "co2_kg = distance_km * (flow_units * weight_kg / 1000) * emission_factor, summed across flows",
+      "zero_denominator": "not applicable — no division",
+      "missing_input": "missing emission factor falls back to ROAD default (0.062 kg CO2/tonne-km) — a documented, tested fallback, not a silent zero",
+      "negative_input": "not possible by construction — flow, weight, distance are all >= 0",
+      "infeasible_result": "an infeasible solve has no flows, so total_carbon_kg is 0 by construction (zero flows = zero carbon, a true zero, not a fabricated one) — but the KPI layer still reports INFEASIBLE status per the network-level infeasibility check, since '0 carbon because the network never solved' must not be read as 'a solved network with 0 carbon'",
+      "empty_dataset": "zero facilities/flows yields 0.0 by arithmetic, verified by test_carbon.py::test_zero_flow_zero_co2",
+      "partial_dataset": "not applicable — carbon is summed once per solve",
+      "wrong_unit": "verified: KILOGRAMS, never tonnes/tCO2e — the pre-existing audit's tCO2e claim is wrong (no kg->tonne conversion exists anywhere in the formula)",
+      "wrong_scope": "NETWORK (total_carbon_kg) and per-flow (FlowSummary.carbon_kg) both exist; no facility-level carbon aggregate is computed in the codebase today",
+      "changed_by_phase_9_1": false
+    },
+    {
+      "formula_id": "MASE",
+      "formula": "mae / naive_mae (rolling-origin, out-of-sample naive-1 benchmark)",
+      "zero_denominator": "if naive_mae <= 1e-9: mase = None (verified, validation.py) — never a fabricated ratio",
+      "missing_input": "insufficient history (< MIN_TRAIN_PERIODS=6) refuses the backtest entirely; SeriesForecast.accuracy stays None and the KPI layer reports NOT_COMPUTABLE",
+      "negative_input": "not applicable — demand quantities are validated non-negative upstream (forecasting/service.py rejects negative demand)",
+      "infeasible_result": "not applicable to forecasting (no solver infeasibility concept here)",
+      "empty_dataset": "zero-history series never reach backtest; ForecastStatus.INSUFFICIENT_HISTORY is reported instead",
+      "partial_dataset": "each series in a multi-series ForecastResult is scored independently; one series' MASE=None never affects another's",
+      "wrong_unit": "verified: a dimensionless ratio (MASE < 1.0 beats the naive benchmark)",
+      "wrong_scope": "MARKET_PRODUCT (per series)",
+      "changed_by_phase_9_1": false
+    },
+    {
+      "formula_id": "BUSINESS_NETWORK_COST",
+      "formula": "sum of included cost components per ResilienceCostBasis flags, excluding the shortage penalty by default",
+      "zero_denominator": "not applicable — no division",
+      "missing_input": "not applicable — always computable from a solved NetworkStateResult",
+      "negative_input": "not possible by construction — every cost component is >= 0",
+      "infeasible_result": "same network-level INFEASIBLE handling as FILL_RATE",
+      "empty_dataset": "a network with no facilities/flows yields business_network_cost=0 by arithmetic (a true zero from an empty sum, not fabricated)",
+      "partial_dataset": "not applicable",
+      "wrong_unit": "verified: INR",
+      "wrong_scope": "NETWORK only",
+      "changed_by_phase_9_1": false
+    },
+    {
+      "formula_id": "SCENARIO_DELTA_GENERIC",
+      "formula": "(scenario_value - baseline_value), and (delta / |baseline_value|) * 100 when |baseline_value| > 1e-9",
+      "zero_denominator": "if |baseline_value| <= 1e-9: pct_delta = None, reason='baseline is zero, so no percentage change is defined' — mirrors the exact convention orchestrator/twin/service.py::_kpi_deltas already uses",
+      "missing_input": "if either side's NetworkStateResult is absent: direction=NOT_COMPARABLE, reason names which side is missing — never a fabricated delta",
+      "negative_input": "a negative delta (scenario lower than baseline) is a valid, expected DECREASED direction — not an error",
+      "infeasible_result": "an infeasible baseline or scenario means that side's NetworkStateResult still exists (with is_feasible=False) but its cost/fill-rate fields may be pre-zeroed by compute_kpis (see FILL_RATE note) — the delta function does not special-case this today, a documented limitation (see report.md limitations)",
+      "empty_dataset": "not applicable at the delta level — handled at the underlying NetworkStateResult level",
+      "partial_dataset": "not applicable — each metric's delta is independent",
+      "wrong_unit": "the delta's unit matches the underlying metric's unit; percentage deltas are always '%' regardless of the base metric's own unit",
+      "wrong_scope": "SCENARIO_COMPARISON, a distinct MetricScope from NETWORK/FACILITY",
+      "changed_by_phase_9_1": true,
+      "phase_9_1_note": "NEW arithmetic, but not a new formula — a direct application of the pattern orchestrator/twin/service.py::_kpi_deltas already uses, applied here to fields that pattern does not cover (network-state-level fill rate/utilization/carbon/SLA read directly rather than through a twin state)."
+    }
+  ],
+  "conclusion": "Zero formulas were changed by this phase. The one new calculation (SCENARIO_DELTA_GENERIC) reuses an existing, tested pattern rather than inventing one, and every edge case it introduces (zero baseline, missing side) mirrors a convention already proven correct elsewhere in the codebase."
+}
