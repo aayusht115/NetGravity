@@ -10,7 +10,7 @@ import { PLANTS, DCS, MARKETS, LANES, EXTERNAL_SIGNALS,
          formatCurrency, formatNumber, getUtilColor, getUtilLabel,
          getFacilityById, getInsightsForFacility, getKpisForFacility } from './data.js';
 import { initMap, setNetworkState, invalidateMapSize } from './map.js';
-import { initTwin3D, setTwin3DState, resizeTwin3D, resumeTwin3D } from './twin3d.js';
+import { initTwin3D, setTwin3DState, resizeTwin3D } from './twin3d.js';
 import { renderForecastChart,
          renderFacilityThroughputChart, renderFacilityCostBreakdownChart, renderFacilityLaneFlowsChart } from './charts.js';
 import { initScenarios } from './scenarios.js';
@@ -32,7 +32,7 @@ const state = {
   // Home cockpit state
   facilityType: 'DC',          // 'DC' | 'Plant'
   selectedFacility: 'DC_DELHI',
-  selectedPeriod: 'AUG_2026',
+  selectedPeriod: 'Q3_2026',
 };
 
 // Expose globally on window
@@ -68,6 +68,17 @@ if (document.readyState === 'loading') {
 // ─── Header & Topbar Visibility Controller ──────────────────
 function updateTopBarLayout(tab) {
   const isHomeOverview = (tab === 'home' || tab === 'overview');
+
+  // .main-content caps at 1280px so other tabs' content doesn't stretch
+  // too wide, but that same cap was leaving a plain white/gray gap to the
+  // right of Home's purple gradient background on wide viewports (the
+  // gradient only fills #tab-home's own box, which bleeds out to
+  // .main-content's edges — not past them). Home spans the full width
+  // instead so the gradient reaches the actual right edge of the page.
+  const mainContent = document.querySelector('.main-content');
+  if (mainContent) {
+    mainContent.classList.toggle('home-full-bleed', isHomeOverview);
+  }
 
   // Upload Data button: ONLY on Home Overview page (unchanged from
   // before the redesign). Launches the same ingestion flow used during
@@ -172,13 +183,15 @@ export function navigateToTab(tab) {
   if (tab === 'twin') {
     setTimeout(() => {
       try {
-        if (!state.mapsInitialised['twin-3d']) {
-          initTwin3D('twin3d-canvas');
-          state.mapsInitialised['twin-3d'] = true;
-        } else {
-          resumeTwin3D();
-          resizeTwin3D();
-        }
+        // Always call initTwin3D rather than gating on a "did we ever
+        // init" flag: the 3D scene/canvas is a singleton shared with
+        // Home's preview (see twin3d.js), and Home re-parents it into its
+        // own container every time it renders — including after this tab
+        // was already visited once. initTwin3D already branches
+        // internally between a cold init and a cheap reparent+resume, so
+        // calling it unconditionally is what keeps the canvas following
+        // whichever container is actually asking for it.
+        initTwin3D('twin3d-canvas');
         if (!state.mapsInitialised['map-twin']) {
           initMap('map-twin');
           state.mapsInitialised['map-twin'] = true;
@@ -335,13 +348,11 @@ function initTabs() {
         } else {
           if (panel2d) panel2d.style.display = 'none';
           if (panel3d) panel3d.style.display = 'block';
-          if (!state.mapsInitialised['twin-3d']) {
-            initTwin3D('twin3d-canvas');
-            state.mapsInitialised['twin-3d'] = true;
-          } else {
-            resumeTwin3D();
-            resizeTwin3D();
-          }
+          // See the same call in navigateToTab: always re-run initTwin3D
+          // rather than trusting a one-time "initialised" flag, since
+          // Home's preview may have re-parented the shared canvas away
+          // since the last time this tab was shown.
+          initTwin3D('twin3d-canvas');
         }
       });
     });
@@ -363,12 +374,12 @@ function initTabs() {
         // Update 3D twin
         setTwin3DState(newState);
 
-        // Update 3D stats overlay
+        // Update 3D + 2D stats overlays
+        const names = { actual: 'Actual', recommended: 'Recommended' };
         const stateLabel = document.getElementById('twin3d-state-label');
-        if (stateLabel) {
-          const names = { actual: 'Actual', optimised: 'Optimised Base', recommended: 'Recommended' };
-          stateLabel.textContent = names[newState] || newState;
-        }
+        if (stateLabel) stateLabel.textContent = names[newState] || newState;
+        const stateLabel2d = document.getElementById('map2d-state-label');
+        if (stateLabel2d) stateLabel2d.textContent = names[newState] || newState;
       });
     });
   }
@@ -509,10 +520,9 @@ function initHomeSelectors() {
     navigateToTab('forecast');
   });
 
-  // Click entire Digital Twin map block → Navigate to Digital Twin
-  document.getElementById('home-twin-block')?.addEventListener('click', () => {
-    navigateToTab('twin');
-  });
+  // Note: the Digital Twin map/card itself is no longer a click-to-navigate
+  // target (it needs click-drag for 3D orbit controls) — only the "Open
+  // Digital Twin" link in its header navigates, via its own onclick.
 
   // Chatbot Send Button & Enter Key
   }
@@ -690,32 +700,6 @@ export function renderFacilityDashboard() {
     `).join('');
   }
 
-  // Telemetry Grid
-  const telGrid = document.getElementById('dash-telemetry-grid');
-  if (telGrid) {
-    telGrid.innerHTML = `
-      <div style="padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);text-align:center">
-        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Connected ERP</div>
-        <div style="font-size:16px;font-weight:800;margin:4px 0">SAP S/4HANA</div>
-        <div class="text-xs" style="color:var(--green)">✓ Synced 8m ago</div>
-      </div>
-      <div style="padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);text-align:center">
-        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Warehouse WMS</div>
-        <div style="font-size:16px;font-weight:800;margin:4px 0">Manhattan Scale</div>
-        <div class="text-xs" style="color:var(--green)">✓ Real-time feed</div>
-      </div>
-      <div style="padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);text-align:center">
-        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Transport TMS</div>
-        <div style="font-size:16px;font-weight:800;margin:4px 0">Oracle OTM Cloud</div>
-        <div class="text-xs" style="color:var(--green)">✓ 384 GPS pings/hr</div>
-      </div>
-      <div style="padding:12px;background:var(--bg-elevated);border-radius:var(--r-md);text-align:center">
-        <div class="text-xs text-muted" style="text-transform:uppercase;font-weight:600">Data Integrity</div>
-        <div style="font-size:16px;font-weight:800;margin:4px 0;color:var(--green)">99.2%</div>
-        <div class="text-xs text-muted">0 schema mismatches</div>
-      </div>
-    `;
-  }
 }
 
 
@@ -731,7 +715,7 @@ function getNetworkKpis(periodId) {
   // Not every period in PERIODS has mock data for every facility yet —
   // fall back the same way getKpisForFacility does.
   if (!rows.length) {
-    rows = DCS.map(d => (FACILITY_KPIS[d.id] || {}).AUG_2026).filter(Boolean);
+    rows = DCS.map(d => (FACILITY_KPIS[d.id] || {}).Q3_2026).filter(Boolean);
   }
   if (!rows.length) return null;
 
@@ -751,90 +735,57 @@ function pctDelta(value, prev) {
   return ((value - prev) / prev) * 100;
 }
 
-// Lower-is-better metrics (cost, inventory days): a drop is "Good", a
-// rise is flagged by how large it is. Tone names match the existing
-// tag-success/tag-warning/tag-danger palette used across the app.
-function deltaStatus(pct) {
-  if (pct <= 0) return { tone: Math.abs(pct) < 1 ? 'gray' : 'green', label: Math.abs(pct) < 1 ? 'Stable' : 'Good' };
-  if (pct > 6) return { tone: 'red', label: 'High' };
-  return { tone: 'amber', label: 'Medium' };
-}
-
-function slaStatus(value, target) {
-  if (value >= target) return { tone: 'green', label: 'Good' };
-  if (value >= target - 2) return { tone: 'amber', label: 'Watch' };
-  return { tone: 'red', label: 'Below Target' };
-}
-
-function utilTone(label) {
-  return label === 'Critical' ? 'red' : label === 'Moderate' ? 'amber' : 'green';
-}
-
 function fmtDelta(pct) {
   return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
 }
 
-function kpiCardHtml({ icon, iconBg, iconColor, name, value, sub, tone, pillLabel, barPct }) {
+function kpiStripArrowSvg(dir) {
+  return dir === 'up'
+    ? `<svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M10 15V5M5 9l5-5 5 5"/></svg>`
+    : `<svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5v10M5 11l5 5 5-5"/></svg>`;
+}
+
+function kpiStripItemHtml({ icon, value, label, deltaPrefix, deltaText, deltaDir, deltaGood }) {
   return `
-    <div class="home2-kpi-card">
-      <div class="home2-kpi-card-head">
-        <span class="home2-kpi-icon-badge" style="background:${iconBg};color:${iconColor}">${icon}</span>
-        <span class="home2-kpi-name">${name}</span>
+    <div class="home2-kpi-strip-item">
+      <span class="home2-kpi-strip-icon">${icon}</span>
+      <div class="home2-kpi-strip-text">
+        <div class="home2-kpi-strip-value">${value}</div>
+        <div class="home2-kpi-strip-name">${label}</div>
+        <div class="home2-kpi-strip-delta">${deltaPrefix}
+          <strong class="tone-${deltaGood ? 'good' : 'bad'}">${deltaText}${kpiStripArrowSvg(deltaDir)}</strong>
+        </div>
       </div>
-      <div class="home2-kpi-val-row">
-        <span class="home2-kpi-val">${value}</span>
-        <span class="home2-kpi-pill tone-${tone}">${pillLabel}</span>
-      </div>
-      <div class="home2-kpi-sub">${sub}</div>
-      <div class="home2-kpi-progress-track"><div class="home2-kpi-progress-fill tone-${tone}" style="width:${Math.max(4, Math.min(100, barPct))}%"></div></div>
     </div>`;
 }
 
-// ─── Home KPI Row (Network Health — compact, network-wide) ──
+// ─── Home KPI Strip (Network Today — 3 headline, network-wide KPIs;
+//     the full facility-by-facility breakdown lives behind "View all
+//     KPIs" on the Facility Dashboard tab) ───────────────────────────
 function renderHomeKPIs() {
   const kpis = getNetworkKpis(state.selectedPeriod);
   const grid = document.getElementById('home-kpi-grid');
   if (!kpis || !grid) return;
 
-  const utilLabel = getUtilLabel(kpis.utilisation.value);
-  const sla = slaStatus(kpis.sla.value, kpis.sla.target);
   const costDeltaPct = pctDelta(kpis.totalCost.value, kpis.totalCost.prev);
-  const costStatus = deltaStatus(costDeltaPct);
-  const invDeltaPct = pctDelta(kpis.inventoryDays.value, kpis.inventoryDays.prev);
-  const invStatus = deltaStatus(invDeltaPct);
+  const slaVsTarget = kpis.sla.value - kpis.sla.target;
+  const utilDeltaPct = pctDelta(kpis.utilisation.value, kpis.utilisation.prev);
 
   grid.innerHTML = [
-    kpiCardHtml({
-      icon: '📊', iconBg: '#f5f0fa', iconColor: 'var(--primary)',
-      name: 'Capacity Utilization',
-      value: `${kpis.utilisation.value}%`,
-      sub: 'of total capacity',
-      tone: utilTone(utilLabel), pillLabel: utilLabel,
-      barPct: kpis.utilisation.value,
+    kpiStripItemHtml({
+      icon: '₹', value: formatCurrency(kpis.totalCost.value), label: 'Total cost',
+      deltaPrefix: 'vs last period:', deltaText: fmtDelta(costDeltaPct),
+      deltaDir: costDeltaPct <= 0 ? 'down' : 'up', deltaGood: costDeltaPct <= 0,
     }),
-    kpiCardHtml({
-      icon: '✅', iconBg: '#f0fdf4', iconColor: 'var(--green)',
-      name: 'On-time Service (SLA)',
-      value: `${kpis.sla.value}%`,
-      sub: `Target: ≥${kpis.sla.target}%`,
-      tone: sla.tone, pillLabel: sla.label,
-      barPct: kpis.sla.value,
+    kpiStripItemHtml({
+      icon: '✅', value: `${kpis.sla.value}%`, label: 'On-time service (SLA)',
+      deltaPrefix: 'vs target:', deltaText: fmtDelta(slaVsTarget),
+      deltaDir: slaVsTarget < 0 ? 'down' : 'up', deltaGood: slaVsTarget >= 0,
     }),
-    kpiCardHtml({
-      icon: '₹', iconBg: '#f5f0fa', iconColor: 'var(--primary)',
-      name: 'Total Cost',
-      value: formatCurrency(kpis.totalCost.value),
-      sub: `vs last period: ${fmtDelta(costDeltaPct)}`,
-      tone: costStatus.tone, pillLabel: costStatus.label,
-      barPct: 50 + costDeltaPct * 3,
-    }),
-    kpiCardHtml({
-      icon: '📦', iconBg: '#fffbeb', iconColor: 'var(--amber)',
-      name: 'Inventory Days',
-      value: `${kpis.inventoryDays.value} days`,
-      sub: `vs last period: ${fmtDelta(invDeltaPct)}`,
-      tone: invStatus.tone, pillLabel: invStatus.label,
-      barPct: 50 + invDeltaPct * 3,
+    kpiStripItemHtml({
+      icon: '📊', value: `${kpis.utilisation.value}%`, label: 'Capacity utilization',
+      deltaPrefix: 'vs last period:', deltaText: fmtDelta(utilDeltaPct),
+      deltaDir: utilDeltaPct <= 0 ? 'down' : 'up', deltaGood: utilDeltaPct <= 0,
     }),
   ].join('');
 }
@@ -852,20 +803,52 @@ function renderHomeForecast() {
   }, 40);
 }
 
-// ─── Home Digital Twin Map Preview ──────────────────────────
+// ─── Home Digital Twin Map Preview (3D — same engine as the Digital
+//     Twin tab, re-parented into Home's preview container) ──────────
 function renderHomeDigitalTwin() {
   setTimeout(() => {
     try {
-      if (!state.mapsInitialised['home-map-twin']) {
-        initMap('home-map-twin');
-        state.mapsInitialised['home-map-twin'] = true;
-      } else {
-        window.dispatchEvent(new Event('resize'));
-      }
+      // initTwin3D re-parents/resumes the existing scene when already
+      // initialised, so it's safe to call every time Home renders.
+      initTwin3D('home-map-twin');
+      window.dispatchEvent(new Event('resize'));
     } catch (e) {
-      console.warn('Home map init:', e);
+      console.warn('Home 3D twin init:', e);
     }
   }, 50);
+  renderHomeTwinCallout();
+}
+
+// Floating "key info" card on the Digital Twin preview — whichever
+// facility is selected in the topbar (Facility selector) surfaces its
+// utilisation snapshot directly on the map, matching
+// Dump/Updated Home Page.png's "Insight context" callout.
+function renderHomeTwinCallout() {
+  const el = document.getElementById('home-twin-callout');
+  if (!el) return;
+
+  const fac = state.selectedFacility && state.selectedFacility !== 'ALL'
+    ? getFacilityById(state.selectedFacility) : null;
+
+  if (!fac) {
+    el.innerHTML = '';
+    el.classList.remove('visible');
+    return;
+  }
+
+  const utilLabel = getUtilLabel(fac.utilPct);
+  const tone = utilLabel === 'Critical' ? 'red' : utilLabel === 'Moderate' ? 'amber' : 'green';
+
+  el.innerHTML = `
+    <div class="home-twin-callout-head">
+      <span class="home-twin-callout-icon">✨</span>
+      <span>Facility snapshot</span>
+    </div>
+    <div class="home-twin-callout-name">${fac.name} utilization</div>
+    <div class="home-twin-callout-value tone-${tone}">${fac.utilPct}%</div>
+    <div class="home-twin-callout-sub">${formatNumber(fac.throughput)} / ${formatNumber(fac.capacity)} units/day capacity</div>
+  `;
+  el.classList.add('visible');
 }
 
 // ─── Home Numbered Insights (Right Rail) ─────────────────────
@@ -893,15 +876,35 @@ function categorizeAttentionLabel(text) {
   return 'Status';
 }
 
-function attentionCardHtml(kind, id, category, title, subtitle) {
+// Deterministic mock "amount at risk" for the featured (first) risk item —
+// same hash-seed approach used throughout the app's other mocked figures
+// (see insight-detail.js). Purely cosmetic emphasis, not a real figure.
+function attnHashStr(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+function attnRiskAmountLakh(id) {
+  return 8 + (attnHashStr(id + ':risk') % 24);
+}
+
+const RISK_CATEGORIES = new Set(['Capacity Risk', 'Service Risk']);
+
+function attentionCardHtml(kind, id, category, title, subtitle, index) {
   const meta = ATTENTION_CATEGORY_META[category];
   const link = kind === 'action' ? 'Run scenario' : meta.link;
+  const featured = index === 0;
+  const riskLine = (featured && RISK_CATEGORIES.has(category))
+    ? `<div class="home2-attn-risk-line" style="color:${meta.color}">₹${attnRiskAmountLakh(id)}L/month at risk</div>`
+    : '';
   return `
-    <div class="home2-attn-item" data-kind="${kind}" data-id="${id}" title="Click for details">
+    <div class="home2-attn-item${featured ? ' featured' : ''}" data-kind="${kind}" data-id="${id}" title="Click for details">
+      <span class="home2-attn-badge-num">${index + 1}</span>
       <span class="home2-attn-icon" style="background:${meta.bg};color:${meta.color}">${meta.icon}</span>
       <div class="home2-attn-body">
-        <div class="home2-attn-kicker">${category}</div>
+        <div class="home2-attn-kicker" style="color:${meta.color}">${category}</div>
         <div class="home2-attn-item-title">${title}</div>
+        ${riskLine}
         <div class="home2-attn-item-sub">${subtitle}</div>
         <span class="home2-attn-link">${link}
           <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
@@ -927,18 +930,23 @@ function renderHomeAttentionFeed() {
   const insights = getInsightsForFacility(state.selectedFacility)
     .filter(ins => !resolvedInsightIds.has(ins.id));
 
-  const insightCards = insights.map(ins =>
-    attentionCardHtml('insight', ins.id, categorizeAttentionLabel(ins.impact), ins.title, ins.subtitle));
+  const insightItems = insights.map(ins =>
+    ({ kind: 'insight', id: ins.id, category: categorizeAttentionLabel(ins.impact), title: ins.title, subtitle: ins.subtitle }));
 
-  const actionCards = HOME_ACTION_ITEMS
+  const actionItems = HOME_ACTION_ITEMS
     .filter(act => !resolvedInsightIds.has(act.id))
     .map(act => {
       const impact = act.expectedImpact || {};
       const subtitle = [impact.cost, impact.sla ? `SLA ${impact.sla}` : null].filter(Boolean).join(' · ');
-      return attentionCardHtml('action', act.id, categorizeAttentionLabel(act.tag), act.title, subtitle);
+      return { kind: 'action', id: act.id, category: categorizeAttentionLabel(act.tag), title: act.title, subtitle };
     });
 
-  const cards = [...insightCards, ...actionCards];
+  // Numbered 1..N across the whole merged feed (not restarted per source),
+  // matching Dump/Updated Home Page.png — with the very first item getting
+  // extra emphasis (see attentionCardHtml's "featured" treatment).
+  const cards = [...insightItems, ...actionItems].map((item, i) =>
+    attentionCardHtml(item.kind, item.id, item.category, item.title, item.subtitle, i));
+
   list.innerHTML = cards.length
     ? cards.join('')
     : `<div class="home2-attn-empty">No open items right now — network is performing within target.</div>`;
@@ -1247,7 +1255,7 @@ export function exportFacilityReport() {
     'Facility Name,' + fac.name,
     'Facility Type,' + (fac.id.startsWith('PLT_') ? 'Manufacturing Plant' : 'Distribution Centre'),
     'Location,"' + fac.city + ', ' + fac.state + ' (' + fac.region + ' Region)"',
-    'Active Period,' + (state.selectedPeriod || 'August 2026'),
+    'Active Period,' + (state.selectedPeriod || 'Q3 2026'),
     '',
     '=== Operational Telemetry & Capacity Horizon ===',
     'Capacity (Units/Day),' + fac.capacity,

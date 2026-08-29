@@ -750,10 +750,10 @@ export const SYSTEM_STATUS = {
 
 // ─── PERIODS ────────────────────────────────────────────────
 export const PERIODS = [
-  { id: "AUG_2026", label: "1 Aug – 31 Aug 2026", short: "Aug 2026", prevId: "JUL_2026" },
-  { id: "JUL_2026", label: "1 Jul – 31 Jul 2026", short: "Jul 2026", prevId: "JUN_2026" },
-  { id: "Q3_2026", label: "Q3 2026 (Jul – Sep)", short: "Q3 2026", prevId: "Q2_2026" },
-  { id: "Q2_2026", label: "Q2 2026 (Apr – Jun)", short: "Q2 2026", prevId: "Q1_2026" },
+  { id: "Q3_2026", label: "Q3 2026", short: "Q3 2026", prevId: "Q2_2026" },
+  { id: "Q2_2026", label: "Q2 2026", short: "Q2 2026", prevId: "Q1_2026" },
+  { id: "Q1_2026", label: "Q1 2026", short: "Q1 2026", prevId: "Q4_2025" },
+  { id: "Q4_2025", label: "Q4 2025", short: "Q4 2025", prevId: "Q3_2025" },
 ];
 
 // ─── FACILITY KPIs BY PERIOD ────────────────────────────────
@@ -761,14 +761,14 @@ export const PERIODS = [
 // "prev" values are for the comparison period.
 export const FACILITY_KPIS = {
   DC_DELHI: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 94.0, capacity: 10000, unit: "units/day", prev: 88.0, status: "critical" },
       sla: { value: 96.7, target: 95, prev: 94.9, status: "normal" },
       totalCost: { value: 1184000, prev: 1223000, status: "normal" },
       inventoryDays: { value: 11.2, prev: 12.1, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 88.0, capacity: 10000, unit: "units/day", prev: 84.0, status: "warning" },
       sla: { value: 94.9, target: 95, prev: 95.1, status: "warning" },
       totalCost: { value: 1223000, prev: 1198000, status: "warning" },
@@ -777,14 +777,14 @@ export const FACILITY_KPIS = {
     },
   },
   DC_MUMBAI: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 75.6, capacity: 9000, unit: "units/day", prev: 72.1, status: "normal" },
       sla: { value: 95.8, target: 95, prev: 94.2, status: "normal" },
       totalCost: { value: 980000, prev: 1010000, status: "normal" },
       inventoryDays: { value: 9.8, prev: 10.4, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 72.1, capacity: 9000, unit: "units/day", prev: 70.5, status: "normal" },
       sla: { value: 94.2, target: 95, prev: 94.8, status: "warning" },
       totalCost: { value: 1010000, prev: 995000, status: "normal" },
@@ -793,14 +793,14 @@ export const FACILITY_KPIS = {
     },
   },
   DC_BENGALURU: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 74.7, capacity: 7500, unit: "units/day", prev: 71.2, status: "normal" },
       sla: { value: 96.2, target: 95, prev: 95.5, status: "normal" },
       totalCost: { value: 840000, prev: 860000, status: "normal" },
       inventoryDays: { value: 10.5, prev: 11.0, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 71.2, capacity: 7500, unit: "units/day", prev: 69.8, status: "normal" },
       sla: { value: 95.5, target: 95, prev: 95.0, status: "normal" },
       totalCost: { value: 860000, prev: 845000, status: "normal" },
@@ -809,14 +809,14 @@ export const FACILITY_KPIS = {
     },
   },
   DC_KOLKATA: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 53.3, capacity: 6000, unit: "units/day", prev: 51.0, status: "normal" },
       sla: { value: 93.1, target: 95, prev: 92.4, status: "warning" },
       totalCost: { value: 520000, prev: 530000, status: "normal" },
       inventoryDays: { value: 14.3, prev: 14.8, status: "warning" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 51.0, capacity: 6000, unit: "units/day", prev: 49.5, status: "normal" },
       sla: { value: 92.4, target: 95, prev: 93.0, status: "warning" },
       totalCost: { value: 530000, prev: 525000, status: "normal" },
@@ -825,14 +825,14 @@ export const FACILITY_KPIS = {
     },
   },
   DC_GUWAHATI: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 52.5, capacity: 4000, unit: "units/day", prev: 50.0, status: "normal" },
       sla: { value: 91.4, target: 95, prev: 90.8, status: "warning" },
       totalCost: { value: 310000, prev: 320000, status: "normal" },
       inventoryDays: { value: 16.1, prev: 16.8, status: "warning" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 50.0, capacity: 4000, unit: "units/day", prev: 48.2, status: "normal" },
       sla: { value: 90.8, target: 95, prev: 91.2, status: "warning" },
       totalCost: { value: 320000, prev: 315000, status: "normal" },
@@ -841,14 +841,14 @@ export const FACILITY_KPIS = {
     },
   },
   PLT_BADDI: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 93.3, capacity: 12000, unit: "units/day", prev: 88.0, status: "critical" },
       sla: { value: 97.1, target: 95, prev: 96.2, status: "normal" },
       totalCost: { value: 1420000, prev: 1380000, status: "warning" },
       inventoryDays: { value: 8.5, prev: 9.0, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 88.0, capacity: 12000, unit: "units/day", prev: 85.0, status: "warning" },
       sla: { value: 96.2, target: 95, prev: 95.8, status: "normal" },
       totalCost: { value: 1380000, prev: 1350000, status: "normal" },
@@ -857,14 +857,14 @@ export const FACILITY_KPIS = {
     },
   },
   PLT_PUNE: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 78.0, capacity: 10000, unit: "units/day", prev: 75.0, status: "normal" },
       sla: { value: 96.8, target: 95, prev: 96.0, status: "normal" },
       totalCost: { value: 1100000, prev: 1120000, status: "normal" },
       inventoryDays: { value: 10.0, prev: 10.5, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 75.0, capacity: 10000, unit: "units/day", prev: 73.0, status: "normal" },
       sla: { value: 96.0, target: 95, prev: 95.5, status: "normal" },
       totalCost: { value: 1120000, prev: 1100000, status: "normal" },
@@ -873,14 +873,14 @@ export const FACILITY_KPIS = {
     },
   },
   PLT_HYDERABAD: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 76.3, capacity: 8000, unit: "units/day", prev: 73.0, status: "normal" },
       sla: { value: 95.9, target: 95, prev: 95.2, status: "normal" },
       totalCost: { value: 890000, prev: 910000, status: "normal" },
       inventoryDays: { value: 11.8, prev: 12.3, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 73.0, capacity: 8000, unit: "units/day", prev: 71.5, status: "normal" },
       sla: { value: 95.2, target: 95, prev: 95.0, status: "normal" },
       totalCost: { value: 910000, prev: 895000, status: "normal" },
@@ -889,14 +889,14 @@ export const FACILITY_KPIS = {
     },
   },
   PLT_KOLKATA: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 70.0, capacity: 6000, unit: "units/day", prev: 67.0, status: "normal" },
       sla: { value: 94.5, target: 95, prev: 93.8, status: "warning" },
       totalCost: { value: 580000, prev: 590000, status: "normal" },
       inventoryDays: { value: 13.2, prev: 13.8, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 67.0, capacity: 6000, unit: "units/day", prev: 65.0, status: "normal" },
       sla: { value: 93.8, target: 95, prev: 94.0, status: "warning" },
       totalCost: { value: 590000, prev: 580000, status: "normal" },
@@ -1214,7 +1214,7 @@ export function getInsightsForFacility(facilityId) {
 export function getKpisForFacility(facilityId, periodId) {
   const facilityKpis = FACILITY_KPIS[facilityId] || FACILITY_KPIS.DC_DELHI;
   if (!facilityKpis) return null;
-  return facilityKpis[periodId] || facilityKpis["AUG_2026"] || facilityKpis[Object.keys(facilityKpis)[0]] || null;
+  return facilityKpis[periodId] || facilityKpis["Q3_2026"] || facilityKpis[Object.keys(facilityKpis)[0]] || null;
 }
 
 // ─── HELPER FUNCTIONS ───────────────────────────────────────

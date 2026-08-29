@@ -963,10 +963,26 @@
    PDF INGESTION
    ═══════════════════════════════════════════════════════════ */
 .ing-pdf-layout {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: calc(40 * var(--u));
   margin-top: calc(6 * var(--u));
+}
+
+/* Findings now span the full page width (the step-by-step progress
+   panel that used to sit to their left has been removed), so they run
+   two-across instead of stacking in a single narrow column. The warning
+   banner and its review panel still take the full row either way — see
+   the ".ing-finding-card.warn.expanded + .ing-review-panel" sibling rule
+   below, which needs them to stay DOM-adjacent. */
+.ing-findings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: calc(12 * var(--u));
+}
+
+.ing-findings-grid .ing-finding-card { margin-bottom: 0; }
+
+.ing-findings-grid .ing-finding-card.warn,
+.ing-findings-grid .ing-review-panel {
+  grid-column: 1 / -1;
 }
 
 .ing-pdf-file-card {
@@ -1000,110 +1016,6 @@
   color: var(--proj-text-4);
 }
 
-.ing-stepper {
-  position: relative;
-}
-
-.ing-step {
-  position: relative;
-  display: flex;
-  gap: calc(18 * var(--u));
-  padding-bottom: calc(28 * var(--u));
-}
-
-.ing-step:last-child { padding-bottom: 0; }
-
-.ing-step-rail {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.ing-step-dot {
-  width: calc(26 * var(--u));
-  height: calc(26 * var(--u));
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  z-index: 1;
-  background: #f1f1f4;
-  color: #a1a1aa;
-}
-
-.ing-step-dot svg { width: calc(14 * var(--u)); height: calc(14 * var(--u)); }
-
-.ing-step.done .ing-step-dot { background: #e6f6ee; color: #16a34a; }
-
-.ing-step.active .ing-step-dot {
-  background: var(--brand-purple);
-  color: #ffffff;
-  box-shadow: 0 0 0 calc(5 * var(--u)) rgba(146, 24, 234, 0.16);
-}
-
-.ing-step-line {
-  width: 2px;
-  flex: 1;
-  background: #ece7f5;
-  margin-top: calc(2 * var(--u));
-}
-
-.ing-step.done + .ing-step .ing-step-line,
-.ing-step.done .ing-step-line { background: #cdeedd; }
-
-.ing-step-body { padding-top: calc(2 * var(--u)); }
-
-.ing-step-title {
-  font-size: calc(16 * var(--u));
-  font-weight: 700;
-  color: var(--proj-text-1);
-}
-
-.ing-step.pending .ing-step-title { color: var(--proj-text-4); }
-
-.ing-step-desc {
-  margin-top: calc(3 * var(--u));
-  font-size: calc(13.5 * var(--u));
-  color: var(--proj-text-3);
-}
-
-.ing-step.pending .ing-step-desc { color: var(--proj-text-4); }
-
-.ing-step-hint {
-  margin-top: calc(6 * var(--u));
-  font-size: calc(13 * var(--u));
-  color: var(--brand-purple);
-  display: flex;
-  align-items: center;
-  gap: calc(3 * var(--u));
-}
-
-.ing-dots span {
-  animation: ingDotFade 1.2s infinite;
-  opacity: 0.2;
-}
-
-.ing-dots span:nth-child(2) { animation-delay: 0.2s; }
-.ing-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-@keyframes ingDotFade {
-  0%, 100% { opacity: 0.2; }
-  50% { opacity: 1; }
-}
-
-.ing-stepper-foot {
-  display: flex;
-  align-items: center;
-  gap: calc(8 * var(--u));
-  margin-top: calc(20 * var(--u));
-  font-size: calc(13.5 * var(--u));
-  color: var(--proj-text-3);
-}
-
-.ing-stepper-foot svg { width: calc(15 * var(--u)); height: calc(15 * var(--u)); color: var(--brand-purple); }
 
 .ing-findings-title {
   display: flex;
@@ -1264,7 +1176,7 @@
 /* ─── Narrow viewports ────────────────────────────────────── */
 @media (max-width: 1080px) {
   .ing-mapping-layout { grid-template-columns: 1fr; }
-  .ing-pdf-layout { grid-template-columns: 1fr; }
+  .ing-findings-grid { grid-template-columns: 1fr; }
   .ing-mapping-head { flex-direction: column; }
 }
 

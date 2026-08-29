@@ -749,49 +749,20 @@ function renderPdfIngestion(file) {
       ${topbar()}
 
       <div class="ing-pdf-layout">
-        <div>
-          <h1 class="ing-title" style="font-size:calc(26*var(--u))">AI is understanding your document</h1>
-          <p class="ing-subtitle">Your file has been uploaded. NetGravity is extracting key information and identifying what matters.</p>
+        <h1 class="ing-title" style="font-size:calc(26*var(--u))">AI is understanding your document</h1>
+        <p class="ing-subtitle">Your file has been uploaded. NetGravity is extracting key information and identifying what matters.</p>
 
-          <div class="ing-pdf-file-card">
-            <span class="ing-file-icon type-pdf" style="width:calc(40*var(--u));height:calc(40*var(--u))">PDF</span>
-            <div class="ing-pdf-file-meta">
-              <div class="ing-pdf-file-name">${ingEsc(file.name)}</div>
-              <div class="ing-pdf-file-sub">${pages} pages &middot; ${file.sizeMB.toFixed(1)} MB</div>
-            </div>
-            <span class="ing-status-chip">${I.checkCircle}Upload successful</span>
+        <div class="ing-pdf-file-card">
+          <span class="ing-file-icon type-pdf" style="width:calc(40*var(--u));height:calc(40*var(--u))">PDF</span>
+          <div class="ing-pdf-file-meta">
+            <div class="ing-pdf-file-name">${ingEsc(file.name)}</div>
+            <div class="ing-pdf-file-sub">${pages} pages &middot; ${file.sizeMB.toFixed(1)} MB</div>
           </div>
-
-          <div class="ing-stepper">
-            <div class="ing-step done">
-              <div class="ing-step-rail"><span class="ing-step-dot">${I.check}</span><span class="ing-step-line"></span></div>
-              <div class="ing-step-body"><div class="ing-step-title">Document read</div><div class="ing-step-desc">${pages} pages processed</div></div>
-            </div>
-            <div class="ing-step done">
-              <div class="ing-step-rail"><span class="ing-step-dot">${I.check}</span><span class="ing-step-line"></span></div>
-              <div class="ing-step-body"><div class="ing-step-title">Contract identified</div><div class="ing-step-desc">Commercial terms and clauses detected</div></div>
-            </div>
-            <div class="ing-step active">
-              <div class="ing-step-rail"><span class="ing-step-dot">&#9679;</span><span class="ing-step-line"></span></div>
-              <div class="ing-step-body">
-                <div class="ing-step-title">Extracting key terms</div>
-                <div class="ing-step-desc">12 terms identified &middot; <span style="color:#b4780a;font-weight:600">2 may need your review</span></div>
-                <div class="ing-step-hint">Checking a few uncertain values before showing the extracted terms<span class="ing-dots"><span>.</span><span>.</span><span>.</span></span></div>
-              </div>
-            </div>
-            <div class="ing-step pending">
-              <div class="ing-step-rail"><span class="ing-step-dot">4</span></div>
-              <div class="ing-step-body"><div class="ing-step-title">Preparing review</div><div class="ing-step-desc">Organizing extracted terms and linking to source</div></div>
-            </div>
-          </div>
-
-          <div class="ing-stepper-foot">${I.sparkle}<span>Almost there &middot; ~<span id="ing-pdf-countdown">18</span> sec remaining</span></div>
+          <span class="ing-status-chip">${I.checkCircle}Upload successful</span>
         </div>
 
-        <div>
-          <div class="ing-findings-title">${I.docSearch}What I've found so far</div>
-          <div id="ing-findings-slot">${findingCardsHtml(file, review)}</div>
-        </div>
+        <div class="ing-findings-title">${I.docSearch}What I've found so far</div>
+        <div id="ing-findings-slot" class="ing-findings-grid">${findingCardsHtml(file, review)}</div>
       </div>
 
       <div class="ing-footer-row">
@@ -813,15 +784,8 @@ function renderPdfIngestion(file) {
 
 function bindPdfIngestion(file) {
   const review = flow.pdfReview[file.id];
-  let countdown = 18;
-  const timer = setInterval(() => {
-    countdown = Math.max(1, countdown - 1);
-    const el = document.getElementById('ing-pdf-countdown');
-    if (el) el.textContent = String(countdown);
-    else clearInterval(timer);
-  }, 1000);
 
-  document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', () => { clearInterval(timer); goBackInFlow(); });
+  document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', goBackInFlow);
 
   function refreshFindings() {
     document.getElementById('ing-findings-slot').innerHTML = findingCardsHtml(file, review);
@@ -850,7 +814,6 @@ function bindPdfIngestion(file) {
   });
 
   document.getElementById('ing-pdf-continue-btn')?.addEventListener('click', () => {
-    clearInterval(timer);
     file.status = 'extracted';
     advanceQueue();
   });

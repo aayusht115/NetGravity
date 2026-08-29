@@ -95,6 +95,14 @@ export function initTwin3D(containerId) {
   if (!containerEl) return;
 
   if (isInitialised) {
+    // The scene/renderer are a module-level singleton shared by every
+    // caller (Home's preview and the Digital Twin tab both use this same
+    // canvas) — re-parent it into whichever container is asking this
+    // time, since only one can be showing it at once.
+    if (renderer && renderer.domElement.parentElement !== containerEl) {
+      containerEl.innerHTML = '';
+      containerEl.appendChild(renderer.domElement);
+    }
     resumeTwin3D();
     resizeTwin3D();
     return;
