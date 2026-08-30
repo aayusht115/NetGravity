@@ -24,11 +24,6 @@ export const DCS = [
   { id: "DC_GUWAHATI", name: "Guwahati DC", city: "Guwahati", state: "Assam", lat: 26.14, lng: 91.74, capacity: 4000, throughput: 2100, fixedCost: 65, handlingCost: 3.8, region: "Northeast", status: "EXISTING", utilPct: 52.5 },
 ];
 
-export const FACILITIES = [
-  ...PLANTS.map((p) => ({ ...p, type: 'Plant' })),
-  ...DCS.map((d) => ({ ...d, type: 'DC' })),
-];
-
 export const MARKETS = [
   { id: "MKT_DELHI", name: "Delhi", lat: 28.70, lng: 77.10, demand: 4200, slaDays: 2, priority: "High", region: "North" },
   { id: "MKT_MUMBAI", name: "Mumbai", lat: 19.08, lng: 72.88, demand: 3800, slaDays: 2, priority: "High", region: "West" },
@@ -40,6 +35,39 @@ export const MARKETS = [
   { id: "MKT_JAIPUR", name: "Jaipur", lat: 26.91, lng: 75.79, demand: 1500, slaDays: 3, priority: "Medium", region: "North" },
   { id: "MKT_LUCKNOW", name: "Lucknow", lat: 26.85, lng: 80.95, demand: 1400, slaDays: 3, priority: "Medium", region: "North" },
   { id: "MKT_GUWAHATI", name: "Guwahati", lat: 26.14, lng: 91.74, demand: 1100, slaDays: 4, priority: "Low", region: "Northeast" },
+];
+
+// ─── S2: de-overlap co-located nodes ──────────────────────────
+// Several plants/DCs/markets share a city and were given the exact same
+// lat/lng (e.g. Kolkata Plant, Kolkata DC and the Kolkata market all sit at
+// 22.57,88.36), which made them render as fully stacked, indistinguishable
+// icons on both the 2D Leaflet map and the 3D twin — neither has any
+// de-collision logic of its own. Fixed once here, at the shared data
+// source, so every consumer (map.js, twin3d.js, lane endpoints, FACILITIES)
+// sees already-separated coordinates. This is a schematic nudge for
+// legibility, not a claim about real inter-facility distance.
+function deoverlapNodes(nodeArrays) {
+  const groups = new Map();
+  nodeArrays.flat().forEach((n) => {
+    const key = `${n.lat.toFixed(4)},${n.lng.toFixed(4)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(n);
+  });
+  const FAN_RADIUS = 0.9; // degrees — visibly separates icons on the India-wide view
+  groups.forEach((nodes) => {
+    if (nodes.length < 2) return;
+    nodes.forEach((n, i) => {
+      const angle = (2 * Math.PI * i) / nodes.length;
+      n.lat += FAN_RADIUS * Math.sin(angle);
+      n.lng += FAN_RADIUS * Math.cos(angle);
+    });
+  });
+}
+deoverlapNodes([PLANTS, DCS, MARKETS]);
+
+export const FACILITIES = [
+  ...PLANTS.map((p) => ({ ...p, type: 'Plant' })),
+  ...DCS.map((d) => ({ ...d, type: 'DC' })),
 ];
 
 // ─── LANES (key corridors with cost, distance, lead time) ───
@@ -750,10 +778,10 @@ export const SYSTEM_STATUS = {
 
 // ─── PERIODS ────────────────────────────────────────────────
 export const PERIODS = [
-  { id: "AUG_2026", label: "1 Aug – 31 Aug 2026", short: "Aug 2026", prevId: "JUL_2026" },
-  { id: "JUL_2026", label: "1 Jul – 31 Jul 2026", short: "Jul 2026", prevId: "JUN_2026" },
-  { id: "Q3_2026", label: "Q3 2026 (Jul – Sep)", short: "Q3 2026", prevId: "Q2_2026" },
-  { id: "Q2_2026", label: "Q2 2026 (Apr – Jun)", short: "Q2 2026", prevId: "Q1_2026" },
+  { id: "Q3_2026", label: "Q3 2026", short: "Q3 2026", prevId: "Q2_2026" },
+  { id: "Q2_2026", label: "Q2 2026", short: "Q2 2026", prevId: "Q1_2026" },
+  { id: "Q1_2026", label: "Q1 2026", short: "Q1 2026", prevId: "Q4_2025" },
+  { id: "Q4_2025", label: "Q4 2025", short: "Q4 2025", prevId: "Q3_2025" },
 ];
 
 // ─── FACILITY KPIs BY PERIOD ────────────────────────────────
@@ -761,14 +789,14 @@ export const PERIODS = [
 // "prev" values are for the comparison period.
 export const FACILITY_KPIS = {
   DC_DELHI: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 94.0, capacity: 10000, unit: "units/day", prev: 88.0, status: "critical" },
       sla: { value: 96.7, target: 95, prev: 94.9, status: "normal" },
       totalCost: { value: 1184000, prev: 1223000, status: "normal" },
       inventoryDays: { value: 11.2, prev: 12.1, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 88.0, capacity: 10000, unit: "units/day", prev: 84.0, status: "warning" },
       sla: { value: 94.9, target: 95, prev: 95.1, status: "warning" },
       totalCost: { value: 1223000, prev: 1198000, status: "warning" },
@@ -777,14 +805,14 @@ export const FACILITY_KPIS = {
     },
   },
   DC_MUMBAI: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 75.6, capacity: 9000, unit: "units/day", prev: 72.1, status: "normal" },
       sla: { value: 95.8, target: 95, prev: 94.2, status: "normal" },
       totalCost: { value: 980000, prev: 1010000, status: "normal" },
       inventoryDays: { value: 9.8, prev: 10.4, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 72.1, capacity: 9000, unit: "units/day", prev: 70.5, status: "normal" },
       sla: { value: 94.2, target: 95, prev: 94.8, status: "warning" },
       totalCost: { value: 1010000, prev: 995000, status: "normal" },
@@ -793,14 +821,14 @@ export const FACILITY_KPIS = {
     },
   },
   DC_BENGALURU: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 74.7, capacity: 7500, unit: "units/day", prev: 71.2, status: "normal" },
       sla: { value: 96.2, target: 95, prev: 95.5, status: "normal" },
       totalCost: { value: 840000, prev: 860000, status: "normal" },
       inventoryDays: { value: 10.5, prev: 11.0, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 71.2, capacity: 7500, unit: "units/day", prev: 69.8, status: "normal" },
       sla: { value: 95.5, target: 95, prev: 95.0, status: "normal" },
       totalCost: { value: 860000, prev: 845000, status: "normal" },
@@ -809,14 +837,14 @@ export const FACILITY_KPIS = {
     },
   },
   DC_KOLKATA: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 53.3, capacity: 6000, unit: "units/day", prev: 51.0, status: "normal" },
       sla: { value: 93.1, target: 95, prev: 92.4, status: "warning" },
       totalCost: { value: 520000, prev: 530000, status: "normal" },
       inventoryDays: { value: 14.3, prev: 14.8, status: "warning" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 51.0, capacity: 6000, unit: "units/day", prev: 49.5, status: "normal" },
       sla: { value: 92.4, target: 95, prev: 93.0, status: "warning" },
       totalCost: { value: 530000, prev: 525000, status: "normal" },
@@ -825,14 +853,14 @@ export const FACILITY_KPIS = {
     },
   },
   DC_GUWAHATI: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 52.5, capacity: 4000, unit: "units/day", prev: 50.0, status: "normal" },
       sla: { value: 91.4, target: 95, prev: 90.8, status: "warning" },
       totalCost: { value: 310000, prev: 320000, status: "normal" },
       inventoryDays: { value: 16.1, prev: 16.8, status: "warning" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 50.0, capacity: 4000, unit: "units/day", prev: 48.2, status: "normal" },
       sla: { value: 90.8, target: 95, prev: 91.2, status: "warning" },
       totalCost: { value: 320000, prev: 315000, status: "normal" },
@@ -841,14 +869,14 @@ export const FACILITY_KPIS = {
     },
   },
   PLT_BADDI: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 93.3, capacity: 12000, unit: "units/day", prev: 88.0, status: "critical" },
       sla: { value: 97.1, target: 95, prev: 96.2, status: "normal" },
       totalCost: { value: 1420000, prev: 1380000, status: "warning" },
       inventoryDays: { value: 8.5, prev: 9.0, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 88.0, capacity: 12000, unit: "units/day", prev: 85.0, status: "warning" },
       sla: { value: 96.2, target: 95, prev: 95.8, status: "normal" },
       totalCost: { value: 1380000, prev: 1350000, status: "normal" },
@@ -857,14 +885,14 @@ export const FACILITY_KPIS = {
     },
   },
   PLT_PUNE: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 78.0, capacity: 10000, unit: "units/day", prev: 75.0, status: "normal" },
       sla: { value: 96.8, target: 95, prev: 96.0, status: "normal" },
       totalCost: { value: 1100000, prev: 1120000, status: "normal" },
       inventoryDays: { value: 10.0, prev: 10.5, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 75.0, capacity: 10000, unit: "units/day", prev: 73.0, status: "normal" },
       sla: { value: 96.0, target: 95, prev: 95.5, status: "normal" },
       totalCost: { value: 1120000, prev: 1100000, status: "normal" },
@@ -873,14 +901,14 @@ export const FACILITY_KPIS = {
     },
   },
   PLT_HYDERABAD: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 76.3, capacity: 8000, unit: "units/day", prev: 73.0, status: "normal" },
       sla: { value: 95.9, target: 95, prev: 95.2, status: "normal" },
       totalCost: { value: 890000, prev: 910000, status: "normal" },
       inventoryDays: { value: 11.8, prev: 12.3, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 73.0, capacity: 8000, unit: "units/day", prev: 71.5, status: "normal" },
       sla: { value: 95.2, target: 95, prev: 95.0, status: "normal" },
       totalCost: { value: 910000, prev: 895000, status: "normal" },
@@ -889,14 +917,14 @@ export const FACILITY_KPIS = {
     },
   },
   PLT_KOLKATA: {
-    AUG_2026: {
+    Q3_2026: {
       utilisation: { value: 70.0, capacity: 6000, unit: "units/day", prev: 67.0, status: "normal" },
       sla: { value: 94.5, target: 95, prev: 93.8, status: "warning" },
       totalCost: { value: 580000, prev: 590000, status: "normal" },
       inventoryDays: { value: 13.2, prev: 13.8, status: "normal" },
       prevLabel: "1 Jul – 31 Jul 2026",
     },
-    JUL_2026: {
+    Q2_2026: {
       utilisation: { value: 67.0, capacity: 6000, unit: "units/day", prev: 65.0, status: "normal" },
       sla: { value: 93.8, target: 95, prev: 94.0, status: "warning" },
       totalCost: { value: 590000, prev: 580000, status: "normal" },
@@ -1214,7 +1242,7 @@ export function getInsightsForFacility(facilityId) {
 export function getKpisForFacility(facilityId, periodId) {
   const facilityKpis = FACILITY_KPIS[facilityId] || FACILITY_KPIS.DC_DELHI;
   if (!facilityKpis) return null;
-  return facilityKpis[periodId] || facilityKpis["AUG_2026"] || facilityKpis[Object.keys(facilityKpis)[0]] || null;
+  return facilityKpis[periodId] || facilityKpis["Q3_2026"] || facilityKpis[Object.keys(facilityKpis)[0]] || null;
 }
 
 // ─── HELPER FUNCTIONS ───────────────────────────────────────
@@ -1236,15 +1264,96 @@ export function formatNumber(value) {
   return value.toLocaleString("en-IN");
 }
 
+// Single owner for the utilization risk bands used everywhere in the app
+// (KPI tiles, map markers, facility panels, legends) — Healthy <85%,
+// Stress 85-95%, Critical >=95%, matching the audited KPI Formula/Logic
+// Verification's DC Capacity Utilization thresholds. Every other place
+// that needs a color, label or tag class for a utilization number should
+// call one of these three functions rather than re-testing the raw
+// percentage, so the band can never drift out of sync between screens.
 export function getUtilColor(pct) {
-  if (pct >= 90) return "#dc2626";
-  if (pct >= 75) return "#f59e0b";
+  if (pct >= 95) return "#dc2626";
+  if (pct >= 85) return "#f59e0b";
   return "#22c55e";
 }
 
 export function getUtilLabel(pct) {
-  if (pct >= 90) return "Critical";
-  if (pct >= 75) return "Moderate";
+  if (pct >= 95) return "Critical";
+  if (pct >= 85) return "Stress";
   return "Healthy";
+}
+
+export function getUtilTagClass(pct) {
+  if (pct >= 95) return "tag-danger";
+  if (pct >= 85) return "tag-warning";
+  return "tag-success";
+}
+
+// ─── S6: Optimized Base Case (single owner) ──────────────────────────
+// The ONE authoritative computation of "today's facility footprint held
+// fixed, only routing/allocation re-optimized" — Z = ΣC_ij·x_ij (transport)
+// + ΣF_j·y_j (fixed facility, unchanged since footprint is fixed) +
+// ΣP_unmet·u_k (shortage penalty, ₹10,000/unit) + SLA-pen, per the KPI
+// Formula/Logic Verification's Total Network Cost definition.
+//
+// This is NOT the same figure as SCENARIOS' SCN_REBALANCE ("Recommended"):
+// that scenario allows volume reallocation across plants and is a candidate
+// action a user opts into, whereas the Optimized Base Case is the routing-
+// only floor achievable with zero footprint change. Do not conflate them —
+// every screen that shows a "Baseline Cost" / "Optimized Cost" / "Savings"
+// figure for S6 must call this function rather than reading SCENARIOS or
+// getNetworkKpis() (both are separate, independently-owned figures).
+//
+// Provenance: DEMO. No live optimizer is wired into this prototype, so
+// these numbers are hand-authored to be internally consistent (fixed cost
+// unchanged, transport cost improved, shortage penalty cleared by better
+// routing) rather than fabricated as if they were a solver result. Once a
+// real deterministic engine is wired in, this function's body — not its
+// call sites — is what gets replaced, and `source` becomes DETERMINISTIC_ENGINE.
+export function getOptimizedBaseCase() {
+  const baseline = {
+    transportCost: 640000,
+    fixedCost: 480000,
+    variableCost: 145000,
+    unmetPenalty: 20000, // 2 units unmet demand @ ₹10,000/unit
+    slaPenalty: 0,
+    sla: 91.2,
+    fillRate: 89.5,
+    avgUtilization: 78.0,
+    maxUtilization: 94.0, // DC Delhi NCR — Stress band
+    inventoryCost: 95000,
+    carbonKgCo2e: 342000,
+    avgDistanceKm: 412,
+  };
+  baseline.totalCost = baseline.transportCost + baseline.fixedCost + baseline.variableCost
+    + baseline.unmetPenalty + baseline.slaPenalty;
+
+  const optimized = {
+    transportCost: 590000,
+    fixedCost: baseline.fixedCost, // footprint held fixed — must equal baseline
+    variableCost: 142000,
+    unmetPenalty: 0, // routing resolves the shortfall that caused baseline's penalty
+    slaPenalty: 0,
+    sla: 96.5,
+    fillRate: 95.8,
+    avgUtilization: 82.0,
+    maxUtilization: 84.0, // DC Delhi NCR relieved from Stress into Healthy band
+    inventoryCost: 92000,
+    carbonKgCo2e: 318000,
+    avgDistanceKm: 378,
+  };
+  optimized.totalCost = optimized.transportCost + optimized.fixedCost + optimized.variableCost
+    + optimized.unmetPenalty + optimized.slaPenalty;
+
+  const savingsAbs = baseline.totalCost - optimized.totalCost;
+  const savingsPct = +((savingsAbs / baseline.totalCost) * 100).toFixed(1);
+
+  return {
+    source: "DEMO",
+    footprintChange: "None (zero CapEx — same facility set as Actual)",
+    baseline: { ...baseline, capacityHeadroomPct: +(100 - baseline.maxUtilization).toFixed(1) },
+    optimized: { ...optimized, capacityHeadroomPct: +(100 - optimized.maxUtilization).toFixed(1) },
+    savings: { abs: savingsAbs, pct: savingsPct },
+  };
 }
 

@@ -9,19 +9,18 @@
  * - Multi-Scenario Trade-off Analysis (Scenario Comparison)
  */
 
-import {
-  SCENARIOS,
-  formatNumber,
-  SCENARIO_COMPARISON_INSIGHTS,
-  SCENARIO_COMPARISON_ACTIONS,
-} from './data.js';
+import { SCENARIOS, DCS, formatNumber } from './data.js';
 import { initMap, renderScenarioDigitalTwin, invalidateMapSize } from './map.js';
 
 // ─── State ──────────────────────────────────────────────────
-let activeView = 'my-scenarios'; // 'my-scenarios' | 'comparison'
-let selectedScenarioId = 'SCN_REBALANCE';
-let mapMode = 'scenario'; // 'baseline' | 'scenario'
-let activeMetricView = 'key';
+// Which metric rows the comparison table shows — user-controlled via
+// "Customize metrics" (see renderCustomizeMenu). Defaults to the 4 "key" rows.
+let multiVisibleKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk'];
+// Up to 3 scenarios shown alongside baseline — the single source of truth
+// for both the comparison table and the Digital Twin map's toggle group.
+let multiSelectedIds = ['SCN_REBALANCE', 'SCN_USER_1'];
+// Which of the selected scenarios the Digital Twin map is currently showing.
+let mapActiveId = multiSelectedIds[0];
 
 // Metric definitions with formatters, provenance, and drilldown data
 const ALL_METRIC_DEFS = {
@@ -119,25 +118,112 @@ const ALL_METRIC_DEFS = {
   },
 };
 
-const METRIC_VIEWS = {
-  key: ['totalCost', 'costChange', 'sla', 'capacityRisk', 'avgUtil'],
-  financial: ['totalCost', 'costChange', 'transportCost', 'fixedCost', 'inventoryCost', 'inventoryDays'],
-  operations: ['sla', 'capacityRisk', 'avgUtil', 'delhiUtil', 'implementationTime'],
-  all: ['totalCost', 'costChange', 'sla', 'capacityRisk', 'avgUtil', 'transportCost', 'inventoryDays', 'carbonKg', 'implementationTime', 'fixedCost', 'inventoryCost', 'delhiUtil'],
-};
+// ─── Deep-Dive / Comparison table rows ───────────────────────
+// The default-visible rows in the multi-scenario table (Dump/Scenario
+// comparison deepdive updated.png, Dump/Multiple scenario comparison
+// updated.png), picked per the global KPI priority order (Cost > Savings >
+// Service/SLA > Capacity/Risk) rather than the original mockup's set, since
+// S8's spec now requires 9 comparison dimensions and not all of them can be
+// on by default without crowding. "View detailed comparison" / the
+// customize-metrics picker exposes every row in DETAIL_EXTRA_ROWS.
+const DEEPDIVE_ROWS = [
+  { key: 'totalCost', label: 'Total Network Cost', sub: '(₹ Lakh per month)', icon: '💰', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'costChange', label: 'Savings %', sub: '(vs baseline)', icon: '💹', unit: 'percent', kind: 'lowerBetter',
+    fmt: (v) => (v === 0 ? '—' : `${v < 0 ? '↓' : '↑'} ${Math.abs(v)}%`) },
+  { key: 'sla', label: 'Service Level', sub: '(% on-time delivery)', icon: '🛡️', unit: 'percent', kind: 'higherBetter' },
+  { key: 'capacityRisk', label: 'Capacity Risk', sub: '(Overall network)', icon: '⚠️', unit: 'categorical', kind: 'categorical' },
+];
 
-let activeSingleMetricKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk', 'avgUtil'];
-let activeMultiMetricKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk', 'avgUtil', 'transportCost', 'inventoryDays', 'carbonKg', 'implementationTime'];
+// Available via the customize-metrics picker (not shown by default) —
+// Fill Rate and Risk Factor are P0-required dimensions for S8 but have no
+// backing data anywhere in this build (confirmed during the S9 pass: no
+// RF/REI data exists, and no scenario carries a fill-rate field), so their
+// rows render "Not available" rather than a fabricated number. Keeping them
+// out of the default view avoids every user seeing a "Not available" row
+// unasked; putting them in the picker keeps the gap honest and discoverable.
+const DETAIL_EXTRA_ROWS = [
+  { key: 'avgUtil', label: 'Avg Utilization', sub: '(Network avg.)', icon: '📈', unit: 'percent', kind: 'lowerBetter' },
+  { key: 'maxUtil', label: 'Max Utilization', sub: '(Peak facility)', icon: '📊', unit: 'percent', kind: 'lowerBetter' },
+  { key: 'transportCost', label: 'Transport Cost', sub: '(₹ Lakh per month)', icon: '🚛', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'fixedCost', label: 'Fixed Facility Cost', sub: '(₹ Lakh per month)', icon: '🏭', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'inventoryCost', label: 'Inventory Cost', sub: '(₹ Lakh per month)', icon: '📦', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'inventoryDays', label: 'Inventory Days', sub: '(Days on hand)', icon: '📦', unit: 'number', kind: 'lowerBetter' },
+  { key: 'carbonKg', label: 'Scope 3 Carbon', sub: '(kg CO2 per month)', icon: '🌱', unit: 'number', kind: 'lowerBetter' },
+  { key: 'fillRate', label: 'Fill Rate', sub: '(On-time fulfillment)', icon: '✅', unit: 'percent', kind: 'higherBetter', unavailable: true },
+  { key: 'riskFactor', label: 'Risk Factor (RF)', sub: '(chain explained in Scenario evidence)', icon: '🧭', unit: 'number', kind: 'higherBetter', unavailable: true },
+];
+
+const ALL_TABLE_ROWS = [...DEEPDIVE_ROWS, ...DETAIL_EXTRA_ROWS];
+
+function fmtRowValue(row, v) {
+  if (row.unavailable) return 'Not available';
+  if (v === undefined || v === null) return '—';
+  if (row.fmt) return row.fmt(v);
+  if (row.unit === 'currency') return `₹${(v / 100000).toFixed(2)}L`;
+  if (row.unit === 'percent') return `${v}%`;
+  if (row.unit === 'number') return formatNumber(v);
+  return v;
+}
+
+function riskRank(label) {
+  return { 'Very Low': 0, Low: 1, Medium: 2, High: 3, 'Very High': 4 }[label] ?? 2;
+}
+
+// Plain "Scenario N" naming everywhere in this UI — no "(AI Rec.)" /
+// "(My Scen 1)" suffixes from the underlying data's cardTitle field.
+function scenarioDisplayName(s) {
+  if (s.id === 'SCN_ACTUAL') return 'Baseline';
+  // A scenario actually created via the toolbox this session (id prefix
+  // SCN_CUSTOM_, see runScenarioCreation) keeps the name the user gave it
+  // everywhere — dropdowns, table headers, picker chips, drawer — instead
+  // of the generic "Scenario N" used for the built-in presets. Presets
+  // also carry type:'USER_CREATED' in the underlying data (legacy field,
+  // predates this naming scheme) so that alone can't be the signal.
+  if (s.id.startsWith('SCN_CUSTOM_') && s.cardTitle) return s.cardTitle;
+  return `Scenario ${s.num}`;
+}
+
+// Compares a scenario's value against baseline for one row. Returns
+// { text, good } where good is true/false, or null for "no material
+// change". Categorical rows (Capacity Risk) resolve via riskRank rather
+// than always showing "—" — a scenario that improves risk should say so.
+function computeRowDelta(row, baseVal, scnVal) {
+  if (row.unavailable) return { text: '—', good: null };
+  if (row.kind === 'categorical') {
+    const baseRank = riskRank(baseVal);
+    const scnRank = riskRank(scnVal);
+    if (baseRank === scnRank) return { text: 'Unchanged', good: null };
+    return scnRank < baseRank ? { text: 'Improved', good: true } : { text: 'Worsened', good: false };
+  }
+  const diff = scnVal - baseVal;
+  if (Math.abs(diff) < 0.001) return { text: '—', good: null };
+  const text = row.unit === 'percent'
+    ? `${diff > 0 ? '↑' : '↓'} ${Math.abs(diff).toFixed(1)} pts`
+    : `${diff > 0 ? '↑' : '↓'} ${Math.abs(baseVal ? (diff / baseVal) * 100 : 0).toFixed(1)}%`;
+  const good = row.kind === 'higherBetter' ? diff > 0 : diff < 0;
+  return { text, good };
+}
+
+// Shared deltas used by both the KPI cards and the "NetGravity's take"
+// checklist, so the two always agree with each other and with the table.
+// Looks rows up by key (not position) — DEEPDIVE_ROWS' order isn't stable
+// now that Savings % sits between Total Cost and Service Level.
+function computeScenarioDeltas(baseline, scn) {
+  const rowByKey = (key) => ALL_TABLE_ROWS.find((r) => r.key === key);
+  return {
+    cost: computeRowDelta(rowByKey('totalCost'), baseline.totalCost, scn.totalCost),
+    sla: computeRowDelta(rowByKey('sla'), baseline.sla, scn.sla),
+    util: computeRowDelta(rowByKey('avgUtil'), baseline.avgUtil, scn.avgUtil),
+    riskGood: riskRank(scn.capacityRisk) < riskRank(baseline.capacityRisk),
+  };
+}
 
 // ─── Init ───────────────────────────────────────────────────
 export function initScenarios() {
-  renderScenarioStrip();
-  renderSingleScenarioTable();
-  renderSingleScenarioInsights();
-  renderSingleScenarioActions();
+  renderScenarioSelector();
   renderMultiScenarioTable();
-  renderComparisonInsights();
-  renderMultiScenarioActions();
+  renderMultiScenarioTakeCard();
+  renderScenarioMapToggle();
   wireScenarioEvents();
 
   // Initialize visual context 2D digital twin map
@@ -146,599 +232,328 @@ export function initScenarios() {
       zoom: 4.2,
       center: [22.5, 79.5],
       isCompact: true,
-      initialScenario: selectedScenarioId,
-      mode: mapMode,
+      initialScenario: mapActiveId,
+      mode: 'scenario',
     });
-    renderScenarioDigitalTwin('scenario-leaflet-map', selectedScenarioId, mapMode);
+    renderScenarioDigitalTwin('scenario-leaflet-map', mapActiveId, 'scenario');
     invalidateMapSize('scenario-leaflet-map');
+    renderFutureNetworkCallouts();
   }, 60);
 }
 
-// ─── Switch Sub-Nav View ────────────────────────────────────
-export function switchScenarioView(viewName) {
-  activeView = viewName;
+// ─── Scenario Selector (selected chips + "Add Scenario" menu) ───
+// Only currently-selected scenarios (up to 3) show as chips; every other
+// scenario lives behind "Add Scenario" instead of being listed inline, so
+// the bar stays compact regardless of how many scenarios exist.
+function renderScenarioSelector() {
+  const chipsEl = document.getElementById('scn-selected-chips');
+  const menu = document.getElementById('scn-add-scenario-menu');
+  if (!chipsEl || !menu) return;
 
-  const btnMy = document.getElementById('tab-btn-my-scenarios');
-  const btnComp = document.getElementById('tab-btn-comparison');
-  const paneMy = document.getElementById('view-my-scenarios');
-  const paneComp = document.getElementById('view-comparison');
+  const selected = multiSelectedIds.map((id) => SCENARIOS.find((s) => s.id === id)).filter(Boolean);
+  const unselected = SCENARIOS.filter((s) => s.id !== 'SCN_ACTUAL' && !multiSelectedIds.includes(s.id));
 
-  if (viewName === 'my-scenarios') {
-    if (btnMy) btnMy.classList.add('active');
-    if (btnComp) btnComp.classList.remove('active');
-    if (paneMy) paneMy.classList.remove('hidden');
-    if (paneComp) paneComp.classList.add('hidden');
-    invalidateMapSize('scenario-leaflet-map');
-    renderScenarioDigitalTwin('scenario-leaflet-map', selectedScenarioId, mapMode);
-  } else {
-    if (btnMy) btnMy.classList.remove('active');
-    if (btnComp) btnComp.classList.add('active');
-    if (paneMy) paneMy.classList.add('hidden');
-    if (paneComp) paneComp.classList.remove('hidden');
-    renderMultiScenarioTable();
-  }
-}
-
-// ─── Render Scenario Selection Strip ────────────────────────
-function renderScenarioStrip() {
-  const container = document.getElementById('scn-strip-container');
-  if (!container) return;
-
-  const visibleScenarios = SCENARIOS.filter((s) => s.id !== 'SCN_ACTUAL');
-  const stripScenarios = visibleScenarios.slice(0, 4);
-
-  const cardsHtml = stripScenarios
-    .map((s) => {
-      const isSelected = s.id === selectedScenarioId;
-      const isRec = s.type === 'RECOMMENDED' || s.id === 'SCN_REBALANCE';
-      const cardTitle = s.cardTitle || s.name;
-
-      // Extract specification / what changed snippet
-      let specSnippet = s.highlight || '';
-      if (!specSnippet && s.changes && s.changes.length > 0) {
-        specSnippet = `${s.changes[0].item}: ${s.changes[0].change}`;
-      }
-      if (!specSnippet) {
-        specSnippet = s.description || 'Optimized network parameters.';
-      }
-
-      const costText = s.costChange !== undefined ? `${s.costChange < 0 ? '↓ ' : '↑ '}${Math.abs(s.costChange)}%` : '—';
-      const riskClass = s.capacityRisk === 'Low' || s.capacityRisk === 'Very Low' ? 'risk-low' : 'risk-high';
-
-      return `
-        <div class="scn-strip-card ${isSelected ? 'selected' : ''}" data-scn-id="${s.id}">
-          <div class="scn-strip-top">
-            <div class="scn-strip-left">
-              <div class="scn-strip-checkbox">
-                ${isSelected ? '✓' : ''}
-              </div>
-              <div class="scn-strip-name">${cardTitle}</div>
-            </div>
-            ${!isRec ? `<span class="scn-strip-close" data-del-id="${s.id}" title="Remove scenario">✕</span>` : '<span class="tag tag-success" style="font-size:9.5px;padding:1px 6px">Rec.</span>'}
-          </div>
-
-          <div class="scn-strip-spec">${specSnippet}</div>
-
-          <div class="scn-strip-metrics-row">
-            <span class="scn-strip-metric-pill cost">${costText} Cost</span>
-            <span class="scn-strip-metric-pill sla">${s.sla}% SLA</span>
-            <span class="scn-strip-metric-pill ${riskClass}">${s.capacityRisk}</span>
-          </div>
-
-          <div class="flex items-center justify-between" style="border-top:1px solid var(--border-light);padding-top:6px">
-            <a href="javascript:void(0)" class="scn-strip-inspect-link" data-inspect-id="${s.id}">Click to Inspect →</a>
-          </div>
-        </div>
-      `;
-    })
+  chipsEl.innerHTML = selected
+    .map((s) => `
+      <div class="scn-selected-chip" data-scn-id="${s.id}">
+        <span>${scenarioDisplayName(s)}</span>
+        ${selected.length > 1 ? `<button type="button" class="scn-scenario-dropdown-del" data-remove-id="${s.id}" title="Remove from comparison">✕</button>` : ''}
+      </div>`)
     .join('');
 
-  container.innerHTML = `
-    ${cardsHtml}
-    <div class="scn-strip-all-card" id="btn-view-all-scenarios" title="Open All Scenarios Workspace">
-      <div style="font-size:20px;font-weight:800;color:var(--primary);line-height:1">➔</div>
-      <div style="font-weight:700;font-size:12.5px;color:var(--text-1);margin-top:2px">All Scenarios</div>
-      <div class="text-xs text-muted">View all (${visibleScenarios.length})</div>
-    </div>
-  `;
-
-  // Wire card events (entire card is clickable to select and open details)
-  container.querySelectorAll('.scn-strip-card').forEach((card) => {
-    card.addEventListener('click', (e) => {
-      if (e.target.classList.contains('scn-strip-close')) {
-        e.stopPropagation();
-        const delId = e.target.dataset.delId;
-        removeScenario(delId);
-        return;
-      }
-      const scnId = card.dataset.scnId;
-      selectScenario(scnId);
-      openScenarioDrawer(scnId);
-    });
-  });
-
-  document.getElementById('btn-view-all-scenarios')?.addEventListener('click', () => {
-    openAllScenariosDrawer();
-  });
-}
-
-// ─── Open All Scenarios Drawer (Right Slide-over Window) ─────
-export function openAllScenariosDrawer() {
-  const overlay = document.getElementById('all-scenarios-drawer-overlay');
-  const listEl = document.getElementById('all-scenarios-drawer-list');
-  const countBadge = document.getElementById('all-scenarios-count-badge');
-  if (!overlay || !listEl) return;
-
-  const visibleScenarios = SCENARIOS.filter((s) => s.id !== 'SCN_ACTUAL');
-  if (countBadge) countBadge.textContent = `${visibleScenarios.length} Active`;
-
-  listEl.innerHTML = visibleScenarios
-    .map((s) => {
-      const isSelected = s.id === selectedScenarioId;
-      const isRec = s.type === 'RECOMMENDED' || s.id === 'SCN_REBALANCE';
-      const badgeCls = isRec ? 'tag-success' : 'tag-primary';
-      const badgeText = isRec ? 'Recommended' : (s.type === 'AI_RECOMMENDED' ? 'AI Recommended' : 'User Created');
-
-      let specSnippet = s.highlight || '';
-      if (!specSnippet && s.changes && s.changes.length > 0) {
-        specSnippet = `${s.changes[0].item}: ${s.changes[0].change}`;
-      }
-      if (!specSnippet) specSnippet = s.description || '';
-
-      const costText = s.costChange !== undefined ? `${s.costChange < 0 ? '↓ ' : '↑ '}${Math.abs(s.costChange)}%` : '—';
-      const riskColor = s.capacityRisk === 'Low' || s.capacityRisk === 'Very Low' ? 'var(--green)' : 'var(--red)';
-
-      return `
-        <div class="scn-section-box" style="padding:14px;border-left:3px solid ${isSelected ? 'var(--primary)' : 'var(--border)'};background:${isSelected ? '#fcf9ff' : 'var(--bg-card)'}">
-          <div class="flex items-center justify-between mb-xs">
-            <div class="flex items-center gap-xs">
-              <span class="tag ${badgeCls}" style="font-size:10px;padding:2px 7px">${badgeText}</span>
-              <strong style="font-size:14px;color:var(--text-1)">${s.cardTitle || s.name}</strong>
-            </div>
-            ${!isRec ? `<button class="btn btn-ghost btn-sm text-danger" data-drawer-del="${s.id}" title="Delete scenario" style="padding:2px 6px;font-size:12px">🗑️</button>` : ''}
-          </div>
-
-          <p style="font-size:12px;color:var(--text-2);line-height:1.45;margin-bottom:10px">${specSnippet}</p>
-
-          <div class="grid-3 mb-sm" style="gap:6px;background:var(--bg-subtle);padding:8px 10px;border-radius:var(--r-sm);font-size:11.5px">
-            <div><span class="text-muted">Total Cost:</span> <strong>₹${(s.totalCost / 100000).toFixed(2)}L</strong> <span style="color:var(--green)">(${costText})</span></div>
-            <div><span class="text-muted">SLA:</span> <strong style="color:${s.sla >= 95 ? 'var(--green)' : 'var(--red)'}">${s.sla}%</strong></div>
-            <div><span class="text-muted">Risk:</span> <strong style="color:${riskColor}">${s.capacityRisk}</strong></div>
-          </div>
-
-          <div class="flex items-center justify-between">
-            <button class="btn btn-secondary btn-sm" data-drawer-select="${s.id}">
-              ${isSelected ? '✓ Currently Selected' : 'Select Scenario'}
-            </button>
-            <a href="javascript:void(0)" class="scn-strip-inspect-link" data-drawer-inspect="${s.id}">Inspect Details →</a>
-          </div>
-        </div>
-      `;
-    })
-    .join('');
-
-  // Wire drawer item actions
-  listEl.querySelectorAll('[data-drawer-select]').forEach((btn) => {
+  chipsEl.querySelectorAll('[data-remove-id]').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const scnId = btn.dataset.drawerSelect;
-      selectScenario(scnId);
-      openAllScenariosDrawer();
+      const id = btn.dataset.removeId;
+      if (multiSelectedIds.length <= 1) return;
+      multiSelectedIds = multiSelectedIds.filter((sid) => sid !== id);
+      if (mapActiveId === id) mapActiveId = multiSelectedIds[0];
+      onSelectionChanged();
     });
   });
 
-  listEl.querySelectorAll('[data-drawer-inspect]').forEach((link) => {
-    link.addEventListener('click', () => {
-      const scnId = link.dataset.drawerInspect;
-      overlay.classList.remove('visible');
-      selectScenario(scnId);
-      openScenarioDrawer(scnId);
+  const addBtn = document.getElementById('scn-add-scenario-btn');
+  if (addBtn) addBtn.classList.toggle('disabled', multiSelectedIds.length >= 3);
+
+  if (multiSelectedIds.length >= 3) {
+    menu.innerHTML = '<div class="scn-add-scenario-empty">Maximum of 3 — remove one to add another.</div>';
+  } else if (unselected.length === 0) {
+    menu.innerHTML = '<div class="scn-add-scenario-empty">No other scenarios yet.</div>';
+  } else {
+    menu.innerHTML = unselected
+      .map((s) => `
+        <div class="scn-scenario-dropdown-item" data-add-id="${s.id}">
+          <span>${scenarioDisplayName(s)}</span>
+          <button type="button" class="scn-scenario-dropdown-del" data-del-id="${s.id}" title="Delete scenario">✕</button>
+        </div>`)
+      .join('');
+  }
+
+  menu.querySelectorAll('[data-add-id]').forEach((item) => {
+    item.addEventListener('click', (e) => {
+      if (e.target.closest('.scn-scenario-dropdown-del')) return;
+      if (multiSelectedIds.length >= 3) return;
+      multiSelectedIds.push(item.dataset.addId);
+      menu.classList.remove('open');
+      onSelectionChanged();
     });
   });
 
-  listEl.querySelectorAll('[data-drawer-del]').forEach((btn) => {
+  menu.querySelectorAll('.scn-scenario-dropdown-del[data-del-id]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const scnId = btn.dataset.drawerDel;
-      removeScenario(scnId);
-      openAllScenariosDrawer();
+      removeScenario(btn.dataset.delId);
     });
   });
-
-  overlay.classList.add('visible');
 }
 
-// ─── Select Scenario ────────────────────────────────────────
-export function selectScenario(scenarioId) {
-  selectedScenarioId = scenarioId;
-
-  // Update strip highlight
-  document.querySelectorAll('.scn-strip-card').forEach((card) => {
-    const isThis = card.dataset.scnId === scenarioId;
-    card.classList.toggle('selected', isThis);
-    const cb = card.querySelector('.scn-strip-checkbox');
-    if (cb) cb.innerHTML = isThis ? '✓' : '';
-  });
-
-  // Re-render single scenario table
-  renderSingleScenarioTable();
-
-  // Update map button text & visual context 2D digital twin
-  const btnScenario = document.getElementById('btn-map-scenario');
-  const scnObj = SCENARIOS.find((s) => s.id === scenarioId);
-  if (btnScenario && scnObj) {
-    btnScenario.textContent = scnObj.cardTitle || scnObj.name;
-  }
-  updateScenarioMapLayers();
-
-  // Re-render right rail insights and actions
-  renderSingleScenarioInsights();
-  renderSingleScenarioActions();
+// Re-renders everything that depends on which scenarios are selected.
+function onSelectionChanged() {
+  renderScenarioSelector();
+  renderMultiScenarioTable();
+  renderMultiScenarioTakeCard();
+  renderScenarioMapToggle();
+  updateScenarioMap();
 }
 
-// ─── Remove Scenario ────────────────────────────────────────
+// Permanently deletes a scenario from the system (not just from the current
+// comparison) — always keeps at least one non-baseline scenario in existence.
 function removeScenario(scenarioId) {
+  const remaining = SCENARIOS.filter((s) => s.id !== 'SCN_ACTUAL' && s.id !== scenarioId);
+  if (remaining.length === 0) return;
+
   const idx = SCENARIOS.findIndex((s) => s.id === scenarioId);
-  if (idx !== -1) {
-    SCENARIOS.splice(idx, 1);
-    if (selectedScenarioId === scenarioId) {
-      selectedScenarioId = 'SCN_REBALANCE';
-    }
-    renderScenarioStrip();
-    renderSingleScenarioTable();
-    renderMultiScenarioTable();
-  }
+  if (idx !== -1) SCENARIOS.splice(idx, 1);
+
+  multiSelectedIds = multiSelectedIds.filter((id) => id !== scenarioId);
+  if (multiSelectedIds.length === 0) multiSelectedIds = [remaining[0].id];
+  if (mapActiveId === scenarioId) mapActiveId = multiSelectedIds[0];
+
+  onSelectionChanged();
 }
 
-// ─── Render Single Scenario Comparison Table ────────────────
-function renderSingleScenarioTable() {
-  const container = document.getElementById('single-scenario-table-wrap');
-  if (!container) return;
+// ─── Digital Twin Map Toggle (one button per selected scenario) ───
+function renderScenarioMapToggle() {
+  const group = document.getElementById('scn-map-toggle-group');
+  if (!group) return;
 
-  const baseline = SCENARIOS.find((s) => s.id === 'SCN_ACTUAL') || SCENARIOS[0];
-  const selected = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[1];
+  const baseline = SCENARIOS.find((s) => s.id === 'SCN_ACTUAL');
+  const selected = multiSelectedIds.map((id) => SCENARIOS.find((s) => s.id === id)).filter(Boolean);
+  const options = baseline ? [baseline, ...selected] : selected;
+  if (!options.some((s) => s.id === mapActiveId)) mapActiveId = options[0]?.id;
 
-  const rowsHtml = activeSingleMetricKeys
-    .map((key) => {
-      const def = ALL_METRIC_DEFS[key];
-      if (!def) return '';
-
-      const baseVal = baseline[key] !== undefined ? def.fmt(baseline[key]) : '—';
-      const scnVal = selected[key] !== undefined ? def.fmt(selected[key]) : '—';
-      const baseClass = def.cellClass ? def.cellClass(baseline[key]) : '';
-      const scnClass = def.cellClass ? def.cellClass(selected[key]) : '';
-
-      const provBadge = def.provenance
-        ? `<span class="provenance-badge ${def.provenance.toLowerCase().replace(' ', '-')}">${def.provenance}</span>`
-        : '';
-
-      return `
-        <tr class="scn-metric-row" data-metric-key="${key}">
-          <td style="font-weight:600;display:flex;align-items:center;justify-content:space-between">
-            <div style="display:flex;align-items:center">
-              <span>${def.label}</span>
-              ${provBadge}
-            </div>
-          </td>
-          <td class="${baseClass}" style="text-align:center">${baseVal}</td>
-          <td class="scn-td-rec ${scnClass}" style="text-align:center;font-weight:700">
-            <span>${scnVal}</span>
-            <span class="scn-info-btn" data-drill-metric="${key}" title="Click for mathematical drilldown">ⓘ</span>
-          </td>
-        </tr>
-      `;
-    })
+  group.innerHTML = options
+    .map((s) => `<button type="button" class="toggle-btn${s.id === mapActiveId ? ' active' : ''}" data-map-scn-id="${s.id}">${scenarioDisplayName(s)}</button>`)
     .join('');
 
-  container.innerHTML = `
-    <table class="scn-data-table">
-      <thead>
-        <tr>
-          <th style="width:40%">Metrics</th>
-          <th style="width:30%;text-align:center">Baseline</th>
-          <th class="scn-th-rec" style="width:30%;text-align:center">${selected.cardTitle || selected.name}</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
-    </table>
-  `;
-
-  // Wire metric drilldown clicks
-  container.querySelectorAll('.scn-info-btn').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const metricKey = btn.dataset.drillMetric;
-      openMetricDrilldown(metricKey, selectedScenarioId);
-    });
-  });
-
-  container.querySelectorAll('.scn-metric-row').forEach((row) => {
-    row.addEventListener('click', () => {
-      const metricKey = row.dataset.metricKey;
-      openMetricDrilldown(metricKey, selectedScenarioId);
+  group.querySelectorAll('[data-map-scn-id]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      mapActiveId = btn.dataset.mapScnId;
+      group.querySelectorAll('.toggle-btn').forEach((b) => b.classList.toggle('active', b === btn));
+      updateScenarioMap();
     });
   });
 }
 
-// ─── Render Single Scenario Insights ────────────────────────
-function renderSingleScenarioInsights() {
-  const container = document.getElementById('scn-single-insights-list');
-  if (!container) return;
-
-  const scn = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[1];
-
-  let bullets = [
-    'Utilisation projected to exceed 95%',
-    'Cost reduction focused on 2 lanes',
-  ];
-
-  if (scn.id === 'SCN_USER_1') {
-    bullets = [
-      'Transport cost ↓7.7% on western lanes',
-      'Delhi NCR remains at 94% utilisation',
-    ];
-  } else if (scn.id === 'SCN_USER_2') {
-    bullets = [
-      '10-min automated dispatch rollout',
-      'Scope 3 Carbon reduced to 97,133 kg',
-    ];
-  } else if (scn.id === 'SCN_AI_REC_4') {
-    bullets = [
-      'Intermodal rail transport absorbs demand',
-      'SLA maintained at 96.7% with Low risk',
-    ];
-  }
-
-  container.innerHTML = bullets
-    .map((b) => `<div class="scn-rail-bullet-item">• ${b}</div>`)
-    .join('');
-
-  container.querySelectorAll('.scn-rail-bullet-item').forEach((el) => {
-    el.addEventListener('click', () => {
-      openScenarioDrawer(selectedScenarioId);
-    });
-  });
+// ─── Shared row rendering for both comparison tables ─────────
+function scenarioRowMetricCellHtml(row) {
+  return `<span class="scn-row2-icon">${row.icon}</span>
+    <div><div class="scn-row2-label">${row.label}</div><div class="scn-row2-sub">${row.sub}</div></div>`;
 }
 
-// ─── Render Single Scenario Action Items ────────────────────
-function renderSingleScenarioActions() {
-  const container = document.getElementById('scn-single-actions-list');
-  if (!container) return;
-
-  const scn = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[1];
-
-  let items = [
-    '1. Rebalance Baddi to Delhi NCR',
-    '2. Review recommended network state',
-  ];
-
-  if (scn.id === 'SCN_USER_1') {
-    items = [
-      '1. Validate line-haul freight rates with carrier',
-      '2. Stress test western corridor headroom',
-    ];
-  } else if (scn.id === 'SCN_USER_2') {
-    items = [
-      '1. Verify Kolkata DC cross-dock throughput',
-      '2. Configure automated dispatch rules in TMS',
-    ];
-  } else if (scn.id === 'SCN_AI_REC_4') {
-    items = [
-      '1. Review rail freight schedules and SLA impact',
-      '2. Approve intermodal corridor allocation',
-    ];
-  }
-
-  container.innerHTML = items
-    .map((item) => `<div class="scn-rail-action-row">${item}</div>`)
-    .join('');
-
-  container.querySelectorAll('.scn-rail-action-row').forEach((el) => {
-    el.addEventListener('click', () => {
-      openScenarioDrawer(selectedScenarioId);
-    });
-  });
+function scenarioDeltaPillHtml(delta) {
+  const tone = delta.good === null ? 'neutral' : (delta.good ? 'good' : 'bad');
+  return `<span class="scn-delta-pill ${tone}">${delta.text}</span>`;
 }
 
 // ─── Leaflet Visual Context (2D Digital Twin) ───────────────
-function updateScenarioMapLayers() {
-  renderScenarioDigitalTwin('scenario-leaflet-map', selectedScenarioId, mapMode);
+function updateScenarioMap() {
+  const mode = mapActiveId === 'SCN_ACTUAL' ? 'baseline' : 'scenario';
+  renderScenarioDigitalTwin('scenario-leaflet-map', mapActiveId, mode);
   invalidateMapSize('scenario-leaflet-map');
+  renderFutureNetworkCallouts();
 }
 
-// ─── Render Multi-Scenario Trade-off Analysis Table ─────────
+// ─── S10: Future Network View callouts ────────────────────────
+// Compact deltas around the existing map. Cost/Service/Risk reuse
+// computeScenarioDeltas/computeRowDelta — the exact functions S8's
+// comparison table calls — rather than recomputing anything here. Facility
+// and lane/flow changes read straight from the scenario's own
+// assumptions/changes fields (already authored per scenario), never
+// invented for this callout.
+function renderFutureNetworkCallouts() {
+  const container = document.getElementById('scn-future-callouts');
+  const stateLabel = document.getElementById('scn-map-state-label');
+  if (!container) return;
+
+  const baseline = SCENARIOS.find((s) => s.id === 'SCN_ACTUAL') || SCENARIOS[0];
+  const scn = SCENARIOS.find((s) => s.id === mapActiveId) || baseline;
+  const isBaseline = scn.id === 'SCN_ACTUAL';
+
+  if (stateLabel) {
+    stateLabel.textContent = isBaseline
+      ? 'Showing: Actual (observed baseline)'
+      : `Showing: ${scenarioDisplayName(scn)} — Future Network`;
+  }
+
+  if (isBaseline) {
+    container.innerHTML = `
+      <div class="scn-future-callout-chip">
+        <span class="scn-fc-label">State</span>
+        <span class="scn-fc-value">Actual — no scenario deltas to show</span>
+      </div>`;
+    return;
+  }
+
+  const deltas = computeScenarioDeltas(baseline, scn);
+  const facilityFootprint = scn.assumptions?.find((a) => a.label === 'Facility Footprint')?.value || 'Not available';
+  const laneChanges = scn.changes || [];
+  const laneSummary = laneChanges.length
+    ? `${laneChanges.length} change${laneChanges.length === 1 ? '' : 's'} — ${laneChanges[0].item} ${laneChanges[0].change}`
+    : 'Not available';
+
+  const riskRow = ALL_TABLE_ROWS.find((r) => r.key === 'capacityRisk');
+  const riskDelta = computeRowDelta(riskRow, baseline.capacityRisk, scn.capacityRisk);
+  const toneOf = (good) => (good === true ? 'good' : good === false ? 'bad' : '');
+
+  const chips = [
+    { label: 'Facility changes', value: facilityFootprint, tone: '' },
+    { label: 'Lane / flow changes', value: laneSummary, tone: '' },
+    { label: 'Cost impact', value: deltas.cost.text, tone: toneOf(deltas.cost.good) },
+    { label: 'Service impact', value: deltas.sla.text, tone: toneOf(deltas.sla.good) },
+    { label: 'Risk impact', value: `${baseline.capacityRisk} → ${scn.capacityRisk} (${riskDelta.text})`, tone: toneOf(riskDelta.good) },
+  ];
+
+  // P1: Carbon impact, only if the scenario has the field — never fabricated.
+  if (typeof scn.carbonKg === 'number' && typeof baseline.carbonKg === 'number') {
+    const carbonRow = ALL_TABLE_ROWS.find((r) => r.key === 'carbonKg');
+    const carbonDelta = computeRowDelta(carbonRow, baseline.carbonKg, scn.carbonKg);
+    chips.push({ label: 'Carbon impact', value: carbonDelta.text, tone: toneOf(carbonDelta.good) });
+  }
+
+  container.innerHTML = chips.map((c) => `
+    <div class="scn-future-callout-chip ${c.tone}">
+      <span class="scn-fc-label">${c.label}</span>
+      <span class="scn-fc-value">${c.value}</span>
+    </div>`).join('');
+}
+
+// ─── Render Multi-Scenario Comparison Table (up to 3 scenarios) ──
 function renderMultiScenarioTable() {
   const container = document.getElementById('multi-scenario-table-wrap');
   if (!container) return;
 
   const baseline = SCENARIOS.find((s) => s.id === 'SCN_ACTUAL') || SCENARIOS[0];
-  const compareScenarios = SCENARIOS.filter((s) => s.id !== 'SCN_ACTUAL');
+  const selected = multiSelectedIds.map((id) => SCENARIOS.find((s) => s.id === id)).filter(Boolean);
+  const rows = ALL_TABLE_ROWS.filter((r) => multiVisibleKeys.includes(r.key));
 
-  const theadCols = compareScenarios
-    .map((s) => {
-      const isRec = s.type === 'RECOMMENDED' || s.id === 'SCN_REBALANCE';
-      const thClass = isRec ? 'scn-th-rec' : '';
-      const colTitle = s.shortName || s.name;
-      return `<th class="${thClass}" style="text-align:center">${colTitle}</th>`;
-    })
+  const theadCols = selected
+    .map((s, i) => `<th class="${i === 0 ? 'scn-th-rec2' : ''}" style="text-align:center">${scenarioDisplayName(s)}${i === 0 ? ' <span class="scn-sparkle-inline">✦</span>' : ''}</th>`)
     .join('');
 
-  const rowsHtml = activeMultiMetricKeys
-    .map((key) => {
-      const def = ALL_METRIC_DEFS[key];
-      if (!def) return '';
+  const rowsHtml = rows
+    .map((row) => {
+      const baseVal = baseline[row.key];
+      const baseCls = row.kind === 'categorical' ? `scn-risk-${baseline.capacityRiskClass}` : '';
 
-      const baseVal = baseline[key] !== undefined ? def.fmt(baseline[key]) : '—';
-      const baseClass = def.cellClass ? def.cellClass(baseline[key]) : '';
-
-      const provBadge = def.provenance
-        ? `<span class="provenance-badge ${def.provenance.toLowerCase().replace(' ', '-')}">${def.provenance}</span>`
-        : '';
-
-      const cellsHtml = compareScenarios
-        .map((s) => {
-          const isRec = s.type === 'RECOMMENDED' || s.id === 'SCN_REBALANCE';
-          const val = s[key] !== undefined ? def.fmt(s[key]) : '—';
-          const cellClass = def.cellClass ? def.cellClass(s[key]) : '';
-          const recColClass = isRec ? 'scn-td-rec' : '';
-
-          return `<td class="${recColClass} ${cellClass}" style="text-align:center">${val}</td>`;
+      const cellsHtml = selected
+        .map((s, i) => {
+          const scnVal = s[row.key];
+          const delta = computeRowDelta(row, baseVal, scnVal);
+          const valCls = row.kind === 'categorical' ? `scn-risk-${s.capacityRiskClass}` : '';
+          return `<td class="${i === 0 ? 'scn-td-rec2' : ''}">
+              <div class="${valCls}" style="font-weight:700">${fmtRowValue(row, scnVal)}</div>
+              ${scenarioDeltaPillHtml(delta)}
+            </td>`;
         })
         .join('');
 
+      // S9: Capacity Risk is the one row wired to the metric drilldown
+      // (evidence trail for the risk chain). Other rows deliberately stay
+      // non-clickable this pass — e.g. totalCost's drilldown branch would
+      // duplicate S6's Total Network Cost ownership, which is out of scope
+      // here and gets fixed when S6 is wired in, not by exposing it via S9.
+      const isRiskRow = row.key === 'capacityRisk';
       return `
-        <tr class="scn-multi-row" data-metric-key="${key}">
-          <td style="font-weight:600;display:flex;align-items:center;justify-content:space-between">
-            <div style="display:flex;align-items:center">
-              <span>${def.label}</span>
-              ${provBadge}
-            </div>
-          </td>
-          <td class="${baseClass}" style="text-align:center">${baseVal}</td>
+        <tr${isRiskRow ? ` class="scn-risk-row-clickable" data-metric-key="capacityRisk" data-scenario-id="${selected[0]?.id || ''}"` : ''}>
+          <td class="scn-row2-metric">${scenarioRowMetricCellHtml(row)}</td>
+          <td class="${baseCls}">${fmtRowValue(row, baseVal)}</td>
           ${cellsHtml}
-          <td style="width:24px;text-align:center">
-            <span class="scn-info-btn" data-drill-metric="${key}" title="Click for metric breakdown">ⓘ</span>
-          </td>
-        </tr>
-      `;
+        </tr>`;
     })
     .join('');
 
   container.innerHTML = `
-    <table class="scn-multi-table">
+    <table class="scn-data-table2 scn-multi-table2">
       <thead>
         <tr>
-          <th style="width:24%;text-align:left">Metrics</th>
-          <th style="width:15%;text-align:center">Current Baseline</th>
+          <th>Metric</th>
+          <th style="text-align:center">Current Baseline</th>
           ${theadCols}
-          <th style="width:24px"></th>
         </tr>
       </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
+      <tbody>${rowsHtml}</tbody>
     </table>
   `;
 
-  // Wire metric drilldowns
-  container.querySelectorAll('.scn-info-btn').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const metricKey = btn.dataset.drillMetric;
-      openMetricDrilldown(metricKey, selectedScenarioId);
-    });
-  });
-
-  container.querySelectorAll('.scn-multi-row').forEach((row) => {
-    row.addEventListener('click', () => {
-      const metricKey = row.dataset.metricKey;
-      openMetricDrilldown(metricKey, selectedScenarioId);
-    });
+  container.querySelectorAll('tr[data-metric-key="capacityRisk"]').forEach((tr) => {
+    tr.style.cursor = 'pointer';
+    tr.title = 'View risk evidence';
+    tr.addEventListener('click', () => openMetricDrilldown('capacityRisk', tr.dataset.scenarioId));
   });
 }
 
-// ─── Render Comparison Insights (View 2) ────────────────────
-function renderComparisonInsights() {
-  const container = document.getElementById('multi-comparison-insights-list');
-  if (!container) return;
+// ─── "NetGravity's take" card — single & multi-scenario views ───
+function scenarioTakeCardBodyHtml(scn, baseline, opts) {
+  const d = computeScenarioDeltas(baseline, scn);
+  const invDelta = scn.inventoryDays - baseline.inventoryDays;
+  const tradeoffText = invDelta > 0
+    ? `Inventory increases by ${invDelta} day${invDelta === 1 ? '' : 's'}.`
+    : invDelta < 0
+      ? `Inventory decreases by ${Math.abs(invDelta)} day${Math.abs(invDelta) === 1 ? '' : 's'}.`
+      : null;
 
-  container.innerHTML = SCENARIO_COMPARISON_INSIGHTS.map(
-    (ins) => `
-      <div class="scn-insight-item" data-insight-id="${ins.id}">
-        (${ins.num}) ${ins.text}
-      </div>
-    `
-  ).join('');
+  const checklist = [
+    { good: !!d.cost.good, text: `Cost <strong>${d.cost.text}</strong>` },
+    { good: !!d.sla.good, text: `Service <strong>${d.sla.text}</strong>` },
+    { good: d.riskGood, text: `Risk <strong>${baseline.capacityRisk} → ${scn.capacityRisk}</strong>` },
+  ];
 
-  container.querySelectorAll('.scn-insight-item').forEach((el) => {
-    el.addEventListener('click', () => {
-      const insId = el.dataset.insightId;
-      const ins = SCENARIO_COMPARISON_INSIGHTS.find((item) => item.id === insId);
-      if (ins) {
-        openScenarioDrawer(ins.scenarioId);
-      }
-    });
-  });
-}
-
-// ─── Render Multi-Scenario Action Items (View 2) ────────────
-function renderMultiScenarioActions() {
-  const container = document.getElementById('multi-comparison-actions-list');
-  if (!container) return;
-
-  container.innerHTML = SCENARIO_COMPARISON_ACTIONS.map(
-    (act) => `
-      <div class="scn-action-item-row" data-action-id="${act.id}">
-        <input type="checkbox" style="margin-top:2px;cursor:pointer">
-        <span>${act.title}</span>
-      </div>
-    `
-  ).join('');
-
-  container.querySelectorAll('.scn-action-item-row').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      if (e.target.tagName === 'INPUT') return;
-      const actId = el.dataset.actionId;
-      openActionDetailDrawer(actId);
-    });
-  });
-}
-
-// ─── Open Action Detail Drawer ──────────────────────────────
-export function openActionDetailDrawer(actionId) {
-  const act = SCENARIO_COMPARISON_ACTIONS.find((a) => a.id === actionId);
-  if (!act) return;
-
-  const overlay = document.getElementById('action-drawer-overlay');
-  const content = document.getElementById('action-drawer-content');
-  if (!overlay || !content) return;
-
-  const scn = SCENARIOS.find((s) => s.id === act.scenarioId) || SCENARIOS[1];
-
-  content.innerHTML = `
-    <div style="margin-bottom:16px">
-      <span class="tag tag-primary" style="font-size:10px;padding:3px 8px">Action Item</span>
-      <h3 style="font-size:18px;font-weight:800;color:var(--text-1);margin-top:6px">${act.title}</h3>
-      <div class="text-xs text-muted">Related Scenario: <strong>${scn.cardTitle || scn.name}</strong></div>
+  return `
+    <div class="scn-take-head">
+      <span class="scn-take-icon">✨</span>
+      <span class="scn-take-title">NetGravity's Recommendation</span>
     </div>
-
-    <div class="scn-section-box">
-      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:6px">Why this action exists</h4>
-      <p style="font-size:12.5px;color:var(--text-2);line-height:1.45">${act.why}</p>
+    <div class="scn-take-headline">${scn.highlight || scn.description}</div>
+    <p class="scn-take-para">${scn.aiAssessment?.recommendation || scn.description}</p>
+    <div class="scn-take-section-title">${opts.checklistTitle}</div>
+    <div class="scn-take-checklist">
+      ${checklist.map((c) => `
+        <div class="scn-take-check-item">
+          <span class="scn-take-check-icon ${c.good ? 'good' : 'warn'}">${c.good ? '✓' : '!'}</span>
+          <span>${c.text}</span>
+        </div>`).join('')}
     </div>
-
-    <div class="scn-section-box">
-      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:6px">Mathematical Evidence</h4>
-      <div style="font-size:12px;color:var(--text-2);background:#fff;padding:10px;border-radius:var(--r-sm);border:1px solid var(--border-light)">
-        ${act.evidence}
-      </div>
-    </div>
-
-    <div class="scn-section-box">
-      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:6px">Suggested Next Step</h4>
-      <p style="font-size:12.5px;color:var(--text-1);font-weight:600">${act.nextStep}</p>
-    </div>
-
-    <div class="flex gap-sm mt-lg">
-      <button class="btn btn-primary" id="btn-action-goto-scenario">Inspect Scenario Details →</button>
-      <button class="btn btn-secondary" id="btn-action-dismiss">Close</button>
-    </div>
+    ${tradeoffText ? `
+      <div class="scn-take-tradeoff">
+        <span class="scn-take-tradeoff-icon">⚠️</span>
+        <div><strong>Trade-off</strong><div>${tradeoffText}</div></div>
+      </div>` : ''}
+    <button type="button" class="scn-take-review-btn" data-take-review>Review proposed changes <span>→</span></button>
   `;
+}
 
-  overlay.classList.add('visible');
+function wireTakeCardLinks(container, scnId) {
+  container.querySelector('[data-take-review]')?.addEventListener('click', () => openScenarioDrawer(scnId));
+}
 
-  document.getElementById('action-drawer-close')?.addEventListener('click', () => {
-    overlay.classList.remove('visible');
-  });
-  document.getElementById('btn-action-dismiss')?.addEventListener('click', () => {
-    overlay.classList.remove('visible');
-  });
-  document.getElementById('btn-action-goto-scenario')?.addEventListener('click', () => {
-    overlay.classList.remove('visible');
-    selectScenario(act.scenarioId);
-    openScenarioDrawer(act.scenarioId);
-  });
+function renderMultiScenarioTakeCard() {
+  const container = document.getElementById('scn-multi-take-card');
+  if (!container) return;
+  const baseline = SCENARIOS.find((s) => s.id === 'SCN_ACTUAL') || SCENARIOS[0];
+  const topId = multiSelectedIds[0];
+  const scn = SCENARIOS.find((s) => s.id === topId) || SCENARIOS[1];
+  container.innerHTML = scenarioTakeCardBodyHtml(scn, baseline, { checklistTitle: 'Why I recommend it' });
+  wireTakeCardLinks(container, scn.id);
 }
 
 // ─── Open Scenario Detail Drawer ────────────────────────────
@@ -858,8 +673,7 @@ export function openScenarioDrawer(scenarioId) {
     </div>
 
     <div class="flex gap-sm mt-lg">
-      <button class="btn btn-primary" id="btn-apply-scenario-drawer" style="flex:1">Proceed with this Scenario</button>
-      <button class="btn btn-secondary" id="btn-close-scenario-drawer">Close</button>
+      <button class="btn btn-secondary" id="btn-close-scenario-drawer" style="flex:1">Close</button>
     </div>
   `;
 
@@ -870,10 +684,6 @@ export function openScenarioDrawer(scenarioId) {
   });
   document.getElementById('btn-close-scenario-drawer')?.addEventListener('click', () => {
     overlay.classList.remove('visible');
-  });
-  document.getElementById('btn-apply-scenario-drawer')?.addEventListener('click', () => {
-    overlay.classList.remove('visible');
-    selectScenario(scenarioId);
   });
 }
 
@@ -956,7 +766,19 @@ export function openMetricDrilldown(metricKey, scenarioId) {
       </div>
     `;
   } else if (metricKey === 'capacityRisk' || metricKey === 'delhiUtil' || metricKey === 'avgUtil') {
+    // S9 P0 coverage for the risk chain: KPI+value (chips above), source/
+    // state (this row), contributing factors, threshold, deterministic
+    // evidence (the two boxes below — unchanged from before this pass) and
+    // an AI-written explanation kept visibly separate via its own
+    // provenance-badge, per the "never show RF alone" rule's intent — since
+    // this build has no REI/RF/VaR data at all, that's stated explicitly
+    // as Not available rather than a fabricated score.
+    const baselineName = scenarioDisplayName(baseline);
+    const scenarioName = scenarioDisplayName(scn);
     detailHtml = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:11.5px;color:var(--text-2)">
+        <span>State: <strong>${baselineName}</strong> vs <strong>${scenarioName}</strong></span>
+      </div>
       <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">
         Projected peak utilization for December demand surge (+14.2% YoY growth).
       </div>
@@ -969,6 +791,26 @@ export function openMetricDrilldown(metricKey, scenarioId) {
           <span class="text-xs text-muted">Delhi NCR DC (Scenario)</span>
           <div style="font-size:16px;font-weight:800;color:var(--green)">91% (Safe Headroom)</div>
         </div>
+      </div>
+      <div style="font-size:12px;margin:12px 0 4px;color:var(--text-1);font-weight:700">Governance threshold</div>
+      <div style="font-size:12.5px;color:var(--text-2);margin-bottom:12px">
+        Utilization ≥95% is classified Critical; 85–95% is Stress. Delhi NCR's baseline projection (108%) breaches the Critical threshold; the scenario's 91% falls to Stress, below the breach line.
+      </div>
+      <div style="font-size:12px;margin:12px 0 4px;color:var(--text-1);font-weight:700">Contributing factors</div>
+      <ul style="font-size:12.5px;color:var(--text-2);margin:0 0 14px 18px;padding:0">
+        <li>December demand forecast: +14.2% YoY growth in North India</li>
+        <li>Baddi → Delhi NCR is the network's highest-volume corridor</li>
+        <li>Delhi NCR has no spare capacity headroom at baseline; Kolkata DC has 41% headroom available</li>
+      </ul>
+      <div style="font-size:12px;margin:12px 0 4px;color:var(--text-1);font-weight:700">Risk chain (P → REI → RF)</div>
+      <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;font-style:italic">
+        Not available — this build does not compute Facility REI or Governed Risk Factor (RF). The label above is a categorical risk read of the utilization projection only, not a synthesized RF score.
+      </div>
+      <span class="provenance-badge model-fact">MODEL FACT — evidence above</span>
+      <hr style="border:none;border-top:1px solid var(--border-light);margin:14px 0">
+      <span class="provenance-badge ai-assessment">AI ASSESSMENT</span>
+      <div style="font-size:12.5px;color:var(--text-2);margin-top:8px">
+        Based on the utilization projection and corridor concentration above, Delhi NCR is likely to breach capacity in December without intervention; reallocating volume toward Kolkata's spare capacity is the most direct mitigation available today.
       </div>
     `;
   } else {
@@ -1000,9 +842,14 @@ function openCreateToolbox() {
   if (!modal) return;
 
   const formBody = document.getElementById('toolbox-form-body');
+  const previewBody = document.getElementById('toolbox-preview-body');
   const execView = document.getElementById('agent-execution-view');
   if (formBody) formBody.classList.remove('hidden');
+  if (previewBody) previewBody.classList.add('hidden');
   if (execView) execView.classList.add('hidden');
+
+  const nameInput = document.getElementById('toolbox-scenario-name');
+  if (nameInput) nameInput.value = '';
 
   renderToolboxDynamicFields('CHANGE_CAPACITY');
   modal.classList.add('visible');
@@ -1084,13 +931,121 @@ function renderToolboxDynamicFields(type) {
       </div>
     `;
   }
+
+  // P0 #4/#5: keep the Current → Proposed line in sync with whatever
+  // fields this type just rendered. Reassigning oninput/onchange (rather
+  // than addEventListener) is safe to call on every render — no listener
+  // stacking, since the container's fields are fully replaced each time.
+  updateCurrentProposed(type);
+  container.oninput = () => updateCurrentProposed(type);
+  container.onchange = () => updateCurrentProposed(type);
+}
+
+// ─── Current → Proposed summary (P0 #4/#5) ───────────────────
+// Reuses fields already on the facility (fac.capacity) or already present
+// elsewhere in this exact modal (the 95% SLA constraint default) rather
+// than inventing new baseline numbers. Where no honest baseline exists
+// (zone-level demand/transport cost), shows "Not available" instead.
+function updateCurrentProposed(type) {
+  const el = document.getElementById('toolbox-current-proposed');
+  if (!el) return;
+  let currentText = 'Not available';
+  let proposedText = 'Not available';
+
+  if (type === 'CHANGE_CAPACITY') {
+    const fac = DCS.find((d) => d.id === document.getElementById('toolbox-facility')?.value);
+    const direction = document.getElementById('toolbox-direction')?.value;
+    const amount = Number(document.getElementById('toolbox-amount')?.value || 0);
+    if (fac) {
+      currentText = `${formatNumber(fac.capacity)} units/day`;
+      const proposed = direction === 'DECREASE' ? fac.capacity - amount : fac.capacity + amount;
+      proposedText = `${formatNumber(Math.max(0, proposed))} units/day`;
+    }
+  } else if (type === 'OPEN_FACILITY') {
+    currentText = 'Not in network today';
+    proposedText = 'New facility added (zero baseline throughput)';
+  } else if (type === 'CLOSE_FACILITY') {
+    const fac = DCS.find((d) => d.id === document.getElementById('toolbox-facility')?.value);
+    currentText = fac ? `${formatNumber(fac.capacity)} units/day (Active)` : 'Active';
+    proposedText = '0 units/day (Closed — removed from network)';
+  } else {
+    const amount = Number(document.getElementById('toolbox-amount')?.value || 0);
+    const zone = document.getElementById('toolbox-zone')?.selectedOptions?.[0]?.textContent || 'selected zone';
+    if (type === 'CHANGE_SLA') {
+      currentText = '95% (network SLA constraint)';
+      proposedText = `${95 + amount}%`;
+    } else {
+      currentText = 'Not available';
+      proposedText = `${amount > 0 ? '+' : ''}${amount}% in ${zone}`;
+    }
+  }
+
+  el.innerHTML = `<strong>Current:</strong> ${currentText} &nbsp;→&nbsp; <strong>Proposed:</strong> ${proposedText}`;
+}
+
+// ─── Scenario Preview (P0 #7) ─────────────────────────────────
+// One confirmation step between the form and the actual solver run — a
+// summary of exactly what will be evaluated, plus P1's qualitative KPI
+// direction chips. No numeric KPI estimate is shown here: the real
+// evaluation only happens after "Confirm & Run", so any number here would
+// be fabricated ahead of the solver, not sourced from it.
+const KPI_DIRECTION_BY_TYPE = {
+  CHANGE_CAPACITY: { Cost: '↑ Likely (CapEx)', Service: '↑ Likely', Capacity: '↓ Risk likely', Risk: '↓ Likely' },
+  OPEN_FACILITY: { Cost: '↑ Likely (CapEx)', Service: '↑ Likely', Capacity: '↓ Risk likely', Risk: '↓ Likely' },
+  CLOSE_FACILITY: { Cost: '↓ Likely (Fixed cost)', Service: '↓ Risk likely', Capacity: '↑ Risk likely', Risk: '↑ Likely' },
+  CHANGE_DEMAND: { Cost: 'Depends on direction', Service: 'Depends on direction', Capacity: 'Depends on direction', Risk: 'Depends on direction' },
+  CHANGE_TRANSPORT_COST: { Cost: 'Direct impact', Service: 'Neutral', Capacity: 'Neutral', Risk: 'Neutral' },
+  CHANGE_SLA: { Cost: '↑ Likely if tightened', Service: 'Direct impact', Capacity: 'Neutral', Risk: '↓ Likely if tightened' },
+};
+
+function showScenarioPreview() {
+  const formBody = document.getElementById('toolbox-form-body');
+  const previewBody = document.getElementById('toolbox-preview-body');
+  if (!formBody || !previewBody) return;
+
+  const name = document.getElementById('toolbox-scenario-name')?.value.trim() || 'Untitled Scenario';
+  const type = document.querySelector('.scn-type-card.active')?.dataset.type || 'CHANGE_CAPACITY';
+  const typeLabel = document.getElementById('toolbox-active-type-badge')?.textContent || type;
+  const currentProposedText = document.getElementById('toolbox-current-proposed')?.textContent || 'Not available';
+  const objective = document.getElementById('toolbox-objective')?.selectedOptions?.[0]?.textContent || '—';
+  const constraint = document.getElementById('toolbox-constraint-type')?.selectedOptions?.[0]?.textContent || '—';
+
+  const nameEl = document.getElementById('preview-scenario-name');
+  if (nameEl) nameEl.textContent = name;
+
+  const rows = [
+    ['Type', typeLabel],
+    ['Current → Proposed', currentProposedText],
+    ['Optimise for', objective],
+    ['Subject to constraint', constraint],
+  ];
+  const rowsEl = document.getElementById('preview-summary-rows');
+  if (rowsEl) {
+    rowsEl.innerHTML = rows.map(([label, val]) => `
+      <div class="flex items-center justify-between text-xs">
+        <span class="text-muted">${label}</span>
+        <span style="font-weight:700;text-align:right">${val || '—'}</span>
+      </div>`).join('');
+  }
+
+  const chipsEl = document.getElementById('preview-kpi-chips');
+  if (chipsEl) {
+    const dirs = KPI_DIRECTION_BY_TYPE[type] || {};
+    chipsEl.innerHTML = Object.entries(dirs).map(([k, v]) => `
+      <span class="tag tag-muted" style="font-size:10.5px">${k}: ${v}</span>`).join('');
+  }
+
+  formBody.classList.add('hidden');
+  previewBody.classList.remove('hidden');
 }
 
 // ─── Execute Scenario Creation (Phased Telemetry) ───────────
 function runScenarioCreation() {
   const formBody = document.getElementById('toolbox-form-body');
+  const previewBody = document.getElementById('toolbox-preview-body');
   const execView = document.getElementById('agent-execution-view');
   if (formBody) formBody.classList.add('hidden');
+  if (previewBody) previewBody.classList.add('hidden');
   if (execView) execView.classList.remove('hidden');
 
   const steps = [
@@ -1123,12 +1078,14 @@ function runScenarioCreation() {
       // Finalize and add new scenario object
       const newNum = SCENARIOS.length;
       const newId = `SCN_CUSTOM_${Date.now()}`;
+      const userName = document.getElementById('toolbox-scenario-name')?.value.trim();
+      const displayName = userName || `Scenario ${newNum}`;
       const newScenario = {
         id: newId,
         num: newNum,
-        name: `Scenario ${newNum} (Custom)`,
-        shortName: `User Created ${newNum}`,
-        cardTitle: `Scenario ${newNum}`,
+        name: `${displayName} (Custom)`,
+        shortName: displayName,
+        cardTitle: displayName,
         type: 'USER_CREATED',
         source: 'user',
         badge: 'User Created',
@@ -1179,107 +1136,95 @@ function runScenarioCreation() {
 
       SCENARIOS.push(newScenario);
 
+      // Bring the freshly-created scenario straight into the comparison —
+      // filling an empty slot if there's room, otherwise replacing the last
+      // one — and show it on the Digital Twin map right away.
+      if (multiSelectedIds.length < 3) {
+        multiSelectedIds.push(newId);
+      } else {
+        multiSelectedIds[multiSelectedIds.length - 1] = newId;
+      }
+      mapActiveId = newId;
+
       setTimeout(() => {
         const modal = document.getElementById('modal-create-toolbox');
         if (modal) modal.classList.remove('visible');
-        renderScenarioStrip();
-        selectScenario(newId);
-        renderMultiScenarioTable();
+        onSelectionChanged();
       }, 500);
     }
   }, 350);
 }
 
+// ─── Customize Metrics Popover ───────────────────────────────
+// Lets the user pick which rows show in the comparison table.
+function customizeMenuHtml(visibleKeys) {
+  return ALL_TABLE_ROWS.map((row) => `
+    <label class="scn-customize-item">
+      <input type="checkbox" data-metric-key="${row.key}" ${visibleKeys.includes(row.key) ? 'checked' : ''}>
+      <span>${row.icon} ${row.label}</span>
+    </label>
+  `).join('');
+}
+
+function wireCustomizeMenu(btnId, menuId, getKeys, rerender) {
+  const btn = document.getElementById(btnId);
+  const menu = document.getElementById(menuId);
+  if (!btn || !menu) return;
+
+  menu.innerHTML = customizeMenuHtml(getKeys());
+  menu.addEventListener('click', (e) => e.stopPropagation());
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menu.classList.toggle('open');
+  });
+
+  menu.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener('change', () => {
+      const key = cb.dataset.metricKey;
+      const keys = getKeys();
+      if (cb.checked) {
+        if (!keys.includes(key)) keys.push(key);
+      } else {
+        const idx = keys.indexOf(key);
+        if (idx !== -1) {
+          if (keys.length <= 1) { cb.checked = true; return; }
+          keys.splice(idx, 1);
+        }
+      }
+      rerender();
+    });
+  });
+}
+
 // ─── Wire Scenario Events ───────────────────────────────────
+// initScenarios() runs both at app boot and every time the user
+// navigates to the Scenario Planning tab (see app.js), so this must be
+// idempotent — otherwise listeners stack up on every visit, and a
+// simple toggle (like "View detailed comparison") ends up firing an
+// even number of times per click and appearing to do nothing at all.
+let eventsWired = false;
 function wireScenarioEvents() {
-  // Sub-Navigation Tabs
-  document.getElementById('tab-btn-my-scenarios')?.addEventListener('click', () => {
-    switchScenarioView('my-scenarios');
-  });
-  document.getElementById('tab-btn-comparison')?.addEventListener('click', () => {
-    switchScenarioView('comparison');
-  });
+  if (eventsWired) return;
+  eventsWired = true;
 
-  // Add Scenario Top Button
-  document.getElementById('btn-add-scenario-top')?.addEventListener('click', () => {
-    openCreateToolbox();
+  // "Add Scenario" popover
+  document.getElementById('scn-add-scenario-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (multiSelectedIds.length >= 3) return;
+    document.getElementById('scn-add-scenario-menu')?.classList.toggle('open');
   });
 
-  // Map View Toggle (Baseline vs Scenario)
-  const btnMapBase = document.getElementById('btn-map-baseline');
-  const btnMapScn = document.getElementById('btn-map-scenario');
+  // "Customize metrics" popover
+  wireCustomizeMenu('scn-multi-customize-btn', 'scn-multi-customize-menu', () => multiVisibleKeys, renderMultiScenarioTable);
 
-  if (btnMapBase && btnMapScn) {
-    btnMapBase.addEventListener('click', () => {
-      mapMode = 'baseline';
-      btnMapBase.classList.add('active');
-      btnMapScn.classList.remove('active');
-      updateScenarioMapLayers();
-    });
-
-    btnMapScn.addEventListener('click', () => {
-      mapMode = 'scenario';
-      btnMapScn.classList.add('active');
-      btnMapBase.classList.remove('active');
-      updateScenarioMapLayers();
-    });
-  }
-
-  // Metric View Dropdowns
-  document.getElementById('scn-metric-view-select')?.addEventListener('change', (e) => {
-    const view = e.target.value;
-    activeSingleMetricKeys = METRIC_VIEWS[view] || METRIC_VIEWS.key;
-    renderSingleScenarioTable();
+  // Click outside any open dropdown/popover closes it.
+  document.addEventListener('click', () => {
+    document.getElementById('scn-add-scenario-menu')?.classList.remove('open');
+    document.getElementById('scn-multi-customize-menu')?.classList.remove('open');
   });
 
-  document.getElementById('scn-multi-metric-view-select')?.addEventListener('change', (e) => {
-    const view = e.target.value;
-    activeMultiMetricKeys = METRIC_VIEWS[view] || METRIC_VIEWS.all;
-    renderMultiScenarioTable();
-  });
-
-  // Customize Metrics Modal
-  const btnCustSingle = document.getElementById('btn-customize-metrics');
-  const btnCustMulti = document.getElementById('btn-multi-customize-metrics');
-  const modalCust = document.getElementById('modal-metric-customizer');
-
-  const openCustModal = () => {
-    if (modalCust) modalCust.classList.add('visible');
-  };
-
-  if (btnCustSingle) btnCustSingle.addEventListener('click', openCustModal);
-  if (btnCustMulti) btnCustMulti.addEventListener('click', openCustModal);
-
-  document.getElementById('modal-close-metrics')?.addEventListener('click', () => {
-    if (modalCust) modalCust.classList.remove('visible');
-  });
-  document.getElementById('btn-cancel-metrics')?.addEventListener('click', () => {
-    if (modalCust) modalCust.classList.remove('visible');
-  });
-
-  document.getElementById('btn-save-metrics')?.addEventListener('click', () => {
-    const checked = [];
-    document.querySelectorAll('#modal-metric-customizer input[type="checkbox"]:checked').forEach((cb) => {
-      if (cb.dataset.metric) checked.push(cb.dataset.metric);
-    });
-    if (checked.length > 0) {
-      activeSingleMetricKeys = checked;
-      activeMultiMetricKeys = checked;
-      renderSingleScenarioTable();
-      renderMultiScenarioTable();
-    }
-    if (modalCust) modalCust.classList.remove('visible');
-  });
-
-  document.getElementById('btn-reset-metrics')?.addEventListener('click', () => {
-    activeSingleMetricKeys = METRIC_VIEWS.key;
-    activeMultiMetricKeys = METRIC_VIEWS.all;
-    renderSingleScenarioTable();
-    renderMultiScenarioTable();
-    if (modalCust) modalCust.classList.remove('visible');
-  });
-
-  // Toolbox Modal events
+  // Toolbox Modal events (Create Scenario)
   document.getElementById('btn-close-toolbox')?.addEventListener('click', () => {
     document.getElementById('modal-create-toolbox')?.classList.remove('visible');
   });
@@ -1297,89 +1242,23 @@ function wireScenarioEvents() {
   });
 
   document.getElementById('btn-run-toolbox-scenario')?.addEventListener('click', () => {
+    showScenarioPreview();
+  });
+  document.getElementById('btn-back-to-toolbox-form')?.addEventListener('click', () => {
+    document.getElementById('toolbox-preview-body')?.classList.add('hidden');
+    document.getElementById('toolbox-form-body')?.classList.remove('hidden');
+  });
+  document.getElementById('btn-confirm-run-scenario')?.addEventListener('click', () => {
     runScenarioCreation();
   });
 
-  // Create Scenario Button
   document.getElementById('btn-create-scenario-main')?.addEventListener('click', () => {
     openCreateToolbox();
   });
 
-  // All Scenarios Drawer Close & Clear Actions
-  document.getElementById('all-scenarios-drawer-close')?.addEventListener('click', () => {
-    document.getElementById('all-scenarios-drawer-overlay')?.classList.remove('visible');
-  });
-  document.getElementById('btn-close-all-scenarios')?.addEventListener('click', () => {
-    document.getElementById('all-scenarios-drawer-overlay')?.classList.remove('visible');
-  });
-
-  document.getElementById('btn-clear-user-scenarios')?.addEventListener('click', () => {
-    // Keep baseline, recommended and canonical scenarios, clear user-created custom scenarios
-    const canonicalIds = ['SCN_ACTUAL', 'SCN_REBALANCE', 'SCN_AI_REC_4'];
-    const removedCount = SCENARIOS.length - SCENARIOS.filter(s => canonicalIds.includes(s.id)).length;
-    
-    // Filter in-place
-    for (let i = SCENARIOS.length - 1; i >= 0; i--) {
-      if (!canonicalIds.includes(SCENARIOS[i].id)) {
-        SCENARIOS.splice(i, 1);
-      }
-    }
-
-    selectedScenarioId = 'SCN_REBALANCE';
-    renderScenarioStrip();
-    renderSingleScenarioTable();
-    renderSingleScenarioInsights();
-    renderSingleScenarioActions();
-    renderMultiScenarioTable();
-    renderComparisonInsights();
-    renderMultiScenarioActions();
-    openAllScenariosDrawer();
-  });
-
-  // Scenario Chatbot Events
-  document.getElementById('scn-chat-send')?.addEventListener('click', handleScenarioChat);
-  document.getElementById('scn-chat-input')?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleScenarioChat();
+  // Scenario Detail Drawer ("Why this scenario?" / "Review proposed changes")
+  document.getElementById('scenario-drawer-close')?.addEventListener('click', () => {
+    document.getElementById('scenario-drawer-overlay')?.classList.remove('visible');
   });
 }
 
-// ─── Scenario Planning Contextual Chatbot ──────────────────
-function handleScenarioChat() {
-  const input = document.getElementById('scn-chat-input');
-  const messages = document.getElementById('scn-chat-messages');
-  if (!input || !input.value.trim()) return;
-
-  const query = input.value.trim();
-  input.value = '';
-
-  if (messages) {
-    messages.style.display = 'block';
-    messages.innerHTML += `<div class="home-chat-msg user">You: ${query}</div>`;
-
-    const scn = SCENARIOS.find((s) => s.id === selectedScenarioId) || SCENARIOS[1];
-    const scnName = scn.cardTitle || scn.name;
-    const costText = scn.costChange < 0 ? `saves ${Math.abs(scn.costChange)}% (₹${((1285000 - scn.totalCost) / 100000).toFixed(1)}L/mo)` : `increases cost by ${scn.costChange}%`;
-
-    let responseText = '';
-    const qLower = query.toLowerCase();
-
-    if (qLower.includes('cost') || qLower.includes('save') || qLower.includes('budget') || qLower.includes('roi')) {
-      responseText = `<strong>${scnName}</strong> ${costText} with total operating cost at ₹${(scn.totalCost / 100000).toFixed(2)}L/month. Transport cost is ₹${(scn.transportCost / 100000).toFixed(2)}L.`;
-    } else if (qLower.includes('delhi') || qLower.includes('bottleneck') || qLower.includes('capacity') || qLower.includes('util')) {
-      responseText = `Under <strong>${scnName}</strong>, network average utilisation is <strong>${scn.avgUtil}%</strong> and Delhi NCR DC capacity risk is mitigated to <strong>${scn.capacityRisk}</strong> (relieving the 108% December peak forecast).`;
-    } else if (qLower.includes('sla') || qLower.includes('service') || qLower.includes('delivery') || qLower.includes('time')) {
-      responseText = `On-time delivery SLA under <strong>${scnName}</strong> reaches <strong>${scn.sla}%</strong> with an average lead time of 2.1 days, meeting enterprise SLA targets (>95%).`;
-    } else if (qLower.includes('kolkata') || qLower.includes('rebalance') || qLower.includes('lane') || qLower.includes('flow')) {
-      responseText = `Key network reallocation: Baddi → Delhi volume is reduced by 1,200 units/day, while Baddi → Kolkata DC absorbs +800 units/day and Pune → Mumbai direct handling absorbs +400 units/day.`;
-    } else if (qLower.includes('action') || qLower.includes('implement') || qLower.includes('execute') || qLower.includes('next')) {
-      responseText = `Recommended next steps: [1] Execute line-haul freight rebalancing on Baddi–Delhi lane; [2] Confirm cross-dock capacity reservations with regional 3PL partners.`;
-    } else {
-      responseText = `<strong>${scnName}</strong> delivers ${costText}, maintains ${scn.sla}% SLA, and ${scn.highlight || scn.description}. Would you like to inspect parameter assumptions or run stress tests?`;
-    }
-
-    setTimeout(() => {
-      messages.innerHTML += `<div class="home-chat-msg bot">🤖 NetGravity: ${responseText}</div>`;
-      messages.scrollTop = messages.scrollHeight;
-    }, 200);
-  }
-}

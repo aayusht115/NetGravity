@@ -10,7 +10,7 @@
  */
 
 /* global THREE */
-import { PLANTS, DCS, MARKETS, LANES, formatNumber, getUtilColor } from './data.js';
+import { PLANTS, DCS, MARKETS, LANES, formatNumber, getUtilColor, getUtilLabel } from './data.js';
 import { INDIA_BASEMAP_DATA_URI } from './basemap-data.js';
 
 // ─── Basemap Calibration ─────────────────────────────────────
@@ -95,6 +95,14 @@ export function initTwin3D(containerId) {
   if (!containerEl) return;
 
   if (isInitialised) {
+    // The scene/renderer are a module-level singleton shared by every
+    // caller (Home's preview and the Digital Twin tab both use this same
+    // canvas) — re-parent it into whichever container is asking this
+    // time, since only one can be showing it at once.
+    if (renderer && renderer.domElement.parentElement !== containerEl) {
+      containerEl.innerHTML = '';
+      containerEl.appendChild(renderer.domElement);
+    }
     resumeTwin3D();
     resizeTwin3D();
     return;
@@ -395,10 +403,13 @@ function createDC3D(data, pos) {
   const group = new THREE.Group();
   group.position.copy(pos);
 
-  // Utilization Color Coding
+  // Utilization Color Coding — same Healthy/Stress/Critical band data.js's
+  // getUtilLabel owns everywhere else (85%/95%), just re-expressed in the
+  // 3D theme's own color set.
   let dcColor = THEME_COLORS.dcHealthy;
-  if (data.utilPct >= 90) dcColor = THEME_COLORS.dcCritical;
-  else if (data.utilPct >= 75) dcColor = THEME_COLORS.dcWarning;
+  const utilBand = getUtilLabel(data.utilPct);
+  if (utilBand === 'Critical') dcColor = THEME_COLORS.dcCritical;
+  else if (utilBand === 'Stress') dcColor = THEME_COLORS.dcWarning;
 
   const radius = 1.3 + (data.utilPct / 100) * 0.7;
 
@@ -435,7 +446,7 @@ function createDC3D(data, pos) {
   const beamMat = new THREE.MeshBasicMaterial({
     color: dcColor,
     transparent: true,
-    opacity: data.utilPct >= 90 ? 0.45 : 0.25,
+    opacity: utilBand === 'Critical' ? 0.45 : 0.25,
   });
   const beam = new THREE.Mesh(beamGeo, beamMat);
   beam.position.y = 8.5;

@@ -25,10 +25,13 @@ const layerGroups = {}; // containerId → { nodes, flows }
 let currentState = 'actual';
 
 // ─── Styles & Color Tokens ──────────────────────────────────
+// Facility-type colors are kept visually distinct from the red/amber/green
+// utilisation-risk palette (used for the DC ring border) so a color never
+// carries two different meanings on the same map.
 const COLORS = {
   plant: '#6B2FA0',
-  dc: '#f59e0b',
-  market: '#22c55e',
+  dc: '#2563eb',
+  market: '#0891b2',
   flow: {
     actual: '#94a3b8',
     optimised: '#6B2FA0',
@@ -440,11 +443,14 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
     if (overrideStats.note) note = overrideStats.note;
   }
 
+  // Only DCs carry a colored ring — it encodes utilisation risk, which is
+  // meaningful only for them. Plants and markets are plain filled icons so
+  // the ring isn't misread as carrying the same risk signal it doesn't.
   let adjustedSize = size;
-  let borderColor = color;
-  if (type === 'dc') {
+  const isDc = type === 'dc';
+  const border = isDc ? `3px solid ${getUtilColor(utilPct)}` : 'none';
+  if (isDc) {
     adjustedSize = Math.max(12, Math.min(22, 10 + (utilPct / 100) * 14));
-    borderColor = getUtilColor(utilPct);
   }
 
   const icon = L.divIcon({
@@ -453,7 +459,7 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
       width:${adjustedSize * 2}px;height:${adjustedSize * 2}px;
       border-radius:50%;
       background:${color}22;
-      border:3px solid ${borderColor};
+      border:${border};
       display:flex;align-items:center;justify-content:center;
       font-size:${Math.max(11, adjustedSize - 3)}px;
       cursor:pointer;
@@ -506,31 +512,39 @@ function getFacilityName(id) {
 }
 
 // ─── Legend ──────────────────────────────────────────────────
+// Simple icon chips that mirror the exact marker glyphs on the map, so
+// the legend reads at a glance instead of requiring a color-to-meaning
+// lookup. Facility-type icons and the utilisation-risk ring colors are
+// shown as two clearly separate groups since they answer different
+// questions (what is this node vs. how loaded is it).
+function iconChip(bg, glyph) {
+  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:${bg}22;font-size:10px;margin-right:6px;flex-shrink:0">${glyph}</span>`;
+}
+
 function addLegend(map, isCompact = false) {
   const legend = L.control({ position: 'bottomright' });
   legend.onAdd = function () {
     const div = L.DomUtil.create('div');
     if (isCompact) {
       div.style.cssText =
-        'background:rgba(255,255,255,0.94);padding:6px 10px;border-radius:6px;box-shadow:0 1px 6px rgba(0,0,0,.1);font-size:10.5px;line-height:1.45;font-family:Inter,sans-serif;border:1px solid #cbd5e1';
+        'background:rgba(255,255,255,0.94);padding:7px 10px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,.1);font-size:10.5px;line-height:1.6;font-family:Inter,sans-serif;border:1px solid #cbd5e1';
       div.innerHTML = `
-        <div style="font-weight:700;margin-bottom:2px">Digital Twin Network</div>
-        <div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${COLORS.plant}"></span>Plant</div>
-        <div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${COLORS.dc}"></span>DC (Ring: Utilisation)</div>
-        <div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:12px;height:2.5px;background:#6B2FA0"></span>Corridor Flow</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.plant, '🏭')}Plant</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.dc, '🏪')}Distribution Centre</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.market, '📦')}Market</div>
       `;
     } else {
       div.style.cssText =
-        'background:white;padding:10px 14px;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:11px;line-height:1.8;font-family:Inter,sans-serif';
+        'background:white;padding:10px 14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:11.5px;line-height:1.5;font-family:Inter,sans-serif';
       div.innerHTML = `
-        <div style="font-weight:700;margin-bottom:4px">Network Legend</div>
-        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.plant};vertical-align:middle;margin-right:6px"></span>Plant</div>
-        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.dc};vertical-align:middle;margin-right:6px"></span>Distribution Centre</div>
-        <div><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${COLORS.market};vertical-align:middle;margin-right:6px"></span>Demand Market</div>
-        <div style="margin-top:4px;border-top:1px solid #eee;padding-top:4px">
-          <div><span style="display:inline-block;width:20px;height:2px;background:#dc2626;vertical-align:middle;margin-right:6px"></span>Critical (&gt;90%)</div>
-          <div><span style="display:inline-block;width:20px;height:2px;background:#f59e0b;vertical-align:middle;margin-right:6px"></span>Moderate (75-90%)</div>
-          <div><span style="display:inline-block;width:20px;height:2px;background:#22c55e;vertical-align:middle;margin-right:6px"></span>Healthy (&lt;75%)</div>
+        <div style="display:flex;align-items:center;margin-bottom:5px">${iconChip(COLORS.plant, '🏭')}Plant</div>
+        <div style="display:flex;align-items:center;margin-bottom:5px">${iconChip(COLORS.dc, '🏪')}Distribution Centre</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.market, '📦')}Demand Market</div>
+        <div style="margin-top:7px;padding-top:7px;border-top:1px solid #eee">
+          <div style="font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">DC Ring = Utilisation</div>
+          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-right:7px"></span>Critical (&gt;95%)</div>
+          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:7px"></span>Stress (85–95%)</div>
+          <div style="display:flex;align-items:center"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:7px"></span>Healthy (&lt;85%)</div>
         </div>
       `;
     }

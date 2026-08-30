@@ -16,6 +16,8 @@
  * STATUS: PROTOTYPE / MOCKED
  */
 
+import { DATA_QUALITY, CONTRACT_DEMO } from './data.js';
+
 const SCHEMA_FIELDS = [
   'Customer ID', 'Distribution Centre', 'Demand Market', 'Service Level SLA',
   'Transit Time (Days)', 'Facility Name', 'Region / Zone', 'Total Cost', 'No match found',
@@ -38,10 +40,34 @@ function baseMappingRows() {
   ];
 }
 
-const PDF_FLAGGED_TERMS = [
-  { id: 'mvc', name: 'Minimum volume commitment' },
-  { id: 'esc', name: 'Escalation clause' },
-];
+// ─── S4: Contract Intelligence (PDF review) ───────────────────
+// Sourced from CONTRACT_DEMO (data.js) — a fully-authored per-vendor
+// extraction (rate, surcharge, confidence per term) that existed but was
+// never wired into the PDF review screen; that screen previously showed
+// unrelated hardcoded numbers (₹12/kg, 6.5%, "Apr 2024 – Mar 2026") that
+// matched no data source at all. Every uploaded PDF shows the same vendor
+// (vendorA), matching this flow's existing convention of reusing identical
+// mock content per file type regardless of the actual uploaded file (see
+// the Excel/CSV mapping stats in buildQueue()).
+const CONTRACT_VENDOR = CONTRACT_DEMO.vendorA;
+
+function contractStatus(effectiveDateStr) {
+  const eff = new Date(effectiveDateStr);
+  return new Date() >= eff
+    ? { label: 'Active', tone: 'green' }
+    : { label: 'Upcoming', tone: 'amber' };
+}
+
+function reviewTermId(term) {
+  return term.field.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
+// Low-confidence/review-required terms (P0 #5) are derived directly from
+// each term's own confidence value — never a separate hand-maintained
+// list that can drift out of sync with what the data actually says.
+function getReviewTerms(vendor) {
+  return vendor.extractedTerms.filter(t => t.confidence !== 'HIGH');
+}
 
 /* ─── Deterministic mock numbers (no real parsing happens) ───── */
 function hashStr(s) {
@@ -564,6 +590,64 @@ function statsRowHtml(stats) {
     </div>`;
 }
 
+// ─── S3 P0: Data Quality summary (record-level validity + issues) ───
+// Distinct from the column-mapping stats above it (that answers "did we
+// read the columns right?"; this answers "can I trust the data enough to
+// run the model?"). Sourced entirely from DATA_QUALITY (data.js) — a
+// fully-authored dataset that existed but was never surfaced anywhere in
+// the ingestion flow. Reuses the same .ing-stats-row / .ing-review-item /
+// .ing-confidence-pill classes already used elsewhere on this screen, so
+// no new visual language is introduced.
+function severityTone(sev) {
+  return sev === 'warning' ? 'medium' : sev === 'info' ? 'high' : 'low';
+}
+function severityLabel(sev) {
+  return sev === 'warning' ? 'Warning' : sev === 'info' ? 'Info' : 'Critical';
+}
+
+function dataQualitySectionHtml() {
+  const dq = DATA_QUALITY;
+  const invalid = dq.totalRecords - dq.validRecords;
+  const needsReview = dq.issues.filter((i) => i.status === 'needs_review').length;
+
+  const issueRows = dq.issues.map((iss) => {
+    const done = iss.status === 'reviewed' || iss.status === 'auto_mapped';
+    const location = iss.facility || iss.market || iss.lane || iss.source || '';
+    return `<div class="ing-review-item${done ? ' reviewed' : ''}">
+        <div>
+          <div class="ing-review-item-name">${ingEsc(iss.type)}${location ? ` — ${ingEsc(location)}` : ''}</div>
+          <div class="ing-review-item-note">${ingEsc(iss.detail)}</div>
+        </div>
+        <span class="ing-confidence-pill tone-${severityTone(iss.severity)}">${severityLabel(iss.severity)}</span>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="ing-card" id="ing-dq-section" style="margin-top:16px">
+      <div class="ing-card-title">Data Quality</div>
+      <div class="ing-card-sub">Can this data be trusted to run the model? ${invalid} of ${dq.totalRecords.toLocaleString('en-IN')} records need attention.</div>
+      <div class="ing-stats-row" style="margin-top:14px">
+        <div class="ing-stat-item">
+          <span class="ing-stat-icon tone-green">${I.checkCircle}</span>
+          <div><div class="ing-stat-value">${dq.validRecords.toLocaleString('en-IN')} / ${dq.totalRecords.toLocaleString('en-IN')}</div><div class="ing-stat-label">records valid (${dq.validPct}%)</div></div>
+        </div>
+        <div class="ing-stat-item">
+          <span class="ing-stat-icon ${invalid > 0 ? 'tone-amber' : 'tone-green'}">${I.warning}</span>
+          <div><div class="ing-stat-value">${invalid}</div><div class="ing-stat-label">invalid records</div></div>
+        </div>
+        <div class="ing-stat-item">
+          <span class="ing-stat-icon tone-amber">${I.warning}</span>
+          <div><div class="ing-stat-value">${dq.issues.length}</div><div class="ing-stat-label">issues found</div></div>
+        </div>
+        <div class="ing-stat-item">
+          <span class="ing-stat-icon tone-gray">${I.ban}</span>
+          <div><div class="ing-stat-value">${needsReview}</div><div class="ing-stat-label">need review</div></div>
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">${issueRows}</div>
+    </div>`;
+}
+
 function renderExcelIngestion(file) {
   const page = document.getElementById('ingestion-page');
   if (!page) return;
@@ -597,6 +681,7 @@ function renderExcelIngestion(file) {
       </div>
 
       ${statsRowHtml(stats)}
+      ${dataQualitySectionHtml()}
 
       <div class="ing-mapping-layout">
         <div class="ing-mapping-main">
@@ -697,40 +782,72 @@ function bindExcelIngestion(file) {
    PDF INGESTION
    ═══════════════════════════════════════════════════════════════ */
 function findingCardsHtml(file, review) {
-  const flaggedCount = PDF_FLAGGED_TERMS.length - review.reviewed.size;
+  const vendor = CONTRACT_VENDOR;
+  const findTerm = (field) => vendor.extractedTerms.find((t) => t.field === field);
+  const baseRate = findTerm('Base Rate');
+  const fuelSurcharge = findTerm('Fuel Surcharge');
+  const effectiveDate = findTerm('Effective Date');
+  const nsl = findTerm('Non-Serviceable Surcharge');
+  const minVolume = findTerm('Minimum Volume');
+  const status = effectiveDate ? contractStatus(effectiveDate.value) : { label: 'Not available', tone: 'gray' };
+
+  const reviewTerms = getReviewTerms(vendor);
+  const flaggedCount = reviewTerms.length - review.reviewed.size;
   const warnClass = `ing-finding-card warn${review.expanded ? ' expanded' : ''}`;
-  const reviewItems = PDF_FLAGGED_TERMS.map(t => {
-    const done = review.reviewed.has(t.id);
+  const reviewItems = reviewTerms.map((t) => {
+    const id = reviewTermId(t);
+    const done = review.reviewed.has(id);
     return `<div class="ing-review-item${done ? ' reviewed' : ''}">
         <div>
-          <div class="ing-review-item-name">${ingEsc(t.name)}</div>
-          <div class="ing-review-item-note">${done ? 'Reviewed' : 'Low confidence — please verify'}</div>
+          <div class="ing-review-item-name">${ingEsc(t.field)}: ${ingEsc(t.value)}</div>
+          <div class="ing-review-item-note">${done ? 'Reviewed' : 'Medium confidence — please verify'}</div>
         </div>
-        <button type="button" class="ing-review-mark-btn" data-mark-term="${t.id}" ${done ? 'disabled' : ''}>${done ? 'Reviewed' : 'Mark reviewed'}</button>
+        <button type="button" class="ing-review-mark-btn" data-mark-term="${id}" ${done ? 'disabled' : ''}>${done ? 'Reviewed' : 'Mark reviewed'}</button>
       </div>`;
   }).join('');
+
+  const hiddenCostAlertCard = vendor.hiddenCostAlert ? `
+    <div class="ing-finding-card warn">
+      <span class="ing-finding-icon">${I.shield}</span>
+      <div><div class="ing-finding-title">Hidden cost alert</div><div class="ing-finding-desc">Headline rate is <strong>${ingEsc(vendor.headlineRate)}</strong>, but effective cost with surcharges applied is <span class="lowconf">${ingEsc(vendor.effectiveCost)}</span>.</div></div>
+    </div>` : '';
 
   return `
     <div class="ing-finding-card">
       <span class="ing-finding-icon">${I.docSearch}</span>
-      <div><div class="ing-finding-title">Contract document detected</div><div class="ing-finding-desc">This appears to be a transportation services agreement.</div></div>
+      <div><div class="ing-finding-title">Contract document detected</div><div class="ing-finding-desc">${ingEsc(vendor.name)} — transportation services agreement.</div></div>
+    </div>
+    <div class="ing-finding-card">
+      <span class="ing-finding-icon">${I.checkCircle}</span>
+      <div><div class="ing-finding-title">Contract status</div><div class="ing-finding-value">${status.label}</div><div class="ing-finding-desc">${effectiveDate ? `Effective from ${ingEsc(effectiveDate.value)}` : 'Not available'}</div></div>
     </div>
     <div class="ing-finding-card">
       <span class="ing-finding-icon">${I.rupee}</span>
-      <div><div class="ing-finding-title">Base freight rate identified</div><div class="ing-finding-value">₹12 / kg</div><div class="ing-finding-desc">Applies to standard road movement across contracted primary lanes.</div></div>
+      <div><div class="ing-finding-title">Base freight rate identified</div><div class="ing-finding-value">${baseRate ? ingEsc(baseRate.value) : 'Not available'}</div><div class="ing-finding-desc">Applies to standard road movement across contracted primary lanes.</div></div>
     </div>
     <div class="ing-finding-card">
       <span class="ing-finding-icon">${I.fuel}</span>
-      <div><div class="ing-finding-title">Fuel surcharge identified</div><div class="ing-finding-value">6.5%</div><div class="ing-finding-desc">Applicable when diesel index exceeds the agreed baseline threshold.</div></div>
+      <div><div class="ing-finding-title">Fuel surcharge identified</div><div class="ing-finding-value">${fuelSurcharge ? ingEsc(fuelSurcharge.value) : 'Not available'}</div><div class="ing-finding-desc">Applicable per shipment per the contracted rate card.</div></div>
     </div>
     <div class="ing-finding-card">
       <span class="ing-finding-icon">${I.calendar}</span>
-      <div><div class="ing-finding-title">Effective period identified</div><div class="ing-finding-value">Apr 2024 – Mar 2026</div><div class="ing-finding-desc">Contract validity period.</div></div>
+      <div><div class="ing-finding-title">Effective period identified</div><div class="ing-finding-value">${effectiveDate ? `From ${ingEsc(effectiveDate.value)}` : 'Not available'}</div><div class="ing-finding-desc">No contract end date was found in this document.</div></div>
     </div>
+    ${nsl ? `
+    <div class="ing-finding-card">
+      <span class="ing-finding-icon">${I.ban}</span>
+      <div><div class="ing-finding-title">Non-serviceable location (NSL) surcharge</div><div class="ing-finding-value">${ingEsc(nsl.value)}</div></div>
+    </div>` : ''}
+    ${minVolume ? `
+    <div class="ing-finding-card">
+      <span class="ing-finding-icon">${I.columns}</span>
+      <div><div class="ing-finding-title">Minimum volume commitment</div><div class="ing-finding-value">${ingEsc(minVolume.value)}</div></div>
+    </div>` : ''}
+    ${hiddenCostAlertCard}
     <div class="${warnClass}" id="ing-warn-card">
       <span class="ing-finding-icon">${I.shield}</span>
       <div><div class="ing-finding-title">${flaggedCount} term${flaggedCount === 1 ? '' : 's'} need${flaggedCount === 1 ? 's' : ''} your review</div>
-        <div class="ing-finding-desc">Minimum volume commitment and escalation clause have <span class="lowconf">low confidence</span> values.</div></div>
+        <div class="ing-finding-desc">${reviewTerms.map((t) => t.field).join(' and ')} ${reviewTerms.length === 1 ? 'has' : 'have'} <span class="lowconf">medium confidence</span> values.</div></div>
       <span class="ing-finding-chevron">${I.chevronRight}</span>
     </div>
     <div class="ing-review-panel" id="ing-review-panel">${reviewItems}</div>`;
@@ -742,56 +859,27 @@ function renderPdfIngestion(file) {
 
   const review = flow.pdfReview[file.id];
   const pages = mockPages(file);
-  const highConfidence = 11;
+  const highConfidence = CONTRACT_VENDOR.extractedTerms.filter((t) => t.confidence === 'HIGH').length;
 
   page.innerHTML = `
     <div class="ing-body">
       ${topbar()}
 
       <div class="ing-pdf-layout">
-        <div>
-          <h1 class="ing-title" style="font-size:calc(26*var(--u))">AI is understanding your document</h1>
-          <p class="ing-subtitle">Your file has been uploaded. NetGravity is extracting key information and identifying what matters.</p>
+        <h1 class="ing-title" style="font-size:calc(26*var(--u))">AI is understanding your document</h1>
+        <p class="ing-subtitle">Your file has been uploaded. NetGravity is extracting key information and identifying what matters.</p>
 
-          <div class="ing-pdf-file-card">
-            <span class="ing-file-icon type-pdf" style="width:calc(40*var(--u));height:calc(40*var(--u))">PDF</span>
-            <div class="ing-pdf-file-meta">
-              <div class="ing-pdf-file-name">${ingEsc(file.name)}</div>
-              <div class="ing-pdf-file-sub">${pages} pages &middot; ${file.sizeMB.toFixed(1)} MB</div>
-            </div>
-            <span class="ing-status-chip">${I.checkCircle}Upload successful</span>
+        <div class="ing-pdf-file-card">
+          <span class="ing-file-icon type-pdf" style="width:calc(40*var(--u));height:calc(40*var(--u))">PDF</span>
+          <div class="ing-pdf-file-meta">
+            <div class="ing-pdf-file-name">${ingEsc(file.name)}</div>
+            <div class="ing-pdf-file-sub">${pages} pages &middot; ${file.sizeMB.toFixed(1)} MB</div>
           </div>
-
-          <div class="ing-stepper">
-            <div class="ing-step done">
-              <div class="ing-step-rail"><span class="ing-step-dot">${I.check}</span><span class="ing-step-line"></span></div>
-              <div class="ing-step-body"><div class="ing-step-title">Document read</div><div class="ing-step-desc">${pages} pages processed</div></div>
-            </div>
-            <div class="ing-step done">
-              <div class="ing-step-rail"><span class="ing-step-dot">${I.check}</span><span class="ing-step-line"></span></div>
-              <div class="ing-step-body"><div class="ing-step-title">Contract identified</div><div class="ing-step-desc">Commercial terms and clauses detected</div></div>
-            </div>
-            <div class="ing-step active">
-              <div class="ing-step-rail"><span class="ing-step-dot">&#9679;</span><span class="ing-step-line"></span></div>
-              <div class="ing-step-body">
-                <div class="ing-step-title">Extracting key terms</div>
-                <div class="ing-step-desc">12 terms identified &middot; <span style="color:#b4780a;font-weight:600">2 may need your review</span></div>
-                <div class="ing-step-hint">Checking a few uncertain values before showing the extracted terms<span class="ing-dots"><span>.</span><span>.</span><span>.</span></span></div>
-              </div>
-            </div>
-            <div class="ing-step pending">
-              <div class="ing-step-rail"><span class="ing-step-dot">4</span></div>
-              <div class="ing-step-body"><div class="ing-step-title">Preparing review</div><div class="ing-step-desc">Organizing extracted terms and linking to source</div></div>
-            </div>
-          </div>
-
-          <div class="ing-stepper-foot">${I.sparkle}<span>Almost there &middot; ~<span id="ing-pdf-countdown">18</span> sec remaining</span></div>
+          <span class="ing-status-chip">${I.checkCircle}Upload successful</span>
         </div>
 
-        <div>
-          <div class="ing-findings-title">${I.docSearch}What I've found so far</div>
-          <div id="ing-findings-slot">${findingCardsHtml(file, review)}</div>
-        </div>
+        <div class="ing-findings-title">${I.docSearch}What I've found so far</div>
+        <div id="ing-findings-slot" class="ing-findings-grid">${findingCardsHtml(file, review)}</div>
       </div>
 
       <div class="ing-footer-row">
@@ -802,7 +890,7 @@ function renderPdfIngestion(file) {
           </div>
           <div class="ing-pdf-actions-col">
             <button type="button" class="ing-btn-secondary" id="ing-pdf-review-btn" style="justify-content:center"><span>Review extracted terms</span>${I.arrowRight}</button>
-            <div class="ing-pdf-action-caption">Review ${PDF_FLAGGED_TERMS.length - review.reviewed.size} term${PDF_FLAGGED_TERMS.length - review.reviewed.size === 1 ? '' : 's'} that may need changes</div>
+            <div class="ing-pdf-action-caption">Review ${getReviewTerms(CONTRACT_VENDOR).length - review.reviewed.size} term${getReviewTerms(CONTRACT_VENDOR).length - review.reviewed.size === 1 ? '' : 's'} that may need changes</div>
           </div>
         </div>
       </div>
@@ -813,15 +901,8 @@ function renderPdfIngestion(file) {
 
 function bindPdfIngestion(file) {
   const review = flow.pdfReview[file.id];
-  let countdown = 18;
-  const timer = setInterval(() => {
-    countdown = Math.max(1, countdown - 1);
-    const el = document.getElementById('ing-pdf-countdown');
-    if (el) el.textContent = String(countdown);
-    else clearInterval(timer);
-  }, 1000);
 
-  document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', () => { clearInterval(timer); goBackInFlow(); });
+  document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', goBackInFlow);
 
   function refreshFindings() {
     document.getElementById('ing-findings-slot').innerHTML = findingCardsHtml(file, review);
@@ -833,7 +914,7 @@ function bindPdfIngestion(file) {
       review.reviewed.add(markBtn.dataset.markTerm);
       refreshFindings();
       const caption = document.querySelectorAll('.ing-pdf-action-caption')[1];
-      const remaining = PDF_FLAGGED_TERMS.length - review.reviewed.size;
+      const remaining = getReviewTerms(CONTRACT_VENDOR).length - review.reviewed.size;
       if (caption) caption.textContent = `Review ${remaining} term${remaining === 1 ? '' : 's'} that may need changes`;
       return;
     }
@@ -850,7 +931,6 @@ function bindPdfIngestion(file) {
   });
 
   document.getElementById('ing-pdf-continue-btn')?.addEventListener('click', () => {
-    clearInterval(timer);
     file.status = 'extracted';
     advanceQueue();
   });
