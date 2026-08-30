@@ -24,7 +24,7 @@
  * existing HOME_INSIGHTS/HOME_ACTION_ITEMS records, not real telemetry.
  */
 
-import { HOME_INSIGHTS, HOME_ACTION_ITEMS, getFacilityById, getOptimizedBaseCase, getUtilLabel, GOVERNANCE_TIERS } from './data.js';
+import { HOME_INSIGHTS, HOME_ACTION_ITEMS, getFacilityById, getOptimizedBaseCase, getUtilLabel, GOVERNANCE_TIERS, NOTIFICATION_RECIPIENTS } from './data.js';
 
 /* ─── Execution type per item ──────────────────────────────────
    Explicit rather than inferred from free-text `nextAction`, so the
@@ -710,6 +710,13 @@ function modalHtml(vm) {
           <button type="button" class="insd-view-message-link" id="insd-edit-recipients">${ICON.edit}Edit recipients</button>
           <button type="button" class="insd-view-message-link" id="insd-edit-message">${ICON.edit}Edit message</button>
         </div>
+        <div class="insd-email-meta-row" style="margin-top:8px;align-items:center">
+          <span style="color:var(--text-2)">Anyone else should see this?</span>
+          <input id="insd-add-recipient-input" type="email" placeholder="name@company.com"
+                 style="padding:4px 8px;border:1px solid var(--border-light);border-radius:var(--r-sm);font-size:12px">
+          <button type="button" class="insd-view-message-link" id="insd-add-recipient-btn">Add</button>
+          <span id="insd-add-recipient-confirm" style="font-size:12px;color:var(--text-2);font-style:italic"></span>
+        </div>
       </div>
 
       <div class="insd-modal-footer">
@@ -772,6 +779,18 @@ function bindModal() {
   document.getElementById('insd-edit-message')?.addEventListener('click', () => {
     const box = document.getElementById('insd-email-body');
     box?.classList.toggle('hidden');
+  });
+
+  document.getElementById('insd-add-recipient-btn')?.addEventListener('click', () => {
+    const input = document.getElementById('insd-add-recipient-input');
+    const email = input?.value.trim();
+    if (!email) return;
+    if (!NOTIFICATION_RECIPIENTS.some(r => r.email.toLowerCase() === email.toLowerCase())) {
+      NOTIFICATION_RECIPIENTS.push({ label: email, email });
+    }
+    const confirm = document.getElementById('insd-add-recipient-confirm');
+    if (confirm) confirm.textContent = `Added ${email} to your regular recipients`;
+    input.value = '';
   });
 
   function approve(sendEmail) {

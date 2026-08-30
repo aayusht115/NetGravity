@@ -988,6 +988,9 @@ class Orchestrator:
             decision.approval_request_id = approval.approval_id
             context.approval_request = approval
             self.state_store.put_approval(approval)
+            self._notify_action_agent("recommendation", approval=approval, context=context)
+        elif decision.classification == ActionClassification.HUMAN_ONLY:
+            self._notify_action_agent("investigate", decision=decision, context=context)
 
         trace.record(events.GOVERNANCE_DECISION,
                      classification=decision.classification.value,
@@ -1002,6 +1005,34 @@ class Orchestrator:
         trace.record(events.GOVERNANCE_APPLIED,
                      classification=decision.classification.value,
                      rules=decision.triggered_rules)
+
+    def _notify_action_agent(self, kind: str, *, context: ExecutionContext,
+                             approval: Any = None, decision: Any = None) -> None:
+        """
+        Dispatch a "card exists" event to the Action Agent — a notification
+        dispatcher, never a second decision-maker. Governance has already
+        decided everything that matters by the time this is called; this
+        only tells the Action Agent a decision exists to notify about.
+
+        Lazily imported so the orchestrator carries no hard, load-time
+        dependency on the action_agent package, and any failure here
+        (e.g. a storage write failing) is logged and swallowed rather than
+        failing the orchestrator run — a missed notification is recoverable,
+        a broken governance decision is not.
+        """
+        try:
+            from netgravity.action_agent import triggers as action_agent_triggers
+
+            if kind == "recommendation":
+                action_agent_triggers.on_recommendation_card_created(approval, context)
+            elif kind == "investigate":
+                action_agent_triggers.on_investigate_card_created(
+                    context.execution_id, decision, context)
+        except Exception:
+            logger.exception(
+                "orchestrator.action_agent.notify_failed kind=%s execution_id=%s",
+                kind, context.execution_id,
+            )
 
     def _collect_evidence(self, context: ExecutionContext) -> Dict[str, Any]:
         """Gather the deterministic facts governance rules evaluate."""

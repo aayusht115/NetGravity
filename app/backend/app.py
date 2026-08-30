@@ -58,6 +58,7 @@ def api_status():
         "mode": "interactive",
         "orchestrator": _ORCHESTRATOR_STATUS,
         "ingestion": _INGESTION_STATUS,
+        "action_agent": _ACTION_AGENT_STATUS,
     })
 
 
@@ -110,6 +111,44 @@ try:
     }
 except Exception as exc:  # noqa: BLE001 - static demo must remain available
     _INGESTION_STATUS = {"mounted": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Action Agent API (inbound-email webhook)
+# ---------------------------------------------------------------------------
+# A dispatcher, not a decision-maker — see netgravity/action_agent/. Runs in
+# stub mode with no outbound email credential configured; the inbound
+# webhook route exists regardless, since it only ever receives, never sends
+# on its own initiative.
+
+_ACTION_AGENT_STATUS = {"mounted": False, "reason": "not initialised"}
+try:
+    from netgravity.action_agent.api import create_action_agent_blueprint
+
+    app.register_blueprint(create_action_agent_blueprint())
+    _ACTION_AGENT_STATUS = {
+        "mounted": True,
+        "url_prefix": "/api",
+    }
+except Exception as exc:  # noqa: BLE001 - static demo must remain available
+    _ACTION_AGENT_STATUS = {"mounted": False, "reason": f"{type(exc).__name__}: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Deep-link placeholder pages (PATCH POINT — see the module docstring)
+# ---------------------------------------------------------------------------
+# Gives Action Agent emails' links somewhere real to land before the
+# frontend owns /ingestion/<id>/review and /insights/<id>. Remove this block
+# (or point NETGRAVITY_APP_BASE_URL at the frontend instead) once it does.
+
+try:
+    from netgravity.action_agent.deep_link_placeholder import (
+        create_deep_link_placeholder_blueprint,
+    )
+
+    app.register_blueprint(create_deep_link_placeholder_blueprint())
+except Exception as exc:  # noqa: BLE001 - static demo must remain available
+    print(f"deep-link placeholder not mounted: {type(exc).__name__}: {exc}")
 
 
 if __name__ == "__main__":

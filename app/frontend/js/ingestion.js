@@ -16,7 +16,7 @@
  * STATUS: PROTOTYPE / MOCKED
  */
 
-import { DATA_QUALITY, CONTRACT_DEMO } from './data.js';
+import { DATA_QUALITY, CONTRACT_DEMO, SOURCE_CONTACTS } from './data.js';
 
 const SCHEMA_FIELDS = [
   'Customer ID', 'Distribution Centre', 'Demand Market', 'Service Level SLA',
@@ -676,6 +676,10 @@ function renderExcelIngestion(file) {
               <div><div class="ing-file-summary-meta-label">Last uploaded</div><div class="ing-file-summary-meta-value">Just now</div></div>
             </div>
             <div class="ing-file-summary-badge"><span class="ing-status-chip">${I.checkCircle}File processed successfully</span></div>
+            <div class="ing-file-summary-meta-label" style="margin-top:10px">Source contact (for missing-data emails)</div>
+            <input id="ing-source-contact-input" type="email" placeholder="name@company.com"
+                   value="${ingEsc((SOURCE_CONTACTS[file.id] || {}).email || '')}"
+                   style="margin-top:4px;width:100%;padding:5px 8px;border:1px solid var(--border-light);border-radius:var(--r-sm);font-size:12px">
           </div>
         </div>
       </div>
@@ -733,6 +737,12 @@ function refreshMapStats(file) {
 
 function bindExcelIngestion(file) {
   let reviewOnly = false;
+
+  document.getElementById('ing-source-contact-input')?.addEventListener('change', e => {
+    const email = e.target.value.trim();
+    if (email) SOURCE_CONTACTS[file.id] = { ...(SOURCE_CONTACTS[file.id] || {}), email };
+    else delete SOURCE_CONTACTS[file.id];
+  });
 
   document.getElementById('ing-map-table-slot')?.addEventListener('change', e => {
     const sel = e.target.closest('[data-row-select]');

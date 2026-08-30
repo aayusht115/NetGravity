@@ -207,6 +207,14 @@ def run_ingestion(
                 f"(all retained for audit)"
             )
 
+    # --- 3b. Data completeness (deterministic, no model call) -------------
+    if tabular_outcome is not None:
+        from netgravity.ingestion.completeness import check_completeness
+
+        completeness = check_completeness(tabular_outcome, has_contracts=bool(contracts))
+        report.missing_required = [m.as_dict() for m in completeness.missing_required]
+        report.missing_optional = [m.as_dict() for m in completeness.missing_optional]
+
     # --- 4. Assemble ------------------------------------------------------
     if not src.facilities or not src.products:
         report.extras["error"] = (
@@ -239,6 +247,18 @@ def run_ingestion(
     report.network_assembled = True
     report.counts = summarise(network)
     report.data_version = network.data_version
+
+    if report.missing_required:
+        # Structurally assembled (so the review/draft screens have something
+        # to show), but not usable for analysis: required fields are missing
+        # from named entities. Reuses the exact gate finalize() already
+        # checks (network_assembled) rather than adding a second one.
+        report.network_assembled = False
+        report.extras["missing_required_data"] = (
+            f"{len(report.missing_required)} required field(s) missing across "
+            f"named entities — see 'missing_required' for detail. This dataset "
+            f"cannot be finalized until they are provided."
+        )
 
     # --- 5. Engine's own pre-solve validation (reused, not duplicated) ----
     engine_report = validate_network(network)
