@@ -1945,6 +1945,39 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   border: 1px solid var(--border-light);
 }
 
+/* S10: Future Network View delta callouts, around (not inside) the map */
+.scn-future-callouts-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.scn-future-callouts-row:empty { margin-top: 0; }
+.scn-future-callout-chip {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  font-size: 11px;
+  line-height: 1.35;
+  min-width: 120px;
+  flex: 1 1 150px;
+}
+.scn-future-callout-chip .scn-fc-label {
+  color: var(--text-2);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  display: block;
+  margin-bottom: 2px;
+}
+.scn-future-callout-chip .scn-fc-value {
+  font-weight: 700;
+  color: var(--text-1);
+}
+.scn-future-callout-chip.good .scn-fc-value { color: var(--green); }
+.scn-future-callout-chip.bad .scn-fc-value { color: var(--red); }
+
 /* Multi-Scenario Table */
 .scn-multi-table-wrap {
   overflow-x: auto;
@@ -9127,11 +9160,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
         
 
         <!-- Settings Button on Bottom Left Corner -->
-        <div class="nav-item" id="nav-item-settings" title="Settings" style="margin: 6px 8px 12px; cursor:pointer;" onclick="alert('Netgravity Settings
-
-• API & MILP Optimization Engine
-• Data Ingestion Pipelines (SAP S/4HANA, Manhattan WMS, Oracle OTM)
-• Access Control & Team Permissions')">
+        <div class="nav-item" id="nav-item-settings" title="Settings" style="margin: 6px 8px 12px; cursor:pointer;">
           <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
             <circle cx="10" cy="10" r="3"/>
             <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.93 4.93l1.41 1.41M13.66 13.66l1.41 1.41M4.93 15.07l1.41-1.41M13.66 6.34l1.41-1.41"/>
@@ -9462,8 +9491,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
                 <span class="twin3d-stat-label">Active Corridors</span>
               </div>
               <div class="twin3d-stat">
-                <span class="twin3d-stat-value" id="map2d-state-label">Actual</span>
-                <span class="twin3d-stat-label">Network State</span>
+                <span class="twin3d-stat-value" id="map2d-cost-label">₹12.9L</span>
+                <span class="twin3d-stat-label">Network Cost</span>
               </div>
             </div>
           </div>
@@ -9482,8 +9511,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
                 <span class="twin3d-stat-label">Active Corridors</span>
               </div>
               <div class="twin3d-stat">
-                <span class="twin3d-stat-value" id="twin3d-state-label">Actual</span>
-                <span class="twin3d-stat-label">Network State</span>
+                <span class="twin3d-stat-value" id="twin3d-cost-label">₹12.9L</span>
+                <span class="twin3d-stat-label">Network Cost</span>
               </div>
             </div>
             <!-- Camera Controls Hint -->
@@ -9497,9 +9526,9 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
               <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#075985"></span>Demand Market</div>
               <div class="twin3d-legend-divider">
                 <div class="twin3d-legend-title">DC Color = Utilisation</div>
-                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b91c1c"></span>Critical (&gt;90%)</div>
-                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b45309"></span>Moderate (75–90%)</div>
-                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#047857"></span>Healthy (&lt;75%)</div>
+                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b91c1c"></span>Critical (&gt;95%)</div>
+                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b45309"></span>Stress (85–95%)</div>
+                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#047857"></span>Healthy (&lt;85%)</div>
               </div>
             </div>
           </div>
@@ -9670,11 +9699,19 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
                can flip between seeing each one's proposed network changes. -->
           <div class="scn-visual-context-card mt-lg">
             <div class="scn-table-header-row" style="margin-bottom:8px">
-              <div class="scn-table-title">Digital Twin — Visual Context</div>
+              <div class="flex items-center" style="gap:8px">
+                <div class="scn-table-title">Digital Twin — Visual Context</div>
+                <span class="text-xs text-muted" id="scn-map-state-label"></span>
+              </div>
               <div class="toggle-group" id="scn-map-toggle-group">
                 <!-- Populated by JS -->
               </div>
             </div>
+            <!-- Future Network View (S10) callouts — compact deltas around the
+                 existing map, sourced from the same functions S8's comparison
+                 table uses (computeScenarioDeltas/computeRowDelta), never
+                 recomputed here. Hidden/neutral when viewing Actual itself. -->
+            <div id="scn-future-callouts" class="scn-future-callouts-row"></div>
             <div class="scn-map-wrap" id="scenario-map-wrap">
               <div id="scenario-leaflet-map" style="width:100%;height:100%"></div>
             </div>
@@ -9685,8 +9722,11 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
             <div class="modal-box scenario-toolbox-modal">
               <div class="toolbox-header">
                 <div>
-                  <div class="card-title" style="font-size:16px">Create New Scenario</div>
-                  <div class="text-xs text-muted">Configure custom network intervention parameters for MILP evaluation.</div>
+                  <div class="flex items-center" style="gap:8px">
+                    <div class="card-title" style="font-size:16px">Create New Scenario</div>
+                    <span class="tag tag-primary" style="font-size:9.5px;padding:2px 7px">🧪 Hypothetical</span>
+                  </div>
+                  <div class="text-xs text-muted">Configure custom network intervention parameters for MILP evaluation. This never changes your Actual network data.</div>
                 </div>
                 <button class="btn btn-ghost btn-sm" id="btn-close-toolbox">✕</button>
               </div>
@@ -9748,6 +9788,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
                     <div id="toolbox-dynamic-fields">
                       <!-- Populated dynamically by JS -->
                     </div>
+                    <!-- Current → Proposed summary, kept in sync with the fields above -->
+                    <div class="text-xs" id="toolbox-current-proposed" style="margin-top:8px;padding:8px 10px;background:var(--bg-subtle);border-radius:var(--r-sm);border:1px solid var(--border-light)"></div>
                   </div>
                 </div>
 
@@ -9793,7 +9835,22 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
                 <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border-light)">
                   <button class="btn btn-secondary btn-sm" id="btn-cancel-toolbox">Cancel</button>
                   <button class="btn btn-primary" id="btn-run-toolbox-scenario" style="padding:10px 24px;font-size:13.5px;font-weight:700">
-                    <span>▶ Run Scenario</span>
+                    <span>Preview Scenario →</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Scenario Preview (shown before execution — P0 #7) -->
+              <div id="toolbox-preview-body" class="hidden">
+                <div class="tag tag-primary" style="font-size:9.5px;padding:2px 7px;display:inline-block;margin-bottom:10px">🧪 Hypothetical — will not affect Actual data</div>
+                <div class="card-title" style="font-size:14.5px;margin-bottom:10px">Preview: <span id="preview-scenario-name"></span></div>
+                <div id="preview-summary-rows" style="display:flex;flex-direction:column;gap:6px"></div>
+                <div class="text-xs text-muted" style="margin:12px 0 6px;font-weight:700">Expected direction of impact</div>
+                <div id="preview-kpi-chips" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+                <div class="flex items-center justify-between mt-lg pt-md" style="border-top:1px solid var(--border-light)">
+                  <button class="btn btn-secondary btn-sm" id="btn-back-to-toolbox-form">← Back to edit</button>
+                  <button class="btn btn-primary" id="btn-confirm-run-scenario" style="padding:10px 24px;font-size:13.5px;font-weight:700">
+                    <span>▶ Confirm &amp; Run Scenario</span>
                   </button>
                 </div>
               </div>
@@ -10159,6 +10216,45 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     </div>
   </div>
 
+  <!-- Metric Drilldown Modal (Scenario Planning) — the single authoritative
+       evidence trail for a KPI (S9: Explainability Drilldown). Only the
+       Capacity Risk row currently opens this (see scenarios.js) — other
+       metric branches exist in openMetricDrilldown() but stay unwired for
+       now so this doesn't duplicate S6's Total Network Cost ownership. -->
+  <div class="modal-overlay" id="modal-metric-drilldown">
+    <div class="modal-box" style="max-width:480px">
+      <div class="toolbox-header">
+        <div class="card-title" style="font-size:16px" id="drilldown-title">Metric Drill-Down</div>
+        <button class="btn btn-ghost btn-sm" id="modal-close-drilldown">✕</button>
+      </div>
+      <span class="provenance-badge model-fact" id="drilldown-provenance-tag" style="margin-bottom:12px;display:inline-block">PROVENANCE</span>
+      <div id="drilldown-body-content"></div>
+      <div style="margin-top:16px;text-align:right">
+        <button class="btn btn-secondary" id="btn-close-drilldown-bottom">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- S12: Signal Guardrails & Admin — replaces the old alert() stub that
+       used to sit on the Settings nav item. Populated from GOVERNANCE_TIERS
+       and SYSTEM_STATUS (data.js), both previously fully authored but never
+       wired into any screen. Trigger keywords/buckets and Product Master
+       have no backing data anywhere in this build, so they show an
+       explicit "Not available" rather than invented content. -->
+  <div class="modal-overlay" id="modal-admin-settings">
+    <div class="modal-box" style="max-width:640px">
+      <div class="toolbox-header">
+        <div class="card-title" style="font-size:16px">Netgravity Settings</div>
+        <button class="btn btn-ghost btn-sm" id="btn-close-admin-settings">✕</button>
+      </div>
+      <div class="text-xs text-muted" style="margin-bottom:14px">Admin &amp; configuration — not an analytics dashboard.</div>
+      <div id="admin-settings-body"></div>
+      <div style="margin-top:16px;text-align:right">
+        <button class="btn btn-secondary" id="btn-close-admin-settings-bottom">Close</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
 /* ═════════ data.js ═════════ */
 /**
@@ -10187,11 +10283,6 @@ const DCS = [
   { id: "DC_GUWAHATI", name: "Guwahati DC", city: "Guwahati", state: "Assam", lat: 26.14, lng: 91.74, capacity: 4000, throughput: 2100, fixedCost: 65, handlingCost: 3.8, region: "Northeast", status: "EXISTING", utilPct: 52.5 },
 ];
 
-const FACILITIES = [
-  ...PLANTS.map((p) => ({ ...p, type: 'Plant' })),
-  ...DCS.map((d) => ({ ...d, type: 'DC' })),
-];
-
 const MARKETS = [
   { id: "MKT_DELHI", name: "Delhi", lat: 28.70, lng: 77.10, demand: 4200, slaDays: 2, priority: "High", region: "North" },
   { id: "MKT_MUMBAI", name: "Mumbai", lat: 19.08, lng: 72.88, demand: 3800, slaDays: 2, priority: "High", region: "West" },
@@ -10203,6 +10294,39 @@ const MARKETS = [
   { id: "MKT_JAIPUR", name: "Jaipur", lat: 26.91, lng: 75.79, demand: 1500, slaDays: 3, priority: "Medium", region: "North" },
   { id: "MKT_LUCKNOW", name: "Lucknow", lat: 26.85, lng: 80.95, demand: 1400, slaDays: 3, priority: "Medium", region: "North" },
   { id: "MKT_GUWAHATI", name: "Guwahati", lat: 26.14, lng: 91.74, demand: 1100, slaDays: 4, priority: "Low", region: "Northeast" },
+];
+
+// ─── S2: de-overlap co-located nodes ──────────────────────────
+// Several plants/DCs/markets share a city and were given the exact same
+// lat/lng (e.g. Kolkata Plant, Kolkata DC and the Kolkata market all sit at
+// 22.57,88.36), which made them render as fully stacked, indistinguishable
+// icons on both the 2D Leaflet map and the 3D twin — neither has any
+// de-collision logic of its own. Fixed once here, at the shared data
+// source, so every consumer (map.js, twin3d.js, lane endpoints, FACILITIES)
+// sees already-separated coordinates. This is a schematic nudge for
+// legibility, not a claim about real inter-facility distance.
+function deoverlapNodes(nodeArrays) {
+  const groups = new Map();
+  nodeArrays.flat().forEach((n) => {
+    const key = `${n.lat.toFixed(4)},${n.lng.toFixed(4)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(n);
+  });
+  const FAN_RADIUS = 0.9; // degrees — visibly separates icons on the India-wide view
+  groups.forEach((nodes) => {
+    if (nodes.length < 2) return;
+    nodes.forEach((n, i) => {
+      const angle = (2 * Math.PI * i) / nodes.length;
+      n.lat += FAN_RADIUS * Math.sin(angle);
+      n.lng += FAN_RADIUS * Math.cos(angle);
+    });
+  });
+}
+deoverlapNodes([PLANTS, DCS, MARKETS]);
+
+const FACILITIES = [
+  ...PLANTS.map((p) => ({ ...p, type: 'Plant' })),
+  ...DCS.map((d) => ({ ...d, type: 'DC' })),
 ];
 
 // ─── LANES (key corridors with cost, distance, lead time) ───
@@ -11399,16 +11523,97 @@ function formatNumber(value) {
   return value.toLocaleString("en-IN");
 }
 
+// Single owner for the utilization risk bands used everywhere in the app
+// (KPI tiles, map markers, facility panels, legends) — Healthy <85%,
+// Stress 85-95%, Critical >=95%, matching the audited KPI Formula/Logic
+// Verification's DC Capacity Utilization thresholds. Every other place
+// that needs a color, label or tag class for a utilization number should
+// call one of these three functions rather than re-testing the raw
+// percentage, so the band can never drift out of sync between screens.
 function getUtilColor(pct) {
-  if (pct >= 90) return "#dc2626";
-  if (pct >= 75) return "#f59e0b";
+  if (pct >= 95) return "#dc2626";
+  if (pct >= 85) return "#f59e0b";
   return "#22c55e";
 }
 
 function getUtilLabel(pct) {
-  if (pct >= 90) return "Critical";
-  if (pct >= 75) return "Moderate";
+  if (pct >= 95) return "Critical";
+  if (pct >= 85) return "Stress";
   return "Healthy";
+}
+
+function getUtilTagClass(pct) {
+  if (pct >= 95) return "tag-danger";
+  if (pct >= 85) return "tag-warning";
+  return "tag-success";
+}
+
+// ─── S6: Optimized Base Case (single owner) ──────────────────────────
+// The ONE authoritative computation of "today's facility footprint held
+// fixed, only routing/allocation re-optimized" — Z = ΣC_ij·x_ij (transport)
+// + ΣF_j·y_j (fixed facility, unchanged since footprint is fixed) +
+// ΣP_unmet·u_k (shortage penalty, ₹10,000/unit) + SLA-pen, per the KPI
+// Formula/Logic Verification's Total Network Cost definition.
+//
+// This is NOT the same figure as SCENARIOS' SCN_REBALANCE ("Recommended"):
+// that scenario allows volume reallocation across plants and is a candidate
+// action a user opts into, whereas the Optimized Base Case is the routing-
+// only floor achievable with zero footprint change. Do not conflate them —
+// every screen that shows a "Baseline Cost" / "Optimized Cost" / "Savings"
+// figure for S6 must call this function rather than reading SCENARIOS or
+// getNetworkKpis() (both are separate, independently-owned figures).
+//
+// Provenance: DEMO. No live optimizer is wired into this prototype, so
+// these numbers are hand-authored to be internally consistent (fixed cost
+// unchanged, transport cost improved, shortage penalty cleared by better
+// routing) rather than fabricated as if they were a solver result. Once a
+// real deterministic engine is wired in, this function's body — not its
+// call sites — is what gets replaced, and `source` becomes DETERMINISTIC_ENGINE.
+function getOptimizedBaseCase() {
+  const baseline = {
+    transportCost: 640000,
+    fixedCost: 480000,
+    variableCost: 145000,
+    unmetPenalty: 20000, // 2 units unmet demand @ ₹10,000/unit
+    slaPenalty: 0,
+    sla: 91.2,
+    fillRate: 89.5,
+    avgUtilization: 78.0,
+    maxUtilization: 94.0, // DC Delhi NCR — Stress band
+    inventoryCost: 95000,
+    carbonKgCo2e: 342000,
+    avgDistanceKm: 412,
+  };
+  baseline.totalCost = baseline.transportCost + baseline.fixedCost + baseline.variableCost
+    + baseline.unmetPenalty + baseline.slaPenalty;
+
+  const optimized = {
+    transportCost: 590000,
+    fixedCost: baseline.fixedCost, // footprint held fixed — must equal baseline
+    variableCost: 142000,
+    unmetPenalty: 0, // routing resolves the shortfall that caused baseline's penalty
+    slaPenalty: 0,
+    sla: 96.5,
+    fillRate: 95.8,
+    avgUtilization: 82.0,
+    maxUtilization: 84.0, // DC Delhi NCR relieved from Stress into Healthy band
+    inventoryCost: 92000,
+    carbonKgCo2e: 318000,
+    avgDistanceKm: 378,
+  };
+  optimized.totalCost = optimized.transportCost + optimized.fixedCost + optimized.variableCost
+    + optimized.unmetPenalty + optimized.slaPenalty;
+
+  const savingsAbs = baseline.totalCost - optimized.totalCost;
+  const savingsPct = +((savingsAbs / baseline.totalCost) * 100).toFixed(1);
+
+  return {
+    source: "DEMO",
+    footprintChange: "None (zero CapEx — same facility set as Actual)",
+    baseline: { ...baseline, capacityHeadroomPct: +(100 - baseline.maxUtilization).toFixed(1) },
+    optimized: { ...optimized, capacityHeadroomPct: +(100 - optimized.maxUtilization).toFixed(1) },
+    savings: { abs: savingsAbs, pct: savingsPct },
+  };
 }
 
 /* ═════════ basemap-data.js ═════════ */
@@ -11951,9 +12156,9 @@ function addLegend(map, isCompact = false) {
         <div style="display:flex;align-items:center">${iconChip(COLORS.market, '📦')}Demand Market</div>
         <div style="margin-top:7px;padding-top:7px;border-top:1px solid #eee">
           <div style="font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">DC Ring = Utilisation</div>
-          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-right:7px"></span>Critical (&gt;90%)</div>
-          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:7px"></span>Moderate (75–90%)</div>
-          <div style="display:flex;align-items:center"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:7px"></span>Healthy (&lt;75%)</div>
+          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-right:7px"></span>Critical (&gt;95%)</div>
+          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:7px"></span>Stress (85–95%)</div>
+          <div style="display:flex;align-items:center"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:7px"></span>Healthy (&lt;85%)</div>
         </div>
       `;
     }
@@ -12368,10 +12573,13 @@ function createDC3D(data, pos) {
   const group = new THREE.Group();
   group.position.copy(pos);
 
-  // Utilization Color Coding
+  // Utilization Color Coding — same Healthy/Stress/Critical band data.js's
+  // getUtilLabel owns everywhere else (85%/95%), just re-expressed in the
+  // 3D theme's own color set.
   let dcColor = THEME_COLORS.dcHealthy;
-  if (data.utilPct >= 90) dcColor = THEME_COLORS.dcCritical;
-  else if (data.utilPct >= 75) dcColor = THEME_COLORS.dcWarning;
+  const utilBand = getUtilLabel(data.utilPct);
+  if (utilBand === 'Critical') dcColor = THEME_COLORS.dcCritical;
+  else if (utilBand === 'Stress') dcColor = THEME_COLORS.dcWarning;
 
   const radius = 1.3 + (data.utilPct / 100) * 0.7;
 
@@ -12408,7 +12616,7 @@ function createDC3D(data, pos) {
   const beamMat = new THREE.MeshBasicMaterial({
     color: dcColor,
     transparent: true,
-    opacity: data.utilPct >= 90 ? 0.45 : 0.25,
+    opacity: utilBand === 'Critical' ? 0.45 : 0.25,
   });
   const beam = new THREE.Mesh(beamGeo, beamMat);
   beam.position.y = 8.5;
@@ -13604,7 +13812,7 @@ function renderFacilityLaneFlowsChart(canvasId, connectedLanes, facilityId) {
 // ─── State ──────────────────────────────────────────────────
 // Which metric rows the comparison table shows — user-controlled via
 // "Customize metrics" (see renderCustomizeMenu). Defaults to the 4 "key" rows.
-let multiVisibleKeys = ['totalCost', 'sla', 'capacityRisk', 'avgUtil'];
+let multiVisibleKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk'];
 // Up to 3 scenarios shown alongside baseline — the single source of truth
 // for both the comparison table and the Digital Twin map's toggle group.
 let multiSelectedIds = ['SCN_REBALANCE', 'SCN_USER_1'];
@@ -13708,28 +13916,46 @@ const ALL_METRIC_DEFS = {
 };
 
 // ─── Deep-Dive / Comparison table rows ───────────────────────
-// The 4 "key" rows shown by default in both the single-scenario and
-// multi-scenario tables (Dump/Scenario comparison deepdive updated.png,
-// Dump/Multiple scenario comparison updated.png). "View detailed
-// comparison" appends DETAIL_EXTRA_ROWS underneath.
+// The default-visible rows in the multi-scenario table (Dump/Scenario
+// comparison deepdive updated.png, Dump/Multiple scenario comparison
+// updated.png), picked per the global KPI priority order (Cost > Savings >
+// Service/SLA > Capacity/Risk) rather than the original mockup's set, since
+// S8's spec now requires 9 comparison dimensions and not all of them can be
+// on by default without crowding. "View detailed comparison" / the
+// customize-metrics picker exposes every row in DETAIL_EXTRA_ROWS.
 const DEEPDIVE_ROWS = [
   { key: 'totalCost', label: 'Total Network Cost', sub: '(₹ Lakh per month)', icon: '💰', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'costChange', label: 'Savings %', sub: '(vs baseline)', icon: '💹', unit: 'percent', kind: 'lowerBetter',
+    fmt: (v) => (v === 0 ? '—' : `${v < 0 ? '↓' : '↑'} ${Math.abs(v)}%`) },
   { key: 'sla', label: 'Service Level', sub: '(% on-time delivery)', icon: '🛡️', unit: 'percent', kind: 'higherBetter' },
   { key: 'capacityRisk', label: 'Capacity Risk', sub: '(Overall network)', icon: '⚠️', unit: 'categorical', kind: 'categorical' },
-  { key: 'avgUtil', label: 'Utilization', sub: '(Network avg.)', icon: '📈', unit: 'percent', kind: 'lowerBetter' },
 ];
 
+// Available via the customize-metrics picker (not shown by default) —
+// Fill Rate and Risk Factor are P0-required dimensions for S8 but have no
+// backing data anywhere in this build (confirmed during the S9 pass: no
+// RF/REI data exists, and no scenario carries a fill-rate field), so their
+// rows render "Not available" rather than a fabricated number. Keeping them
+// out of the default view avoids every user seeing a "Not available" row
+// unasked; putting them in the picker keeps the gap honest and discoverable.
 const DETAIL_EXTRA_ROWS = [
+  { key: 'avgUtil', label: 'Avg Utilization', sub: '(Network avg.)', icon: '📈', unit: 'percent', kind: 'lowerBetter' },
+  { key: 'maxUtil', label: 'Max Utilization', sub: '(Peak facility)', icon: '📊', unit: 'percent', kind: 'lowerBetter' },
   { key: 'transportCost', label: 'Transport Cost', sub: '(₹ Lakh per month)', icon: '🚛', unit: 'currency', kind: 'lowerBetter' },
   { key: 'fixedCost', label: 'Fixed Facility Cost', sub: '(₹ Lakh per month)', icon: '🏭', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'inventoryCost', label: 'Inventory Cost', sub: '(₹ Lakh per month)', icon: '📦', unit: 'currency', kind: 'lowerBetter' },
   { key: 'inventoryDays', label: 'Inventory Days', sub: '(Days on hand)', icon: '📦', unit: 'number', kind: 'lowerBetter' },
   { key: 'carbonKg', label: 'Scope 3 Carbon', sub: '(kg CO2 per month)', icon: '🌱', unit: 'number', kind: 'lowerBetter' },
+  { key: 'fillRate', label: 'Fill Rate', sub: '(On-time fulfillment)', icon: '✅', unit: 'percent', kind: 'higherBetter', unavailable: true },
+  { key: 'riskFactor', label: 'Risk Factor (RF)', sub: '(chain explained in Scenario evidence)', icon: '🧭', unit: 'number', kind: 'higherBetter', unavailable: true },
 ];
 
 const ALL_TABLE_ROWS = [...DEEPDIVE_ROWS, ...DETAIL_EXTRA_ROWS];
 
 function fmtRowValue(row, v) {
+  if (row.unavailable) return 'Not available';
   if (v === undefined || v === null) return '—';
+  if (row.fmt) return row.fmt(v);
   if (row.unit === 'currency') return `₹${(v / 100000).toFixed(2)}L`;
   if (row.unit === 'percent') return `${v}%`;
   if (row.unit === 'number') return formatNumber(v);
@@ -13756,9 +13982,16 @@ function scenarioDisplayName(s) {
 
 // Compares a scenario's value against baseline for one row. Returns
 // { text, good } where good is true/false, or null for "no material
-// change" (categorical rows always render as "—", matching the mockups).
+// change". Categorical rows (Capacity Risk) resolve via riskRank rather
+// than always showing "—" — a scenario that improves risk should say so.
 function computeRowDelta(row, baseVal, scnVal) {
-  if (row.kind === 'categorical') return { text: '—', good: null };
+  if (row.unavailable) return { text: '—', good: null };
+  if (row.kind === 'categorical') {
+    const baseRank = riskRank(baseVal);
+    const scnRank = riskRank(scnVal);
+    if (baseRank === scnRank) return { text: 'Unchanged', good: null };
+    return scnRank < baseRank ? { text: 'Improved', good: true } : { text: 'Worsened', good: false };
+  }
   const diff = scnVal - baseVal;
   if (Math.abs(diff) < 0.001) return { text: '—', good: null };
   const text = row.unit === 'percent'
@@ -13770,11 +14003,14 @@ function computeRowDelta(row, baseVal, scnVal) {
 
 // Shared deltas used by both the KPI cards and the "NetGravity's take"
 // checklist, so the two always agree with each other and with the table.
+// Looks rows up by key (not position) — DEEPDIVE_ROWS' order isn't stable
+// now that Savings % sits between Total Cost and Service Level.
 function computeScenarioDeltas(baseline, scn) {
+  const rowByKey = (key) => ALL_TABLE_ROWS.find((r) => r.key === key);
   return {
-    cost: computeRowDelta(DEEPDIVE_ROWS[0], baseline.totalCost, scn.totalCost),
-    sla: computeRowDelta(DEEPDIVE_ROWS[1], baseline.sla, scn.sla),
-    util: computeRowDelta(DEEPDIVE_ROWS[3], baseline.avgUtil, scn.avgUtil),
+    cost: computeRowDelta(rowByKey('totalCost'), baseline.totalCost, scn.totalCost),
+    sla: computeRowDelta(rowByKey('sla'), baseline.sla, scn.sla),
+    util: computeRowDelta(rowByKey('avgUtil'), baseline.avgUtil, scn.avgUtil),
     riskGood: riskRank(scn.capacityRisk) < riskRank(baseline.capacityRisk),
   };
 }
@@ -13798,6 +14034,7 @@ function initScenarios() {
     });
     renderScenarioDigitalTwin('scenario-leaflet-map', mapActiveId, 'scenario');
     invalidateMapSize('scenario-leaflet-map');
+    renderFutureNetworkCallouts();
   }, 60);
 }
 
@@ -13930,6 +14167,71 @@ function updateScenarioMap() {
   const mode = mapActiveId === 'SCN_ACTUAL' ? 'baseline' : 'scenario';
   renderScenarioDigitalTwin('scenario-leaflet-map', mapActiveId, mode);
   invalidateMapSize('scenario-leaflet-map');
+  renderFutureNetworkCallouts();
+}
+
+// ─── S10: Future Network View callouts ────────────────────────
+// Compact deltas around the existing map. Cost/Service/Risk reuse
+// computeScenarioDeltas/computeRowDelta — the exact functions S8's
+// comparison table calls — rather than recomputing anything here. Facility
+// and lane/flow changes read straight from the scenario's own
+// assumptions/changes fields (already authored per scenario), never
+// invented for this callout.
+function renderFutureNetworkCallouts() {
+  const container = document.getElementById('scn-future-callouts');
+  const stateLabel = document.getElementById('scn-map-state-label');
+  if (!container) return;
+
+  const baseline = SCENARIOS.find((s) => s.id === 'SCN_ACTUAL') || SCENARIOS[0];
+  const scn = SCENARIOS.find((s) => s.id === mapActiveId) || baseline;
+  const isBaseline = scn.id === 'SCN_ACTUAL';
+
+  if (stateLabel) {
+    stateLabel.textContent = isBaseline
+      ? 'Showing: Actual (observed baseline)'
+      : `Showing: ${scenarioDisplayName(scn)} — Future Network`;
+  }
+
+  if (isBaseline) {
+    container.innerHTML = `
+      <div class="scn-future-callout-chip">
+        <span class="scn-fc-label">State</span>
+        <span class="scn-fc-value">Actual — no scenario deltas to show</span>
+      </div>`;
+    return;
+  }
+
+  const deltas = computeScenarioDeltas(baseline, scn);
+  const facilityFootprint = scn.assumptions?.find((a) => a.label === 'Facility Footprint')?.value || 'Not available';
+  const laneChanges = scn.changes || [];
+  const laneSummary = laneChanges.length
+    ? `${laneChanges.length} change${laneChanges.length === 1 ? '' : 's'} — ${laneChanges[0].item} ${laneChanges[0].change}`
+    : 'Not available';
+
+  const riskRow = ALL_TABLE_ROWS.find((r) => r.key === 'capacityRisk');
+  const riskDelta = computeRowDelta(riskRow, baseline.capacityRisk, scn.capacityRisk);
+  const toneOf = (good) => (good === true ? 'good' : good === false ? 'bad' : '');
+
+  const chips = [
+    { label: 'Facility changes', value: facilityFootprint, tone: '' },
+    { label: 'Lane / flow changes', value: laneSummary, tone: '' },
+    { label: 'Cost impact', value: deltas.cost.text, tone: toneOf(deltas.cost.good) },
+    { label: 'Service impact', value: deltas.sla.text, tone: toneOf(deltas.sla.good) },
+    { label: 'Risk impact', value: `${baseline.capacityRisk} → ${scn.capacityRisk} (${riskDelta.text})`, tone: toneOf(riskDelta.good) },
+  ];
+
+  // P1: Carbon impact, only if the scenario has the field — never fabricated.
+  if (typeof scn.carbonKg === 'number' && typeof baseline.carbonKg === 'number') {
+    const carbonRow = ALL_TABLE_ROWS.find((r) => r.key === 'carbonKg');
+    const carbonDelta = computeRowDelta(carbonRow, baseline.carbonKg, scn.carbonKg);
+    chips.push({ label: 'Carbon impact', value: carbonDelta.text, tone: toneOf(carbonDelta.good) });
+  }
+
+  container.innerHTML = chips.map((c) => `
+    <div class="scn-future-callout-chip ${c.tone}">
+      <span class="scn-fc-label">${c.label}</span>
+      <span class="scn-fc-value">${c.value}</span>
+    </div>`).join('');
 }
 
 // ─── Render Multi-Scenario Comparison Table (up to 3 scenarios) ──
@@ -13962,8 +14264,14 @@ function renderMultiScenarioTable() {
         })
         .join('');
 
+      // S9: Capacity Risk is the one row wired to the metric drilldown
+      // (evidence trail for the risk chain). Other rows deliberately stay
+      // non-clickable this pass — e.g. totalCost's drilldown branch would
+      // duplicate S6's Total Network Cost ownership, which is out of scope
+      // here and gets fixed when S6 is wired in, not by exposing it via S9.
+      const isRiskRow = row.key === 'capacityRisk';
       return `
-        <tr>
+        <tr${isRiskRow ? ` class="scn-risk-row-clickable" data-metric-key="capacityRisk" data-scenario-id="${selected[0]?.id || ''}"` : ''}>
           <td class="scn-row2-metric">${scenarioRowMetricCellHtml(row)}</td>
           <td class="${baseCls}">${fmtRowValue(row, baseVal)}</td>
           ${cellsHtml}
@@ -13983,6 +14291,12 @@ function renderMultiScenarioTable() {
       <tbody>${rowsHtml}</tbody>
     </table>
   `;
+
+  container.querySelectorAll('tr[data-metric-key="capacityRisk"]').forEach((tr) => {
+    tr.style.cursor = 'pointer';
+    tr.title = 'View risk evidence';
+    tr.addEventListener('click', () => openMetricDrilldown('capacityRisk', tr.dataset.scenarioId));
+  });
 }
 
 // ─── "NetGravity's take" card — single & multi-scenario views ───
@@ -14249,7 +14563,19 @@ function openMetricDrilldown(metricKey, scenarioId) {
       </div>
     `;
   } else if (metricKey === 'capacityRisk' || metricKey === 'delhiUtil' || metricKey === 'avgUtil') {
+    // S9 P0 coverage for the risk chain: KPI+value (chips above), source/
+    // state (this row), contributing factors, threshold, deterministic
+    // evidence (the two boxes below — unchanged from before this pass) and
+    // an AI-written explanation kept visibly separate via its own
+    // provenance-badge, per the "never show RF alone" rule's intent — since
+    // this build has no REI/RF/VaR data at all, that's stated explicitly
+    // as Not available rather than a fabricated score.
+    const baselineName = scenarioDisplayName(baseline);
+    const scenarioName = scenarioDisplayName(scn);
     detailHtml = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:11.5px;color:var(--text-2)">
+        <span>State: <strong>${baselineName}</strong> vs <strong>${scenarioName}</strong></span>
+      </div>
       <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">
         Projected peak utilization for December demand surge (+14.2% YoY growth).
       </div>
@@ -14262,6 +14588,26 @@ function openMetricDrilldown(metricKey, scenarioId) {
           <span class="text-xs text-muted">Delhi NCR DC (Scenario)</span>
           <div style="font-size:16px;font-weight:800;color:var(--green)">91% (Safe Headroom)</div>
         </div>
+      </div>
+      <div style="font-size:12px;margin:12px 0 4px;color:var(--text-1);font-weight:700">Governance threshold</div>
+      <div style="font-size:12.5px;color:var(--text-2);margin-bottom:12px">
+        Utilization ≥95% is classified Critical; 85–95% is Stress. Delhi NCR's baseline projection (108%) breaches the Critical threshold; the scenario's 91% falls to Stress, below the breach line.
+      </div>
+      <div style="font-size:12px;margin:12px 0 4px;color:var(--text-1);font-weight:700">Contributing factors</div>
+      <ul style="font-size:12.5px;color:var(--text-2);margin:0 0 14px 18px;padding:0">
+        <li>December demand forecast: +14.2% YoY growth in North India</li>
+        <li>Baddi → Delhi NCR is the network's highest-volume corridor</li>
+        <li>Delhi NCR has no spare capacity headroom at baseline; Kolkata DC has 41% headroom available</li>
+      </ul>
+      <div style="font-size:12px;margin:12px 0 4px;color:var(--text-1);font-weight:700">Risk chain (P → REI → RF)</div>
+      <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;font-style:italic">
+        Not available — this build does not compute Facility REI or Governed Risk Factor (RF). The label above is a categorical risk read of the utilization projection only, not a synthesized RF score.
+      </div>
+      <span class="provenance-badge model-fact">MODEL FACT — evidence above</span>
+      <hr style="border:none;border-top:1px solid var(--border-light);margin:14px 0">
+      <span class="provenance-badge ai-assessment">AI ASSESSMENT</span>
+      <div style="font-size:12.5px;color:var(--text-2);margin-top:8px">
+        Based on the utilization projection and corridor concentration above, Delhi NCR is likely to breach capacity in December without intervention; reallocating volume toward Kolkata's spare capacity is the most direct mitigation available today.
       </div>
     `;
   } else {
@@ -14293,8 +14639,10 @@ function openCreateToolbox() {
   if (!modal) return;
 
   const formBody = document.getElementById('toolbox-form-body');
+  const previewBody = document.getElementById('toolbox-preview-body');
   const execView = document.getElementById('agent-execution-view');
   if (formBody) formBody.classList.remove('hidden');
+  if (previewBody) previewBody.classList.add('hidden');
   if (execView) execView.classList.add('hidden');
 
   const nameInput = document.getElementById('toolbox-scenario-name');
@@ -14380,13 +14728,121 @@ function renderToolboxDynamicFields(type) {
       </div>
     `;
   }
+
+  // P0 #4/#5: keep the Current → Proposed line in sync with whatever
+  // fields this type just rendered. Reassigning oninput/onchange (rather
+  // than addEventListener) is safe to call on every render — no listener
+  // stacking, since the container's fields are fully replaced each time.
+  updateCurrentProposed(type);
+  container.oninput = () => updateCurrentProposed(type);
+  container.onchange = () => updateCurrentProposed(type);
+}
+
+// ─── Current → Proposed summary (P0 #4/#5) ───────────────────
+// Reuses fields already on the facility (fac.capacity) or already present
+// elsewhere in this exact modal (the 95% SLA constraint default) rather
+// than inventing new baseline numbers. Where no honest baseline exists
+// (zone-level demand/transport cost), shows "Not available" instead.
+function updateCurrentProposed(type) {
+  const el = document.getElementById('toolbox-current-proposed');
+  if (!el) return;
+  let currentText = 'Not available';
+  let proposedText = 'Not available';
+
+  if (type === 'CHANGE_CAPACITY') {
+    const fac = DCS.find((d) => d.id === document.getElementById('toolbox-facility')?.value);
+    const direction = document.getElementById('toolbox-direction')?.value;
+    const amount = Number(document.getElementById('toolbox-amount')?.value || 0);
+    if (fac) {
+      currentText = `${formatNumber(fac.capacity)} units/day`;
+      const proposed = direction === 'DECREASE' ? fac.capacity - amount : fac.capacity + amount;
+      proposedText = `${formatNumber(Math.max(0, proposed))} units/day`;
+    }
+  } else if (type === 'OPEN_FACILITY') {
+    currentText = 'Not in network today';
+    proposedText = 'New facility added (zero baseline throughput)';
+  } else if (type === 'CLOSE_FACILITY') {
+    const fac = DCS.find((d) => d.id === document.getElementById('toolbox-facility')?.value);
+    currentText = fac ? `${formatNumber(fac.capacity)} units/day (Active)` : 'Active';
+    proposedText = '0 units/day (Closed — removed from network)';
+  } else {
+    const amount = Number(document.getElementById('toolbox-amount')?.value || 0);
+    const zone = document.getElementById('toolbox-zone')?.selectedOptions?.[0]?.textContent || 'selected zone';
+    if (type === 'CHANGE_SLA') {
+      currentText = '95% (network SLA constraint)';
+      proposedText = `${95 + amount}%`;
+    } else {
+      currentText = 'Not available';
+      proposedText = `${amount > 0 ? '+' : ''}${amount}% in ${zone}`;
+    }
+  }
+
+  el.innerHTML = `<strong>Current:</strong> ${currentText} &nbsp;→&nbsp; <strong>Proposed:</strong> ${proposedText}`;
+}
+
+// ─── Scenario Preview (P0 #7) ─────────────────────────────────
+// One confirmation step between the form and the actual solver run — a
+// summary of exactly what will be evaluated, plus P1's qualitative KPI
+// direction chips. No numeric KPI estimate is shown here: the real
+// evaluation only happens after "Confirm & Run", so any number here would
+// be fabricated ahead of the solver, not sourced from it.
+const KPI_DIRECTION_BY_TYPE = {
+  CHANGE_CAPACITY: { Cost: '↑ Likely (CapEx)', Service: '↑ Likely', Capacity: '↓ Risk likely', Risk: '↓ Likely' },
+  OPEN_FACILITY: { Cost: '↑ Likely (CapEx)', Service: '↑ Likely', Capacity: '↓ Risk likely', Risk: '↓ Likely' },
+  CLOSE_FACILITY: { Cost: '↓ Likely (Fixed cost)', Service: '↓ Risk likely', Capacity: '↑ Risk likely', Risk: '↑ Likely' },
+  CHANGE_DEMAND: { Cost: 'Depends on direction', Service: 'Depends on direction', Capacity: 'Depends on direction', Risk: 'Depends on direction' },
+  CHANGE_TRANSPORT_COST: { Cost: 'Direct impact', Service: 'Neutral', Capacity: 'Neutral', Risk: 'Neutral' },
+  CHANGE_SLA: { Cost: '↑ Likely if tightened', Service: 'Direct impact', Capacity: 'Neutral', Risk: '↓ Likely if tightened' },
+};
+
+function showScenarioPreview() {
+  const formBody = document.getElementById('toolbox-form-body');
+  const previewBody = document.getElementById('toolbox-preview-body');
+  if (!formBody || !previewBody) return;
+
+  const name = document.getElementById('toolbox-scenario-name')?.value.trim() || 'Untitled Scenario';
+  const type = document.querySelector('.scn-type-card.active')?.dataset.type || 'CHANGE_CAPACITY';
+  const typeLabel = document.getElementById('toolbox-active-type-badge')?.textContent || type;
+  const currentProposedText = document.getElementById('toolbox-current-proposed')?.textContent || 'Not available';
+  const objective = document.getElementById('toolbox-objective')?.selectedOptions?.[0]?.textContent || '—';
+  const constraint = document.getElementById('toolbox-constraint-type')?.selectedOptions?.[0]?.textContent || '—';
+
+  const nameEl = document.getElementById('preview-scenario-name');
+  if (nameEl) nameEl.textContent = name;
+
+  const rows = [
+    ['Type', typeLabel],
+    ['Current → Proposed', currentProposedText],
+    ['Optimise for', objective],
+    ['Subject to constraint', constraint],
+  ];
+  const rowsEl = document.getElementById('preview-summary-rows');
+  if (rowsEl) {
+    rowsEl.innerHTML = rows.map(([label, val]) => `
+      <div class="flex items-center justify-between text-xs">
+        <span class="text-muted">${label}</span>
+        <span style="font-weight:700;text-align:right">${val || '—'}</span>
+      </div>`).join('');
+  }
+
+  const chipsEl = document.getElementById('preview-kpi-chips');
+  if (chipsEl) {
+    const dirs = KPI_DIRECTION_BY_TYPE[type] || {};
+    chipsEl.innerHTML = Object.entries(dirs).map(([k, v]) => `
+      <span class="tag tag-muted" style="font-size:10.5px">${k}: ${v}</span>`).join('');
+  }
+
+  formBody.classList.add('hidden');
+  previewBody.classList.remove('hidden');
 }
 
 // ─── Execute Scenario Creation (Phased Telemetry) ───────────
 function runScenarioCreation() {
   const formBody = document.getElementById('toolbox-form-body');
+  const previewBody = document.getElementById('toolbox-preview-body');
   const execView = document.getElementById('agent-execution-view');
   if (formBody) formBody.classList.add('hidden');
+  if (previewBody) previewBody.classList.add('hidden');
   if (execView) execView.classList.remove('hidden');
 
   const steps = [
@@ -14583,6 +15039,13 @@ function wireScenarioEvents() {
   });
 
   document.getElementById('btn-run-toolbox-scenario')?.addEventListener('click', () => {
+    showScenarioPreview();
+  });
+  document.getElementById('btn-back-to-toolbox-form')?.addEventListener('click', () => {
+    document.getElementById('toolbox-preview-body')?.classList.add('hidden');
+    document.getElementById('toolbox-form-body')?.classList.remove('hidden');
+  });
+  document.getElementById('btn-confirm-run-scenario')?.addEventListener('click', () => {
     runScenarioCreation();
   });
 
@@ -15299,8 +15762,13 @@ function buildViewModel(kind, id) {
   const serviceGainPts = raw.expectedImpact
     ? (synth(id, 'svc', 8, 20) / 10)
     : (synth(id, 'svc', 8, 20) / 10);
-  const riskFrom = badge.tone === 'red' ? 'High' : badge.tone === 'amber' ? 'Medium' : 'Low';
-  const riskTo = badge.tone === 'red' ? 'Medium' : 'Low';
+  // Risk level: derived from the same utilization risk band (getUtilLabel)
+  // S2/S6/S8/S9/S-Decision-1 all already use — not an independently
+  // invented High/Medium/Low keyed off the priority badge's color, which
+  // had no connection to any actual utilization or capacity figure.
+  const riskFrom = getUtilLabel(currentPct);
+  const facAAfterDefault = Math.max(40, Math.round(currentPct - (currentPct - threshold + 4)));
+  const riskTo = getUtilLabel(facAAfterDefault);
 
   const riskAmountLakh = synth(id, 'risk', Math.max(10, Math.round(costDeltaLakh * 1.3)), Math.max(14, Math.round(costDeltaLakh * 1.8)));
 
@@ -15327,18 +15795,35 @@ function buildViewModel(kind, id) {
 }
 
 /* Recomputed as the shift % is edited (sentence input or modal table). */
+// S-Decision-1: Before/After Cost and Risk must come from S6's and S9's
+// authoritative outputs, never recomputed independently here.
 function computeAfterValues(vm, shiftPct) {
   const ratio = shiftPct / vm.shiftPct;
   const facAAfter = Math.max(40, Math.round(vm.currentPct - (vm.currentPct - vm.threshold + 4) * ratio));
   const facBBase = Math.max(40, vm.currentPct - synth(vm.id, 'facb', 12, 22));
   const facBAfter = Math.min(96, Math.round(facBBase + (vm.currentPct - facAAfter) * 0.9));
-  const costAfterCr = (12.4 - (vm.costDeltaLakh * ratio) / 100).toFixed(2);
-  const costBeforeCr = '12.40';
+
+  // Cost: "Before" is S6's authoritative Actual/baseline Total Network Cost
+  // (getOptimizedBaseCase().baseline) — not an independently invented
+  // figure. "After" applies this insight's own claimed savings on top of
+  // that authoritative base, scaled to how much of the recommended shift
+  // is actually being applied (the editable % in the modal).
+  const baselineCost = getOptimizedBaseCase().baseline.totalCost / 100000;
+  const costBeforeLakh = baselineCost.toFixed(2);
+  const costAfterLakh = (baselineCost - vm.costDeltaLakh * ratio).toFixed(2);
+
   const serviceBefore = (94.6).toFixed(1);
   const serviceAfter = (94.6 + vm.serviceGainPts * ratio).toFixed(1);
+
+  // Risk: derived from the same utilization risk band (getUtilLabel) that
+  // S2/S6/S8/S9 all already use — not an independently invented label.
+  const riskFrom = getUtilLabel(vm.currentPct);
+  const riskTo = getUtilLabel(facAAfter);
+
   return {
     facAAfter, facBBefore: Math.round(facBBase), facBAfter,
-    costBeforeCr, costAfterCr, serviceBefore, serviceAfter,
+    costBeforeLakh, costAfterLakh, serviceBefore, serviceAfter,
+    riskFrom, riskTo,
   };
 }
 
@@ -15420,6 +15905,18 @@ function metricHtml(iconSvg, tone, label, val, sub) {
     </div>`;
 }
 
+// riskFrom/riskTo are now Healthy/Stress/Critical (getUtilLabel), not the
+// old High/Medium/Low — this maps the chip's color/caption off the real
+// band instead of a literal 'Medium' string match that would otherwise
+// never match again, and never claims "Improved" when the band is
+// actually unchanged.
+function riskToneFor(riskTo) {
+  return riskTo === 'Critical' ? 'red' : riskTo === 'Stress' ? 'amber' : 'green';
+}
+function riskCaptionFor(riskFrom, riskTo) {
+  return INSD_RISK_RANK[riskTo] < INSD_RISK_RANK[riskFrom] ? 'Improved' : 'Unchanged';
+}
+
 function recommendationCardHtml(vm) {
   // Only 'auto' items are genuinely reallocation-style — the editable
   // "Shift X%..." sentence and the target-facility capacity stat both
@@ -15437,7 +15934,7 @@ function recommendationCardHtml(vm) {
       <div class="insd-metrics-row">
         ${metricHtml(ICON.rupee, 'green', 'Cost impact', `↓ ₹${vm.costDeltaLakh}L / month`, `(${(vm.costDeltaLakh / 12).toFixed(1)}% improvement)`)}
         ${metricHtml(ICON.trendUp, 'green', 'Service level', `↑ ${vm.serviceGainPts.toFixed(1)} pts`, `(to ${after.serviceAfter}%)`)}
-        ${metricHtml(ICON.shield, vm.riskTo === 'Medium' ? 'amber' : 'green', 'Risk level', `${vm.riskFrom} → ${vm.riskTo}`, 'Improved')}
+        ${metricHtml(ICON.shield, riskToneFor(vm.riskTo), 'Risk level', `${vm.riskFrom} → ${vm.riskTo}`, riskCaptionFor(vm.riskFrom, vm.riskTo))}
       </div>`;
 
   const whyStat = isReallocation ? `
@@ -15487,11 +15984,13 @@ function actionTakenCardHtml(vm) {
       <div class="insd-metrics-row">
         ${metricHtml(ICON.rupee, 'green', 'Cost impact', `↓ ₹${vm.costDeltaLakh}L / month`, `(${(vm.costDeltaLakh / 12).toFixed(1)}% improvement)`)}
         ${metricHtml(ICON.trendUp, 'green', 'Service level', `↑ ${vm.serviceGainPts.toFixed(1)} pts`, `(to ${after.serviceAfter}%)`)}
-        ${metricHtml(ICON.shield, vm.riskTo === 'Medium' ? 'amber' : 'green', 'Risk level', `${vm.riskFrom} → ${vm.riskTo}`, 'Improved')}
+        ${metricHtml(ICON.shield, riskToneFor(vm.riskTo), 'Risk level', `${vm.riskFrom} → ${vm.riskTo}`, riskCaptionFor(vm.riskFrom, vm.riskTo))}
       </div>
       <button type="button" class="insd-details-toggle" id="insd-details-toggle">${ICON.chevronDown}<span>Action details</span></button>
       <div class="insd-details-body" id="insd-details-body">
         ${detailsRows}
+        <button type="button" class="insd-action-link" id="insd-taken-why-btn">${ICON.info}<span>Why this was recommended</span></button>
+        <div class="insd-why-reveal" id="insd-taken-why-reveal">${insdEsc(vm.whyThisWorks)}</div>
         ${vm.messageSent ? `
           <button type="button" class="insd-view-message-link" id="insd-view-message">${ICON.mail}View message sent${ICON.chevronRight}</button>
           <div class="insd-sent-message-box hidden" id="insd-sent-message-box">${insdEsc(emailBody(vm, after))}</div>
@@ -15651,6 +16150,13 @@ function bindDeepDive() {
     document.getElementById('insd-why-reveal')?.classList.toggle('open');
   });
 
+  // S11 P1: link to original reasoning from the post-approval receipt —
+  // reuses vm.whyThisWorks (already computed for the pre-approval card),
+  // not a new explanation.
+  document.getElementById('insd-taken-why-btn')?.addEventListener('click', () => {
+    document.getElementById('insd-taken-why-reveal')?.classList.toggle('open');
+  });
+
   document.getElementById('insd-twin-btn')?.addEventListener('click', () => {
     if (typeof window.navigateToTab === 'function') window.navigateToTab('twin');
   });
@@ -15690,13 +16196,25 @@ Regards,
 Netgravity`;
 }
 
+const INSD_RISK_RANK = { Healthy: 0, Stress: 1, Critical: 2 };
+
 function modalTableRows(vm, after) {
+  // vm.costDeltaLakh is an insight-specific savings figure authored
+  // independently of S6's real network total — for some insights it can
+  // exceed the authoritative baseline (a holdover from when this modal
+  // showed an unrelated, much larger fictional cost). Rather than display
+  // an impossible negative "after" cost, show "Not available" — an honest
+  // gap, not a fabricated number.
+  const costAfterValid = Number(after.costAfterLakh) > 0;
+  const costAfterDisplay = costAfterValid ? `₹${after.costAfterLakh}L` : 'Not available';
+  const costGood = costAfterValid && Number(after.costAfterLakh) < Number(after.costBeforeLakh);
+
   const rows = [
     [`${vm.facA} utilization`, `${vm.currentPct}%`, `${after.facAAfter}%`, after.facAAfter < vm.currentPct],
     [`${vm.facB} utilization`, `${after.facBBefore}%`, `${after.facBAfter}%`, true],
-    ['Monthly network cost', `₹${after.costBeforeCr} Cr`, `₹${after.costAfterCr} Cr`, Number(after.costAfterCr) < Number(after.costBeforeCr)],
+    ['Monthly network cost', `₹${after.costBeforeLakh}L`, costAfterDisplay, costGood],
     ['Service level', `${after.serviceBefore}%`, `${after.serviceAfter}%`, true],
-    ['Risk', vm.riskFrom, vm.riskTo, true],
+    ['Risk', after.riskFrom, after.riskTo, INSD_RISK_RANK[after.riskTo] <= INSD_RISK_RANK[after.riskFrom]],
   ];
   return rows.map(([label, before, afterVal, good]) => `
     <tr>
@@ -15706,9 +16224,20 @@ function modalTableRows(vm, after) {
     </tr>`).join('');
 }
 
+// P0 #6: approval requirement, derived from GOVERNANCE_TIERS using this
+// insight's own real cost-at-stake — not a new classification scheme, and
+// not hardcoded copy duplicated from the tier definitions.
+function approvalTierFor(costDeltaLakh) {
+  const tier = costDeltaLakh < 5 ? GOVERNANCE_TIERS[0]
+    : costDeltaLakh <= 50 ? GOVERNANCE_TIERS[1]
+    : GOVERNANCE_TIERS[2];
+  return tier;
+}
+
 function modalHtml(vm) {
   const after = computeAfterValues(vm, insdFlow.shiftPct ?? vm.shiftPct);
   const shiftPct = insdFlow.shiftPct ?? vm.shiftPct;
+  const tier = approvalTierFor(vm.costDeltaLakh);
 
   return `
     <div class="insd-modal-card">
@@ -15718,6 +16247,9 @@ function modalHtml(vm) {
       </div>
       <p class="insd-modal-sentence">I recommend shifting <input type="number" class="insd-shift-input" id="insd-modal-shift-pct" min="1" max="60" value="${shiftPct}">% of volume from ${insdEsc(vm.facA)} to ${insdEsc(vm.facB)}.</p>
       <p class="insd-modal-sub">This reduces the projected capacity risk while improving service with a lower monthly network cost.</p>
+      <div class="text-xs" style="margin:-4px 0 12px;padding:6px 10px;background:${tier.color}14;border:1px solid ${tier.color}44;border-radius:var(--r-sm);color:${tier.color};font-weight:600">
+        Tier ${tier.tier} — ${tier.label}: ${insdEsc(tier.description)}
+      </div>
 
       <div class="insd-modal-split">
         <div>
@@ -16450,10 +16982,34 @@ function baseMappingRows() {
   ];
 }
 
-const PDF_FLAGGED_TERMS = [
-  { id: 'mvc', name: 'Minimum volume commitment' },
-  { id: 'esc', name: 'Escalation clause' },
-];
+// ─── S4: Contract Intelligence (PDF review) ───────────────────
+// Sourced from CONTRACT_DEMO (data.js) — a fully-authored per-vendor
+// extraction (rate, surcharge, confidence per term) that existed but was
+// never wired into the PDF review screen; that screen previously showed
+// unrelated hardcoded numbers (₹12/kg, 6.5%, "Apr 2024 – Mar 2026") that
+// matched no data source at all. Every uploaded PDF shows the same vendor
+// (vendorA), matching this flow's existing convention of reusing identical
+// mock content per file type regardless of the actual uploaded file (see
+// the Excel/CSV mapping stats in buildQueue()).
+const CONTRACT_VENDOR = CONTRACT_DEMO.vendorA;
+
+function contractStatus(effectiveDateStr) {
+  const eff = new Date(effectiveDateStr);
+  return new Date() >= eff
+    ? { label: 'Active', tone: 'green' }
+    : { label: 'Upcoming', tone: 'amber' };
+}
+
+function reviewTermId(term) {
+  return term.field.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+}
+
+// Low-confidence/review-required terms (P0 #5) are derived directly from
+// each term's own confidence value — never a separate hand-maintained
+// list that can drift out of sync with what the data actually says.
+function getReviewTerms(vendor) {
+  return vendor.extractedTerms.filter(t => t.confidence !== 'HIGH');
+}
 
 /* ─── Deterministic mock numbers (no real parsing happens) ───── */
 function hashStr(s) {
@@ -16976,6 +17532,64 @@ function statsRowHtml(stats) {
     </div>`;
 }
 
+// ─── S3 P0: Data Quality summary (record-level validity + issues) ───
+// Distinct from the column-mapping stats above it (that answers "did we
+// read the columns right?"; this answers "can I trust the data enough to
+// run the model?"). Sourced entirely from DATA_QUALITY (data.js) — a
+// fully-authored dataset that existed but was never surfaced anywhere in
+// the ingestion flow. Reuses the same .ing-stats-row / .ing-review-item /
+// .ing-confidence-pill classes already used elsewhere on this screen, so
+// no new visual language is introduced.
+function severityTone(sev) {
+  return sev === 'warning' ? 'medium' : sev === 'info' ? 'high' : 'low';
+}
+function severityLabel(sev) {
+  return sev === 'warning' ? 'Warning' : sev === 'info' ? 'Info' : 'Critical';
+}
+
+function dataQualitySectionHtml() {
+  const dq = DATA_QUALITY;
+  const invalid = dq.totalRecords - dq.validRecords;
+  const needsReview = dq.issues.filter((i) => i.status === 'needs_review').length;
+
+  const issueRows = dq.issues.map((iss) => {
+    const done = iss.status === 'reviewed' || iss.status === 'auto_mapped';
+    const location = iss.facility || iss.market || iss.lane || iss.source || '';
+    return `<div class="ing-review-item${done ? ' reviewed' : ''}">
+        <div>
+          <div class="ing-review-item-name">${ingEsc(iss.type)}${location ? ` — ${ingEsc(location)}` : ''}</div>
+          <div class="ing-review-item-note">${ingEsc(iss.detail)}</div>
+        </div>
+        <span class="ing-confidence-pill tone-${severityTone(iss.severity)}">${severityLabel(iss.severity)}</span>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="ing-card" id="ing-dq-section" style="margin-top:16px">
+      <div class="ing-card-title">Data Quality</div>
+      <div class="ing-card-sub">Can this data be trusted to run the model? ${invalid} of ${dq.totalRecords.toLocaleString('en-IN')} records need attention.</div>
+      <div class="ing-stats-row" style="margin-top:14px">
+        <div class="ing-stat-item">
+          <span class="ing-stat-icon tone-green">${I.checkCircle}</span>
+          <div><div class="ing-stat-value">${dq.validRecords.toLocaleString('en-IN')} / ${dq.totalRecords.toLocaleString('en-IN')}</div><div class="ing-stat-label">records valid (${dq.validPct}%)</div></div>
+        </div>
+        <div class="ing-stat-item">
+          <span class="ing-stat-icon ${invalid > 0 ? 'tone-amber' : 'tone-green'}">${I.warning}</span>
+          <div><div class="ing-stat-value">${invalid}</div><div class="ing-stat-label">invalid records</div></div>
+        </div>
+        <div class="ing-stat-item">
+          <span class="ing-stat-icon tone-amber">${I.warning}</span>
+          <div><div class="ing-stat-value">${dq.issues.length}</div><div class="ing-stat-label">issues found</div></div>
+        </div>
+        <div class="ing-stat-item">
+          <span class="ing-stat-icon tone-gray">${I.ban}</span>
+          <div><div class="ing-stat-value">${needsReview}</div><div class="ing-stat-label">need review</div></div>
+        </div>
+      </div>
+      <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">${issueRows}</div>
+    </div>`;
+}
+
 function renderExcelIngestion(file) {
   const page = document.getElementById('ingestion-page');
   if (!page) return;
@@ -17009,6 +17623,7 @@ function renderExcelIngestion(file) {
       </div>
 
       ${statsRowHtml(stats)}
+      ${dataQualitySectionHtml()}
 
       <div class="ing-mapping-layout">
         <div class="ing-mapping-main">
@@ -17109,40 +17724,72 @@ function bindExcelIngestion(file) {
    PDF INGESTION
    ═══════════════════════════════════════════════════════════════ */
 function findingCardsHtml(file, review) {
-  const flaggedCount = PDF_FLAGGED_TERMS.length - review.reviewed.size;
+  const vendor = CONTRACT_VENDOR;
+  const findTerm = (field) => vendor.extractedTerms.find((t) => t.field === field);
+  const baseRate = findTerm('Base Rate');
+  const fuelSurcharge = findTerm('Fuel Surcharge');
+  const effectiveDate = findTerm('Effective Date');
+  const nsl = findTerm('Non-Serviceable Surcharge');
+  const minVolume = findTerm('Minimum Volume');
+  const status = effectiveDate ? contractStatus(effectiveDate.value) : { label: 'Not available', tone: 'gray' };
+
+  const reviewTerms = getReviewTerms(vendor);
+  const flaggedCount = reviewTerms.length - review.reviewed.size;
   const warnClass = `ing-finding-card warn${review.expanded ? ' expanded' : ''}`;
-  const reviewItems = PDF_FLAGGED_TERMS.map(t => {
-    const done = review.reviewed.has(t.id);
+  const reviewItems = reviewTerms.map((t) => {
+    const id = reviewTermId(t);
+    const done = review.reviewed.has(id);
     return `<div class="ing-review-item${done ? ' reviewed' : ''}">
         <div>
-          <div class="ing-review-item-name">${ingEsc(t.name)}</div>
-          <div class="ing-review-item-note">${done ? 'Reviewed' : 'Low confidence — please verify'}</div>
+          <div class="ing-review-item-name">${ingEsc(t.field)}: ${ingEsc(t.value)}</div>
+          <div class="ing-review-item-note">${done ? 'Reviewed' : 'Medium confidence — please verify'}</div>
         </div>
-        <button type="button" class="ing-review-mark-btn" data-mark-term="${t.id}" ${done ? 'disabled' : ''}>${done ? 'Reviewed' : 'Mark reviewed'}</button>
+        <button type="button" class="ing-review-mark-btn" data-mark-term="${id}" ${done ? 'disabled' : ''}>${done ? 'Reviewed' : 'Mark reviewed'}</button>
       </div>`;
   }).join('');
+
+  const hiddenCostAlertCard = vendor.hiddenCostAlert ? `
+    <div class="ing-finding-card warn">
+      <span class="ing-finding-icon">${I.shield}</span>
+      <div><div class="ing-finding-title">Hidden cost alert</div><div class="ing-finding-desc">Headline rate is <strong>${ingEsc(vendor.headlineRate)}</strong>, but effective cost with surcharges applied is <span class="lowconf">${ingEsc(vendor.effectiveCost)}</span>.</div></div>
+    </div>` : '';
 
   return `
     <div class="ing-finding-card">
       <span class="ing-finding-icon">${I.docSearch}</span>
-      <div><div class="ing-finding-title">Contract document detected</div><div class="ing-finding-desc">This appears to be a transportation services agreement.</div></div>
+      <div><div class="ing-finding-title">Contract document detected</div><div class="ing-finding-desc">${ingEsc(vendor.name)} — transportation services agreement.</div></div>
+    </div>
+    <div class="ing-finding-card">
+      <span class="ing-finding-icon">${I.checkCircle}</span>
+      <div><div class="ing-finding-title">Contract status</div><div class="ing-finding-value">${status.label}</div><div class="ing-finding-desc">${effectiveDate ? `Effective from ${ingEsc(effectiveDate.value)}` : 'Not available'}</div></div>
     </div>
     <div class="ing-finding-card">
       <span class="ing-finding-icon">${I.rupee}</span>
-      <div><div class="ing-finding-title">Base freight rate identified</div><div class="ing-finding-value">₹12 / kg</div><div class="ing-finding-desc">Applies to standard road movement across contracted primary lanes.</div></div>
+      <div><div class="ing-finding-title">Base freight rate identified</div><div class="ing-finding-value">${baseRate ? ingEsc(baseRate.value) : 'Not available'}</div><div class="ing-finding-desc">Applies to standard road movement across contracted primary lanes.</div></div>
     </div>
     <div class="ing-finding-card">
       <span class="ing-finding-icon">${I.fuel}</span>
-      <div><div class="ing-finding-title">Fuel surcharge identified</div><div class="ing-finding-value">6.5%</div><div class="ing-finding-desc">Applicable when diesel index exceeds the agreed baseline threshold.</div></div>
+      <div><div class="ing-finding-title">Fuel surcharge identified</div><div class="ing-finding-value">${fuelSurcharge ? ingEsc(fuelSurcharge.value) : 'Not available'}</div><div class="ing-finding-desc">Applicable per shipment per the contracted rate card.</div></div>
     </div>
     <div class="ing-finding-card">
       <span class="ing-finding-icon">${I.calendar}</span>
-      <div><div class="ing-finding-title">Effective period identified</div><div class="ing-finding-value">Apr 2024 – Mar 2026</div><div class="ing-finding-desc">Contract validity period.</div></div>
+      <div><div class="ing-finding-title">Effective period identified</div><div class="ing-finding-value">${effectiveDate ? `From ${ingEsc(effectiveDate.value)}` : 'Not available'}</div><div class="ing-finding-desc">No contract end date was found in this document.</div></div>
     </div>
+    ${nsl ? `
+    <div class="ing-finding-card">
+      <span class="ing-finding-icon">${I.ban}</span>
+      <div><div class="ing-finding-title">Non-serviceable location (NSL) surcharge</div><div class="ing-finding-value">${ingEsc(nsl.value)}</div></div>
+    </div>` : ''}
+    ${minVolume ? `
+    <div class="ing-finding-card">
+      <span class="ing-finding-icon">${I.columns}</span>
+      <div><div class="ing-finding-title">Minimum volume commitment</div><div class="ing-finding-value">${ingEsc(minVolume.value)}</div></div>
+    </div>` : ''}
+    ${hiddenCostAlertCard}
     <div class="${warnClass}" id="ing-warn-card">
       <span class="ing-finding-icon">${I.shield}</span>
       <div><div class="ing-finding-title">${flaggedCount} term${flaggedCount === 1 ? '' : 's'} need${flaggedCount === 1 ? 's' : ''} your review</div>
-        <div class="ing-finding-desc">Minimum volume commitment and escalation clause have <span class="lowconf">low confidence</span> values.</div></div>
+        <div class="ing-finding-desc">${reviewTerms.map((t) => t.field).join(' and ')} ${reviewTerms.length === 1 ? 'has' : 'have'} <span class="lowconf">medium confidence</span> values.</div></div>
       <span class="ing-finding-chevron">${I.chevronRight}</span>
     </div>
     <div class="ing-review-panel" id="ing-review-panel">${reviewItems}</div>`;
@@ -17154,7 +17801,7 @@ function renderPdfIngestion(file) {
 
   const review = flow.pdfReview[file.id];
   const pages = mockPages(file);
-  const highConfidence = 11;
+  const highConfidence = CONTRACT_VENDOR.extractedTerms.filter((t) => t.confidence === 'HIGH').length;
 
   page.innerHTML = `
     <div class="ing-body">
@@ -17185,7 +17832,7 @@ function renderPdfIngestion(file) {
           </div>
           <div class="ing-pdf-actions-col">
             <button type="button" class="ing-btn-secondary" id="ing-pdf-review-btn" style="justify-content:center"><span>Review extracted terms</span>${I.arrowRight}</button>
-            <div class="ing-pdf-action-caption">Review ${PDF_FLAGGED_TERMS.length - review.reviewed.size} term${PDF_FLAGGED_TERMS.length - review.reviewed.size === 1 ? '' : 's'} that may need changes</div>
+            <div class="ing-pdf-action-caption">Review ${getReviewTerms(CONTRACT_VENDOR).length - review.reviewed.size} term${getReviewTerms(CONTRACT_VENDOR).length - review.reviewed.size === 1 ? '' : 's'} that may need changes</div>
           </div>
         </div>
       </div>
@@ -17209,7 +17856,7 @@ function bindPdfIngestion(file) {
       review.reviewed.add(markBtn.dataset.markTerm);
       refreshFindings();
       const caption = document.querySelectorAll('.ing-pdf-action-caption')[1];
-      const remaining = PDF_FLAGGED_TERMS.length - review.reviewed.size;
+      const remaining = getReviewTerms(CONTRACT_VENDOR).length - review.reviewed.size;
       if (caption) caption.textContent = `Review ${remaining} term${remaining === 1 ? '' : 's'} that may need changes`;
       return;
     }
@@ -18096,14 +18743,25 @@ function initTabs() {
         // Update 3D twin
         setTwin3DState(newState);
 
-        // Update 3D + 2D stats overlays
-        const names = { actual: 'Actual', recommended: 'Recommended' };
-        const stateLabel = document.getElementById('twin3d-state-label');
-        if (stateLabel) stateLabel.textContent = names[newState] || newState;
-        const stateLabel2d = document.getElementById('map2d-state-label');
-        if (stateLabel2d) stateLabel2d.textContent = names[newState] || newState;
+        // Update the "Network Cost" stat on both overlays — a teaser of
+        // S6/SCENARIOS' authoritative cost, never computed here (S2 owns
+        // showing the Actual figure; Recommended reads the scenario's own
+        // cost — see computeNetworkCostLabel).
+        const costLabel = computeNetworkCostLabel(newState);
+        const costEl3d = document.getElementById('twin3d-cost-label');
+        if (costEl3d) costEl3d.textContent = costLabel;
+        const costEl2d = document.getElementById('map2d-cost-label');
+        if (costEl2d) costEl2d.textContent = costLabel;
       });
     });
+
+    // Set the correct cost for the default ('actual') state on load,
+    // rather than relying on a static value baked into the HTML.
+    const initCostLabel = computeNetworkCostLabel(state.networkState);
+    const initCostEl3d = document.getElementById('twin3d-cost-label');
+    if (initCostEl3d) initCostEl3d.textContent = initCostLabel;
+    const initCostEl2d = document.getElementById('map2d-cost-label');
+    if (initCostEl2d) initCostEl2d.textContent = initCostLabel;
   }
 
   // Window resize handler for 3D canvas and maps
@@ -18113,6 +18771,18 @@ function initTabs() {
 
   // Facility panel close
   document.getElementById('fp-close')?.addEventListener('click', closeFacilityPanel);
+
+  // S12: Signal Guardrails & Admin — replaces the old alert() stub
+  document.getElementById('nav-item-settings')?.addEventListener('click', () => {
+    renderAdminSettingsModal();
+    document.getElementById('modal-admin-settings')?.classList.add('visible');
+  });
+  document.getElementById('btn-close-admin-settings')?.addEventListener('click', () => {
+    document.getElementById('modal-admin-settings')?.classList.remove('visible');
+  });
+  document.getElementById('btn-close-admin-settings-bottom')?.addEventListener('click', () => {
+    document.getElementById('modal-admin-settings')?.classList.remove('visible');
+  });
 
   // Action drawer close (still used by scenarios.js's own detail drawer)
   document.getElementById('action-drawer-close')?.addEventListener('click', closeActionDrawer);
@@ -18297,7 +18967,7 @@ function renderFacilityDashboard() {
   
   const dashDot = document.getElementById('dash-facility-dot');
   if (dashDot) {
-    dashDot.style.background = utilPct >= 90 ? 'var(--red)' : utilPct >= 75 ? 'var(--amber)' : 'var(--green)';
+    dashDot.style.background = utilColor;
   }
 
   const elDashTitle = document.getElementById('dash-title');
@@ -18314,7 +18984,7 @@ function renderFacilityDashboard() {
         <div class="dash-metric-val" style="color:${utilColor}">${utilPct}% <span style="font-size:14px;color:var(--text-3);font-weight:600">(${formatNumber(fac.throughput)}/${formatNumber(fac.capacity)} u/d)</span></div>
         <div class="dash-metric-sub">
           <span>Spare Capacity: <strong>${formatNumber(fac.capacity - fac.throughput)} u/d</strong></span>
-          <span class="tag ${utilPct >= 90 ? 'tag-danger' : utilPct >= 75 ? 'tag-warning' : 'tag-success'}">${getUtilLabel(utilPct)}</span>
+          <span class="tag ${getUtilTagClass(utilPct)}">${getUtilLabel(utilPct)}</span>
         </div>
       </div>
 
@@ -18467,7 +19137,13 @@ function kpiStripArrowSvg(dir) {
     : `<svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5v10M5 11l5 5 5-5"/></svg>`;
 }
 
-function kpiStripItemHtml({ icon, value, label, deltaPrefix, deltaText, deltaDir, deltaGood }) {
+function kpiStripItemHtml({ icon, value, label, deltaPrefix, deltaText, deltaDir, deltaGood, deltaNeutral }) {
+  // deltaNeutral: a plain source/state label rather than a trend arrow —
+  // used where no authoritative prior-period figure exists to compare
+  // against (see the Total cost tile, sourced from S6's single snapshot).
+  const deltaInner = deltaNeutral
+    ? `<strong style="color:var(--text-3);font-weight:600">${deltaText}</strong>`
+    : `<strong class="tone-${deltaGood ? 'good' : 'bad'}">${deltaText}${kpiStripArrowSvg(deltaDir)}</strong>`;
   return `
     <div class="home2-kpi-strip-item">
       <span class="home2-kpi-strip-icon">${icon}</span>
@@ -18475,7 +19151,7 @@ function kpiStripItemHtml({ icon, value, label, deltaPrefix, deltaText, deltaDir
         <div class="home2-kpi-strip-value">${value}</div>
         <div class="home2-kpi-strip-name">${label}</div>
         <div class="home2-kpi-strip-delta">${deltaPrefix}
-          <strong class="tone-${deltaGood ? 'good' : 'bad'}">${deltaText}${kpiStripArrowSvg(deltaDir)}</strong>
+          ${deltaInner}
         </div>
       </div>
     </div>`;
@@ -18484,30 +19160,53 @@ function kpiStripItemHtml({ icon, value, label, deltaPrefix, deltaText, deltaDir
 // ─── Home KPI Strip (Network Today — 3 headline, network-wide KPIs;
 //     the full facility-by-facility breakdown lives behind "View all
 //     KPIs" on the Facility Dashboard tab) ───────────────────────────
+// S1 P0 coverage: Total Network Cost (tile 1), Fill Rate (tile 2 — see
+// note below on why this isn't split into a second SLA-Adherence figure),
+// Savings % (tile 3, replacing the lower-priority Utilization-detail tile
+// that used to be here — Capacity Risk itself is already surfaced via the
+// attention feed's risk-categorized cards, not duplicated here).
+//
+// Total cost is sourced from S6's getOptimizedBaseCase().baseline — not
+// from getNetworkKpis()'s FACILITY_KPIS sum, which is a different, much
+// larger figure (per-facility operating cost on a different basis, ~3x
+// this network total) that was being shown here as if it were the same
+// "Total Network Cost" every other screen displays. getNetworkKpis() is
+// still used below for Fill Rate, which has no other single owner.
 function renderHomeKPIs() {
   const kpis = getNetworkKpis(state.selectedPeriod);
   const grid = document.getElementById('home-kpi-grid');
   if (!kpis || !grid) return;
 
-  const costDeltaPct = pctDelta(kpis.totalCost.value, kpis.totalCost.prev);
-  const slaVsTarget = kpis.sla.value - kpis.sla.target;
-  const utilDeltaPct = pctDelta(kpis.utilisation.value, kpis.utilisation.prev);
+  const baselineCost = getOptimizedBaseCase().baseline.totalCost;
+  const fillRateVsTarget = kpis.sla.value - kpis.sla.target;
+  // Savings Opportunity: the Recommended scenario's cost delta vs the
+  // Actual baseline (SCN_REBALANCE.costChange) — a scenario-state figure,
+  // not an Actual-state observation, so it's explicitly captioned "if
+  // adopted" rather than presented as something that has already happened.
+  const recommended = SCENARIOS.find(s => s.id === 'SCN_REBALANCE');
+  const savingsPct = recommended ? Math.abs(recommended.costChange) : null;
 
   grid.innerHTML = [
     kpiStripItemHtml({
-      icon: '₹', value: formatCurrency(kpis.totalCost.value), label: 'Total cost',
-      deltaPrefix: 'vs last period:', deltaText: fmtDelta(costDeltaPct),
-      deltaDir: costDeltaPct <= 0 ? 'down' : 'up', deltaGood: costDeltaPct <= 0,
+      icon: '₹', value: formatCurrency(baselineCost), label: 'Total cost',
+      deltaPrefix: 'Source:', deltaText: 'S6 Optimized Base Case (Actual)', deltaNeutral: true,
     }),
     kpiStripItemHtml({
-      icon: '✅', value: `${kpis.sla.value}%`, label: 'On-time service (SLA)',
-      deltaPrefix: 'vs target:', deltaText: fmtDelta(slaVsTarget),
-      deltaDir: slaVsTarget < 0 ? 'down' : 'up', deltaGood: slaVsTarget >= 0,
+      // This mock field is a single on-time/fulfilled-delivery %, which is
+      // genuinely what "Fill Rate" measures — it is deliberately NOT also
+      // labeled/split into a distinct "SLA Adherence" figure, since that
+      // needs an actual-arrival-timestamp data source this schema doesn't
+      // have; showing two labels off one number would fabricate precision
+      // that doesn't exist. SLA/Service Level (P0 #3) is a known, deferred
+      // gap, not something this tile silently covers.
+      icon: '✅', value: `${kpis.sla.value}%`, label: 'Fill Rate',
+      deltaPrefix: 'vs target:', deltaText: fmtDelta(fillRateVsTarget),
+      deltaDir: fillRateVsTarget < 0 ? 'down' : 'up', deltaGood: fillRateVsTarget >= 0,
     }),
     kpiStripItemHtml({
-      icon: '📊', value: `${kpis.utilisation.value}%`, label: 'Capacity utilization',
-      deltaPrefix: 'vs last period:', deltaText: fmtDelta(utilDeltaPct),
-      deltaDir: utilDeltaPct <= 0 ? 'down' : 'up', deltaGood: utilDeltaPct <= 0,
+      icon: '🎯', value: savingsPct !== null ? `${savingsPct}%` : 'Not available', label: 'Savings opportunity',
+      deltaPrefix: 'if adopted:', deltaText: 'Recommended scenario',
+      deltaDir: 'down', deltaGood: true,
     }),
   ].join('');
 }
@@ -18559,7 +19258,7 @@ function renderHomeTwinCallout() {
   }
 
   const utilLabel = getUtilLabel(fac.utilPct);
-  const tone = utilLabel === 'Critical' ? 'red' : utilLabel === 'Moderate' ? 'amber' : 'green';
+  const tone = utilLabel === 'Critical' ? 'red' : utilLabel === 'Stress' ? 'amber' : 'green';
 
   el.innerHTML = `
     <div class="home-twin-callout-head">
@@ -18707,6 +19406,21 @@ function closeActionDrawer() {
 // ═══════════════════════════════════════════════════════════
 
 // ─── Digital Twin Tables ────────────────────────────────────
+// ─── Network Cost (Digital Twin stats overlay) ──────────────
+// S2's own P0: a teaser of the authoritative Total Network Cost, sourced
+// per single-owner rules rather than computed here. "Actual" reads S6's
+// Optimized-Base-Case function's baseline figure (S2 is that function's
+// designated display for the Actual-state cost, per the KPI Master
+// Reference's ownership table); "Recommended" reads that scenario's own
+// cost straight from SCENARIOS. Neither branch recomputes anything.
+function computeNetworkCostLabel(networkState) {
+  if (networkState === 'recommended') {
+    const rec = SCENARIOS.find(s => s.id === 'SCN_REBALANCE');
+    return rec ? formatCurrency(rec.totalCost) : 'Not available';
+  }
+  return formatCurrency(getOptimizedBaseCase().baseline.totalCost);
+}
+
 function renderTwinTables() {
   // Plants
   const plantBody = document.querySelector('#table-plants tbody');
@@ -18727,7 +19441,7 @@ function renderTwinTables() {
     dcBody.innerHTML = DCS.map(d => {
       const color = getUtilColor(d.utilPct);
       const label = getUtilLabel(d.utilPct);
-      const tagClass = d.utilPct >= 90 ? 'tag-danger' : d.utilPct >= 75 ? 'tag-warning' : 'tag-success';
+      const tagClass = getUtilTagClass(d.utilPct);
       return `
         <tr class="clickable-row" data-id="${d.id}">
           <td>${d.name}</td>
@@ -18770,15 +19484,21 @@ window.openFacilityPanel = function(facilityId) {
   const utilColor = getUtilColor(utilPct);
   const utilLabel = getUtilLabel(utilPct);
 
+  // S2 P0 #5: every facility needs a risk/bottleneck status, not just
+  // Delhi — derived from the same utilLabel already computed above (no new
+  // calculation), so the band can never drift from what the map/DC table
+  // already show for this facility.
+  const riskStatus = utilLabel === 'Critical' ? 'HIGH — Capacity Breach'
+    : utilLabel === 'Stress' ? 'MEDIUM — Approaching Capacity'
+    : 'LOW — Healthy Headroom';
+
+  // Delhi keeps its December forecast callout as additional context on top
+  // of the general risk row below, not as a replacement for it.
   const isBaddi = facilityId === 'DC_DELHI';
   const forecastSection = isBaddi ? `
     <div class="fp-stat" style="border-bottom:2px solid var(--red)">
       <span class="fp-stat-label">Forecast Dec 2026</span>
       <span class="fp-stat-value" style="color:var(--red)">10,800 units/day</span>
-    </div>
-    <div class="fp-stat">
-      <span class="fp-stat-label">Risk</span>
-      <span class="fp-stat-value"><span class="tag tag-danger">HIGH — Capacity Breach</span></span>
     </div>
   ` : '';
 
@@ -18789,10 +19509,11 @@ window.openFacilityPanel = function(facilityId) {
     <div class="fp-stat"><span class="fp-stat-label">Status</span><span class="fp-stat-value"><span class="tag tag-success">Active</span></span></div>
     <div class="fp-stat"><span class="fp-stat-label">Capacity</span><span class="fp-stat-value">${formatNumber(fac.capacity)} units/day</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Current Throughput</span><span class="fp-stat-value">${formatNumber(fac.throughput)} units/day</span></div>
-    <div class="fp-stat"><span class="fp-stat-label">Utilisation</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${utilPct >= 90 ? 'tag-danger' : utilPct >= 75 ? 'tag-warning' : 'tag-success'}">${utilLabel}</span></span></div>
+    <div class="fp-stat"><span class="fp-stat-label">Utilisation</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${getUtilTagClass(utilPct)}">${utilLabel}</span></span></div>
     ${isDC ? `<div class="fp-stat"><span class="fp-stat-label">Fixed Cost</span><span class="fp-stat-value">₹${fac.fixedCost}L/year</span></div>` : ''}
     ${isDC ? `<div class="fp-stat"><span class="fp-stat-label">Handling Cost</span><span class="fp-stat-value">₹${fac.handlingCost}/unit</span></div>` : ''}
     ${forecastSection}
+    <div class="fp-stat"><span class="fp-stat-label">Risk / Bottleneck</span><span class="fp-stat-value"><span class="tag ${getUtilTagClass(utilPct)}">${riskStatus}</span></span></div>
     <div style="margin-top:var(--space-lg)">
       <div class="card-title mb-md">Connected Lanes</div>
       ${LANES.filter(l => l.from === facilityId || l.to === facilityId).map(l => `
@@ -18937,12 +19658,60 @@ function renderDataIntelligence() {
         <div class="flex gap-sm mt-sm" style="flex-wrap:wrap">
           <span class="tag tag-muted">Geography: ${sig.geography}</span>
           <span class="tag tag-muted">Direction: ${sig.direction}</span>
+          <span class="tag tag-muted">Magnitude: ${sig.magnitude}</span>
           <span class="tag ${sig.confidence === 'HIGH' ? 'tag-success' : 'tag-warning'}">Conf: ${sig.confidence}</span>
+          <span class="tag tag-muted" title="No Signal_Type field exists in the current schema — every signal shares the same generic 'signal' type today">Category: Not available</span>
+          <span class="tag tag-muted" title="No severity/materiality threshold field exists in the current schema to compute a guardrail bucket">Guardrail status: Not available</span>
         </div>
         <div class="text-xs mt-sm" style="color:var(--primary);font-weight:600">→ ${sig.intendedUse}</div>
       </div>
     `).join('');
   }
+}
+
+// ─── S12: Signal Guardrails & Admin ──────────────────────────
+// Sourced from GOVERNANCE_TIERS and SYSTEM_STATUS (data.js) — both fully
+// authored but never wired into any screen before this. Trigger
+// keywords/buckets and Product Master have no backing data anywhere in
+// this build, so they show "Not available" rather than invented content.
+function renderAdminSettingsModal() {
+  const body = document.getElementById('admin-settings-body');
+  if (!body) return;
+
+  const tiersHtml = GOVERNANCE_TIERS.map(t => `
+    <div style="padding:10px 0">
+      <span class="tag" style="background:${t.color}22;color:${t.color};font-weight:700">Tier ${t.tier} — ${t.label}</span>
+      <div class="text-sm mt-xs" style="color:var(--text-1)">${t.description}</div>
+      <div class="text-xs text-muted mt-xs">Materiality threshold: ${t.criteria}</div>
+    </div>
+  `).join('<hr style="border:none;border-top:1px solid var(--border-light);margin:0">');
+
+  const opt = SYSTEM_STATUS.optimisation;
+  const fc = SYSTEM_STATUS.forecast;
+  const d = SYSTEM_STATUS.data;
+  const ai = SYSTEM_STATUS.ai;
+
+  body.innerHTML = `
+    <div class="card-title" style="font-size:13px;margin:10px 0 6px">Guardrail Configuration &amp; Materiality Thresholds</div>
+    <div style="border:1px solid var(--border-light);border-radius:var(--r-sm);padding:0 12px">${tiersHtml}</div>
+
+    <div class="card-title" style="font-size:13px;margin:18px 0 6px">Optimization Configuration</div>
+    <div class="grid-2" style="gap:10px;font-size:12.5px">
+      <div><span class="text-muted">Solver</span><br><strong>${opt.solver}</strong></div>
+      <div><span class="text-muted">Status</span><br><strong>${opt.status}</strong></div>
+      <div><span class="text-muted">Last run</span><br><strong>${new Date(opt.lastRun).toLocaleString('en-IN')}</strong></div>
+      <div><span class="text-muted">Forecast model</span><br><strong>${fc.model}</strong></div>
+      <div><span class="text-muted">Forecast horizon</span><br><strong>${fc.horizon}</strong></div>
+      <div><span class="text-muted">Data quality</span><br><strong>${d.qualityPct}% (${d.facilities} facilities, ${d.lanes} lanes)</strong></div>
+      <div><span class="text-muted">AI agent</span><br><strong>${ai.agentStatus} — ${ai.model}</strong></div>
+    </div>
+
+    <div class="card-title" style="font-size:13px;margin:18px 0 6px">Trigger Keywords / Buckets</div>
+    <div class="text-xs" style="color:var(--text-2);font-style:italic">Not available — no keyword/bucket configuration exists in this build yet.</div>
+
+    <div class="card-title" style="font-size:13px;margin:18px 0 6px">Product Master / Configuration</div>
+    <div class="text-xs" style="color:var(--text-2);font-style:italic">Not available — no Product Master data exists in this build yet.</div>
+  `;
 }
 
 // ─── Notification Toast ─────────────────────────────────────

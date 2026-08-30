@@ -5,10 +5,11 @@
  * KPI rendering, insight list, insight drawer, and all sub-views.
  */
 
-import { PLANTS, DCS, MARKETS, LANES, EXTERNAL_SIGNALS,
+import { PLANTS, DCS, MARKETS, LANES, EXTERNAL_SIGNALS, SCENARIOS,
          RECOMMENDATION, PERIODS, HOME_ACTION_ITEMS, FACILITY_KPIS,
-         formatCurrency, formatNumber, getUtilColor, getUtilLabel,
-         getFacilityById, getInsightsForFacility, getKpisForFacility } from './data.js';
+         GOVERNANCE_TIERS, SYSTEM_STATUS,
+         formatCurrency, formatNumber, getUtilColor, getUtilLabel, getUtilTagClass,
+         getFacilityById, getInsightsForFacility, getKpisForFacility, getOptimizedBaseCase } from './data.js';
 import { initMap, setNetworkState, invalidateMapSize } from './map.js';
 import { initTwin3D, setTwin3DState, resizeTwin3D } from './twin3d.js';
 import { renderForecastChart,
@@ -374,14 +375,25 @@ function initTabs() {
         // Update 3D twin
         setTwin3DState(newState);
 
-        // Update 3D + 2D stats overlays
-        const names = { actual: 'Actual', recommended: 'Recommended' };
-        const stateLabel = document.getElementById('twin3d-state-label');
-        if (stateLabel) stateLabel.textContent = names[newState] || newState;
-        const stateLabel2d = document.getElementById('map2d-state-label');
-        if (stateLabel2d) stateLabel2d.textContent = names[newState] || newState;
+        // Update the "Network Cost" stat on both overlays — a teaser of
+        // S6/SCENARIOS' authoritative cost, never computed here (S2 owns
+        // showing the Actual figure; Recommended reads the scenario's own
+        // cost — see computeNetworkCostLabel).
+        const costLabel = computeNetworkCostLabel(newState);
+        const costEl3d = document.getElementById('twin3d-cost-label');
+        if (costEl3d) costEl3d.textContent = costLabel;
+        const costEl2d = document.getElementById('map2d-cost-label');
+        if (costEl2d) costEl2d.textContent = costLabel;
       });
     });
+
+    // Set the correct cost for the default ('actual') state on load,
+    // rather than relying on a static value baked into the HTML.
+    const initCostLabel = computeNetworkCostLabel(state.networkState);
+    const initCostEl3d = document.getElementById('twin3d-cost-label');
+    if (initCostEl3d) initCostEl3d.textContent = initCostLabel;
+    const initCostEl2d = document.getElementById('map2d-cost-label');
+    if (initCostEl2d) initCostEl2d.textContent = initCostLabel;
   }
 
   // Window resize handler for 3D canvas and maps
@@ -391,6 +403,18 @@ function initTabs() {
 
   // Facility panel close
   document.getElementById('fp-close')?.addEventListener('click', closeFacilityPanel);
+
+  // S12: Signal Guardrails & Admin — replaces the old alert() stub
+  document.getElementById('nav-item-settings')?.addEventListener('click', () => {
+    renderAdminSettingsModal();
+    document.getElementById('modal-admin-settings')?.classList.add('visible');
+  });
+  document.getElementById('btn-close-admin-settings')?.addEventListener('click', () => {
+    document.getElementById('modal-admin-settings')?.classList.remove('visible');
+  });
+  document.getElementById('btn-close-admin-settings-bottom')?.addEventListener('click', () => {
+    document.getElementById('modal-admin-settings')?.classList.remove('visible');
+  });
 
   // Action drawer close (still used by scenarios.js's own detail drawer)
   document.getElementById('action-drawer-close')?.addEventListener('click', closeActionDrawer);
@@ -575,7 +599,7 @@ export function renderFacilityDashboard() {
   
   const dashDot = document.getElementById('dash-facility-dot');
   if (dashDot) {
-    dashDot.style.background = utilPct >= 90 ? 'var(--red)' : utilPct >= 75 ? 'var(--amber)' : 'var(--green)';
+    dashDot.style.background = utilColor;
   }
 
   const elDashTitle = document.getElementById('dash-title');
@@ -592,7 +616,7 @@ export function renderFacilityDashboard() {
         <div class="dash-metric-val" style="color:${utilColor}">${utilPct}% <span style="font-size:14px;color:var(--text-3);font-weight:600">(${formatNumber(fac.throughput)}/${formatNumber(fac.capacity)} u/d)</span></div>
         <div class="dash-metric-sub">
           <span>Spare Capacity: <strong>${formatNumber(fac.capacity - fac.throughput)} u/d</strong></span>
-          <span class="tag ${utilPct >= 90 ? 'tag-danger' : utilPct >= 75 ? 'tag-warning' : 'tag-success'}">${getUtilLabel(utilPct)}</span>
+          <span class="tag ${getUtilTagClass(utilPct)}">${getUtilLabel(utilPct)}</span>
         </div>
       </div>
 
@@ -745,7 +769,13 @@ function kpiStripArrowSvg(dir) {
     : `<svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5v10M5 11l5 5 5-5"/></svg>`;
 }
 
-function kpiStripItemHtml({ icon, value, label, deltaPrefix, deltaText, deltaDir, deltaGood }) {
+function kpiStripItemHtml({ icon, value, label, deltaPrefix, deltaText, deltaDir, deltaGood, deltaNeutral }) {
+  // deltaNeutral: a plain source/state label rather than a trend arrow —
+  // used where no authoritative prior-period figure exists to compare
+  // against (see the Total cost tile, sourced from S6's single snapshot).
+  const deltaInner = deltaNeutral
+    ? `<strong style="color:var(--text-3);font-weight:600">${deltaText}</strong>`
+    : `<strong class="tone-${deltaGood ? 'good' : 'bad'}">${deltaText}${kpiStripArrowSvg(deltaDir)}</strong>`;
   return `
     <div class="home2-kpi-strip-item">
       <span class="home2-kpi-strip-icon">${icon}</span>
@@ -753,7 +783,7 @@ function kpiStripItemHtml({ icon, value, label, deltaPrefix, deltaText, deltaDir
         <div class="home2-kpi-strip-value">${value}</div>
         <div class="home2-kpi-strip-name">${label}</div>
         <div class="home2-kpi-strip-delta">${deltaPrefix}
-          <strong class="tone-${deltaGood ? 'good' : 'bad'}">${deltaText}${kpiStripArrowSvg(deltaDir)}</strong>
+          ${deltaInner}
         </div>
       </div>
     </div>`;
@@ -762,30 +792,53 @@ function kpiStripItemHtml({ icon, value, label, deltaPrefix, deltaText, deltaDir
 // ─── Home KPI Strip (Network Today — 3 headline, network-wide KPIs;
 //     the full facility-by-facility breakdown lives behind "View all
 //     KPIs" on the Facility Dashboard tab) ───────────────────────────
+// S1 P0 coverage: Total Network Cost (tile 1), Fill Rate (tile 2 — see
+// note below on why this isn't split into a second SLA-Adherence figure),
+// Savings % (tile 3, replacing the lower-priority Utilization-detail tile
+// that used to be here — Capacity Risk itself is already surfaced via the
+// attention feed's risk-categorized cards, not duplicated here).
+//
+// Total cost is sourced from S6's getOptimizedBaseCase().baseline — not
+// from getNetworkKpis()'s FACILITY_KPIS sum, which is a different, much
+// larger figure (per-facility operating cost on a different basis, ~3x
+// this network total) that was being shown here as if it were the same
+// "Total Network Cost" every other screen displays. getNetworkKpis() is
+// still used below for Fill Rate, which has no other single owner.
 function renderHomeKPIs() {
   const kpis = getNetworkKpis(state.selectedPeriod);
   const grid = document.getElementById('home-kpi-grid');
   if (!kpis || !grid) return;
 
-  const costDeltaPct = pctDelta(kpis.totalCost.value, kpis.totalCost.prev);
-  const slaVsTarget = kpis.sla.value - kpis.sla.target;
-  const utilDeltaPct = pctDelta(kpis.utilisation.value, kpis.utilisation.prev);
+  const baselineCost = getOptimizedBaseCase().baseline.totalCost;
+  const fillRateVsTarget = kpis.sla.value - kpis.sla.target;
+  // Savings Opportunity: the Recommended scenario's cost delta vs the
+  // Actual baseline (SCN_REBALANCE.costChange) — a scenario-state figure,
+  // not an Actual-state observation, so it's explicitly captioned "if
+  // adopted" rather than presented as something that has already happened.
+  const recommended = SCENARIOS.find(s => s.id === 'SCN_REBALANCE');
+  const savingsPct = recommended ? Math.abs(recommended.costChange) : null;
 
   grid.innerHTML = [
     kpiStripItemHtml({
-      icon: '₹', value: formatCurrency(kpis.totalCost.value), label: 'Total cost',
-      deltaPrefix: 'vs last period:', deltaText: fmtDelta(costDeltaPct),
-      deltaDir: costDeltaPct <= 0 ? 'down' : 'up', deltaGood: costDeltaPct <= 0,
+      icon: '₹', value: formatCurrency(baselineCost), label: 'Total cost',
+      deltaPrefix: 'Source:', deltaText: 'S6 Optimized Base Case (Actual)', deltaNeutral: true,
     }),
     kpiStripItemHtml({
-      icon: '✅', value: `${kpis.sla.value}%`, label: 'On-time service (SLA)',
-      deltaPrefix: 'vs target:', deltaText: fmtDelta(slaVsTarget),
-      deltaDir: slaVsTarget < 0 ? 'down' : 'up', deltaGood: slaVsTarget >= 0,
+      // This mock field is a single on-time/fulfilled-delivery %, which is
+      // genuinely what "Fill Rate" measures — it is deliberately NOT also
+      // labeled/split into a distinct "SLA Adherence" figure, since that
+      // needs an actual-arrival-timestamp data source this schema doesn't
+      // have; showing two labels off one number would fabricate precision
+      // that doesn't exist. SLA/Service Level (P0 #3) is a known, deferred
+      // gap, not something this tile silently covers.
+      icon: '✅', value: `${kpis.sla.value}%`, label: 'Fill Rate',
+      deltaPrefix: 'vs target:', deltaText: fmtDelta(fillRateVsTarget),
+      deltaDir: fillRateVsTarget < 0 ? 'down' : 'up', deltaGood: fillRateVsTarget >= 0,
     }),
     kpiStripItemHtml({
-      icon: '📊', value: `${kpis.utilisation.value}%`, label: 'Capacity utilization',
-      deltaPrefix: 'vs last period:', deltaText: fmtDelta(utilDeltaPct),
-      deltaDir: utilDeltaPct <= 0 ? 'down' : 'up', deltaGood: utilDeltaPct <= 0,
+      icon: '🎯', value: savingsPct !== null ? `${savingsPct}%` : 'Not available', label: 'Savings opportunity',
+      deltaPrefix: 'if adopted:', deltaText: 'Recommended scenario',
+      deltaDir: 'down', deltaGood: true,
     }),
   ].join('');
 }
@@ -837,7 +890,7 @@ function renderHomeTwinCallout() {
   }
 
   const utilLabel = getUtilLabel(fac.utilPct);
-  const tone = utilLabel === 'Critical' ? 'red' : utilLabel === 'Moderate' ? 'amber' : 'green';
+  const tone = utilLabel === 'Critical' ? 'red' : utilLabel === 'Stress' ? 'amber' : 'green';
 
   el.innerHTML = `
     <div class="home-twin-callout-head">
@@ -985,6 +1038,21 @@ export function closeActionDrawer() {
 // ═══════════════════════════════════════════════════════════
 
 // ─── Digital Twin Tables ────────────────────────────────────
+// ─── Network Cost (Digital Twin stats overlay) ──────────────
+// S2's own P0: a teaser of the authoritative Total Network Cost, sourced
+// per single-owner rules rather than computed here. "Actual" reads S6's
+// Optimized-Base-Case function's baseline figure (S2 is that function's
+// designated display for the Actual-state cost, per the KPI Master
+// Reference's ownership table); "Recommended" reads that scenario's own
+// cost straight from SCENARIOS. Neither branch recomputes anything.
+function computeNetworkCostLabel(networkState) {
+  if (networkState === 'recommended') {
+    const rec = SCENARIOS.find(s => s.id === 'SCN_REBALANCE');
+    return rec ? formatCurrency(rec.totalCost) : 'Not available';
+  }
+  return formatCurrency(getOptimizedBaseCase().baseline.totalCost);
+}
+
 function renderTwinTables() {
   // Plants
   const plantBody = document.querySelector('#table-plants tbody');
@@ -1005,7 +1073,7 @@ function renderTwinTables() {
     dcBody.innerHTML = DCS.map(d => {
       const color = getUtilColor(d.utilPct);
       const label = getUtilLabel(d.utilPct);
-      const tagClass = d.utilPct >= 90 ? 'tag-danger' : d.utilPct >= 75 ? 'tag-warning' : 'tag-success';
+      const tagClass = getUtilTagClass(d.utilPct);
       return `
         <tr class="clickable-row" data-id="${d.id}">
           <td>${d.name}</td>
@@ -1048,15 +1116,21 @@ window.openFacilityPanel = function(facilityId) {
   const utilColor = getUtilColor(utilPct);
   const utilLabel = getUtilLabel(utilPct);
 
+  // S2 P0 #5: every facility needs a risk/bottleneck status, not just
+  // Delhi — derived from the same utilLabel already computed above (no new
+  // calculation), so the band can never drift from what the map/DC table
+  // already show for this facility.
+  const riskStatus = utilLabel === 'Critical' ? 'HIGH — Capacity Breach'
+    : utilLabel === 'Stress' ? 'MEDIUM — Approaching Capacity'
+    : 'LOW — Healthy Headroom';
+
+  // Delhi keeps its December forecast callout as additional context on top
+  // of the general risk row below, not as a replacement for it.
   const isBaddi = facilityId === 'DC_DELHI';
   const forecastSection = isBaddi ? `
     <div class="fp-stat" style="border-bottom:2px solid var(--red)">
       <span class="fp-stat-label">Forecast Dec 2026</span>
       <span class="fp-stat-value" style="color:var(--red)">10,800 units/day</span>
-    </div>
-    <div class="fp-stat">
-      <span class="fp-stat-label">Risk</span>
-      <span class="fp-stat-value"><span class="tag tag-danger">HIGH — Capacity Breach</span></span>
     </div>
   ` : '';
 
@@ -1067,10 +1141,11 @@ window.openFacilityPanel = function(facilityId) {
     <div class="fp-stat"><span class="fp-stat-label">Status</span><span class="fp-stat-value"><span class="tag tag-success">Active</span></span></div>
     <div class="fp-stat"><span class="fp-stat-label">Capacity</span><span class="fp-stat-value">${formatNumber(fac.capacity)} units/day</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Current Throughput</span><span class="fp-stat-value">${formatNumber(fac.throughput)} units/day</span></div>
-    <div class="fp-stat"><span class="fp-stat-label">Utilisation</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${utilPct >= 90 ? 'tag-danger' : utilPct >= 75 ? 'tag-warning' : 'tag-success'}">${utilLabel}</span></span></div>
+    <div class="fp-stat"><span class="fp-stat-label">Utilisation</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${getUtilTagClass(utilPct)}">${utilLabel}</span></span></div>
     ${isDC ? `<div class="fp-stat"><span class="fp-stat-label">Fixed Cost</span><span class="fp-stat-value">₹${fac.fixedCost}L/year</span></div>` : ''}
     ${isDC ? `<div class="fp-stat"><span class="fp-stat-label">Handling Cost</span><span class="fp-stat-value">₹${fac.handlingCost}/unit</span></div>` : ''}
     ${forecastSection}
+    <div class="fp-stat"><span class="fp-stat-label">Risk / Bottleneck</span><span class="fp-stat-value"><span class="tag ${getUtilTagClass(utilPct)}">${riskStatus}</span></span></div>
     <div style="margin-top:var(--space-lg)">
       <div class="card-title mb-md">Connected Lanes</div>
       ${LANES.filter(l => l.from === facilityId || l.to === facilityId).map(l => `
@@ -1215,12 +1290,60 @@ function renderDataIntelligence() {
         <div class="flex gap-sm mt-sm" style="flex-wrap:wrap">
           <span class="tag tag-muted">Geography: ${sig.geography}</span>
           <span class="tag tag-muted">Direction: ${sig.direction}</span>
+          <span class="tag tag-muted">Magnitude: ${sig.magnitude}</span>
           <span class="tag ${sig.confidence === 'HIGH' ? 'tag-success' : 'tag-warning'}">Conf: ${sig.confidence}</span>
+          <span class="tag tag-muted" title="No Signal_Type field exists in the current schema — every signal shares the same generic 'signal' type today">Category: Not available</span>
+          <span class="tag tag-muted" title="No severity/materiality threshold field exists in the current schema to compute a guardrail bucket">Guardrail status: Not available</span>
         </div>
         <div class="text-xs mt-sm" style="color:var(--primary);font-weight:600">→ ${sig.intendedUse}</div>
       </div>
     `).join('');
   }
+}
+
+// ─── S12: Signal Guardrails & Admin ──────────────────────────
+// Sourced from GOVERNANCE_TIERS and SYSTEM_STATUS (data.js) — both fully
+// authored but never wired into any screen before this. Trigger
+// keywords/buckets and Product Master have no backing data anywhere in
+// this build, so they show "Not available" rather than invented content.
+function renderAdminSettingsModal() {
+  const body = document.getElementById('admin-settings-body');
+  if (!body) return;
+
+  const tiersHtml = GOVERNANCE_TIERS.map(t => `
+    <div style="padding:10px 0">
+      <span class="tag" style="background:${t.color}22;color:${t.color};font-weight:700">Tier ${t.tier} — ${t.label}</span>
+      <div class="text-sm mt-xs" style="color:var(--text-1)">${t.description}</div>
+      <div class="text-xs text-muted mt-xs">Materiality threshold: ${t.criteria}</div>
+    </div>
+  `).join('<hr style="border:none;border-top:1px solid var(--border-light);margin:0">');
+
+  const opt = SYSTEM_STATUS.optimisation;
+  const fc = SYSTEM_STATUS.forecast;
+  const d = SYSTEM_STATUS.data;
+  const ai = SYSTEM_STATUS.ai;
+
+  body.innerHTML = `
+    <div class="card-title" style="font-size:13px;margin:10px 0 6px">Guardrail Configuration &amp; Materiality Thresholds</div>
+    <div style="border:1px solid var(--border-light);border-radius:var(--r-sm);padding:0 12px">${tiersHtml}</div>
+
+    <div class="card-title" style="font-size:13px;margin:18px 0 6px">Optimization Configuration</div>
+    <div class="grid-2" style="gap:10px;font-size:12.5px">
+      <div><span class="text-muted">Solver</span><br><strong>${opt.solver}</strong></div>
+      <div><span class="text-muted">Status</span><br><strong>${opt.status}</strong></div>
+      <div><span class="text-muted">Last run</span><br><strong>${new Date(opt.lastRun).toLocaleString('en-IN')}</strong></div>
+      <div><span class="text-muted">Forecast model</span><br><strong>${fc.model}</strong></div>
+      <div><span class="text-muted">Forecast horizon</span><br><strong>${fc.horizon}</strong></div>
+      <div><span class="text-muted">Data quality</span><br><strong>${d.qualityPct}% (${d.facilities} facilities, ${d.lanes} lanes)</strong></div>
+      <div><span class="text-muted">AI agent</span><br><strong>${ai.agentStatus} — ${ai.model}</strong></div>
+    </div>
+
+    <div class="card-title" style="font-size:13px;margin:18px 0 6px">Trigger Keywords / Buckets</div>
+    <div class="text-xs" style="color:var(--text-2);font-style:italic">Not available — no keyword/bucket configuration exists in this build yet.</div>
+
+    <div class="card-title" style="font-size:13px;margin:18px 0 6px">Product Master / Configuration</div>
+    <div class="text-xs" style="color:var(--text-2);font-style:italic">Not available — no Product Master data exists in this build yet.</div>
+  `;
 }
 
 // ─── Notification Toast ─────────────────────────────────────

@@ -9462,8 +9462,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
                 <span class="twin3d-stat-label">Active Corridors</span>
               </div>
               <div class="twin3d-stat">
-                <span class="twin3d-stat-value" id="map2d-state-label">Actual</span>
-                <span class="twin3d-stat-label">Network State</span>
+                <span class="twin3d-stat-value" id="map2d-risk-label">Stress</span>
+                <span class="twin3d-stat-label">Overall Risk</span>
               </div>
             </div>
           </div>
@@ -9482,8 +9482,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
                 <span class="twin3d-stat-label">Active Corridors</span>
               </div>
               <div class="twin3d-stat">
-                <span class="twin3d-stat-value" id="twin3d-state-label">Actual</span>
-                <span class="twin3d-stat-label">Network State</span>
+                <span class="twin3d-stat-value" id="twin3d-risk-label">Stress</span>
+                <span class="twin3d-stat-label">Overall Risk</span>
               </div>
             </div>
             <!-- Camera Controls Hint -->
@@ -9497,9 +9497,9 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
               <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#075985"></span>Demand Market</div>
               <div class="twin3d-legend-divider">
                 <div class="twin3d-legend-title">DC Color = Utilisation</div>
-                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b91c1c"></span>Critical (&gt;90%)</div>
-                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b45309"></span>Moderate (75–90%)</div>
-                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#047857"></span>Healthy (&lt;75%)</div>
+                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b91c1c"></span>Critical (&gt;95%)</div>
+                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b45309"></span>Stress (85–95%)</div>
+                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#047857"></span>Healthy (&lt;85%)</div>
               </div>
             </div>
           </div>
@@ -11399,16 +11399,29 @@ function formatNumber(value) {
   return value.toLocaleString("en-IN");
 }
 
+// Single owner for the utilization risk bands used everywhere in the app
+// (KPI tiles, map markers, facility panels, legends) — Healthy <85%,
+// Stress 85-95%, Critical >=95%, matching the audited KPI Formula/Logic
+// Verification's DC Capacity Utilization thresholds. Every other place
+// that needs a color, label or tag class for a utilization number should
+// call one of these three functions rather than re-testing the raw
+// percentage, so the band can never drift out of sync between screens.
 function getUtilColor(pct) {
-  if (pct >= 90) return "#dc2626";
-  if (pct >= 75) return "#f59e0b";
+  if (pct >= 95) return "#dc2626";
+  if (pct >= 85) return "#f59e0b";
   return "#22c55e";
 }
 
 function getUtilLabel(pct) {
-  if (pct >= 90) return "Critical";
-  if (pct >= 75) return "Moderate";
+  if (pct >= 95) return "Critical";
+  if (pct >= 85) return "Stress";
   return "Healthy";
+}
+
+function getUtilTagClass(pct) {
+  if (pct >= 95) return "tag-danger";
+  if (pct >= 85) return "tag-warning";
+  return "tag-success";
 }
 
 /* ═════════ basemap-data.js ═════════ */
@@ -11951,9 +11964,9 @@ function addLegend(map, isCompact = false) {
         <div style="display:flex;align-items:center">${iconChip(COLORS.market, '📦')}Demand Market</div>
         <div style="margin-top:7px;padding-top:7px;border-top:1px solid #eee">
           <div style="font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">DC Ring = Utilisation</div>
-          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-right:7px"></span>Critical (&gt;90%)</div>
-          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:7px"></span>Moderate (75–90%)</div>
-          <div style="display:flex;align-items:center"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:7px"></span>Healthy (&lt;75%)</div>
+          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-right:7px"></span>Critical (&gt;95%)</div>
+          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:7px"></span>Stress (85–95%)</div>
+          <div style="display:flex;align-items:center"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:7px"></span>Healthy (&lt;85%)</div>
         </div>
       `;
     }
@@ -12368,10 +12381,13 @@ function createDC3D(data, pos) {
   const group = new THREE.Group();
   group.position.copy(pos);
 
-  // Utilization Color Coding
+  // Utilization Color Coding — same Healthy/Stress/Critical band data.js's
+  // getUtilLabel owns everywhere else (85%/95%), just re-expressed in the
+  // 3D theme's own color set.
   let dcColor = THEME_COLORS.dcHealthy;
-  if (data.utilPct >= 90) dcColor = THEME_COLORS.dcCritical;
-  else if (data.utilPct >= 75) dcColor = THEME_COLORS.dcWarning;
+  const utilBand = getUtilLabel(data.utilPct);
+  if (utilBand === 'Critical') dcColor = THEME_COLORS.dcCritical;
+  else if (utilBand === 'Stress') dcColor = THEME_COLORS.dcWarning;
 
   const radius = 1.3 + (data.utilPct / 100) * 0.7;
 
@@ -12408,7 +12424,7 @@ function createDC3D(data, pos) {
   const beamMat = new THREE.MeshBasicMaterial({
     color: dcColor,
     transparent: true,
-    opacity: data.utilPct >= 90 ? 0.45 : 0.25,
+    opacity: utilBand === 'Critical' ? 0.45 : 0.25,
   });
   const beam = new THREE.Mesh(beamGeo, beamMat);
   beam.position.y = 8.5;
@@ -18096,12 +18112,14 @@ function initTabs() {
         // Update 3D twin
         setTwin3DState(newState);
 
-        // Update 3D + 2D stats overlays
-        const names = { actual: 'Actual', recommended: 'Recommended' };
-        const stateLabel = document.getElementById('twin3d-state-label');
-        if (stateLabel) stateLabel.textContent = names[newState] || newState;
-        const stateLabel2d = document.getElementById('map2d-state-label');
-        if (stateLabel2d) stateLabel2d.textContent = names[newState] || newState;
+        // Update the "Overall Risk" stat on both overlays — worst DC
+        // utilization band under this state, same Healthy/Stress/Critical
+        // scale as everywhere else (getUtilLabel).
+        const riskLabel = computeOverallRiskLabel(newState);
+        const riskEl3d = document.getElementById('twin3d-risk-label');
+        if (riskEl3d) riskEl3d.textContent = riskLabel;
+        const riskEl2d = document.getElementById('map2d-risk-label');
+        if (riskEl2d) riskEl2d.textContent = riskLabel;
       });
     });
   }
@@ -18297,7 +18315,7 @@ function renderFacilityDashboard() {
   
   const dashDot = document.getElementById('dash-facility-dot');
   if (dashDot) {
-    dashDot.style.background = utilPct >= 90 ? 'var(--red)' : utilPct >= 75 ? 'var(--amber)' : 'var(--green)';
+    dashDot.style.background = utilColor;
   }
 
   const elDashTitle = document.getElementById('dash-title');
@@ -18314,7 +18332,7 @@ function renderFacilityDashboard() {
         <div class="dash-metric-val" style="color:${utilColor}">${utilPct}% <span style="font-size:14px;color:var(--text-3);font-weight:600">(${formatNumber(fac.throughput)}/${formatNumber(fac.capacity)} u/d)</span></div>
         <div class="dash-metric-sub">
           <span>Spare Capacity: <strong>${formatNumber(fac.capacity - fac.throughput)} u/d</strong></span>
-          <span class="tag ${utilPct >= 90 ? 'tag-danger' : utilPct >= 75 ? 'tag-warning' : 'tag-success'}">${getUtilLabel(utilPct)}</span>
+          <span class="tag ${getUtilTagClass(utilPct)}">${getUtilLabel(utilPct)}</span>
         </div>
       </div>
 
@@ -18484,14 +18502,24 @@ function kpiStripItemHtml({ icon, value, label, deltaPrefix, deltaText, deltaDir
 // ─── Home KPI Strip (Network Today — 3 headline, network-wide KPIs;
 //     the full facility-by-facility breakdown lives behind "View all
 //     KPIs" on the Facility Dashboard tab) ───────────────────────────
+// S1 P0 coverage: Total Network Cost (tile 1), Fill Rate (tile 2 — see
+// note below on why this isn't split into a second SLA-Adherence figure),
+// Savings % (tile 3, replacing the lower-priority Utilization-detail tile
+// that used to be here — Capacity Risk itself is already surfaced via the
+// attention feed's risk-categorized cards, not duplicated here).
 function renderHomeKPIs() {
   const kpis = getNetworkKpis(state.selectedPeriod);
   const grid = document.getElementById('home-kpi-grid');
   if (!kpis || !grid) return;
 
   const costDeltaPct = pctDelta(kpis.totalCost.value, kpis.totalCost.prev);
-  const slaVsTarget = kpis.sla.value - kpis.sla.target;
-  const utilDeltaPct = pctDelta(kpis.utilisation.value, kpis.utilisation.prev);
+  const fillRateVsTarget = kpis.sla.value - kpis.sla.target;
+  // Savings Opportunity: the Recommended scenario's cost delta vs the
+  // Actual baseline (SCN_REBALANCE.costChange) — a scenario-state figure,
+  // not an Actual-state observation, so it's explicitly captioned "if
+  // adopted" rather than presented as something that has already happened.
+  const recommended = SCENARIOS.find(s => s.id === 'SCN_REBALANCE');
+  const savingsPct = recommended ? Math.abs(recommended.costChange) : null;
 
   grid.innerHTML = [
     kpiStripItemHtml({
@@ -18500,14 +18528,21 @@ function renderHomeKPIs() {
       deltaDir: costDeltaPct <= 0 ? 'down' : 'up', deltaGood: costDeltaPct <= 0,
     }),
     kpiStripItemHtml({
-      icon: '✅', value: `${kpis.sla.value}%`, label: 'On-time service (SLA)',
-      deltaPrefix: 'vs target:', deltaText: fmtDelta(slaVsTarget),
-      deltaDir: slaVsTarget < 0 ? 'down' : 'up', deltaGood: slaVsTarget >= 0,
+      // This mock field is a single on-time/fulfilled-delivery %, which is
+      // genuinely what "Fill Rate" measures — it is deliberately NOT also
+      // labeled/split into a distinct "SLA Adherence" figure, since that
+      // needs an actual-arrival-timestamp data source this schema doesn't
+      // have; showing two labels off one number would fabricate precision
+      // that doesn't exist. SLA/Service Level (P0 #3) is a known, deferred
+      // gap, not something this tile silently covers.
+      icon: '✅', value: `${kpis.sla.value}%`, label: 'Fill Rate',
+      deltaPrefix: 'vs target:', deltaText: fmtDelta(fillRateVsTarget),
+      deltaDir: fillRateVsTarget < 0 ? 'down' : 'up', deltaGood: fillRateVsTarget >= 0,
     }),
     kpiStripItemHtml({
-      icon: '📊', value: `${kpis.utilisation.value}%`, label: 'Capacity utilization',
-      deltaPrefix: 'vs last period:', deltaText: fmtDelta(utilDeltaPct),
-      deltaDir: utilDeltaPct <= 0 ? 'down' : 'up', deltaGood: utilDeltaPct <= 0,
+      icon: '🎯', value: savingsPct !== null ? `${savingsPct}%` : 'Not available', label: 'Savings opportunity',
+      deltaPrefix: 'if adopted:', deltaText: 'Recommended scenario',
+      deltaDir: 'down', deltaGood: true,
     }),
   ].join('');
 }
@@ -18559,7 +18594,7 @@ function renderHomeTwinCallout() {
   }
 
   const utilLabel = getUtilLabel(fac.utilPct);
-  const tone = utilLabel === 'Critical' ? 'red' : utilLabel === 'Moderate' ? 'amber' : 'green';
+  const tone = utilLabel === 'Critical' ? 'red' : utilLabel === 'Stress' ? 'amber' : 'green';
 
   el.innerHTML = `
     <div class="home-twin-callout-head">
@@ -18707,6 +18742,21 @@ function closeActionDrawer() {
 // ═══════════════════════════════════════════════════════════
 
 // ─── Digital Twin Tables ────────────────────────────────────
+// ─── Overall Risk (Digital Twin stats overlay) ──────────────
+// A cheap, always-available governed-risk indicator for the twin's stats
+// strip — the worst DC utilization band across the network, using the
+// same overrides the 2D/3D map layers already apply for "Recommended".
+function computeOverallRiskLabel(networkState) {
+  const overrides = networkState === 'recommended'
+    ? { DC_DELHI: 91.0, DC_KOLKATA: 64.0 }
+    : {};
+  const worstPct = DCS.reduce((max, d) => {
+    const pct = overrides[d.id] !== undefined ? overrides[d.id] : d.utilPct;
+    return Math.max(max, pct);
+  }, 0);
+  return getUtilLabel(worstPct);
+}
+
 function renderTwinTables() {
   // Plants
   const plantBody = document.querySelector('#table-plants tbody');
@@ -18727,7 +18777,7 @@ function renderTwinTables() {
     dcBody.innerHTML = DCS.map(d => {
       const color = getUtilColor(d.utilPct);
       const label = getUtilLabel(d.utilPct);
-      const tagClass = d.utilPct >= 90 ? 'tag-danger' : d.utilPct >= 75 ? 'tag-warning' : 'tag-success';
+      const tagClass = getUtilTagClass(d.utilPct);
       return `
         <tr class="clickable-row" data-id="${d.id}">
           <td>${d.name}</td>
@@ -18789,7 +18839,7 @@ window.openFacilityPanel = function(facilityId) {
     <div class="fp-stat"><span class="fp-stat-label">Status</span><span class="fp-stat-value"><span class="tag tag-success">Active</span></span></div>
     <div class="fp-stat"><span class="fp-stat-label">Capacity</span><span class="fp-stat-value">${formatNumber(fac.capacity)} units/day</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Current Throughput</span><span class="fp-stat-value">${formatNumber(fac.throughput)} units/day</span></div>
-    <div class="fp-stat"><span class="fp-stat-label">Utilisation</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${utilPct >= 90 ? 'tag-danger' : utilPct >= 75 ? 'tag-warning' : 'tag-success'}">${utilLabel}</span></span></div>
+    <div class="fp-stat"><span class="fp-stat-label">Utilisation</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${getUtilTagClass(utilPct)}">${utilLabel}</span></span></div>
     ${isDC ? `<div class="fp-stat"><span class="fp-stat-label">Fixed Cost</span><span class="fp-stat-value">₹${fac.fixedCost}L/year</span></div>` : ''}
     ${isDC ? `<div class="fp-stat"><span class="fp-stat-label">Handling Cost</span><span class="fp-stat-value">₹${fac.handlingCost}/unit</span></div>` : ''}
     ${forecastSection}

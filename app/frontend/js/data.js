@@ -24,11 +24,6 @@ export const DCS = [
   { id: "DC_GUWAHATI", name: "Guwahati DC", city: "Guwahati", state: "Assam", lat: 26.14, lng: 91.74, capacity: 4000, throughput: 2100, fixedCost: 65, handlingCost: 3.8, region: "Northeast", status: "EXISTING", utilPct: 52.5 },
 ];
 
-export const FACILITIES = [
-  ...PLANTS.map((p) => ({ ...p, type: 'Plant' })),
-  ...DCS.map((d) => ({ ...d, type: 'DC' })),
-];
-
 export const MARKETS = [
   { id: "MKT_DELHI", name: "Delhi", lat: 28.70, lng: 77.10, demand: 4200, slaDays: 2, priority: "High", region: "North" },
   { id: "MKT_MUMBAI", name: "Mumbai", lat: 19.08, lng: 72.88, demand: 3800, slaDays: 2, priority: "High", region: "West" },
@@ -40,6 +35,39 @@ export const MARKETS = [
   { id: "MKT_JAIPUR", name: "Jaipur", lat: 26.91, lng: 75.79, demand: 1500, slaDays: 3, priority: "Medium", region: "North" },
   { id: "MKT_LUCKNOW", name: "Lucknow", lat: 26.85, lng: 80.95, demand: 1400, slaDays: 3, priority: "Medium", region: "North" },
   { id: "MKT_GUWAHATI", name: "Guwahati", lat: 26.14, lng: 91.74, demand: 1100, slaDays: 4, priority: "Low", region: "Northeast" },
+];
+
+// ─── S2: de-overlap co-located nodes ──────────────────────────
+// Several plants/DCs/markets share a city and were given the exact same
+// lat/lng (e.g. Kolkata Plant, Kolkata DC and the Kolkata market all sit at
+// 22.57,88.36), which made them render as fully stacked, indistinguishable
+// icons on both the 2D Leaflet map and the 3D twin — neither has any
+// de-collision logic of its own. Fixed once here, at the shared data
+// source, so every consumer (map.js, twin3d.js, lane endpoints, FACILITIES)
+// sees already-separated coordinates. This is a schematic nudge for
+// legibility, not a claim about real inter-facility distance.
+function deoverlapNodes(nodeArrays) {
+  const groups = new Map();
+  nodeArrays.flat().forEach((n) => {
+    const key = `${n.lat.toFixed(4)},${n.lng.toFixed(4)}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(n);
+  });
+  const FAN_RADIUS = 0.9; // degrees — visibly separates icons on the India-wide view
+  groups.forEach((nodes) => {
+    if (nodes.length < 2) return;
+    nodes.forEach((n, i) => {
+      const angle = (2 * Math.PI * i) / nodes.length;
+      n.lat += FAN_RADIUS * Math.sin(angle);
+      n.lng += FAN_RADIUS * Math.cos(angle);
+    });
+  });
+}
+deoverlapNodes([PLANTS, DCS, MARKETS]);
+
+export const FACILITIES = [
+  ...PLANTS.map((p) => ({ ...p, type: 'Plant' })),
+  ...DCS.map((d) => ({ ...d, type: 'DC' })),
 ];
 
 // ─── LANES (key corridors with cost, distance, lead time) ───
@@ -1236,15 +1264,96 @@ export function formatNumber(value) {
   return value.toLocaleString("en-IN");
 }
 
+// Single owner for the utilization risk bands used everywhere in the app
+// (KPI tiles, map markers, facility panels, legends) — Healthy <85%,
+// Stress 85-95%, Critical >=95%, matching the audited KPI Formula/Logic
+// Verification's DC Capacity Utilization thresholds. Every other place
+// that needs a color, label or tag class for a utilization number should
+// call one of these three functions rather than re-testing the raw
+// percentage, so the band can never drift out of sync between screens.
 export function getUtilColor(pct) {
-  if (pct >= 90) return "#dc2626";
-  if (pct >= 75) return "#f59e0b";
+  if (pct >= 95) return "#dc2626";
+  if (pct >= 85) return "#f59e0b";
   return "#22c55e";
 }
 
 export function getUtilLabel(pct) {
-  if (pct >= 90) return "Critical";
-  if (pct >= 75) return "Moderate";
+  if (pct >= 95) return "Critical";
+  if (pct >= 85) return "Stress";
   return "Healthy";
+}
+
+export function getUtilTagClass(pct) {
+  if (pct >= 95) return "tag-danger";
+  if (pct >= 85) return "tag-warning";
+  return "tag-success";
+}
+
+// ─── S6: Optimized Base Case (single owner) ──────────────────────────
+// The ONE authoritative computation of "today's facility footprint held
+// fixed, only routing/allocation re-optimized" — Z = ΣC_ij·x_ij (transport)
+// + ΣF_j·y_j (fixed facility, unchanged since footprint is fixed) +
+// ΣP_unmet·u_k (shortage penalty, ₹10,000/unit) + SLA-pen, per the KPI
+// Formula/Logic Verification's Total Network Cost definition.
+//
+// This is NOT the same figure as SCENARIOS' SCN_REBALANCE ("Recommended"):
+// that scenario allows volume reallocation across plants and is a candidate
+// action a user opts into, whereas the Optimized Base Case is the routing-
+// only floor achievable with zero footprint change. Do not conflate them —
+// every screen that shows a "Baseline Cost" / "Optimized Cost" / "Savings"
+// figure for S6 must call this function rather than reading SCENARIOS or
+// getNetworkKpis() (both are separate, independently-owned figures).
+//
+// Provenance: DEMO. No live optimizer is wired into this prototype, so
+// these numbers are hand-authored to be internally consistent (fixed cost
+// unchanged, transport cost improved, shortage penalty cleared by better
+// routing) rather than fabricated as if they were a solver result. Once a
+// real deterministic engine is wired in, this function's body — not its
+// call sites — is what gets replaced, and `source` becomes DETERMINISTIC_ENGINE.
+export function getOptimizedBaseCase() {
+  const baseline = {
+    transportCost: 640000,
+    fixedCost: 480000,
+    variableCost: 145000,
+    unmetPenalty: 20000, // 2 units unmet demand @ ₹10,000/unit
+    slaPenalty: 0,
+    sla: 91.2,
+    fillRate: 89.5,
+    avgUtilization: 78.0,
+    maxUtilization: 94.0, // DC Delhi NCR — Stress band
+    inventoryCost: 95000,
+    carbonKgCo2e: 342000,
+    avgDistanceKm: 412,
+  };
+  baseline.totalCost = baseline.transportCost + baseline.fixedCost + baseline.variableCost
+    + baseline.unmetPenalty + baseline.slaPenalty;
+
+  const optimized = {
+    transportCost: 590000,
+    fixedCost: baseline.fixedCost, // footprint held fixed — must equal baseline
+    variableCost: 142000,
+    unmetPenalty: 0, // routing resolves the shortfall that caused baseline's penalty
+    slaPenalty: 0,
+    sla: 96.5,
+    fillRate: 95.8,
+    avgUtilization: 82.0,
+    maxUtilization: 84.0, // DC Delhi NCR relieved from Stress into Healthy band
+    inventoryCost: 92000,
+    carbonKgCo2e: 318000,
+    avgDistanceKm: 378,
+  };
+  optimized.totalCost = optimized.transportCost + optimized.fixedCost + optimized.variableCost
+    + optimized.unmetPenalty + optimized.slaPenalty;
+
+  const savingsAbs = baseline.totalCost - optimized.totalCost;
+  const savingsPct = +((savingsAbs / baseline.totalCost) * 100).toFixed(1);
+
+  return {
+    source: "DEMO",
+    footprintChange: "None (zero CapEx — same facility set as Actual)",
+    baseline: { ...baseline, capacityHeadroomPct: +(100 - baseline.maxUtilization).toFixed(1) },
+    optimized: { ...optimized, capacityHeadroomPct: +(100 - optimized.maxUtilization).toFixed(1) },
+    savings: { abs: savingsAbs, pct: savingsPct },
+  };
 }
 

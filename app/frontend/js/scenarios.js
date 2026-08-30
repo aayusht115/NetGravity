@@ -9,13 +9,13 @@
  * - Multi-Scenario Trade-off Analysis (Scenario Comparison)
  */
 
-import { SCENARIOS, formatNumber } from './data.js';
+import { SCENARIOS, DCS, formatNumber } from './data.js';
 import { initMap, renderScenarioDigitalTwin, invalidateMapSize } from './map.js';
 
 // ─── State ──────────────────────────────────────────────────
 // Which metric rows the comparison table shows — user-controlled via
 // "Customize metrics" (see renderCustomizeMenu). Defaults to the 4 "key" rows.
-let multiVisibleKeys = ['totalCost', 'sla', 'capacityRisk', 'avgUtil'];
+let multiVisibleKeys = ['totalCost', 'costChange', 'sla', 'capacityRisk'];
 // Up to 3 scenarios shown alongside baseline — the single source of truth
 // for both the comparison table and the Digital Twin map's toggle group.
 let multiSelectedIds = ['SCN_REBALANCE', 'SCN_USER_1'];
@@ -119,28 +119,46 @@ const ALL_METRIC_DEFS = {
 };
 
 // ─── Deep-Dive / Comparison table rows ───────────────────────
-// The 4 "key" rows shown by default in both the single-scenario and
-// multi-scenario tables (Dump/Scenario comparison deepdive updated.png,
-// Dump/Multiple scenario comparison updated.png). "View detailed
-// comparison" appends DETAIL_EXTRA_ROWS underneath.
+// The default-visible rows in the multi-scenario table (Dump/Scenario
+// comparison deepdive updated.png, Dump/Multiple scenario comparison
+// updated.png), picked per the global KPI priority order (Cost > Savings >
+// Service/SLA > Capacity/Risk) rather than the original mockup's set, since
+// S8's spec now requires 9 comparison dimensions and not all of them can be
+// on by default without crowding. "View detailed comparison" / the
+// customize-metrics picker exposes every row in DETAIL_EXTRA_ROWS.
 const DEEPDIVE_ROWS = [
   { key: 'totalCost', label: 'Total Network Cost', sub: '(₹ Lakh per month)', icon: '💰', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'costChange', label: 'Savings %', sub: '(vs baseline)', icon: '💹', unit: 'percent', kind: 'lowerBetter',
+    fmt: (v) => (v === 0 ? '—' : `${v < 0 ? '↓' : '↑'} ${Math.abs(v)}%`) },
   { key: 'sla', label: 'Service Level', sub: '(% on-time delivery)', icon: '🛡️', unit: 'percent', kind: 'higherBetter' },
   { key: 'capacityRisk', label: 'Capacity Risk', sub: '(Overall network)', icon: '⚠️', unit: 'categorical', kind: 'categorical' },
-  { key: 'avgUtil', label: 'Utilization', sub: '(Network avg.)', icon: '📈', unit: 'percent', kind: 'lowerBetter' },
 ];
 
+// Available via the customize-metrics picker (not shown by default) —
+// Fill Rate and Risk Factor are P0-required dimensions for S8 but have no
+// backing data anywhere in this build (confirmed during the S9 pass: no
+// RF/REI data exists, and no scenario carries a fill-rate field), so their
+// rows render "Not available" rather than a fabricated number. Keeping them
+// out of the default view avoids every user seeing a "Not available" row
+// unasked; putting them in the picker keeps the gap honest and discoverable.
 const DETAIL_EXTRA_ROWS = [
+  { key: 'avgUtil', label: 'Avg Utilization', sub: '(Network avg.)', icon: '📈', unit: 'percent', kind: 'lowerBetter' },
+  { key: 'maxUtil', label: 'Max Utilization', sub: '(Peak facility)', icon: '📊', unit: 'percent', kind: 'lowerBetter' },
   { key: 'transportCost', label: 'Transport Cost', sub: '(₹ Lakh per month)', icon: '🚛', unit: 'currency', kind: 'lowerBetter' },
   { key: 'fixedCost', label: 'Fixed Facility Cost', sub: '(₹ Lakh per month)', icon: '🏭', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'inventoryCost', label: 'Inventory Cost', sub: '(₹ Lakh per month)', icon: '📦', unit: 'currency', kind: 'lowerBetter' },
   { key: 'inventoryDays', label: 'Inventory Days', sub: '(Days on hand)', icon: '📦', unit: 'number', kind: 'lowerBetter' },
   { key: 'carbonKg', label: 'Scope 3 Carbon', sub: '(kg CO2 per month)', icon: '🌱', unit: 'number', kind: 'lowerBetter' },
+  { key: 'fillRate', label: 'Fill Rate', sub: '(On-time fulfillment)', icon: '✅', unit: 'percent', kind: 'higherBetter', unavailable: true },
+  { key: 'riskFactor', label: 'Risk Factor (RF)', sub: '(chain explained in Scenario evidence)', icon: '🧭', unit: 'number', kind: 'higherBetter', unavailable: true },
 ];
 
 const ALL_TABLE_ROWS = [...DEEPDIVE_ROWS, ...DETAIL_EXTRA_ROWS];
 
 function fmtRowValue(row, v) {
+  if (row.unavailable) return 'Not available';
   if (v === undefined || v === null) return '—';
+  if (row.fmt) return row.fmt(v);
   if (row.unit === 'currency') return `₹${(v / 100000).toFixed(2)}L`;
   if (row.unit === 'percent') return `${v}%`;
   if (row.unit === 'number') return formatNumber(v);
@@ -167,9 +185,16 @@ function scenarioDisplayName(s) {
 
 // Compares a scenario's value against baseline for one row. Returns
 // { text, good } where good is true/false, or null for "no material
-// change" (categorical rows always render as "—", matching the mockups).
+// change". Categorical rows (Capacity Risk) resolve via riskRank rather
+// than always showing "—" — a scenario that improves risk should say so.
 function computeRowDelta(row, baseVal, scnVal) {
-  if (row.kind === 'categorical') return { text: '—', good: null };
+  if (row.unavailable) return { text: '—', good: null };
+  if (row.kind === 'categorical') {
+    const baseRank = riskRank(baseVal);
+    const scnRank = riskRank(scnVal);
+    if (baseRank === scnRank) return { text: 'Unchanged', good: null };
+    return scnRank < baseRank ? { text: 'Improved', good: true } : { text: 'Worsened', good: false };
+  }
   const diff = scnVal - baseVal;
   if (Math.abs(diff) < 0.001) return { text: '—', good: null };
   const text = row.unit === 'percent'
@@ -181,11 +206,14 @@ function computeRowDelta(row, baseVal, scnVal) {
 
 // Shared deltas used by both the KPI cards and the "NetGravity's take"
 // checklist, so the two always agree with each other and with the table.
+// Looks rows up by key (not position) — DEEPDIVE_ROWS' order isn't stable
+// now that Savings % sits between Total Cost and Service Level.
 function computeScenarioDeltas(baseline, scn) {
+  const rowByKey = (key) => ALL_TABLE_ROWS.find((r) => r.key === key);
   return {
-    cost: computeRowDelta(DEEPDIVE_ROWS[0], baseline.totalCost, scn.totalCost),
-    sla: computeRowDelta(DEEPDIVE_ROWS[1], baseline.sla, scn.sla),
-    util: computeRowDelta(DEEPDIVE_ROWS[3], baseline.avgUtil, scn.avgUtil),
+    cost: computeRowDelta(rowByKey('totalCost'), baseline.totalCost, scn.totalCost),
+    sla: computeRowDelta(rowByKey('sla'), baseline.sla, scn.sla),
+    util: computeRowDelta(rowByKey('avgUtil'), baseline.avgUtil, scn.avgUtil),
     riskGood: riskRank(scn.capacityRisk) < riskRank(baseline.capacityRisk),
   };
 }
@@ -209,6 +237,7 @@ export function initScenarios() {
     });
     renderScenarioDigitalTwin('scenario-leaflet-map', mapActiveId, 'scenario');
     invalidateMapSize('scenario-leaflet-map');
+    renderFutureNetworkCallouts();
   }, 60);
 }
 
@@ -341,6 +370,71 @@ function updateScenarioMap() {
   const mode = mapActiveId === 'SCN_ACTUAL' ? 'baseline' : 'scenario';
   renderScenarioDigitalTwin('scenario-leaflet-map', mapActiveId, mode);
   invalidateMapSize('scenario-leaflet-map');
+  renderFutureNetworkCallouts();
+}
+
+// ─── S10: Future Network View callouts ────────────────────────
+// Compact deltas around the existing map. Cost/Service/Risk reuse
+// computeScenarioDeltas/computeRowDelta — the exact functions S8's
+// comparison table calls — rather than recomputing anything here. Facility
+// and lane/flow changes read straight from the scenario's own
+// assumptions/changes fields (already authored per scenario), never
+// invented for this callout.
+function renderFutureNetworkCallouts() {
+  const container = document.getElementById('scn-future-callouts');
+  const stateLabel = document.getElementById('scn-map-state-label');
+  if (!container) return;
+
+  const baseline = SCENARIOS.find((s) => s.id === 'SCN_ACTUAL') || SCENARIOS[0];
+  const scn = SCENARIOS.find((s) => s.id === mapActiveId) || baseline;
+  const isBaseline = scn.id === 'SCN_ACTUAL';
+
+  if (stateLabel) {
+    stateLabel.textContent = isBaseline
+      ? 'Showing: Actual (observed baseline)'
+      : `Showing: ${scenarioDisplayName(scn)} — Future Network`;
+  }
+
+  if (isBaseline) {
+    container.innerHTML = `
+      <div class="scn-future-callout-chip">
+        <span class="scn-fc-label">State</span>
+        <span class="scn-fc-value">Actual — no scenario deltas to show</span>
+      </div>`;
+    return;
+  }
+
+  const deltas = computeScenarioDeltas(baseline, scn);
+  const facilityFootprint = scn.assumptions?.find((a) => a.label === 'Facility Footprint')?.value || 'Not available';
+  const laneChanges = scn.changes || [];
+  const laneSummary = laneChanges.length
+    ? `${laneChanges.length} change${laneChanges.length === 1 ? '' : 's'} — ${laneChanges[0].item} ${laneChanges[0].change}`
+    : 'Not available';
+
+  const riskRow = ALL_TABLE_ROWS.find((r) => r.key === 'capacityRisk');
+  const riskDelta = computeRowDelta(riskRow, baseline.capacityRisk, scn.capacityRisk);
+  const toneOf = (good) => (good === true ? 'good' : good === false ? 'bad' : '');
+
+  const chips = [
+    { label: 'Facility changes', value: facilityFootprint, tone: '' },
+    { label: 'Lane / flow changes', value: laneSummary, tone: '' },
+    { label: 'Cost impact', value: deltas.cost.text, tone: toneOf(deltas.cost.good) },
+    { label: 'Service impact', value: deltas.sla.text, tone: toneOf(deltas.sla.good) },
+    { label: 'Risk impact', value: `${baseline.capacityRisk} → ${scn.capacityRisk} (${riskDelta.text})`, tone: toneOf(riskDelta.good) },
+  ];
+
+  // P1: Carbon impact, only if the scenario has the field — never fabricated.
+  if (typeof scn.carbonKg === 'number' && typeof baseline.carbonKg === 'number') {
+    const carbonRow = ALL_TABLE_ROWS.find((r) => r.key === 'carbonKg');
+    const carbonDelta = computeRowDelta(carbonRow, baseline.carbonKg, scn.carbonKg);
+    chips.push({ label: 'Carbon impact', value: carbonDelta.text, tone: toneOf(carbonDelta.good) });
+  }
+
+  container.innerHTML = chips.map((c) => `
+    <div class="scn-future-callout-chip ${c.tone}">
+      <span class="scn-fc-label">${c.label}</span>
+      <span class="scn-fc-value">${c.value}</span>
+    </div>`).join('');
 }
 
 // ─── Render Multi-Scenario Comparison Table (up to 3 scenarios) ──
@@ -373,8 +467,14 @@ function renderMultiScenarioTable() {
         })
         .join('');
 
+      // S9: Capacity Risk is the one row wired to the metric drilldown
+      // (evidence trail for the risk chain). Other rows deliberately stay
+      // non-clickable this pass — e.g. totalCost's drilldown branch would
+      // duplicate S6's Total Network Cost ownership, which is out of scope
+      // here and gets fixed when S6 is wired in, not by exposing it via S9.
+      const isRiskRow = row.key === 'capacityRisk';
       return `
-        <tr>
+        <tr${isRiskRow ? ` class="scn-risk-row-clickable" data-metric-key="capacityRisk" data-scenario-id="${selected[0]?.id || ''}"` : ''}>
           <td class="scn-row2-metric">${scenarioRowMetricCellHtml(row)}</td>
           <td class="${baseCls}">${fmtRowValue(row, baseVal)}</td>
           ${cellsHtml}
@@ -394,6 +494,12 @@ function renderMultiScenarioTable() {
       <tbody>${rowsHtml}</tbody>
     </table>
   `;
+
+  container.querySelectorAll('tr[data-metric-key="capacityRisk"]').forEach((tr) => {
+    tr.style.cursor = 'pointer';
+    tr.title = 'View risk evidence';
+    tr.addEventListener('click', () => openMetricDrilldown('capacityRisk', tr.dataset.scenarioId));
+  });
 }
 
 // ─── "NetGravity's take" card — single & multi-scenario views ───
@@ -660,7 +766,19 @@ export function openMetricDrilldown(metricKey, scenarioId) {
       </div>
     `;
   } else if (metricKey === 'capacityRisk' || metricKey === 'delhiUtil' || metricKey === 'avgUtil') {
+    // S9 P0 coverage for the risk chain: KPI+value (chips above), source/
+    // state (this row), contributing factors, threshold, deterministic
+    // evidence (the two boxes below — unchanged from before this pass) and
+    // an AI-written explanation kept visibly separate via its own
+    // provenance-badge, per the "never show RF alone" rule's intent — since
+    // this build has no REI/RF/VaR data at all, that's stated explicitly
+    // as Not available rather than a fabricated score.
+    const baselineName = scenarioDisplayName(baseline);
+    const scenarioName = scenarioDisplayName(scn);
     detailHtml = `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:11.5px;color:var(--text-2)">
+        <span>State: <strong>${baselineName}</strong> vs <strong>${scenarioName}</strong></span>
+      </div>
       <div style="font-size:12.5px;color:var(--text-2);margin-bottom:14px">
         Projected peak utilization for December demand surge (+14.2% YoY growth).
       </div>
@@ -673,6 +791,26 @@ export function openMetricDrilldown(metricKey, scenarioId) {
           <span class="text-xs text-muted">Delhi NCR DC (Scenario)</span>
           <div style="font-size:16px;font-weight:800;color:var(--green)">91% (Safe Headroom)</div>
         </div>
+      </div>
+      <div style="font-size:12px;margin:12px 0 4px;color:var(--text-1);font-weight:700">Governance threshold</div>
+      <div style="font-size:12.5px;color:var(--text-2);margin-bottom:12px">
+        Utilization ≥95% is classified Critical; 85–95% is Stress. Delhi NCR's baseline projection (108%) breaches the Critical threshold; the scenario's 91% falls to Stress, below the breach line.
+      </div>
+      <div style="font-size:12px;margin:12px 0 4px;color:var(--text-1);font-weight:700">Contributing factors</div>
+      <ul style="font-size:12.5px;color:var(--text-2);margin:0 0 14px 18px;padding:0">
+        <li>December demand forecast: +14.2% YoY growth in North India</li>
+        <li>Baddi → Delhi NCR is the network's highest-volume corridor</li>
+        <li>Delhi NCR has no spare capacity headroom at baseline; Kolkata DC has 41% headroom available</li>
+      </ul>
+      <div style="font-size:12px;margin:12px 0 4px;color:var(--text-1);font-weight:700">Risk chain (P → REI → RF)</div>
+      <div style="font-size:12px;color:var(--text-2);margin-bottom:14px;font-style:italic">
+        Not available — this build does not compute Facility REI or Governed Risk Factor (RF). The label above is a categorical risk read of the utilization projection only, not a synthesized RF score.
+      </div>
+      <span class="provenance-badge model-fact">MODEL FACT — evidence above</span>
+      <hr style="border:none;border-top:1px solid var(--border-light);margin:14px 0">
+      <span class="provenance-badge ai-assessment">AI ASSESSMENT</span>
+      <div style="font-size:12.5px;color:var(--text-2);margin-top:8px">
+        Based on the utilization projection and corridor concentration above, Delhi NCR is likely to breach capacity in December without intervention; reallocating volume toward Kolkata's spare capacity is the most direct mitigation available today.
       </div>
     `;
   } else {
@@ -704,8 +842,10 @@ function openCreateToolbox() {
   if (!modal) return;
 
   const formBody = document.getElementById('toolbox-form-body');
+  const previewBody = document.getElementById('toolbox-preview-body');
   const execView = document.getElementById('agent-execution-view');
   if (formBody) formBody.classList.remove('hidden');
+  if (previewBody) previewBody.classList.add('hidden');
   if (execView) execView.classList.add('hidden');
 
   const nameInput = document.getElementById('toolbox-scenario-name');
@@ -791,13 +931,121 @@ function renderToolboxDynamicFields(type) {
       </div>
     `;
   }
+
+  // P0 #4/#5: keep the Current → Proposed line in sync with whatever
+  // fields this type just rendered. Reassigning oninput/onchange (rather
+  // than addEventListener) is safe to call on every render — no listener
+  // stacking, since the container's fields are fully replaced each time.
+  updateCurrentProposed(type);
+  container.oninput = () => updateCurrentProposed(type);
+  container.onchange = () => updateCurrentProposed(type);
+}
+
+// ─── Current → Proposed summary (P0 #4/#5) ───────────────────
+// Reuses fields already on the facility (fac.capacity) or already present
+// elsewhere in this exact modal (the 95% SLA constraint default) rather
+// than inventing new baseline numbers. Where no honest baseline exists
+// (zone-level demand/transport cost), shows "Not available" instead.
+function updateCurrentProposed(type) {
+  const el = document.getElementById('toolbox-current-proposed');
+  if (!el) return;
+  let currentText = 'Not available';
+  let proposedText = 'Not available';
+
+  if (type === 'CHANGE_CAPACITY') {
+    const fac = DCS.find((d) => d.id === document.getElementById('toolbox-facility')?.value);
+    const direction = document.getElementById('toolbox-direction')?.value;
+    const amount = Number(document.getElementById('toolbox-amount')?.value || 0);
+    if (fac) {
+      currentText = `${formatNumber(fac.capacity)} units/day`;
+      const proposed = direction === 'DECREASE' ? fac.capacity - amount : fac.capacity + amount;
+      proposedText = `${formatNumber(Math.max(0, proposed))} units/day`;
+    }
+  } else if (type === 'OPEN_FACILITY') {
+    currentText = 'Not in network today';
+    proposedText = 'New facility added (zero baseline throughput)';
+  } else if (type === 'CLOSE_FACILITY') {
+    const fac = DCS.find((d) => d.id === document.getElementById('toolbox-facility')?.value);
+    currentText = fac ? `${formatNumber(fac.capacity)} units/day (Active)` : 'Active';
+    proposedText = '0 units/day (Closed — removed from network)';
+  } else {
+    const amount = Number(document.getElementById('toolbox-amount')?.value || 0);
+    const zone = document.getElementById('toolbox-zone')?.selectedOptions?.[0]?.textContent || 'selected zone';
+    if (type === 'CHANGE_SLA') {
+      currentText = '95% (network SLA constraint)';
+      proposedText = `${95 + amount}%`;
+    } else {
+      currentText = 'Not available';
+      proposedText = `${amount > 0 ? '+' : ''}${amount}% in ${zone}`;
+    }
+  }
+
+  el.innerHTML = `<strong>Current:</strong> ${currentText} &nbsp;→&nbsp; <strong>Proposed:</strong> ${proposedText}`;
+}
+
+// ─── Scenario Preview (P0 #7) ─────────────────────────────────
+// One confirmation step between the form and the actual solver run — a
+// summary of exactly what will be evaluated, plus P1's qualitative KPI
+// direction chips. No numeric KPI estimate is shown here: the real
+// evaluation only happens after "Confirm & Run", so any number here would
+// be fabricated ahead of the solver, not sourced from it.
+const KPI_DIRECTION_BY_TYPE = {
+  CHANGE_CAPACITY: { Cost: '↑ Likely (CapEx)', Service: '↑ Likely', Capacity: '↓ Risk likely', Risk: '↓ Likely' },
+  OPEN_FACILITY: { Cost: '↑ Likely (CapEx)', Service: '↑ Likely', Capacity: '↓ Risk likely', Risk: '↓ Likely' },
+  CLOSE_FACILITY: { Cost: '↓ Likely (Fixed cost)', Service: '↓ Risk likely', Capacity: '↑ Risk likely', Risk: '↑ Likely' },
+  CHANGE_DEMAND: { Cost: 'Depends on direction', Service: 'Depends on direction', Capacity: 'Depends on direction', Risk: 'Depends on direction' },
+  CHANGE_TRANSPORT_COST: { Cost: 'Direct impact', Service: 'Neutral', Capacity: 'Neutral', Risk: 'Neutral' },
+  CHANGE_SLA: { Cost: '↑ Likely if tightened', Service: 'Direct impact', Capacity: 'Neutral', Risk: '↓ Likely if tightened' },
+};
+
+function showScenarioPreview() {
+  const formBody = document.getElementById('toolbox-form-body');
+  const previewBody = document.getElementById('toolbox-preview-body');
+  if (!formBody || !previewBody) return;
+
+  const name = document.getElementById('toolbox-scenario-name')?.value.trim() || 'Untitled Scenario';
+  const type = document.querySelector('.scn-type-card.active')?.dataset.type || 'CHANGE_CAPACITY';
+  const typeLabel = document.getElementById('toolbox-active-type-badge')?.textContent || type;
+  const currentProposedText = document.getElementById('toolbox-current-proposed')?.textContent || 'Not available';
+  const objective = document.getElementById('toolbox-objective')?.selectedOptions?.[0]?.textContent || '—';
+  const constraint = document.getElementById('toolbox-constraint-type')?.selectedOptions?.[0]?.textContent || '—';
+
+  const nameEl = document.getElementById('preview-scenario-name');
+  if (nameEl) nameEl.textContent = name;
+
+  const rows = [
+    ['Type', typeLabel],
+    ['Current → Proposed', currentProposedText],
+    ['Optimise for', objective],
+    ['Subject to constraint', constraint],
+  ];
+  const rowsEl = document.getElementById('preview-summary-rows');
+  if (rowsEl) {
+    rowsEl.innerHTML = rows.map(([label, val]) => `
+      <div class="flex items-center justify-between text-xs">
+        <span class="text-muted">${label}</span>
+        <span style="font-weight:700;text-align:right">${val || '—'}</span>
+      </div>`).join('');
+  }
+
+  const chipsEl = document.getElementById('preview-kpi-chips');
+  if (chipsEl) {
+    const dirs = KPI_DIRECTION_BY_TYPE[type] || {};
+    chipsEl.innerHTML = Object.entries(dirs).map(([k, v]) => `
+      <span class="tag tag-muted" style="font-size:10.5px">${k}: ${v}</span>`).join('');
+  }
+
+  formBody.classList.add('hidden');
+  previewBody.classList.remove('hidden');
 }
 
 // ─── Execute Scenario Creation (Phased Telemetry) ───────────
 function runScenarioCreation() {
   const formBody = document.getElementById('toolbox-form-body');
+  const previewBody = document.getElementById('toolbox-preview-body');
   const execView = document.getElementById('agent-execution-view');
   if (formBody) formBody.classList.add('hidden');
+  if (previewBody) previewBody.classList.add('hidden');
   if (execView) execView.classList.remove('hidden');
 
   const steps = [
@@ -994,6 +1242,13 @@ function wireScenarioEvents() {
   });
 
   document.getElementById('btn-run-toolbox-scenario')?.addEventListener('click', () => {
+    showScenarioPreview();
+  });
+  document.getElementById('btn-back-to-toolbox-form')?.addEventListener('click', () => {
+    document.getElementById('toolbox-preview-body')?.classList.add('hidden');
+    document.getElementById('toolbox-form-body')?.classList.remove('hidden');
+  });
+  document.getElementById('btn-confirm-run-scenario')?.addEventListener('click', () => {
     runScenarioCreation();
   });
 

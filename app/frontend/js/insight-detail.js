@@ -24,7 +24,7 @@
  * existing HOME_INSIGHTS/HOME_ACTION_ITEMS records, not real telemetry.
  */
 
-import { HOME_INSIGHTS, HOME_ACTION_ITEMS, getFacilityById } from './data.js';
+import { HOME_INSIGHTS, HOME_ACTION_ITEMS, getFacilityById, getOptimizedBaseCase, getUtilLabel, GOVERNANCE_TIERS } from './data.js';
 
 /* ─── Execution type per item ──────────────────────────────────
    Explicit rather than inferred from free-text `nextAction`, so the
@@ -182,8 +182,13 @@ function buildViewModel(kind, id) {
   const serviceGainPts = raw.expectedImpact
     ? (synth(id, 'svc', 8, 20) / 10)
     : (synth(id, 'svc', 8, 20) / 10);
-  const riskFrom = badge.tone === 'red' ? 'High' : badge.tone === 'amber' ? 'Medium' : 'Low';
-  const riskTo = badge.tone === 'red' ? 'Medium' : 'Low';
+  // Risk level: derived from the same utilization risk band (getUtilLabel)
+  // S2/S6/S8/S9/S-Decision-1 all already use — not an independently
+  // invented High/Medium/Low keyed off the priority badge's color, which
+  // had no connection to any actual utilization or capacity figure.
+  const riskFrom = getUtilLabel(currentPct);
+  const facAAfterDefault = Math.max(40, Math.round(currentPct - (currentPct - threshold + 4)));
+  const riskTo = getUtilLabel(facAAfterDefault);
 
   const riskAmountLakh = synth(id, 'risk', Math.max(10, Math.round(costDeltaLakh * 1.3)), Math.max(14, Math.round(costDeltaLakh * 1.8)));
 
@@ -210,18 +215,35 @@ function buildViewModel(kind, id) {
 }
 
 /* Recomputed as the shift % is edited (sentence input or modal table). */
+// S-Decision-1: Before/After Cost and Risk must come from S6's and S9's
+// authoritative outputs, never recomputed independently here.
 function computeAfterValues(vm, shiftPct) {
   const ratio = shiftPct / vm.shiftPct;
   const facAAfter = Math.max(40, Math.round(vm.currentPct - (vm.currentPct - vm.threshold + 4) * ratio));
   const facBBase = Math.max(40, vm.currentPct - synth(vm.id, 'facb', 12, 22));
   const facBAfter = Math.min(96, Math.round(facBBase + (vm.currentPct - facAAfter) * 0.9));
-  const costAfterCr = (12.4 - (vm.costDeltaLakh * ratio) / 100).toFixed(2);
-  const costBeforeCr = '12.40';
+
+  // Cost: "Before" is S6's authoritative Actual/baseline Total Network Cost
+  // (getOptimizedBaseCase().baseline) — not an independently invented
+  // figure. "After" applies this insight's own claimed savings on top of
+  // that authoritative base, scaled to how much of the recommended shift
+  // is actually being applied (the editable % in the modal).
+  const baselineCost = getOptimizedBaseCase().baseline.totalCost / 100000;
+  const costBeforeLakh = baselineCost.toFixed(2);
+  const costAfterLakh = (baselineCost - vm.costDeltaLakh * ratio).toFixed(2);
+
   const serviceBefore = (94.6).toFixed(1);
   const serviceAfter = (94.6 + vm.serviceGainPts * ratio).toFixed(1);
+
+  // Risk: derived from the same utilization risk band (getUtilLabel) that
+  // S2/S6/S8/S9 all already use — not an independently invented label.
+  const riskFrom = getUtilLabel(vm.currentPct);
+  const riskTo = getUtilLabel(facAAfter);
+
   return {
     facAAfter, facBBefore: Math.round(facBBase), facBAfter,
-    costBeforeCr, costAfterCr, serviceBefore, serviceAfter,
+    costBeforeLakh, costAfterLakh, serviceBefore, serviceAfter,
+    riskFrom, riskTo,
   };
 }
 
@@ -303,6 +325,18 @@ function metricHtml(iconSvg, tone, label, val, sub) {
     </div>`;
 }
 
+// riskFrom/riskTo are now Healthy/Stress/Critical (getUtilLabel), not the
+// old High/Medium/Low — this maps the chip's color/caption off the real
+// band instead of a literal 'Medium' string match that would otherwise
+// never match again, and never claims "Improved" when the band is
+// actually unchanged.
+function riskToneFor(riskTo) {
+  return riskTo === 'Critical' ? 'red' : riskTo === 'Stress' ? 'amber' : 'green';
+}
+function riskCaptionFor(riskFrom, riskTo) {
+  return INSD_RISK_RANK[riskTo] < INSD_RISK_RANK[riskFrom] ? 'Improved' : 'Unchanged';
+}
+
 function recommendationCardHtml(vm) {
   // Only 'auto' items are genuinely reallocation-style — the editable
   // "Shift X%..." sentence and the target-facility capacity stat both
@@ -320,7 +354,7 @@ function recommendationCardHtml(vm) {
       <div class="insd-metrics-row">
         ${metricHtml(ICON.rupee, 'green', 'Cost impact', `↓ ₹${vm.costDeltaLakh}L / month`, `(${(vm.costDeltaLakh / 12).toFixed(1)}% improvement)`)}
         ${metricHtml(ICON.trendUp, 'green', 'Service level', `↑ ${vm.serviceGainPts.toFixed(1)} pts`, `(to ${after.serviceAfter}%)`)}
-        ${metricHtml(ICON.shield, vm.riskTo === 'Medium' ? 'amber' : 'green', 'Risk level', `${vm.riskFrom} → ${vm.riskTo}`, 'Improved')}
+        ${metricHtml(ICON.shield, riskToneFor(vm.riskTo), 'Risk level', `${vm.riskFrom} → ${vm.riskTo}`, riskCaptionFor(vm.riskFrom, vm.riskTo))}
       </div>`;
 
   const whyStat = isReallocation ? `
@@ -370,11 +404,13 @@ function actionTakenCardHtml(vm) {
       <div class="insd-metrics-row">
         ${metricHtml(ICON.rupee, 'green', 'Cost impact', `↓ ₹${vm.costDeltaLakh}L / month`, `(${(vm.costDeltaLakh / 12).toFixed(1)}% improvement)`)}
         ${metricHtml(ICON.trendUp, 'green', 'Service level', `↑ ${vm.serviceGainPts.toFixed(1)} pts`, `(to ${after.serviceAfter}%)`)}
-        ${metricHtml(ICON.shield, vm.riskTo === 'Medium' ? 'amber' : 'green', 'Risk level', `${vm.riskFrom} → ${vm.riskTo}`, 'Improved')}
+        ${metricHtml(ICON.shield, riskToneFor(vm.riskTo), 'Risk level', `${vm.riskFrom} → ${vm.riskTo}`, riskCaptionFor(vm.riskFrom, vm.riskTo))}
       </div>
       <button type="button" class="insd-details-toggle" id="insd-details-toggle">${ICON.chevronDown}<span>Action details</span></button>
       <div class="insd-details-body" id="insd-details-body">
         ${detailsRows}
+        <button type="button" class="insd-action-link" id="insd-taken-why-btn">${ICON.info}<span>Why this was recommended</span></button>
+        <div class="insd-why-reveal" id="insd-taken-why-reveal">${insdEsc(vm.whyThisWorks)}</div>
         ${vm.messageSent ? `
           <button type="button" class="insd-view-message-link" id="insd-view-message">${ICON.mail}View message sent${ICON.chevronRight}</button>
           <div class="insd-sent-message-box hidden" id="insd-sent-message-box">${insdEsc(emailBody(vm, after))}</div>
@@ -534,6 +570,13 @@ function bindDeepDive() {
     document.getElementById('insd-why-reveal')?.classList.toggle('open');
   });
 
+  // S11 P1: link to original reasoning from the post-approval receipt —
+  // reuses vm.whyThisWorks (already computed for the pre-approval card),
+  // not a new explanation.
+  document.getElementById('insd-taken-why-btn')?.addEventListener('click', () => {
+    document.getElementById('insd-taken-why-reveal')?.classList.toggle('open');
+  });
+
   document.getElementById('insd-twin-btn')?.addEventListener('click', () => {
     if (typeof window.navigateToTab === 'function') window.navigateToTab('twin');
   });
@@ -573,13 +616,25 @@ Regards,
 Netgravity`;
 }
 
+const INSD_RISK_RANK = { Healthy: 0, Stress: 1, Critical: 2 };
+
 function modalTableRows(vm, after) {
+  // vm.costDeltaLakh is an insight-specific savings figure authored
+  // independently of S6's real network total — for some insights it can
+  // exceed the authoritative baseline (a holdover from when this modal
+  // showed an unrelated, much larger fictional cost). Rather than display
+  // an impossible negative "after" cost, show "Not available" — an honest
+  // gap, not a fabricated number.
+  const costAfterValid = Number(after.costAfterLakh) > 0;
+  const costAfterDisplay = costAfterValid ? `₹${after.costAfterLakh}L` : 'Not available';
+  const costGood = costAfterValid && Number(after.costAfterLakh) < Number(after.costBeforeLakh);
+
   const rows = [
     [`${vm.facA} utilization`, `${vm.currentPct}%`, `${after.facAAfter}%`, after.facAAfter < vm.currentPct],
     [`${vm.facB} utilization`, `${after.facBBefore}%`, `${after.facBAfter}%`, true],
-    ['Monthly network cost', `₹${after.costBeforeCr} Cr`, `₹${after.costAfterCr} Cr`, Number(after.costAfterCr) < Number(after.costBeforeCr)],
+    ['Monthly network cost', `₹${after.costBeforeLakh}L`, costAfterDisplay, costGood],
     ['Service level', `${after.serviceBefore}%`, `${after.serviceAfter}%`, true],
-    ['Risk', vm.riskFrom, vm.riskTo, true],
+    ['Risk', after.riskFrom, after.riskTo, INSD_RISK_RANK[after.riskTo] <= INSD_RISK_RANK[after.riskFrom]],
   ];
   return rows.map(([label, before, afterVal, good]) => `
     <tr>
@@ -589,9 +644,20 @@ function modalTableRows(vm, after) {
     </tr>`).join('');
 }
 
+// P0 #6: approval requirement, derived from GOVERNANCE_TIERS using this
+// insight's own real cost-at-stake — not a new classification scheme, and
+// not hardcoded copy duplicated from the tier definitions.
+function approvalTierFor(costDeltaLakh) {
+  const tier = costDeltaLakh < 5 ? GOVERNANCE_TIERS[0]
+    : costDeltaLakh <= 50 ? GOVERNANCE_TIERS[1]
+    : GOVERNANCE_TIERS[2];
+  return tier;
+}
+
 function modalHtml(vm) {
   const after = computeAfterValues(vm, insdFlow.shiftPct ?? vm.shiftPct);
   const shiftPct = insdFlow.shiftPct ?? vm.shiftPct;
+  const tier = approvalTierFor(vm.costDeltaLakh);
 
   return `
     <div class="insd-modal-card">
@@ -601,6 +667,9 @@ function modalHtml(vm) {
       </div>
       <p class="insd-modal-sentence">I recommend shifting <input type="number" class="insd-shift-input" id="insd-modal-shift-pct" min="1" max="60" value="${shiftPct}">% of volume from ${insdEsc(vm.facA)} to ${insdEsc(vm.facB)}.</p>
       <p class="insd-modal-sub">This reduces the projected capacity risk while improving service with a lower monthly network cost.</p>
+      <div class="text-xs" style="margin:-4px 0 12px;padding:6px 10px;background:${tier.color}14;border:1px solid ${tier.color}44;border-radius:var(--r-sm);color:${tier.color};font-weight:600">
+        Tier ${tier.tier} — ${tier.label}: ${insdEsc(tier.description)}
+      </div>
 
       <div class="insd-modal-split">
         <div>
