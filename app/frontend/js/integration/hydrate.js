@@ -37,6 +37,7 @@ import {
   SOLVED_STATE_KEY, setNetworkPeriods, OBSERVED_UTILISATION,
   setAuthoritativeBaseline, clearDemoNarrative, loadNetworkData,
   setForecastSeries, getOptimizedBaseCase, applyInsightResponse,
+  applyHorizon, SOLVE_HORIZON,
 } from '../data.js';
 
 /** Read a KPIResult; a non-VALID status yields null, never 0. */
@@ -297,6 +298,12 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
     totalDemand: relaxedMeta.total_demand ?? null,
   } : null;
 
+  // ---- Planning horizon ------------------------------------------------
+  // What span of time every figure below covers. Applied BEFORE the baseline
+  // is written, so nothing can render a cost before the label that says what
+  // period it is on exists.
+  applyHorizon(networkRes?.horizon);
+
   // ---- Network baseline ------------------------------------------------
   // Written straight from the solver's own cost breakdown. There is no
   // "optimised" counterpart, because the engine has not been asked to produce
@@ -378,7 +385,14 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
 
   Object.entries(facilities).forEach(([facId, metrics]) => {
     const util = val(metrics.utilization_pct);
-    const throughput = val(metrics.throughput_units);
+    // PER PERIOD, to match `node.capacity`, which comes from the upload's own
+    // per-period capacity column. `throughput_units` is the horizon total, so
+    // over twelve modelled periods it is twelve times this — and shown beside a
+    // one-period capacity it would read as 277% on a site the solver puts at
+    // 23%. The per-period figure divides into that capacity to give exactly
+    // `utilization_pct`, so every number on the card agrees.
+    const throughput = val(metrics.throughput_units_per_period)
+      ?? val(metrics.throughput_units);
     const node = byId.get(facId);
 
     // Keep the topology arrays consistent with the solve, so the map, the 3D
@@ -408,6 +422,12 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
           value: util,
           capacity: node ? node.capacity : (prior.utilisation?.capacity ?? null),
           unit: 'units/period',
+          // Utilisation in the busiest single period of the horizon, from the
+          // solver. `value` above is the horizon AVERAGE, and a site at 43%
+          // for the year can still be at 91% in March — which is the reading
+          // that decides whether it needs more room. Equal to `value` on a
+          // single-period solve, and null only when the solve reported none.
+          peak: val(metrics.peak_utilization_pct),
           // The comparison is against what the client RECORDED, not against a
           // previous solve — there has been none. Still null when the upload
           // carried no capacity history for this facility.
@@ -445,6 +465,38 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
           ? `recorded ${obs.period}` : 'no prior solve',
       },
     };
+
+    // A solved entry for each period the model actually covered, keyed by the
+    // month the upload named it.
+    //
+    // Without these, selecting a period resolved to the same horizon-average
+    // entry whichever month was chosen — the control moved and nothing behind
+    // it did. Utilisation here is the solver's own per-period figure, not this
+    // month's throughput divided by something in the browser.
+    const series = (networkRes?.horizon?.by_facility || {})[facId];
+    const labels = SOLVE_HORIZON.periodLabels || {};
+    if (series && series.utilisation) {
+      Object.entries(series.utilisation).forEach(([index, pct]) => {
+        const label = labels[index];
+        if (!label || typeof pct !== 'number' || !Number.isFinite(pct)) return;
+        const base = FACILITY_KPIS[facId][SOLVED_STATE_KEY];
+        FACILITY_KPIS[facId][label] = {
+          ...base,
+          utilisation: {
+            ...base.utilisation,
+            value: +pct.toFixed(1),
+            // The horizon average, kept beside the period's own reading so the
+            // two are distinguishable rather than one silently replacing the
+            // other.
+            horizonAverage: util,
+            throughput: series.throughput ? series.throughput[index] ?? null : null,
+            prev: null,
+            status: pct >= 90 ? 'critical' : pct >= 75 ? 'warning' : 'normal',
+          },
+          prevLabel: `solved ${label}`,
+        };
+      });
+    }
   });
 
   // ---- Lane flows ------------------------------------------------------
@@ -459,7 +511,13 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
     const f = flowByLane.get(`${lane.from}->${lane.to}`);
     // Explicitly null, not zero, when this lane carries no solved flow: an
     // unused lane and an unsolved one look identical at zero.
-    lane.flow = f ? f.flow_units : null;
+    //
+    // PER PERIOD, because a corridor's volume is read beside its per-unit rate
+    // and its stated lane capacity, both of which are per period. The horizon
+    // total stays available as `flowHorizon` for anything that wants the whole
+    // span rather than a period of it.
+    lane.flow = f ? (f.flow_units_per_period ?? f.flow_units) : null;
+    lane.flowHorizon = f ? f.flow_units : null;
     lane.transportCost = f ? f.transport_cost : null;
     lane.carbonKg = f ? f.carbon_kg : null;
   });
@@ -470,7 +528,7 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
         const [from, to] = String(row.lane).split(' → ');
         const f = flowByLane.get(`${from}->${to}`);
         if (f) {
-          row.volume = f.flow_units;
+          row.volume = f.flow_units_per_period ?? f.flow_units;
           row.cost = f.transport_cost;
         }
       });

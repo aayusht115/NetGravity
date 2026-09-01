@@ -228,7 +228,12 @@ def browser_checks() -> None:
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1440, "height": 950})
-        page.on("pageerror", lambda e: page_errors.append(str(e)))
+        # The message AND the first frames of the stack. A bare
+        # "Cannot read properties of null" names neither the file nor the line,
+        # so a failure here said only that something broke somewhere — which
+        # costs more to chase than the check saves.
+        page.on("pageerror", lambda e: page_errors.append(
+            f"{e}  @ {' | '.join((getattr(e, 'stack', '') or '').splitlines()[1:4])}"))
         page.on("response", lambda r: failed_requests.append(
             (r.status, r.url)) if r.status >= 400 else None)
 
@@ -381,6 +386,63 @@ def browser_checks() -> None:
                f"disabled={home['periodDisabled']}"
                + "  (was a single disabled 'Period 1'; before that, Q3 2026 / "
                "Q2 2026 / Q1 2026 / Q4 2025, none of which appear in any upload)")
+
+        # ---- The period control drives something ----------------------
+        #
+        # H-06 asserts the control OFFERS real periods. It offered thirty-six
+        # real months while every one of them resolved to the same horizon
+        # average, so the control moved and nothing behind it did — a filter
+        # that looks like it works is worse than one that is visibly disabled.
+        # This asserts that the periods the model solved return their OWN
+        # solved utilisation, and that they differ from each other.
+        # Across EVERY distribution centre, not just the first.
+        #
+        # A genuinely flat site is a real answer — F004 sits at its SLA-eligible
+        # lane capacity of 3,230 units in all twelve periods, so one distinct
+        # reading is correct for it and asserting otherwise would demand a
+        # variation the data does not contain. What must be true is that at
+        # least one site varies, because a horizon in which nothing varies is
+        # indistinguishable from a control that still returns one number.
+        horizon = page.evaluate("""async () => {
+          const mod = await import('./js/data.js');
+          const labels = Object.values(mod.SOLVE_HORIZON.periodLabels || {});
+          const byFacility = {};
+          mod.DCS.forEach((dc) => {
+            byFacility[dc.id] = labels.map((p) => {
+              const k = mod.getKpisForFacility(dc.id, p);
+              return (k && k.utilisation) ? k.utilisation.value : null;
+            });
+          });
+          return { periods: mod.SOLVE_HORIZON.periodsModelled,
+                   labels: labels.length, byFacility,
+                   costPerPeriod: mod.SOLVE_HORIZON.costPerPeriod };
+        }""")
+        series = {
+            fid: [v for v in vals if v is not None]
+            for fid, vals in (horizon.get("byFacility") or {}).items()
+        }
+        varying = {fid: vals for fid, vals in series.items() if len(set(vals)) > 1}
+        complete = [fid for fid, vals in series.items()
+                    if len(vals) == horizon.get("labels", 0)]
+        widest = max(varying.items(), key=lambda kv: max(kv[1]) - min(kv[1]),
+                     default=(None, []))
+        record("H-14", "Choosing a period changes the solved figure behind it",
+               horizon.get("periods", 1) > 1 and bool(varying)
+               and len(complete) == len(series),
+               f"{len(varying)} of {len(series)} site(s) vary across "
+               f"{horizon.get('periods')} modelled periods; widest is "
+               f"{widest[0]} at {min(widest[1]) if widest[1] else '—'}%–"
+               f"{max(widest[1]) if widest[1] else '—'}%; "
+               f"{len(complete)}/{len(series)} carry a reading for every period"
+               + "  (every period returned the same horizon average until the "
+               "solve's own per-period series was carried through)")
+
+        record("H-15", "A per-period cost is published, not divided in the browser",
+               isinstance(horizon.get("costPerPeriod"), (int, float))
+               and horizon["costPerPeriod"] > 0,
+               f"cost_per_period={horizon.get('costPerPeriod')}"
+               + "  (the KPI layer's own figure; a cost divided in the UI "
+               "would be a second cost engine)")
 
         record("H-07", "No hardcoded quarter appears anywhere on screen",
                "Q3 2026" not in home["body"] and "Q4 2025" not in home["body"],

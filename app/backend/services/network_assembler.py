@@ -51,6 +51,36 @@ _DEFAULT_PRODUCT_NAME = "All products (aggregate)"
 #: period-to-period uncertainty.
 _SIGMA_WINDOW = 12
 
+#: How many observed periods the model carries variables for.
+#:
+#: Twelve is one full seasonal cycle. That is the shortest horizon that sees
+#: every season exactly once, which is the whole reason to model more than one
+#: period: a network sized on the mean month is a different network from one
+#: sized on the peak month, and only a horizon that contains the peak can tell
+#: them apart. A longer horizon adds trend rather than seasonality, and trend
+#: is already carried — by `_SIGMA_WINDOW` into safety stock, and by the
+#: forecasting engine, which is the right instrument for it.
+#:
+#: This is a bound on what is MODELLED, not on what is kept. The full observed
+#: history is still stored (`demand_history_store`) and still measured for
+#: variability; the horizon is the part the MILP is asked to reason over.
+_HORIZON_PERIODS = 12
+
+#: A ceiling on the demand table the horizon may produce, in rows.
+#:
+#: Solve cost grows linearly in the number of periods — measured on the sample
+#: client network at 82 variables and 0.02 s for one period against 3,032 and
+#: 0.13 s for thirty-six. That is affordable because the network is small. The
+#: same horizon over a client with four thousand market-product pairs is not,
+#: and a planning tool that becomes unusable on a large upload has failed at
+#: exactly the size where it is worth the most.
+#:
+#: So the horizon shortens to fit the budget rather than the budget being
+#: assumed. What that costs is stated in the assumptions, never absorbed
+#: silently: a client whose horizon was cut needs to know their answer covers
+#: fewer months than their file does.
+_MAX_MODELLED_DEMAND_ROWS = 20_000
+
 
 def _as_float(value: Any) -> float | None:
     try:
@@ -59,6 +89,61 @@ def _as_float(value: Any) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def choose_horizon(
+    observed: List[str], rows_per_period: int,
+) -> Tuple[List[str], List[str]]:
+    """
+    Which of the observed periods the MILP will carry variables for.
+
+    Returns `(modelled, notes)` — the periods to model, most recent last, and
+    the plain-language reasons for anything the caller should know about.
+
+    Three things can shorten a horizon, and each is reported rather than
+    applied quietly:
+
+      * the data is shorter than `_HORIZON_PERIODS`, in which case the horizon
+        is simply what there is;
+      * the data is longer, and the most recent `_HORIZON_PERIODS` are taken —
+        a full seasonal cycle, ending at the present;
+      * the resulting table would exceed `_MAX_MODELLED_DEMAND_ROWS`, in which
+        case the horizon shortens until it fits.
+
+    The budget is evaluated against the row count the upload actually produces,
+    not against a guess about network size, so a wide network is bounded by the
+    same rule as a long one.
+    """
+    notes: List[str] = []
+    if len(observed) <= 1:
+        return list(observed), notes
+
+    wanted = min(len(observed), _HORIZON_PERIODS)
+
+    if rows_per_period > 0:
+        affordable = max(1, _MAX_MODELLED_DEMAND_ROWS // rows_per_period)
+        if affordable < wanted:
+            notes.append(
+                f"This upload states {rows_per_period:,} demand rows per period. "
+                f"Modelling {wanted} periods would build a demand table of "
+                f"{wanted * rows_per_period:,} rows, beyond the "
+                f"{_MAX_MODELLED_DEMAND_ROWS:,}-row budget this solve is held "
+                f"to, so the horizon is the most recent {affordable} period(s) "
+                f"instead. Seasonality outside that window is not modelled."
+            )
+            wanted = affordable
+
+    modelled = observed[-wanted:]
+    if len(observed) > wanted and not notes:
+        notes.append(
+            f"The upload carries {len(observed)} periods of demand history "
+            f"({observed[0]} to {observed[-1]}). The model covers the most "
+            f"recent {wanted} ({modelled[0]} to {modelled[-1]}) — one full "
+            f"seasonal cycle. The earlier periods still inform demand "
+            f"variability and remain available to forecasting; they are not "
+            f"solved as planning periods."
+        )
+    return modelled, notes
 
 
 def diagnose_servability(network: Any) -> List[Dict[str, Any]]:
@@ -77,18 +162,30 @@ def diagnose_servability(network: Any) -> List[Dict[str, Any]]:
     and a decision.
 
     Returns one row per market that cannot be fully served, most severe first.
+
+    Demand is measured PER PERIOD, against lane capacity that is also per
+    period. A demand table stating a horizon would otherwise be added up and
+    compared with one period's capacity, reporting every market as short by a
+    factor equal to the length of the horizon — a fabricated crisis, and on the
+    one screen whose job is to tell the user what is really wrong. The peak
+    period is the one that has to be servable.
     """
-    demand_by_market: Dict[str, float] = {}
+    per_period: Dict[str, Dict[Any, float]] = {}
     sla_by_market: Dict[str, float | None] = {}
     for record in network.demands:
-        demand_by_market[record.market_id] = (
-            demand_by_market.get(record.market_id, 0.0) + record.quantity
-        )
+        bucket = per_period.setdefault(record.market_id, {})
+        period = getattr(record, "period", 1)
+        bucket[period] = bucket.get(period, 0.0) + record.quantity
         sla = getattr(record, "sla_days", None)
         if sla is not None:
             prior = sla_by_market.get(record.market_id)
             # The tightest SLA stated for the market binds it.
             sla_by_market[record.market_id] = sla if prior is None else min(prior, sla)
+
+    demand_by_market: Dict[str, float] = {
+        market_id: (max(buckets.values()) if buckets else 0.0)
+        for market_id, buckets in per_period.items()
+    }
 
     findings: List[Dict[str, Any]] = []
     for market_id, demand in demand_by_market.items():
@@ -332,23 +429,48 @@ def assemble_network_from_structure(
     # Per-product demand from the history when the upload has one; otherwise
     # the market-level figure, split evenly across products only if the upload
     # itself gave no product breakdown.
+    #
+    # The history is read as a HORIZON, not as a single figure. Every period the
+    # upload states is bucketed here; `choose_horizon` then decides how many of
+    # them the model carries. Previously only `max(periods)` survived and every
+    # other period was discarded after being counted for variability — so a
+    # workbook stating three years of monthly demand was solved as one month,
+    # the multi-period MILP built in `netgravity/optimization/periods.py` was
+    # unreachable from any upload, and seasonality could not be asked about at
+    # all because the model had never been told it existed.
     history = structure.get("demandHistory") or []
-    latest_period = ""
-    per_pair: Dict[Tuple[str, str], float] = {}
-    series: Dict[Tuple[str, str], List[float]] = {}
-    if history:
-        periods = [h.get("period") for h in history if h.get("period")]
-        if periods:
-            latest_period = max(periods)
-            for h in history:
-                mid = str(h.get("marketId") or "").strip()
-                pid = str(h.get("productId") or "").strip() or product_ids[0]
-                qty = _as_float(h.get("quantity"))
-                if not mid or qty is None:
-                    continue
-                if h.get("period") == latest_period:
-                    per_pair[(mid, pid)] = per_pair.get((mid, pid), 0.0) + qty
-                series.setdefault((mid, pid), []).append(qty)
+
+    #: {period label: {(market, product): quantity}}
+    by_period: Dict[str, Dict[Tuple[str, str], float]] = {}
+    for h in history:
+        label = str(h.get("period") or "").strip()
+        mid = str(h.get("marketId") or "").strip()
+        pid = str(h.get("productId") or "").strip() or product_ids[0]
+        qty = _as_float(h.get("quantity"))
+        if not label or not mid or qty is None:
+            continue
+        bucket = by_period.setdefault(label, {})
+        bucket[(mid, pid)] = bucket.get((mid, pid), 0.0) + qty
+
+    # Calendar order, taken from the labels rather than from row order in the
+    # file. A workbook is under no obligation to arrive sorted, and the sigma
+    # window below is defined as "the most recent N periods" — which is a
+    # different set of numbers if the rows happen to be ordered by market.
+    observed_periods: List[str] = sorted(by_period)
+
+    rows_per_period = max((len(b) for b in by_period.values()), default=0)
+    modelled_periods, horizon_notes = choose_horizon(observed_periods, rows_per_period)
+    assumptions.extend(horizon_notes)
+
+    #: Integer index the engine uses <-> the label the client's file used.
+    #: `DemandRecord.period` is an int everywhere in the engine, so the calendar
+    #: has to be carried alongside rather than substituted into it.
+    period_index: Dict[str, int] = {
+        label: i + 1 for i, label in enumerate(modelled_periods)
+    }
+    period_labels: Dict[str, str] = {
+        str(i + 1): label for i, label in enumerate(modelled_periods)
+    }
 
     # Demand variability, for the safety-stock term the inventory module already
     # owns. `DemandRecord.std_dev` defaults to 0.0, and a sigma of zero means no
@@ -360,6 +482,16 @@ def assemble_network_from_structure(
     # (Delhi/P001 runs 3,972 -> 5,862 over three years) and a standard deviation
     # taken across the whole span would measure that growth as if it were
     # week-to-week uncertainty, oversizing the buffer.
+    #
+    # Measured over the whole observed history, not just the modelled horizon:
+    # shortening the horizon for solve cost is a decision about what to OPTIMISE
+    # over, and it should not also quietly narrow the evidence base for how
+    # uncertain demand is.
+    series: Dict[Tuple[str, str], List[float]] = {}
+    for label in observed_periods:
+        for key, qty in by_period[label].items():
+            series.setdefault(key, []).append(qty)
+
     std_by_pair: Dict[Tuple[str, str], float] = {}
     for key, values in series.items():
         window = values[-_SIGMA_WINDOW:]
@@ -368,42 +500,87 @@ def assemble_network_from_structure(
 
     demands: List[DemandRecord] = []
     markets_without_demand: List[str] = []
-    sigma_pairs = 0
+    markets_held_flat: List[str] = []
+    sigma_pairs: set[Tuple[str, str]] = set()
+
+    def add_demand(mid: str, pid: str, qty: float, period: int,
+                   sla: float | None) -> None:
+        record = DemandRecord(
+            market_id=mid, product_id=pid, quantity=qty, period=period)
+        if sla is not None and sla > 0:
+            record.sla_days = sla
+        # Variability describes the market-product PAIR, so the same sigma
+        # travels with every period's row for that pair. It is not a property
+        # of one month.
+        sigma = std_by_pair.get((mid, pid))
+        if sigma is not None and sigma > 0:
+            record.std_dev = sigma
+            sigma_pairs.add((mid, pid))
+        demands.append(record)
+
     for m in markets:
         mid = str(m.get("id") or "").strip()
         if not mid:
             continue
         sla = _as_float(m.get("slaDays"))
 
-        pairs = {pid: qty for (mkt, pid), qty in per_pair.items() if mkt == mid}
-        if not pairs:
-            qty = _as_float(m.get("demand"))
-            if qty is None or qty <= 0:
-                markets_without_demand.append(mid)
-                continue
-            pairs = {product_ids[0]: qty}
+        # Every period this market appears in, at the quantity it recorded.
+        # A pair absent from a period contributes no row for it, which is what
+        # the data says: no demand was recorded that month. Inventing a zero or
+        # carrying the previous month forward would both be a claim the upload
+        # does not make.
+        observed_rows = 0
+        for label in modelled_periods:
+            for (mkt, pid), qty in by_period[label].items():
+                if mkt != mid or qty is None or qty <= 0:
+                    continue
+                add_demand(mid, pid, qty, period_index[label], sla)
+                observed_rows += 1
 
-        for pid, qty in pairs.items():
-            if qty is None or qty <= 0:
-                continue
-            record = DemandRecord(market_id=mid, product_id=pid, quantity=qty)
-            if sla is not None and sla > 0:
-                record.sla_days = sla
-            sigma = std_by_pair.get((mid, pid))
-            if sigma is not None and sigma > 0:
-                record.std_dev = sigma
-                sigma_pairs += 1
-            demands.append(record)
+        if observed_rows:
+            continue
 
-    if per_pair:
+        # No history for this market. The markets sheet may still state a
+        # single demand figure; it describes one period, and the only
+        # defensible way to place it on a horizon is to hold it flat — which
+        # is an assumption, so it is declared.
+        qty = _as_float(m.get("demand"))
+        if qty is None or qty <= 0:
+            markets_without_demand.append(mid)
+            continue
+        for label in (modelled_periods or [""]):
+            add_demand(mid, product_ids[0], qty,
+                       period_index.get(label, 1), sla)
+        if modelled_periods and len(modelled_periods) > 1:
+            markets_held_flat.append(mid)
+
+    if modelled_periods and len(modelled_periods) > 1:
         assumptions.append(
-            f"Demand is the latest period on record ({latest_period}) from the "
-            f"uploaded demand history, kept split by product."
+            f"Demand is modelled over {len(modelled_periods)} periods, "
+            f"{modelled_periods[0]} to {modelled_periods[-1]}, kept split by "
+            f"product. Each period binds its own demand and capacity, and stock "
+            f"may be carried between them where a facility can hold it — so "
+            f"cost, utilisation and service are horizon figures across those "
+            f"{len(modelled_periods)} periods, not one period's."
+        )
+    elif modelled_periods:
+        assumptions.append(
+            f"The upload states a single demand period ({modelled_periods[0]}), "
+            f"so that period is what is modelled. Seasonality cannot be "
+            f"assessed from one period of data."
+        )
+    if markets_held_flat:
+        assumptions.append(
+            f"{len(markets_held_flat)} market(s) carried a single demand figure "
+            f"with no period history and are held flat across the horizon: "
+            f"{', '.join(markets_held_flat[:6])}"
+            f"{'…' if len(markets_held_flat) > 6 else ''}. Their seasonality is "
+            f"unknown, not zero."
         )
     if sigma_pairs:
         assumptions.append(
-            f"Demand variability for {sigma_pairs} market-product pair(s) is the "
-            f"sample standard deviation of the last {_SIGMA_WINDOW} periods of "
+            f"Demand variability for {len(sigma_pairs)} market-product pair(s) is "
+            f"the sample standard deviation of the last {_SIGMA_WINDOW} periods of "
             f"the uploaded history, which is what sizes safety stock. Pairs with "
             f"fewer than two observations carry no variability and therefore no "
             f"safety stock."
@@ -528,7 +705,21 @@ def assemble_network_from_structure(
         lanes=lanes,
         network_id=network_id,
         description=description or "Assembled from user-uploaded files",
+        # So every downstream surface can say "2024-03" rather than "period 7".
+        period_labels=period_labels,
     )
+
+    # What a demand table stating several periods is solved as. Stated
+    # explicitly rather than left to the schema default, because the assembler
+    # is now the thing that decides how many periods there are — and a horizon
+    # arriving at a solve whose policy nobody chose is how twelve months
+    # silently becomes one.
+    #
+    # FULL_HORIZON is the choice that assumes least: it models what the data
+    # says. The collapse policies remain available to a caller who explicitly
+    # wants a cheaper single-period answer; none of them can tell a network that
+    # carries the mean month from one that carries the peak.
+    network.config.multi_period_policy = "FULL_HORIZON"
 
     # A client's own network is frequently unable to serve all of its demand
     # within its own service levels — that is a finding, and the planner still

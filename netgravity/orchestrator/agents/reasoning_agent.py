@@ -83,6 +83,29 @@ def _bounded(sentences, limit: int) -> str:
     return text
 
 
+def _period_span(state: dict) -> str:
+    """
+    How to qualify a cost figure taken from `state`.
+
+    Returns `" per period"` for a single-period solve — the phrasing every
+    narrative used unconditionally — and, for a horizon, the number of periods
+    the figure covers plus the per-period equivalent, which is the reading a
+    planner compares against a monthly budget.
+
+    The per-period figure is READ from the state, never computed here. Dividing
+    a cost in a narrative would make this a second cost engine, and it would
+    disagree with the first the moment either changed.
+    """
+    periods = state.get("periods_modelled")
+    if not isinstance(periods, int) or periods <= 1:
+        return " per period"
+    per_period = state.get("cost_per_period")
+    if isinstance(per_period, (int, float)):
+        return (f" across the {periods} periods modelled "
+                f"({per_period:,.2f} per period)")
+    return f" across the {periods} periods modelled"
+
+
 class ReasoningAgent:
     """Produces narrative synthesis over deterministic evidence."""
 
@@ -931,21 +954,29 @@ class ReasoningAgent:
         else:
             cost = state.get("business_network_cost")
             if cost is not None:
-                parts.append(
-                    f"I see a business network cost of {cost:,.2f} per period; this is "
-                    "the operating-cost view from the optimizer, separate from any "
-                    "mathematical shortage penalty."
-                )
-                evidence.append(f"business_network_cost = {cost:,.2f}")
+                # What the figure COVERS. It was called "per period"
+                # unconditionally, which was true while every solve modelled one
+                # period. Over a twelve-month horizon the same sentence
+                # overstates the monthly cost twelvefold, in prose a planner is
+                # meant to act on — so the span is stated, and the per-period
+                # figure quoted beside it comes from the solve rather than from
+                # dividing here.
+                span = _period_span(state)
                 insights.append(KPIInsight(
                     theme="Cost",
                     headline="I see the current cost position clearly",
                     narrative=(
-                        f"I see business network cost at {cost:,.2f} per period. I use "
+                        f"I see business network cost at {cost:,.2f}{span}. I use "
                         "this as the decision baseline for comparing any scenario."
                     ),
                     metric_refs=refs_for("business_network_cost"),
                 ))
+                parts.append(
+                    f"I see a business network cost of {cost:,.2f}{span}; this is "
+                    "the operating-cost view from the optimizer, separate from any "
+                    "mathematical shortage penalty."
+                )
+                evidence.append(f"business_network_cost = {cost:,.2f}")
 
             delta = scenario.get("business_cost_delta")
             delta_pct = scenario.get("business_cost_delta_pct")

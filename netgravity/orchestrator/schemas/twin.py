@@ -281,6 +281,17 @@ class TwinKPIs(BaseModel):
     total_carbon_kg: Optional[float] = None
     pct_demand_in_sla: Optional[float] = None
 
+    #: How many planning periods the cost and volume figures above cover, and
+    #: the per-period cost.
+    #:
+    #: Carried so that anything writing prose about these numbers can say what
+    #: they cover. The reasoning agent stated "a business network cost of X per
+    #: period" unconditionally, which was true while every solve was one period
+    #: and became a twelvefold overstatement the moment a horizon was modelled —
+    #: in a sentence a planner is meant to act on.
+    periods_modelled: Optional[int] = None
+    cost_per_period: Optional[float] = None
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 

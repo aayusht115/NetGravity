@@ -191,6 +191,16 @@ _FACT_SPEC: Dict[str, Tuple[ClaimKind, str]] = {
     "opening_cost":              (ClaimKind.CURRENCY, "optimization_result"),
     "carbon_cost":               (ClaimKind.CURRENCY, "optimization_result"),
     "shortage_penalty_cost":     (ClaimKind.CURRENCY, "optimization_result"),
+    # `business_network_cost` divided by the periods the solve modelled, from
+    # the solve itself. Citable because a narrative reporting a horizon cost
+    # has to be able to say what one period of it is — otherwise the only way
+    # to state the figure a planner budgets against is to compute it in prose,
+    # which is precisely the unsourced number this validator exists to catch.
+    "cost_per_period":           (ClaimKind.CURRENCY, "optimization_result"),
+    # How many planning periods the figures above cover. A bare count, so
+    # `_is_policeable` ignores it as a claim; declared here so that when it does
+    # appear beside a cost it is a sourced number rather than an unexplained one.
+    "periods_modelled":          (ClaimKind.COUNT, "optimization_result"),
     # KPI engine
     "total_demand":              (ClaimKind.UNITS, "kpi_engine"),
     "served_demand":             (ClaimKind.UNITS, "kpi_engine"),

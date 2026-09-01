@@ -9,7 +9,8 @@
  * - Multi-Scenario Trade-off Analysis (Scenario Comparison)
  */
 
-import { SCENARIOS, DCS, PLANTS, MARKETS, formatNumber, formatCurrency } from './data.js';
+import { SCENARIOS, DCS, PLANTS, MARKETS, formatNumber, formatCurrency,
+         SOLVE_HORIZON } from './data.js';
 import { initMap, renderScenarioDigitalTwin, invalidateMapSize } from './map.js';
 import { scenarioService } from './integration/services/scenario-service.js';
 import {
@@ -505,9 +506,30 @@ function renderScenarioMapToggle() {
 }
 
 // ─── Shared row rendering for both comparison tables ─────────
+
+/**
+ * The sub-label for a comparison row, corrected for the horizon actually
+ * solved.
+ *
+ * Every cost and carbon figure in this table is the solver's total across the
+ * modelled periods. These rows were written when a solve was always one period
+ * and say "per period" literally — so on a twelve-month horizon they label a
+ * twelve-month total as a monthly one, which overstates it twelvefold in the
+ * one place a user compares options and picks one. The row keeps its own text
+ * for a single-period solve, where it is exactly right.
+ */
+function rowSubLabel(row) {
+  const n = SOLVE_HORIZON.periodsModelled;
+  if (!n || n <= 1 || !/per period/.test(row.sub || '')) return row.sub;
+  const span = (SOLVE_HORIZON.firstPeriod && SOLVE_HORIZON.lastPeriod)
+    ? `${SOLVE_HORIZON.firstPeriod}–${SOLVE_HORIZON.lastPeriod}`
+    : `${n} periods`;
+  return row.sub.replace('per period', `total, ${span}`);
+}
+
 function scenarioRowMetricCellHtml(row) {
   return `<span class="scn-row2-icon">${row.icon}</span>
-    <div><div class="scn-row2-label">${row.label}</div><div class="scn-row2-sub">${row.sub}</div></div>`;
+    <div><div class="scn-row2-label">${row.label}</div><div class="scn-row2-sub">${rowSubLabel(row)}</div></div>`;
 }
 
 function scenarioDeltaPillHtml(delta) {

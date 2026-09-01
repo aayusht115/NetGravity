@@ -90,6 +90,38 @@ def _build_cost_breakdown(
     return breakdown
 
 
+def _utilisation_by_period(fd: Any) -> Dict[str, float]:
+    """
+    Utilisation period by period, from figures the solve already published.
+
+    Not a second definition of utilisation. `FacilityDecision` carries the
+    throughput of each period, the horizon capacity and the number of periods,
+    and the engine's own `peak_utilization_pct` is the maximum of exactly this
+    series — which `test_the_series_agrees_with_the_engines_own_peak` asserts,
+    so the two cannot drift apart without a test failing.
+
+    Derived here rather than in the MILP because the MILP is a frozen file:
+    solver internals change by deliberate, separately-tested commit, and adding
+    a reporting field is not a reason to touch the mathematics.
+
+    Empty when the solve modelled one period — the series would be a single
+    entry restating `utilization_pct` — or when capacity cannot form a ratio.
+    """
+    by_period = getattr(fd, "throughput_by_period", None) or {}
+    n_periods = getattr(fd, "n_periods", 1) or 1
+    horizon_capacity = getattr(fd, "capacity_units", 0.0) or 0.0
+    if not by_period or n_periods <= 1 or horizon_capacity <= 0:
+        return {}
+    # The engine's basis: one period's throughput over ONE period's capacity.
+    per_period_capacity = horizon_capacity / n_periods
+    if per_period_capacity <= 0:
+        return {}
+    return {
+        str(period): round(float(units) / per_period_capacity * 100.0, 2)
+        for period, units in by_period.items()
+    }
+
+
 def build_network_state_result(
     result:     OptimizationResult,
     network:    CanonicalNetwork,
@@ -118,6 +150,18 @@ def build_network_state_result(
 
     costs = _build_cost_breakdown(result, network, config, cost_basis)
 
+    # How many periods this result actually covers. `period_report` is written
+    # by the solve itself and so is authoritative — a collapse policy reduces a
+    # twelve-period network to one modelled period, and counting the network's
+    # demand rows would then divide a one-period cost by twelve. The flow rows
+    # are the fallback for a result produced before that field existed.
+    #
+    # Computed before the facilities, because per-period throughput needs it.
+    period_report = getattr(result, "period_report", None) or {}
+    periods_modelled = period_report.get("modelled_periods")
+    if not isinstance(periods_modelled, int) or periods_modelled < 1:
+        periods_modelled = len({fl.period for fl in result.flow_decisions}) or 1
+
     # --- Facilities ---
     facilities: List[FacilitySummary] = []
     open_ids: List[str] = []
@@ -138,6 +182,20 @@ def build_network_state_result(
             throughput_units     = round(fd.throughput_units, 4),
             capacity_units       = round(fd.capacity_units, 4),
             utilization_pct      = round(fd.utilization_pct, 4),
+            # Computed by the MILP for every multi-period solve and, until now,
+            # dropped at this boundary — so the peak month a horizon was
+            # modelled to expose could not be read by anything downstream.
+            # Falls back to the average for a single-period solve, where the two
+            # are the same number by definition.
+            peak_utilization_pct = round(
+                getattr(fd, "peak_utilization_pct", 0.0) or fd.utilization_pct, 4),
+            throughput_by_period = {
+                str(k): round(float(v), 4)
+                for k, v in (getattr(fd, "throughput_by_period", None) or {}).items()
+            },
+            utilization_by_period = _utilisation_by_period(fd),
+            throughput_units_per_period = round(
+                fd.throughput_units / periods_modelled, 4),
             baseline_status      = fac.effective_baseline_status.value if fac else None,
             contract_status      = fac.contract_status.value if fac else "NONE",
             closure_cost_charged = round(charged, 4),
@@ -162,6 +220,7 @@ def build_network_state_result(
             origin_id      = o,
             destination_id = d,
             flow_units     = round(v["flow"], 4),
+            flow_units_per_period = round(v["flow"] / periods_modelled, 4),
             transport_cost = round(v["cost"], 4),
             distance_km    = round(v["distance"], 4),
             carbon_kg      = round(v["carbon"], 6),
@@ -191,6 +250,13 @@ def build_network_state_result(
         warnings         = list(result.solver.warnings),
     )
 
+    # Only the periods actually modelled are named. A collapsed solve carries
+    # one period that corresponds to no single month, and labelling it with the
+    # first month of the horizon would claim it describes that month.
+    labels = dict(getattr(network, "period_labels", None) or {})
+    if len(labels) != periods_modelled:
+        labels = {}
+
     return NetworkStateResult(
         network_id        = result.network_id,
         data_version      = result.data_version,
@@ -207,6 +273,9 @@ def build_network_state_result(
         closed_facilities = sorted(closed_ids),
         facilities        = facilities,
         flows             = flows,
+        periods_modelled  = periods_modelled,
+        period_labels     = labels,
+        cost_per_period   = round(costs.business_network_cost / periods_modelled, 4),
         avg_utilization_pct = round(kpis.avg_utilization_pct, 4) if kpis else 0.0,
         max_utilization_pct = round(kpis.max_utilization_pct, 4) if kpis else 0.0,
         overutilized_facilities  = list(analytics.overutilized_facilities) if analytics else [],

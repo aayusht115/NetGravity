@@ -604,8 +604,15 @@ export const SOLVED_STATE_KEY = 'CURRENT';
 export function getKpisForFacility(facilityId, periodId) {
   const facilityKpis = FACILITY_KPIS[facilityId];
   if (!facilityKpis) return null;
-  return facilityKpis[SOLVED_STATE_KEY]
-    || facilityKpis[periodId]
+  // The REQUESTED period first, when the solve modelled it.
+  //
+  // `SOLVED_STATE_KEY` used to win unconditionally, which was right while a
+  // solve produced exactly one state and there was no such thing as a solved
+  // reading for a particular month. It is why the period control changed
+  // nothing: every period resolved to the same horizon-average entry. A period
+  // the solve did not model still falls back to it rather than showing a gap.
+  return (periodId && facilityKpis[periodId])
+    || facilityKpis[SOLVED_STATE_KEY]
     || facilityKpis[Object.keys(facilityKpis)[0]]
     || null;
 }
@@ -737,6 +744,46 @@ const EMPTY_BASELINE = {
   carbonKgCo2e: null, avgDistanceKm: null, capacityHeadroomPct: null,
   totalDemand: null, servedDemand: null, unservedDemand: null,
 };
+
+/**
+ * What span of time the solved figures cover.
+ *
+ * Every cost and volume figure in the base case is a TOTAL over
+ * `periodsModelled` periods. Displaying one without the other is how a
+ * twelve-month cost gets read as a monthly one — so this travels with the
+ * baseline and is written only by `applyHorizon` from the KPI layer's own
+ * `horizon` block. `costPerPeriod` is the backend's division, not this
+ * module's: a per-period cost computed here would be a second cost engine.
+ */
+export const SOLVE_HORIZON = {
+  periodsModelled: 1,
+  periodLabels: {},
+  firstPeriod: null,
+  lastPeriod: null,
+  costPerPeriod: null,
+};
+
+export function applyHorizon(horizon) {
+  SOLVE_HORIZON.periodsModelled = Number(horizon?.periods_modelled) || 1;
+  SOLVE_HORIZON.periodLabels = horizon?.period_labels || {};
+  SOLVE_HORIZON.firstPeriod = horizon?.first_period ?? null;
+  SOLVE_HORIZON.lastPeriod = horizon?.last_period ?? null;
+  SOLVE_HORIZON.costPerPeriod = (typeof horizon?.cost_per_period === 'number'
+    && Number.isFinite(horizon.cost_per_period)) ? horizon.cost_per_period : null;
+}
+
+/**
+ * "12 periods, 2025-09 to 2026-08" — or "" when the solve covered one period,
+ * where there is nothing to disambiguate and a label would only add noise.
+ */
+export function horizonLabel() {
+  const n = SOLVE_HORIZON.periodsModelled;
+  if (!n || n <= 1) return '';
+  const { firstPeriod, lastPeriod } = SOLVE_HORIZON;
+  return (firstPeriod && lastPeriod)
+    ? `${n} periods, ${firstPeriod} to ${lastPeriod}`
+    : `${n} periods`;
+}
 
 export function getOptimizedBaseCase() {
   if (customOptimizedBaseCase) {

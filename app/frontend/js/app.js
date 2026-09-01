@@ -14,7 +14,7 @@ import {
   getFacilityById, getInsightsForFacility, getKpisForFacility, getOptimizedBaseCase,
   getNetworkInsights, NETWORK_RECOMMENDATION, OBSERVED_UTILISATION,
   isDCFacility, isPlantFacility, facilityRole, clearNetworkModel,
-  perPeriodLabel
+  perPeriodLabel, SOLVE_HORIZON, horizonLabel
 } from './data.js';
 import { initMap, setNetworkState, invalidateMapSize, refreshAllMaps } from './map.js';
 import { initTwin3D, setTwin3DState, resizeTwin3D } from './twin3d.js';
@@ -745,8 +745,22 @@ function populatePeriodSelect(select) {
   // Most recent first: a planner opening the control wants the latest month,
   // not the oldest one three years back.
   const ordered = observed.length ? [...periods].reverse() : periods;
+
+  // Which of these the model actually solved.
+  //
+  // The recorded history runs longer than the horizon the MILP is given, so
+  // some of these periods carry a solved reading of their own and the rest
+  // fall back to the horizon average. Both are legitimate; showing them
+  // identically is not, because two months displaying the same utilisation
+  // would look like a finding rather than like one of them not being modelled.
+  const solved = new Set(Object.values(SOLVE_HORIZON.periodLabels || {}));
+  const someSolved = ordered.some((p) => solved.has(p.id));
   select.innerHTML = ordered
-    .map((p) => `<option value="${p.id}">${p.label}</option>`).join('');
+    .map((p) => {
+      const isSolved = solved.has(p.id);
+      const suffix = (someSolved && !isSolved) ? ' · recorded only' : '';
+      return `<option value="${p.id}">${p.label}${suffix}</option>`;
+    }).join('');
   if (!state.selectedPeriod
       || !ordered.some((p) => p.id === state.selectedPeriod)) {
     state.selectedPeriod = ordered[0].id;
@@ -755,9 +769,14 @@ function populatePeriodSelect(select) {
   select.disabled = ordered.length < 2;
   select.title = ordered.length < 2
     ? 'Your data states one demand period, and the analysis covers all of it.'
-    : 'Selects which recorded period the observed-utilisation figures cover. '
-      + 'The optimised plan is one solve over the demand the model was given, '
-      + 'and does not change with this control.';
+    : (someSolved
+       ? `Selects the period the figures describe. The ${solved.size} period(s) `
+         + 'the model solved show that period\'s own solved utilisation; the '
+         + 'rest are outside the modelled horizon and show what your capacity '
+         + 'history recorded, against the horizon average.'
+       : 'Selects which recorded period the observed-utilisation figures cover. '
+         + 'The optimised plan is one solve over the demand the model was given, '
+         + 'and does not change with this control.');
 }
 
 function initHomeSelectors() {
@@ -980,6 +999,14 @@ export function renderFacilityDashboard() {
     : (fac.throughput != null && fac.capacity
         ? ((fac.throughput / fac.capacity) * 100).toFixed(1) : null);
   const utilColor = getUtilColor(utilPct);
+  // Peak-period utilisation, from the solver. Null unless a multi-period solve
+  // reported one that is genuinely above the average — on a single-period solve
+  // the two are the same number, and printing both would imply a seasonal
+  // reading the data cannot support.
+  const peakRaw = kpis?.utilisation?.peak;
+  const peakUtil = (typeof peakRaw === 'number' && Number.isFinite(peakRaw)
+    && SOLVE_HORIZON.periodsModelled > 1 && peakRaw > (parseFloat(utilPct) || 0) + 0.05)
+    ? peakRaw : null;
 
   // Update Top Bar & Header
   const elFacName = document.getElementById('dash-facility-name');
@@ -1022,12 +1049,22 @@ export function renderFacilityDashboard() {
   if (metricsGrid) {
     metricsGrid.innerHTML = `
       <div class="dash-metric-card">
-        <div class="dash-metric-title">Capacity & Daily Throughput</div>
-        <div class="dash-metric-val" style="color:${utilColor}">${utilPct}% <span style="font-size:14px;color:var(--text-3);font-weight:600">(${formatNumber(fac.throughput)}/${formatNumber(fac.capacity)} u/d)</span></div>
+        <div class="dash-metric-title">Capacity & Throughput</div>
+        <div class="dash-metric-val" style="color:${utilColor}">${utilPct}% <span style="font-size:14px;color:var(--text-3);font-weight:600">(${formatNumber(fac.throughput)}/${formatNumber(fac.capacity)} ${perPeriodLabel()})</span></div>
         <div class="dash-metric-sub">
-          <span>Spare Capacity: <strong>${formatNumber(fac.capacity - fac.throughput)} u/d</strong></span>
+          <span>Spare Capacity: <strong>${formatNumber(fac.capacity - fac.throughput)} ${perPeriodLabel()}</strong></span>
           <span class="tag ${getUtilTagClass(utilPct)}">${getUtilLabel(utilPct)}</span>
         </div>
+        <!-- Utilisation in the busiest single period of the horizon. The
+             figure above is the average across it, and a site with room on
+             average can still be full in its peak month — which is the reading
+             that decides whether it needs more space. Shown only when a
+             horizon was actually modelled and the solver reported a peak. -->
+        ${peakUtil === null ? '' : `
+        <div class="dash-metric-sub">
+          <span>Peak period: <strong style="color:${getUtilColor(peakUtil)}">${peakUtil.toFixed(1)}%</strong></span>
+          <span class="text-muted">busiest of ${SOLVE_HORIZON.periodsModelled} modelled periods</span>
+        </div>`}
       </div>
 
       <div class="dash-metric-card">
@@ -1142,7 +1179,7 @@ export function renderFacilityDashboard() {
       <tr>
         <td><strong>${l.peerName}</strong></td>
         <td><span class="tag ${l.direction === 'Inbound' ? 'tag-primary' : 'tag-muted'}">${l.direction}</span></td>
-        <td class="num">${formatNumber(l.flow)} u/d</td>
+        <td class="num">${formatNumber(l.flow)} ${perPeriodLabel()}</td>
         <td class="num">${formatNumber(l.distance)} km</td>
         <td class="num font-bold">₹${fmtNum(l.cost, 1)}</td>
         <td class="num">${l.leadTime} days</td>
@@ -1303,11 +1340,24 @@ function renderHomeKPIs() {
     : null;
   const savingsPct = best ? +Math.abs(best.costChange).toFixed(1) : null;
 
+  // What the cost figure COVERS. `totalCost` is the solver's business network
+  // cost across every period it modelled, so on a twelve-month horizon it is a
+  // twelve-month total — twelve times the monthly figure, with nothing in the
+  // number itself to say so. The per-period figure comes from the KPI layer,
+  // not from dividing here: a cost computed in this file would be a second
+  // cost engine disagreeing with the first.
+  const span = horizonLabel();
+  const perPeriod = SOLVE_HORIZON.costPerPeriod;
+  const costDetail = (baselineCost === null || !span)
+    ? costSource
+    : `${costSource} · ${span}`
+      + (perPeriod === null ? '' : ` · ${formatCurrency(perPeriod)}/period`);
+
   grid.innerHTML = [
     kpiStripItemHtml({
       icon: '₹', value: formatCurrency(baselineCost), label: 'Total cost',
       deltaPrefix: 'Source:',
-      deltaText: costSource,
+      deltaText: costDetail,
       deltaNeutral: true,
     }),
     kpiStripItemHtml({
@@ -1838,7 +1888,7 @@ window.openFacilityPanel = function (facilityId) {
       ${LANES.filter(l => l.from === facilityId || l.to === facilityId).map(l => `
         <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light);font-size:12px">
           <span>${l.from === facilityId ? '→ ' + getFacilityById(l.to)?.name : '← ' + getFacilityById(l.from)?.name}</span>
-          <span style="color:var(--text-3)">${formatNumber(l.flow)} u/d · ₹${l.cost}/u</span>
+          <span style="color:var(--text-3)">${formatNumber(l.flow)} ${perPeriodLabel()} · ₹${l.cost}/u</span>
         </div>
       `).join('')}
     </div>

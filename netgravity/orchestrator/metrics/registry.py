@@ -328,6 +328,19 @@ class KPIRegistry:
                                       "%", "UTILIZATION_MAX"),
             "total_carbon_kg": wrap("total_carbon_kg", state.total_carbon_kg,
                                    "kg", "CARBON_TOTAL"),
+            # What the figures above COVER. Every cost and volume metric in this
+            # block is a total across `periods_modelled` periods, and a twelve-
+            # period total read as one period's cost is wrong by a factor of
+            # twelve with nothing in the number to reveal it. The period count is
+            # therefore an authoritative metric in its own right, and
+            # `cost_per_period` is published so no consumer has to divide —
+            # a divided KPI computed in a UI is a second, unowned cost engine.
+            "periods_modelled": wrap("periods_modelled",
+                                     getattr(state, "periods_modelled", 1),
+                                     "count", "PLANNING_PERIODS"),
+            "cost_per_period": wrap("cost_per_period",
+                                    getattr(state, "cost_per_period", 0.0),
+                                    "INR", "BUSINESS_COST_PER_PERIOD"),
         }
         if state.service is not None:
             results["pct_demand_in_sla"] = wrap(
@@ -384,10 +397,42 @@ class KPIRegistry:
                     authoritative_owner="netgravity.optimization.milp",
                     snapshot_id=context.baseline_snapshot_id, execution_id=eid,
                 ),
+                # Utilisation in the single busiest period. Over a horizon,
+                # `utilization_pct` is an average, and an average is what hides
+                # the month a site runs out of room — the specific thing a
+                # multi-period model exists to find. Equal to the average on a
+                # single-period solve, so this is never a second, disagreeing
+                # answer to the same question.
+                "peak_utilization_pct": KPIResult(
+                    metric_id="peak_utilization_pct",
+                    value=getattr(fac, "peak_utilization_pct", 0.0) or fac.utilization_pct,
+                    unit="%",
+                    scope=MetricScope.FACILITY, entity_id=fac.facility_id,
+                    formula_id="UTILIZATION_PEAK", source_capability="optimization.solve",
+                    authoritative_owner="netgravity.optimization.milp",
+                    snapshot_id=context.baseline_snapshot_id, execution_id=eid,
+                ),
                 "throughput_units": KPIResult(
                     metric_id="throughput_units", value=fac.throughput_units, unit="units",
                     scope=MetricScope.FACILITY, entity_id=fac.facility_id,
                     formula_id="THROUGHPUT", source_capability="optimization.solve",
+                    authoritative_owner="netgravity.optimization.milp",
+                    snapshot_id=context.baseline_snapshot_id, execution_id=eid,
+                ),
+                # The same throughput on a per-period basis. `throughput_units`
+                # is a horizon total; the capacity an upload states is per
+                # period, and pairing the two would compare a year of volume
+                # with a month of room. Published rather than left to a caller
+                # to divide, so the ratio a screen shows is the same ratio
+                # `utilization_pct` reports.
+                "throughput_units_per_period": KPIResult(
+                    metric_id="throughput_units_per_period",
+                    value=getattr(fac, "throughput_units_per_period", 0.0)
+                          or fac.throughput_units,
+                    unit="units/period",
+                    scope=MetricScope.FACILITY, entity_id=fac.facility_id,
+                    formula_id="THROUGHPUT_PER_PERIOD",
+                    source_capability="optimization.solve",
                     authoritative_owner="netgravity.optimization.milp",
                     snapshot_id=context.baseline_snapshot_id, execution_id=eid,
                 ),
@@ -432,6 +477,11 @@ class KPIRegistry:
                 "origin_id": flow.origin_id,
                 "destination_id": flow.destination_id,
                 "flow_units": flow.flow_units,
+                # The same volume per period, for pairing with a lane capacity
+                # or a rate, both of which are per period. Equal to `flow_units`
+                # on a single-period solve.
+                "flow_units_per_period": getattr(
+                    flow, "flow_units_per_period", 0.0) or flow.flow_units,
                 "transport_cost": flow.transport_cost,
                 "distance_km": flow.distance_km,
                 "carbon_kg": flow.carbon_kg,

@@ -133,3 +133,66 @@ def test_real_agents_sdk_wiring_uses_structured_output_and_stubbed_runner(monkey
     assert len(captured["agent"].tools) == 2
     assert "network_state.business_network_cost" in captured["input"]
     assert runtime.stats["calls"] == 1
+
+
+# ---------------------------------------------------------- horizon phrasing
+
+class TestACostFigureSaysWhatSpanItCovers:
+    """
+    "per period" was asserted unconditionally about `business_network_cost`.
+
+    That was true while every solve modelled one period. Once a horizon is
+    modelled the same sentence describes a twelve-month total as a monthly one
+    — a twelvefold overstatement, in the prose a planner acts on, next to a
+    figure that is itself correct.
+    """
+
+    def _reason(self, network_state):
+        agent = ReasoningAgent()
+        return agent.reason({"network_state": network_state},
+                            allow_llm=False, scope=ReasoningScope.NETWORK)
+
+    def test_a_single_period_solve_still_says_per_period(self):
+        result = self._reason({
+            "business_network_cost": 1000.0, "periods_modelled": 1,
+        })
+        assert "1,000.00 per period" in result.summary
+
+    def test_a_horizon_states_the_span_and_the_per_period_figure(self):
+        result = self._reason({
+            "business_network_cost": 12000.0,
+            "periods_modelled": 12,
+            "cost_per_period": 1000.0,
+        })
+        assert "across the 12 periods modelled" in result.summary
+        assert "1,000.00 per period" in result.summary
+        # The horizon total is never restated as a per-period figure.
+        assert "12,000.00 per period" not in result.summary
+
+    def test_the_span_is_stated_even_with_no_per_period_figure(self):
+        """
+        The period count alone still corrects the sentence. Computing the
+        per-period figure here instead would make this a second cost engine.
+        """
+        result = self._reason({
+            "business_network_cost": 12000.0, "periods_modelled": 12,
+        })
+        assert "across the 12 periods modelled" in result.summary
+        assert "per period)" not in result.summary
+
+    def test_the_per_period_figure_survives_numeric_grounding(self):
+        """
+        The regression this class exists for. `cost_per_period` was not a
+        citable fact, so the validator adjudicated the new figure against the
+        nearest currency it did know — transport cost — and marked the whole
+        narrative CONTRADICTED, which drops the insight from the feed.
+        """
+        result = self._reason({
+            "business_network_cost": 216594606.26,
+            "periods_modelled": 12,
+            "cost_per_period": 18049550.52,
+            "cost_components": {"transport_cost": 10138267.14},
+        })
+        assert result.grounding_status == "GROUNDED"
+        assert result.validation_warnings == []
+        assert "18,049,550.52 per period" in result.summary

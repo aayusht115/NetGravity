@@ -48,6 +48,20 @@ from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+#: Bumped whenever the SHAPE of a serialised analysis changes.
+#:
+#: The cache key is `(snapshot_id, data_version, variant)`, and `data_version`
+#: describes the NETWORK — it is a hash of facilities, products, demands and
+#: lanes. Adding a block to the analysis document does not change any of those,
+#: so every existing entry stays valid by that key and is served forever: the
+#: code produces the new shape and no caller ever sees it, on exactly the
+#: networks that have been analysed before.
+#:
+#: That is not hypothetical. It is how `horizon.by_facility` came back empty on
+#: a network whose horizon was solved correctly — the answer was right and a
+#: document written before the field existed was what got returned.
+_ANALYSIS_VERSION = 2
+
 
 class AnalysisService:
     """Computes a snapshot's analysis at most once, keeps it, and serves it."""
@@ -99,8 +113,12 @@ class AnalysisService:
         service: one store, one single-flight lock, one persistence path. A
         second cache for the second kind of analysis is how the two come to
         expire under different rules.
+
+        `_ANALYSIS_VERSION` rides in the same key, so a change to the document's
+        SHAPE invalidates entries that a change to the network would not.
         """
-        return f"{snapshot_id}#{variant}" if variant else snapshot_id
+        variant = f"v{_ANALYSIS_VERSION}:{variant}" if variant else f"v{_ANALYSIS_VERSION}"
+        return f"{snapshot_id}#{variant}"
 
     def peek(self, snapshot_id: str, data_version: str,
              variant: str = "") -> Optional[Dict[str, Any]]:
@@ -185,6 +203,54 @@ class AnalysisService:
 analysis_service = AnalysisService()
 
 
+def _horizon_of(ctx: Any) -> Dict[str, Any]:
+    """
+    The planning horizon the solve in `ctx` actually covered.
+
+    Empty `period_labels` is the honest answer for a network whose upload
+    carried no calendar, and `periods_modelled` is then 1 — never a fabricated
+    "Period 1" standing in for a month the data never named.
+    """
+    states = getattr(ctx, "network_states", None) or {}
+    state = (states.get("optimization.solve")
+             or (next(iter(states.values())) if len(states) == 1 else None))
+    if state is None:
+        return {"periods_modelled": 1, "period_labels": {},
+                "first_period": None, "last_period": None, "cost_per_period": None}
+
+    labels = dict(getattr(state, "period_labels", None) or {})
+    ordered = [labels[k] for k in sorted(labels, key=lambda s: int(s))] if labels else []
+
+    # Solved utilisation and throughput per facility per period.
+    #
+    # A KPIResult carries one number, so a series cannot travel as one — and
+    # without it a period selector has nothing solved to show for the month a
+    # user picked, which is why choosing a period changed the recorded history
+    # on screen and nothing the solver produced. Read from the state, not
+    # recomputed: these are the same figures `peak_utilization_pct` is the
+    # maximum of.
+    by_facility: Dict[str, Any] = {}
+    for facility in getattr(state, "facilities", None) or []:
+        utilisation = dict(getattr(facility, "utilization_by_period", None) or {})
+        throughput = dict(getattr(facility, "throughput_by_period", None) or {})
+        if not utilisation and not throughput:
+            continue
+        by_facility[facility.facility_id] = {
+            "utilisation": utilisation,
+            "throughput": throughput,
+            "peak_utilisation_pct": getattr(facility, "peak_utilization_pct", None),
+        }
+
+    return {
+        "periods_modelled": int(getattr(state, "periods_modelled", 1) or 1),
+        "period_labels": labels,
+        "first_period": ordered[0] if ordered else None,
+        "last_period": ordered[-1] if ordered else None,
+        "cost_per_period": getattr(state, "cost_per_period", None),
+        "by_facility": by_facility,
+    }
+
+
 def serialise_analysis(registry: Any, ctx: Any) -> Dict[str, Any]:
     """
     Everything the KPI endpoints report, read once from one execution.
@@ -204,6 +270,14 @@ def serialise_analysis(registry: Any, ctx: Any) -> Dict[str, Any]:
 
     return {
         "execution_id": getattr(ctx, "execution_id", ""),
+        # What span of time every cost and volume figure below covers.
+        #
+        # Read from the solve itself, not inferred. Without it a caller has a
+        # cost and no way to know whether it is one month or twelve — and the
+        # two differ by a factor of twelve with nothing in the number to say
+        # which. Publishing it here means no consumer has to divide, and the
+        # per-period figure has one owner rather than one per screen.
+        "horizon": _horizon_of(ctx),
         "kpis": dump(network),
         "triggered_thresholds": [
             t.model_dump(mode="json")

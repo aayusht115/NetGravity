@@ -106,6 +106,39 @@ class FacilitySummary(BaseModel):
     throughput_units: float = 0.0
     capacity_units:   float = 0.0
     utilization_pct:  float = 0.0
+
+    #: Utilisation in the single busiest period, and what moved in each period.
+    #:
+    #: `utilization_pct` above is throughput over capacity across the WHOLE
+    #: horizon, which is an average — and an average is the one number that
+    #: cannot answer the question a horizon was modelled to answer. A DC running
+    #: at 43% for the year and 91% in March is at 43% by that measure and out of
+    #: room in March. The MILP has computed both since the multi-period model
+    #: was built; only the average was carried into this contract, so the peak
+    #: could not be seen from any screen.
+    #:
+    #: `peak_utilization_pct` equals `utilization_pct` for a single-period
+    #: solve, and `throughput_by_period` is empty for one — neither invents a
+    #: seasonal profile the data does not describe.
+    peak_utilization_pct: float = 0.0
+    throughput_by_period: Dict[str, float] = Field(default_factory=dict)
+    #: Utilisation period by period, on the same basis as the peak above. This
+    #: is what lets a period selector show a solved reading for the month the
+    #: user picked instead of the horizon average on every one of them.
+    utilization_by_period: Dict[str, float] = Field(default_factory=dict)
+
+    #: `throughput_units` divided by the number of periods modelled.
+    #:
+    #: `throughput_units` and `capacity_units` are both horizon totals, and they
+    #: divide out to `utilization_pct` correctly. But a screen that pairs solved
+    #: throughput with the capacity the UPLOAD states — which is per period, by
+    #: the name of the column it came from — is comparing a twelve-month volume
+    #: with one month of capacity, and would print a figure contradicting the
+    #: utilisation shown beside it. This is the term that matches such a
+    #: capacity, so the comparison stays on one basis without any consumer
+    #: dividing by a period count it had to go and find.
+    throughput_units_per_period: float = 0.0
+
     # Observed-baseline provenance, so open→closed transitions are visible.
     baseline_status:  Optional[str] = None
     # Contractual state that constrained (or did not constrain) this facility.
@@ -123,6 +156,12 @@ class FlowSummary(BaseModel):
     transport_cost: float = 0.0
     distance_km:    float = 0.0
     carbon_kg:      float = 0.0
+
+    #: `flow_units` divided by the number of periods modelled — the volume that
+    #: is comparable with a lane's stated per-period capacity, and with the
+    #: rate-per-unit economics a corridor is usually read against. Equal to
+    #: `flow_units` on a single-period solve.
+    flow_units_per_period: float = 0.0
 
     model_config = ConfigDict(extra="forbid")
 
@@ -197,6 +236,31 @@ class NetworkStateResult(BaseModel):
     closed_facilities: List[str] = Field(default_factory=list)
     facilities:        List[FacilitySummary] = Field(default_factory=list)
     flows:             List[FlowSummary] = Field(default_factory=list)
+
+    # --- Planning horizon ---
+    #: How many planning periods this result covers, and what the source calls
+    #: each of them (`{"1": "2025-09", ...}`).
+    #:
+    #: Every cost, volume and carbon figure in this contract is a TOTAL over
+    #: `periods_modelled` periods — the engine charges fixed and handling cost
+    #: in each period a facility is open, and opening, closure and capex once.
+    #: Reading a twelve-period total as one period's cost overstates it
+    #: twelvefold, and nothing in the numbers themselves reveals which it is.
+    #: So the period count travels with the figures rather than being left for a
+    #: caller to infer, and `cost_per_period` gives the comparable per-period
+    #: figure without any consumer having to divide and hope.
+    periods_modelled: int = 1
+    period_labels:    Dict[str, str] = Field(default_factory=dict)
+
+    #: `business_network_cost` divided by `periods_modelled`.
+    #:
+    #: An AVERAGE period, not a typical one: fixed and handling costs recur
+    #: every period, but opening, closure and capex are charged once across the
+    #: horizon, so this spreads a one-off over the periods rather than assigning
+    #: it to the period that incurred it. It is the right figure for comparing a
+    #: horizon result against a monthly budget, and the wrong one for asking
+    #: what a specific month cost.
+    cost_per_period: float = 0.0
 
     # --- Utilisation indicators ---
     avg_utilization_pct: float = 0.0

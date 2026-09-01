@@ -866,6 +866,21 @@ class CanonicalNetwork(BaseModel):
     data_version: Optional[str]   = None   # set by builder from input hash
     description:  str             = ""
 
+    #: What each modelled planning period is, in the source's own words —
+    #: `{"1": "2023-09", "2": "2023-10", ...}`.
+    #:
+    #: The engine indexes periods by integer everywhere (`DemandRecord.period`,
+    #: `FlowDecision.period`, constraint names), which is what makes the model
+    #: build. But "period 7" is not a thing a planner can act on, and an upload
+    #: that states months knows perfectly well which month each index is. This
+    #: is the only place that correspondence is recorded, so a screen, an
+    #: assumption line or an evidence reference can say "2024-03" instead of
+    #: silently renumbering the client's own calendar.
+    #:
+    #: Empty when the source stated no period labels, which is the honest
+    #: answer for a single-period upload — not a fabricated "Period 1".
+    period_labels: Dict[str, str] = Field(default_factory=dict)
+
     @model_validator(mode="after")
     def validate_network_consistency(self) -> "CanonicalNetwork":
         facility_ids: Set[str] = {f.id for f in self.facilities}

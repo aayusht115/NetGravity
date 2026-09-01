@@ -27,7 +27,10 @@ from app.backend.api.network_extractor import (
 )
 from app.backend.services.errors import ValidationError
 from app.backend.services.network_assembler import (
+    _HORIZON_PERIODS,
+    _MAX_MODELLED_DEMAND_ROWS,
     assemble_network_from_structure,
+    choose_horizon,
     diagnose_servability,
 )
 
@@ -202,9 +205,60 @@ def test_assembly_keeps_the_product_dimension(normalised_tables):
     network, assumptions, _ = assemble_network_from_structure(
         structure, network_id="test_net")
     assert {p.id for p in network.products} == {"P001", "P002"}
-    # One demand record per market-product pair, not one aggregate per market.
-    assert len(network.demands) == 4
+    # One demand record per market-product pair PER PERIOD, not one aggregate
+    # per market. The pair count is what this test is about; the period count is
+    # asserted separately in test_the_observed_horizon_is_modelled.
+    pairs = {(d.market_id, d.product_id) for d in network.demands}
+    assert pairs == {("M001", "P001"), ("M001", "P002"),
+                     ("M003", "P001"), ("M003", "P002")}
     assert not any("single aggregate product" in a for a in assumptions)
+
+
+def test_the_observed_horizon_is_modelled(normalised_tables):
+    """
+    Every period the upload states is carried into the model, not just the
+    latest one.
+
+    The fixture holds three months for two markets and two products. Collapsing
+    that to the newest month — which is what happened until the horizon was
+    wired through — discards two thirds of the client's own data and makes the
+    multi-period MILP unreachable from any upload, so seasonality cannot be
+    asked about at all.
+    """
+    structure = build_network_from_dataframes(normalised_tables)
+    network, assumptions, _ = assemble_network_from_structure(
+        structure, network_id="test_net")
+
+    assert {d.period for d in network.demands} == {1, 2, 3}
+    assert network.period_labels == {"1": "2026-06", "2": "2026-07", "3": "2026-08"}
+    # 2 markets x 2 products x 3 periods.
+    assert len(network.demands) == 12
+
+    # The latest period's figures survive unchanged at the newest index, so the
+    # horizon is an addition to what was reported before, not a restatement.
+    latest = {(d.market_id, d.product_id): d.quantity
+              for d in network.demands if d.period == 3}
+    assert latest[("M001", "P001")] == pytest.approx(3020)
+    assert latest[("M001", "P002")] == pytest.approx(3520)
+
+    assert network.config.multi_period_policy == "FULL_HORIZON"
+    assert any("modelled over 3 periods" in a for a in assumptions)
+
+
+def test_a_horizon_does_not_manufacture_a_capacity_shortfall(normalised_tables):
+    """
+    Demand and capacity are both per period, so a horizon must not be added up
+    and compared with one period's capacity.
+
+    Doing so reports a shortfall equal in size to the length of the horizon —
+    and for a twelve-month table that lands squarely on the 12x ratio the
+    consistency check treats as a units error, so the upload is told its
+    capacity column is on the wrong period when nothing is wrong with it.
+    """
+    structure = build_network_from_dataframes(normalised_tables)
+    _, _, issues = assemble_network_from_structure(structure, network_id="test_net")
+    assert not any("looks like" in i and "monthly capacity" in i for i in issues)
+    assert not any("exceeds total capacity" in i for i in issues)
 
 
 def test_per_product_rates_are_blended_by_demand_and_declared(normalised_tables):
@@ -423,3 +477,68 @@ def test_missing_capacity_row_yields_no_percentage_not_zero():
     store.put("net", [{"facilityId": "F001", "period": "2026-08",
                        "available": None, "used": None}])
     assert store.latest_utilisation("net")["F001"]["utilisationPct"] is None
+
+
+# ------------------------------------------------------- horizon selection
+
+class TestTheHorizonIsBounded:
+    """
+    How many periods get modelled must scale with the size of the upload, not
+    with how much history it happens to contain.
+
+    Solve cost grows linearly in the number of periods. On the sample network —
+    fourteen market-product pairs — thirty-six periods is 3,032 variables and a
+    tenth of a second. The same horizon over a client with four thousand pairs
+    is a different proposition entirely, and a planning tool that stops working
+    on a large upload has failed at the size where it matters most.
+    """
+
+    def months(self, n):
+        return [f"2026-{i:02d}" if i <= 12 else f"2027-{i - 12:02d}"
+                for i in range(1, n + 1)]
+
+    def test_a_short_history_is_modelled_whole(self):
+        modelled, notes = choose_horizon(self.months(4), rows_per_period=10)
+        assert modelled == self.months(4)
+        assert notes == []
+
+    def test_a_long_history_keeps_the_most_recent_seasonal_cycle(self):
+        observed = self.months(30)
+        modelled, notes = choose_horizon(observed, rows_per_period=10)
+        assert len(modelled) == _HORIZON_PERIODS
+        # The most RECENT periods, ending at the present. A network is designed
+        # forward from where it is, not from where it was three years ago.
+        assert modelled == observed[-_HORIZON_PERIODS:]
+        assert notes and "most recent 12" in notes[0]
+
+    def test_a_wide_upload_shortens_the_horizon_rather_than_blowing_up(self):
+        """
+        The bound is on the demand table the horizon PRODUCES, so a network
+        that is wide is limited by the same rule as one that is long.
+        """
+        wide = _MAX_MODELLED_DEMAND_ROWS // 4      # only 4 periods affordable
+        modelled, notes = choose_horizon(self.months(24), rows_per_period=wide)
+        assert len(modelled) == 4
+        assert len(modelled) * wide <= _MAX_MODELLED_DEMAND_ROWS
+
+    def test_shortening_the_horizon_is_never_silent(self):
+        """
+        A client whose answer covers fewer months than their file does has to
+        be told. Absorbing that quietly is how a partial answer gets read as a
+        complete one.
+        """
+        wide = _MAX_MODELLED_DEMAND_ROWS // 4
+        _, notes = choose_horizon(self.months(24), rows_per_period=wide)
+        assert notes
+        assert "budget" in notes[0]
+        assert "Seasonality outside that window is not modelled" in notes[0]
+
+    def test_a_single_period_upload_is_left_exactly_as_it_is(self):
+        assert choose_horizon(["2026-01"], rows_per_period=10) == (["2026-01"], [])
+        assert choose_horizon([], rows_per_period=0) == ([], [])
+
+    def test_the_budget_never_shortens_below_one_period(self):
+        """An upload wider than the whole budget still has to produce a model."""
+        modelled, _ = choose_horizon(
+            self.months(12), rows_per_period=_MAX_MODELLED_DEMAND_ROWS * 5)
+        assert len(modelled) == 1

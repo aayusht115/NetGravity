@@ -4,7 +4,7 @@
       "id": "G-01",
       "name": "The derived tariff reproduces this network's own freight",
       "status": "PASS",
-      "detail": "was median 419% error, now 8.2% (11.36/unit + 0.01290/unit-km)"
+      "detail": "was median 418% error, now 8.2% (11.36/unit + 0.01293/unit-km)"
     },
     {
       "id": "G-02",
@@ -16,7 +16,7 @@
       "id": "G-03",
       "name": "A greenfield DC can carry flow at all",
       "status": "PASS",
-      "detail": "open=True throughput=27,549 (was 0 for every greenfield site, whatever its capacity)"
+      "detail": "open=True throughput=318,184 (was 0 for every greenfield site, whatever its capacity)"
     },
     {
       "id": "G-04",
@@ -28,7 +28,7 @@
       "id": "G-05",
       "name": "A realistic new site opens and serves more demand",
       "status": "PASS",
-      "detail": "fill 76.39% -> 94.54%, throughput 18,871"
+      "detail": "fill 78.10% -> 96.10%, throughput 222,350"
     },
     {
       "id": "G-06",
@@ -76,25 +76,37 @@
       "id": "L-03",
       "name": "The loading screen reports real work, not a timer",
       "status": "PASS",
-      "detail": "\u2726 Analysing Phase 10.7 Network Reading the analysis already computed for this network. Progress 2s elapsed 80% \u2014 4 of 5 steps complete \u2713 Reading your network 8 facilities, 36 lanes Done \u2713 Solving the "
+      "detail": "\u2726 Analysing Phase 10.7 Network Reading the analysis already computed for this network. Progress 1s elapsed 80% \u2014 4 of 5 steps complete \u2713 Reading your network 8 facilities, 36 lanes Done \u2713 Solving the "
     },
     {
       "id": "H-04",
       "name": "No fabricated service target is reported against",
       "status": "PASS",
-      "detail": "Network today \u20b9 \u20b9180.7L Total cost Source: Your network, as uploaded \u2705 76.4% Fill Rate 28,249 of 36,982 units served \ud83c\udfaf Not available Savings opportunity No scenario beats your network yet View all KPI  (was 'vs target: -18.6%' against a 95% benchmark stated in no upload)"
+      "detail": "Network today \u20b9 \u20b92165.9L Total cost Source: Your network, as uploaded \u00b7 12 periods, 2025-09 to 2026-08 \u00b7 \u20b9180.5L/period \u2705 78.1% Fill Rate 3,33,182 of 4,26,607 units served \ud83c\udfaf Not available Savings oppo  (was 'vs target: -18.6%' against a 95% benchmark stated in no upload)"
     },
     {
       "id": "H-05",
       "name": "The fill rate says what it is made of, from the solve",
       "status": "PASS",
-      "detail": "Network today \u20b9 \u20b9180.7L Total cost Source: Your network, as uploaded \u2705 76.4% Fill Rate 28,249 of 36,982 units served \ud83c\udfaf Not available Savings opportunity No scenario beats your netw"
+      "detail": "Network today \u20b9 \u20b92165.9L Total cost Source: Your network, as uploaded \u00b7 12 periods, 2025-09 to 2026-08 \u00b7 \u20b9180.5L/period \u2705 78.1% Fill Rate 3,33,182 of 4,26,607 units served \ud83c\udfaf Not av"
     },
     {
       "id": "H-06",
       "name": "The period control lists periods the upload states",
       "status": "PASS",
-      "detail": "36 options [\"2026-08\", \"2026-07\", \"2026-06\"]\u2026[\"2023-09\"] disabled=False  (was a single disabled 'Period 1'; before that, Q3 2026 / Q2 2026 / Q1 2026 / Q4 2025, none of which appear in any upload)"
+      "detail": "36 options [\"2026-08\", \"2026-07\", \"2026-06\"]\u2026[\"2023-09 \\u00b7 recorded only\"] disabled=False  (was a single disabled 'Period 1'; before that, Q3 2026 / Q2 2026 / Q1 2026 / Q4 2025, none of which appear in any upload)"
+    },
+    {
+      "id": "H-14",
+      "name": "Choosing a period changes the solved figure behind it",
+      "status": "PASS",
+      "detail": "4 of 5 site(s) vary across 12 modelled periods; widest is F007 at 37.8%\u201348.3%; 5/5 carry a reading for every period  (every period returned the same horizon average until the solve's own per-period series was carried through)"
+    },
+    {
+      "id": "H-15",
+      "name": "A per-period cost is published, not divided in the browser",
+      "status": "PASS",
+      "detail": "cost_per_period=18049550.5221  (the KPI layer's own figure; a cost divided in the UI would be a second cost engine)"
     },
     {
       "id": "H-07",
@@ -112,19 +124,19 @@
       "id": "H-09",
       "name": "The analysis timestamp is real, not the literal '5 min ago'",
       "status": "PASS",
-      "detail": "Last analysed: 9 h ago"
+      "detail": "Last analysed: 10 min ago"
     },
     {
       "id": "H-10",
       "name": "Facility status is the solver's decision, not always 'Active'",
       "status": "PASS",
-      "detail": "[\"Mumbai Manufacturing Plant 42,150 9,762 Open\", \"Chennai Manufacturing Plant 38,480 11,728 Open\", \"Ahmedabad Manufacturing Plant 35,710 6,759 Open\"]"
+      "detail": "[\"Mumbai Manufacturing Plant 42,150 9,733.25 Open\", \"Chennai Manufacturing Plant 38,480 11,670.167 Open\", \"Ahmedabad Manufacturing Plant 35,710 6,361.75 Open\"]"
     },
     {
       "id": "H-11",
-      "name": "The new-site form opens on the network, not on Nagpur",
-      "status": "FAIL",
-      "detail": "{\"name\": \"New DC\", \"lat\": \"19.4169\", \"lng\": \"78.428\", \"capacity\": \"24370\", \"fixed\": \"15754800\", \"handling\": \"0.00\", \"city\": \"Choose a city, or type coordinates below\"}  (shipped pre-filled with 'Nagpur DC' at 21.1458/79.0882 with a capacity of 5,000)"
+      "name": "The new-site form opens on the network, not on a city we chose",
+      "status": "PASS",
+      "detail": "{\"name\": \"New DC\", \"lat\": \"19.4169\", \"lng\": \"78.428\", \"capacity\": \"24370\", \"fixed\": \"15754800\", \"handling\": \"0.00\", \"city\": \"Choose a city, or type coordinates below\"} names_a_place=False  (shipped pre-filled with 'Nagpur DC' at 21.1458/79.0882 with a capacity of 5,000; later opened with a blank name that blocked submission)"
     },
     {
       "id": "G-08",
@@ -136,19 +148,19 @@
       "id": "G-09",
       "name": "The new site is opened and the scenario has a real effect",
       "status": "PASS",
-      "detail": "{\"name\": \"Greenfield end to end\", \"cost\": 7197885.5463, \"ref\": 9561047.4808, \"effect\": -2363161.93, \"newSites\": 1, \"overrides\": [\"ADD_FACILITY NEW_NAGPUR_DC 'Nagpur DC' (21.1458, 79.0882) capacity 24,370 units/period, 10 lanes derived\"]}"
+      "detail": "{\"name\": \"Greenfield end to end\", \"cost\": 85948616.2163, \"ref\": 114496742.4659, \"effect\": -28548126.25, \"newSites\": 1, \"overrides\": [\"ADD_FACILITY NEW_NAGPUR_DC 'Nagpur DC' (21.1458, 79.0882) capacity 24,370 units/period, 10 lanes derived\"]}"
     },
     {
       "id": "G-10",
       "name": "The saving is measured against the re-optimised reference",
       "status": "PASS",
-      "detail": "reference 9,561,047.48 - scenario 7,197,885.55 = -2,363,161.93"
+      "detail": "reference 114,496,742.47 - scenario 85,948,616.22 = -28,548,126.25"
     },
     {
       "id": "H-12",
       "name": "The assistant does not announce a version that does not exist",
       "status": "PASS",
-      "detail": "\u2190 Back to FAQs & suggestions NetGravity v2.0.0 - grounded answers, model assisted Which DC is most utilised? \u2726 NETWORK_STATE_QUERY I find Pune Distribution Center is the most utilised DC at 43.1% util"
+      "detail": "\u2190 Back to FAQs & suggestions NetGravity v2.0.0 - grounded answers, model assisted Which DC is most utilised? \u2726 NETWORK_STATE_QUERY I find Pune Distribution Center is the most utilised DC at 116,799 un"
     },
     {
       "id": "H-13",
@@ -158,8 +170,8 @@
     }
   ],
   "summary": {
-    "total": 26,
-    "passed": 25,
-    "failed": 1
+    "total": 28,
+    "passed": 28,
+    "failed": 0
   }
 }

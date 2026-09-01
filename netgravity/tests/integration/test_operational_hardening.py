@@ -432,3 +432,58 @@ class TestResilienceIsCachedSeparatelyFromTheBaseline:
         service.invalidate("snap_2")
         assert service.peek("snap_2", "v1") is None
         assert service.peek("snap_2", "v1", variant="resilience") is None
+
+
+class TestAChangedAnalysisShapeIsNotServedStale:
+    """
+    The cache key must distinguish a change to the DOCUMENT from a change to
+    the network.
+
+    `data_version` is a hash of facilities, products, demands and lanes. Adding
+    a block to the serialised analysis changes none of them, so every entry
+    written before the change stays valid by that key and is returned forever —
+    the new code runs and no caller ever sees its output, on precisely the
+    networks that have been analysed before.
+
+    That is not hypothetical: `horizon.by_facility` came back empty on a
+    network whose horizon had been solved correctly, because a document written
+    before the field existed was what got served.
+    """
+
+    def test_bumping_the_analysis_version_invalidates_existing_entries(self):
+        from app.backend.services import analysis_store
+        from app.backend.services.analysis_store import AnalysisService
+
+        service = AnalysisService()
+        calls = []
+
+        def compute():
+            calls.append(1)
+            return {"kpis": {}, "horizon": {"periods_modelled": 12}}
+
+        service.get("snap_shape", "v1", compute)
+        service.get("snap_shape", "v1", compute)
+        assert len(calls) == 1, "the second read must come from the cache"
+
+        original = analysis_store._ANALYSIS_VERSION
+        try:
+            analysis_store._ANALYSIS_VERSION = original + 1
+            service.get("snap_shape", "v1", compute)
+        finally:
+            analysis_store._ANALYSIS_VERSION = original
+        assert len(calls) == 2, (
+            "a new document shape must recompute rather than serve a document "
+            "written before the shape existed"
+        )
+
+    def test_the_version_does_not_collide_across_variants(self):
+        from app.backend.services.analysis_store import AnalysisService
+
+        service = AnalysisService()
+        calls = []
+        service.get("snap_var", "v1", lambda: calls.append("base") or {"kpis": {}})
+        service.get("snap_var", "v1",
+                    lambda: calls.append("rei") or {"rei": {}}, variant="resilience")
+        assert calls == ["base", "rei"]
+        assert service.peek("snap_var", "v1") is not None
+        assert service.peek("snap_var", "v1", variant="resilience") is not None

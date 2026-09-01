@@ -45,12 +45,17 @@ def build_network(
     network_id: str = "netgravity_india",
     description: str = "",
     contracts: Optional[List[ContractRule]] = None,
+    period_labels: Optional[Dict[str, str]] = None,
 ) -> Tuple[CanonicalNetwork, List[RowIssue]]:
     """
     Assemble a CanonicalNetwork from validated records.
 
     Returns the network plus any issues raised during assembly (for example a
     contract surcharge that could not be matched to a lane destination).
+
+    `period_labels` maps each integer period index to what the source called it
+    ("1" -> "2023-09"). Optional, because a single-period upload has no calendar
+    to carry; supplying it is what lets a horizon result name its months.
 
     Raises NetworkBuildError only when assembly is impossible — Pydantic's own
     cross-reference validation failing, for instance.
@@ -74,6 +79,7 @@ def build_network(
             config=config or OptimizationConfig(),
             network_id=network_id,
             description=description,
+            period_labels=dict(period_labels or {}),
         )
     except Exception as exc:  # Pydantic validation error
         raise NetworkBuildError(f"CanonicalNetwork rejected the assembled data: {exc}") from exc
@@ -110,15 +116,38 @@ def _check_period_consistency(facilities: List[FacilityRecord],
     Names cannot always tell us, so this checks the NUMBERS: a demand-to-
     capacity ratio sitting near 30, 12 or 7 is far more likely to be a unit
     error than a genuine 30x shortfall.
+
+    Both sides of the ratio are PER PERIOD. A demand table may state many
+    planning periods — twelve months of history is the ordinary shape — while
+    `capacity_units_per_period` is, by its name, one period's worth. Adding the
+    periods up and dividing by one period's capacity manufactures a ratio equal
+    to the length of the horizon, which for a twelve-month table lands inside
+    the tolerance around 12x and reports "monthly capacity against annual
+    demand" for a network whose units are perfectly consistent. That is this
+    check producing exactly the confident wrong answer it exists to prevent.
+
+    The PEAK period is the one compared, not the mean: the network has to fit
+    the month it is busiest, and averaging hides the month it breaks in.
     """
     issues: List[RowIssue] = []
-    total_demand = sum(d.quantity for d in demands)
+    demand_by_period: Dict[int, float] = {}
+    for d in demands:
+        demand_by_period[d.period] = demand_by_period.get(d.period, 0.0) + d.quantity
+    total_demand = max(demand_by_period.values()) if demand_by_period else 0.0
+    n_periods = len(demand_by_period)
     total_capacity = sum(
         f.capacity_units_per_period for f in facilities
         if not f.is_market and f.capacity_units_per_period < 1e11
     )
     if total_demand <= 0 or total_capacity <= 0:
         return issues
+
+    # Says which period the figure is, so a reader of the message can tell a
+    # horizon table from a single-period one.
+    demand_label = (
+        f"peak-period demand ({total_demand:,.0f} across {n_periods} periods)"
+        if n_periods > 1 else f"demand ({total_demand:,.0f})"
+    )
 
     ratio = total_demand / total_capacity
     if ratio <= 1.0:
@@ -130,7 +159,7 @@ def _check_period_consistency(facilities: List[FacilityRecord],
                 severity=Severity.ERROR,
                 code="R-021",
                 message=(
-                    f"demand ({total_demand:,.0f}) exceeds total capacity "
+                    f"{demand_label} exceeds total capacity "
                     f"({total_capacity:,.0f}) by {ratio:.1f}x, which is close to "
                     f"{factor:g}x — this looks like {explanation}, not a real "
                     f"shortfall. State the period explicitly in the capacity "
@@ -144,7 +173,7 @@ def _check_period_consistency(facilities: List[FacilityRecord],
     issues.append(RowIssue(
         severity=Severity.WARNING, code="R-021",
         message=(
-            f"demand ({total_demand:,.0f}) exceeds total capacity "
+            f"{demand_label} exceeds total capacity "
             f"({total_capacity:,.0f}) by {ratio:.1f}x. If this is not a genuine "
             f"shortfall, check that demand and capacity are on the same period."
         ),

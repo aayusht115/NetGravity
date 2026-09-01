@@ -4,7 +4,7 @@
       "id": "U-01",
       "name": "A baseline row exists, built from the solved network",
       "status": "PASS",
-      "detail": "{\"id\": \"SCN_ACTUAL\", \"name\": \"Current Baseline\", \"cost\": 18067793.9644, \"fill\": 76.39, \"change\": 0, \"maxUtil\": 43.12, \"risk\": \"Low\", \"transport\": 863063.1448, \"fixed\": 17201200, \"unserved\": 8733, \"open\": 8, \"newSites\": 0, \"overrides\": []}"
+      "detail": "{\"id\": \"SCN_ACTUAL\", \"name\": \"Current Baseline\", \"cost\": 216594606.2647, \"fill\": 78.1, \"change\": 0, \"maxUtil\": 42.99, \"risk\": \"Low\", \"transport\": 10138267.1353, \"fixed\": 206414400, \"unserved\": 93425, \"open\": 8, \"newSites\": 0, \"overrides\": []}"
     },
     {
       "id": "U-02",
@@ -16,19 +16,19 @@
       "id": "U-03",
       "name": "Change Capacity runs and appears in the comparison table",
       "status": "PASS",
-      "detail": "Metric Current Baseline Capacity boost \u2726 \ud83d\udcb0 Total Network Cost (\u20b9 per period) \u20b9180.7L \u20b995.6L \u2193 47.1% \ud83d\udcb9 Savings % (vs baseline) Reference \u2193 47.1% \u2193 47.1 pts \u2705 Demand Fill Rate (% of demand served) 76.4%"
+      "detail": "Metric Current Baseline Capacity boost \u2726 \ud83d\udcb0 Total Network Cost (\u20b9 total, 2025-09\u20132026-08) \u20b92165.9L \u20b91145.0L \u2193 47.1% \ud83d\udcb9 Savings % (vs baseline) Reference \u2193 47.1% \u2193 47.1 pts \u2705 Demand Fill Rate (% of deman"
     },
     {
       "id": "U-04",
       "name": "The recommendation panel names the scenario just created",
       "status": "PASS",
-      "detail": "\u2728 NetGravity's Recommendation Capacity boost is the cheapest of the 1 compared, at \u20b985.1L below your current network The change itself moves nothing. All \u20b985.1L of the difference comes from re-optimising the footprint yo"
+      "detail": "\u2728 NetGravity's Recommendation Capacity boost is the cheapest of the 1 compared, at \u20b91021.0L below your current network The change itself moves nothing. All \u20b91021.0L of the difference comes from re-optimising the footprin"
     },
     {
       "id": "U-05",
       "name": "Close Facility runs and appears alongside the first",
       "status": "PASS",
-      "detail": "Metric Current Baseline Capacity boost \u2726 Close a DC \ud83d\udcb0 Total Network Cost (\u20b9 per period) \u20b9180.7L \u20b995.6L \u2193 47.1% \u20b996.1L \u2193 46.8% \ud83d\udcb9 Savings % (vs baseline) Reference \u2193 47.1% \u2193 47.1 pts \u2193 46.8% \u2193 46.8 pts \u2705 Demand Fill Rate (% of demand served) "
+      "detail": "Metric Current Baseline Capacity boost \u2726 Close a DC \ud83d\udcb0 Total Network Cost (\u20b9 total, 2025-09\u20132026-08) \u20b92165.9L \u20b91145.0L \u2193 47.1% \u20b91153.1L \u2193 46.8% \ud83d\udcb9 Savings % (vs baseline) Reference \u2193 47.1% \u2193 47.1 pts \u2193 46.8% \u2193 46.8 pts \u2705 Demand Fill Rate (% o"
     },
     {
       "id": "U-06",
@@ -40,7 +40,7 @@
       "id": "U-07",
       "name": "A greenfield site solves and is recorded as a new site",
       "status": "PASS",
-      "detail": "{\"id\": \"SCN_7cc970b4\", \"name\": \"Nagpur greenfield DC\", \"cost\": 11131199.7042, \"fill\": 92.61, \"change\": -38.39, \"maxUtil\": 100, \"risk\": \"High\", \"transport\": 1401680.8783, \"fixed\": 9724700, \"unserved\": 2733, \"open\": 6, \"newSites\": 1, \"overrides\": [\"ADD_FACILITY NEW_NAGPUR_GREENFIELD_DC 'Nagpur greenfield DC' (21.1458, 79.0882) capacity 6,000 units/period, 10 lanes derived\"]}"
+      "detail": "{\"id\": \"SCN_3a00dc96\", \"name\": \"Nagpur greenfield DC\", \"cost\": 133277230.2426, \"fill\": 94.73, \"change\": -38.47, \"maxUtil\": 100, \"risk\": \"High\", \"transport\": 16523681.8985, \"fixed\": 116696400, \"unserved\": 22491, \"open\": 6, \"newSites\": 1, \"overrides\": [\"ADD_FACILITY NEW_NAGPUR_GREENFIELD_DC 'Nagpur greenfield DC' (21.1458, 79.0882) capacity 6,000 units/period, 10 lanes derived\"]}"
     },
     {
       "id": "U-08",
@@ -58,7 +58,7 @@
       "id": "U-10",
       "name": "Each scenario reports its own effect, apart from the re-optimisation",
       "status": "PASS",
-      "detail": "{\"effects\": [{\"name\": \"Capacity boost\", \"cost\": 9561047.4808, \"reference\": 9561047.4808, \"changeEffect\": 0, \"reoptEffect\": -8506746.48}, {\"name\": \"Close a DC\", \"cost\": 9612573.259, \"reference\": 9561047.4808, \"changeEffect\": 51525.78, \"reoptEffect\": -8506746.48}, {\"name\": \"Nagpur greenfield DC\", \"cost\": 11131199.7042, \"reference\": 9561047.4808, \"changeEffect\": 1570152.22, \"reoptEffect\": -8506746.48}], \"row\": [\"No effect\\n\\u2014\", \"\\u2191 \\u20b951.5K\\n\\u2014\", \"\\u2191 \\u20b915.7L\\n\\u2014\"]}"
+      "detail": "{\"effects\": [{\"name\": \"Capacity boost\", \"cost\": 114496742.4659, \"reference\": 114496742.4659, \"changeEffect\": 0, \"reoptEffect\": -102097863.8}, {\"name\": \"Close a DC\", \"cost\": 115308267.3049, \"reference\": 114496742.4659, \"changeEffect\": 811524.84, \"reoptEffect\": -102097863.8}, {\"name\": \"Nagpur greenfield DC\", \"cost\": 133277230.2426, \"reference\": 114496742.4659, \"changeEffect\": 18780487.78, \"reoptEffect\": -102097863.8}], \"row\": [\"No effect\\n\\u2014\", \"\\u2191 \\u20b98.1L\\n\\u2014\", \"\\u2191 \\u20b9187.8L\\n\\u2014\"]}"
     },
     {
       "id": "U-11",
@@ -76,25 +76,25 @@
       "id": "U-13",
       "name": "The recommendation panel names a scenario on screen and ranks the rest",
       "status": "PASS",
-      "detail": "\u2728 NetGravity's Recommendation Capacity boost is the cheapest of the 3 compared, at \u20b985.1L below your current network  The change itself moves nothing. All \u20b985.1L of the difference comes from re-optimising the footprint you already have \u2014 the solver reaches the same plan with or w"
+      "detail": "\u2728 NetGravity's Recommendation Capacity boost is the cheapest of the 3 compared, at \u20b91021.0L below your current network  The change itself moves nothing. All \u20b91021.0L of the difference comes from re-optimising the footprint you already have \u2014 the solver reaches the same plan with "
     },
     {
       "id": "U-14",
       "name": "The recommendation panel shows no undefined text",
       "status": "PASS",
-      "detail": "\u2728 NetGravity's Recommendation Capacity boost is the cheapest of the 3 compared, at \u20b985.1L below your current network  The change itself moves nothing. All \u20b985.1L of the difference comes from re-optimi"
+      "detail": "\u2728 NetGravity's Recommendation Capacity boost is the cheapest of the 3 compared, at \u20b91021.0L below your current network  The change itself moves nothing. All \u20b91021.0L of the difference comes from re-op"
     },
     {
       "id": "U-15",
       "name": "The Digital Twin draws a different network per scenario",
       "status": "PASS",
-      "detail": "{\"Baseline\": 36, \"Capacity boost\": 13, \"Close a DC\": 12, \"Nagpur greenfield DC\": 16}"
+      "detail": "{\"Baseline\": 36, \"Capacity boost\": 13, \"Close a DC\": 13, \"Nagpur greenfield DC\": 18}"
     },
     {
       "id": "U-16",
       "name": "The map says what each scenario changed",
       "status": "PASS",
-      "detail": "{\"Baseline\": \"Current network. Ring colour is the solved utilisation of each distribution centre; line w\", \"Capacity boost\": \"Capacity boost. 3 facility sites closes (F001, F002, F008) \\u00b7 12 corridors carry different \", \"Close a DC\": \"Close a DC. 3 facility sites closes (F001, F002, F006) \\u00b7 12 corridors carry different volu\", \"Nagpur greenfield DC\": \"Nagpur greenfield DC. New site Nagpur greenfield DC opens, moving 6,000 units \\u00b7 3 facility\"}"
+      "detail": "{\"Baseline\": \"Current network. Ring colour is the solved utilisation of each distribution centre; line w\", \"Capacity boost\": \"Capacity boost. 3 facility sites closes (F001, F002, F008) \\u00b7 12 corridors carry different \", \"Close a DC\": \"Close a DC. 3 facility sites closes (F001, F002, F006) \\u00b7 14 corridors carry different volu\", \"Nagpur greenfield DC\": \"Nagpur greenfield DC. New site Nagpur greenfield DC opens, moving 72,000 units \\u00b7 3 facilit\"}"
     },
     {
       "id": "U-17",
@@ -106,7 +106,7 @@
       "id": "U-18",
       "name": "The scenario drawer shows what was asked and what the solver did",
       "status": "PASS",
-      "detail": "SOLVED MILP EVALUATED Capacity boost  Solved against snapshot snap_bdfd1736bee1 by execution f929c66b-cca.  Total network cost \u20b995.6L (\u2193 47.1%) Demand fill rate 76.4% What you asked for Change requested CHANGE CAPACITY Facilities named F005 Capacity adjustment"
+      "detail": "SOLVED MILP EVALUATED Capacity boost  Solved against snapshot snap_296bf7bcd39f by execution 8d11bd56-3dc.  Total network cost \u20b91145.0L (\u2193 47.1%) Demand fill rate 78.1% What you asked for Change requested CHANGE CAPACITY Facilities named F005 Capacity adjustme"
     },
     {
       "id": "U-19",
@@ -118,13 +118,13 @@
       "id": "U-20",
       "name": "Change Transport Cost runs and freight cost actually rises",
       "status": "PASS",
-      "detail": "{\"baseline\": 863063.1448, \"scenario\": 1431589.8633}"
+      "detail": "{\"baseline\": 10138267.1353, \"scenario\": 16884842.7033}"
     },
     {
       "id": "U-21",
       "name": "Change SLA runs and reports its own solved figures",
       "status": "PASS",
-      "detail": "{\"id\": \"SCN_3ea69991\", \"name\": \"Relax SLA by a day\", \"cost\": 11728343.2135, \"fill\": 100, \"change\": -35.09, \"maxUtil\": 96.11, \"risk\": \"High\", \"transport\": 1585552.6589, \"fixed\": 10137400, \"unserved\": 0, \"open\": 6, \"newSites\": 0, \"overrides\": [\"CHANGE_SLA +1.0 days on 14 of 14 demand rows\"]}"
+      "detail": "{\"id\": \"SCN_a660ef87\", \"name\": \"Relax SLA by a day\", \"cost\": 119948739.1458, \"fill\": 100, \"change\": -44.62, \"maxUtil\": 99.55, \"risk\": \"High\", \"transport\": 18941462.7916, \"fixed\": 100941600, \"unserved\": 0, \"open\": 5, \"newSites\": 0, \"overrides\": [\"CHANGE_SLA +1.0 days on 168 of 168 demand rows\"]}"
     },
     {
       "id": "U-22",
@@ -142,7 +142,7 @@
       "id": "U-24",
       "name": "A deleted scenario is removed on the server, not just on screen",
       "status": "PASS",
-      "detail": "{\"id\": \"SCN_b4054225\", \"goneLocally\": true, \"goneOnServer\": true}"
+      "detail": "{\"id\": \"SCN_39c25573\", \"goneLocally\": true, \"goneOnServer\": true}"
     },
     {
       "id": "U-25",
@@ -166,7 +166,7 @@
       "id": "U-28",
       "name": "No prototype facility or scenario appears anywhere",
       "status": "PASS",
-      "detail": "Metric Current Baseline Relax SLA by a day \u2726 Freight +25% Peak demand +20% \ud83d\udcb0 Total Network Cost (\u20b9 per period) \u20b9180.7L \u20b9117.3L \u2193 35.1% \u20b998.5L \u2193 45.5% \u20b997.4L \u2193 46.1% \ud83d\udcb9 Savings % (vs baseline) Reference"
+      "detail": "Metric Current Baseline Relax SLA by a day \u2726 Freight +25% Peak demand +20% \ud83d\udcb0 Total Network Cost (\u20b9 total, 2025-09\u20132026-08) \u20b92165.9L \u20b91199.5L \u2193 44.6% \u20b91178.7L \u2193 45.6% \u20b91166.1L \u2193 46.2% \ud83d\udcb9 Savings % (vs b"
     },
     {
       "id": "U-29",

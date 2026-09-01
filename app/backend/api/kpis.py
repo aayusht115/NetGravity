@@ -120,6 +120,11 @@ def create_kpi_blueprint(orchestrator: Optional[Orchestrator] = None,
             # answer's cost from the cost of fetching it.
             "compute_seconds": analysis.get("compute_seconds"),
             "data_version": analysis.get("data_version", ""),
+            # What span of time the figures cover. On every KPI response rather
+            # than one of them, because every one of them reports totals over
+            # this horizon and a caller reading /flows must not have to fetch
+            # /network to learn what period its numbers are on.
+            "horizon": analysis.get("horizon", {}),
         }
 
     # ------------------------------------------------------------------

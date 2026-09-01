@@ -405,3 +405,142 @@ class TestTwoRowsForOnePeriodDoNotCollide:
         result = milp_solve(build(demands), None)
         assert result.solver.status.value in {"OPTIMAL", "FEASIBLE"}
         assert served(result) == pytest.approx(100.0)
+
+
+class TestTheHorizonReachesTheDashboardContract:
+    """
+    A horizon that the engine models and the contract cannot describe is a
+    horizon nobody can read.
+
+    Every cost and volume figure on `NetworkStateResult` is a total across the
+    modelled periods. Twelve months of cost and one month of cost are the same
+    kind of number and differ by a factor of twelve, so a consumer handed one
+    without the period count cannot tell which it has — and will render a
+    twelvefold overstatement with no way to notice. These assert that the span,
+    and the per-period figures comparable with an upload's own per-period
+    columns, cross the boundary with the totals.
+    """
+
+    def _state(self, network):
+        from netgravity.metrics.contracts import build_network_state_result
+        result = milp_solve(network, None)
+        return result, build_network_state_result(result, network)
+
+    def test_the_contract_states_how_many_periods_it_covers(self):
+        _, state = self._state(build(rows(100.0, 120.0, 140.0)))
+        assert state.periods_modelled == 3
+
+    def test_a_single_period_solve_still_says_one(self):
+        """The ordinary case must not be labelled as a horizon it is not."""
+        _, state = self._state(build(rows(100.0)))
+        assert state.periods_modelled == 1
+        assert state.period_labels == {}
+
+    def test_cost_per_period_divides_the_horizon_total(self):
+        """
+        Published by the engine rather than left to a caller to compute. A UI
+        dividing a cost by a period count is a second cost engine, and it
+        disagrees with the first the moment either changes.
+        """
+        _, state = self._state(build(rows(100.0, 120.0, 140.0)))
+        assert state.cost_per_period == pytest.approx(
+            state.costs.business_network_cost / 3, rel=1e-6)
+
+    def test_period_labels_travel_from_the_network(self):
+        network = build(rows(100.0, 120.0, 140.0))
+        network.period_labels = {"1": "2026-01", "2": "2026-02", "3": "2026-03"}
+        _, state = self._state(network)
+        assert state.period_labels == {"1": "2026-01", "2": "2026-02", "3": "2026-03"}
+
+    def test_labels_are_dropped_when_they_do_not_match_the_solve(self):
+        """
+        A collapse policy models one period that corresponds to no single month.
+        Labelling it with the first month of the horizon would claim the figures
+        describe that month, which is exactly the false precision the collapse
+        note warns about.
+        """
+        network = build(rows(100.0, 120.0, 140.0), policy="REPRESENTATIVE_MEAN")
+        network.period_labels = {"1": "2026-01", "2": "2026-02", "3": "2026-03"}
+        _, state = self._state(network)
+        assert state.periods_modelled == 1
+        assert state.period_labels == {}
+
+    def test_peak_utilisation_crosses_the_boundary(self):
+        """
+        The MILP has computed peak utilisation for every multi-period solve
+        since the horizon model was built, and the contract dropped it — so a
+        site at 40% for the year and 100% in its peak month read as 40%
+        everywhere, which is the one number that cannot support the conclusion
+        it invites.
+        """
+        network = build(rows(50.0, 50.0, 150.0), dc_capacity=150.0)
+        _, state = self._state(network)
+        dc = next(f for f in state.facilities if f.facility_id == "DC")
+        assert dc.peak_utilization_pct == pytest.approx(100.0, abs=0.1)
+        assert dc.peak_utilization_pct > dc.utilization_pct
+        assert dc.throughput_by_period == {"1": 50.0, "2": 50.0, "3": 150.0}
+
+    def test_peak_equals_average_on_a_single_period_solve(self):
+        """Never a second, disagreeing answer to the same question."""
+        _, state = self._state(build(rows(100.0), dc_capacity=200.0))
+        dc = next(f for f in state.facilities if f.facility_id == "DC")
+        assert dc.peak_utilization_pct == pytest.approx(dc.utilization_pct)
+
+    def test_per_period_throughput_matches_the_utilisation_ratio(self):
+        """
+        Throughput per period over the upload's per-period capacity must give
+        exactly the utilisation the contract reports. Pairing a horizon total
+        with a one-period capacity is what would print 277% beside a solved 23%.
+        """
+        network = build(rows(100.0, 100.0, 100.0), dc_capacity=400.0)
+        _, state = self._state(network)
+        dc = next(f for f in state.facilities if f.facility_id == "DC")
+        assert dc.throughput_units_per_period == pytest.approx(
+            dc.throughput_units / 3, rel=1e-6)
+        assert (dc.throughput_units_per_period / 400.0) * 100 == pytest.approx(
+            dc.utilization_pct, abs=0.01)
+
+    def test_flow_per_period_divides_the_horizon_flow(self):
+        _, state = self._state(build(rows(90.0, 90.0, 90.0)))
+        lane = next(f for f in state.flows
+                    if f.origin_id == "DC" and f.destination_id == "MKT")
+        assert lane.flow_units == pytest.approx(270.0)
+        assert lane.flow_units_per_period == pytest.approx(90.0)
+
+    def test_utilisation_is_reported_period_by_period(self):
+        network = build(rows(50.0, 50.0, 150.0), dc_capacity=150.0)
+        _, state = self._state(network)
+        dc = next(f for f in state.facilities if f.facility_id == "DC")
+        assert dc.utilization_by_period == {
+            "1": pytest.approx(33.33, abs=0.01),
+            "2": pytest.approx(33.33, abs=0.01),
+            "3": pytest.approx(100.0, abs=0.01),
+        }
+
+    def test_the_series_agrees_with_the_engines_own_peak(self):
+        """
+        The series is derived in the contract bridge; `peak_utilization_pct` is
+        computed inside the MILP. They must be the same measurement, and this is
+        what stops them drifting — a change to either that breaks the identity
+        fails here rather than showing a user two different utilisations for the
+        same month.
+        """
+        for demands, capacity in (
+            (rows(50.0, 50.0, 150.0), 150.0),
+            (rows(120.0, 80.0, 100.0), 200.0),
+            (rows(10.0, 300.0), 400.0),
+        ):
+            _, state = self._state(build(demands, dc_capacity=capacity))
+            dc = next(f for f in state.facilities if f.facility_id == "DC")
+            assert dc.utilization_by_period, "a horizon solve must report a series"
+            assert max(dc.utilization_by_period.values()) == pytest.approx(
+                dc.peak_utilization_pct, abs=0.01)
+
+    def test_a_single_period_solve_reports_no_series(self):
+        """
+        One entry restating `utilization_pct` is not a seasonal profile, and
+        offering it as one invites a reading the data cannot support.
+        """
+        _, state = self._state(build(rows(100.0), dc_capacity=200.0))
+        dc = next(f for f in state.facilities if f.facility_id == "DC")
+        assert dc.utilization_by_period == {}
