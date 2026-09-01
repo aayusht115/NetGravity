@@ -8886,7 +8886,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
               <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
               <input type="password" id="signin-password" class="auth-input" placeholder="••••••••••••" value="••••••••••••" required autocomplete="current-password" />
               <button type="button" class="auth-password-toggle" title="Toggle password visibility">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             </div>
           </div>
@@ -8930,7 +8930,7 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
               <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
               <input type="password" id="signup-password" class="auth-input" placeholder="Create a password" value="Netgravity@2026" required autocomplete="new-password" />
               <button type="button" class="auth-password-toggle" title="Toggle password visibility">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
               </button>
             </div>
           </div>
@@ -15081,7 +15081,7 @@ function bindLandingEvents() {
           btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>`;
         } else {
           input.type = 'password';
-          btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+          btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
         }
       }
     });
@@ -17773,6 +17773,18 @@ const state = {
   selectedPeriod: 'Q3_2026',
 };
 
+// Insights actioned via the deep-dive page (insight-detail.js) are dropped
+// from Home's feed on the next render — see window.markAttentionItemResolved.
+//
+// Declared here, above the boot call, and NOT beside the feed renderer that
+// reads it. `bootApp()` runs at the bottom of this bundle's app.js section but
+// still ABOVE the renderer's own declarations, so with the `const` left down
+// there the very first renderHomeAttentionFeed() hit its temporal dead zone
+// and threw "Cannot access 'resolvedInsightIds' before initialization". The
+// try/catch around renderHome() swallowed it into a console line, so the only
+// visible symptom was a permanently empty attention feed.
+const resolvedInsightIds = new Set();
+
 // Expose globally on window
 if (typeof window !== 'undefined') {
   window.navigateToTab = navigateToTab;
@@ -17797,10 +17809,24 @@ function bootApp() {
   try { initInsightDetail(); } catch (e) { console.error('initInsightDetail error:', e); }
 }
 
+// `bootApp()` must not run during this module's own evaluation.
+//
+// As a module script this block is usually reached after the DOM is ready, so
+// the `else` branch used to call bootApp() right here — while the rest of the
+// module body below was still executing. Everything bootApp reaches that
+// depends on a `const` declared further down (ATTENTION_CATEGORY_META,
+// resolvedInsightIds, …) was then in the temporal dead zone, and Home's
+// attention feed died with "Cannot access '…' before initialization" — caught
+// by the try/catch around renderHome(), so the only visible symptom was an
+// empty feed.
+//
+// A microtask runs after the current synchronous execution completes, which
+// includes the rest of this module — so every declaration exists by the time
+// bootApp starts. Matches app/frontend/js/app.js.
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', bootApp);
 } else {
-  bootApp();
+  queueMicrotask(bootApp);
 }
 
 // ─── Header & Topbar Visibility Controller ──────────────────
@@ -18669,11 +18695,6 @@ function attentionCardHtml(kind, id, category, title, subtitle, index) {
       </div>
     </div>`;
 }
-
-// Insights actioned via the deep-dive page (insight-detail.js) are
-// dropped from Home's feed on the next render — see
-// window.markAttentionItemResolved below.
-const resolvedInsightIds = new Set();
 
 // ─── Home Attention Feed (merged Insights + Recommendations) ─
 // Replaces the two separate "Here is what I found" / "Here are my
