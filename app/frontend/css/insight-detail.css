@@ -347,6 +347,23 @@
   font-weight: 700;
   color: #111827;
   margin-bottom: 4px;
+  /* The card titles put an inline SVG before the text. Every other icon in
+     this file sits inside a sized circular avatar (.insd-why-icon,
+     .insd-metric-icon) which constrains it; these do not, and an inline SVG
+     with no width/height attribute resolves to 100% of its container — so the
+     bulb beside "Evidence" rendered roughly 700px tall and pushed the table
+     off the fold. Sized here rather than on each icon so any title gains the
+     constraint by using the class. */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.insd-why-title svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: #9218EA;
 }
 
 .insd-why-text {

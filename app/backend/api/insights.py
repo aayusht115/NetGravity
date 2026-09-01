@@ -40,6 +40,7 @@ narrative was checked against the deterministic facts rather than assuming it.
 from __future__ import annotations
 
 import logging
+import math
 import time
 from typing import Any, Dict, List, Optional
 
@@ -71,8 +72,162 @@ logger = logging.getLogger(__name__)
 #: second state, which is the scenario comparison endpoint's job.
 _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
 
+#: Shape of this endpoint's response. Part of the cache key — see the note at
+#: the `variant` assignment. Bump on any field added to or removed from the
+#: body, including inside `insights[]` and `evidence[]`.
+#:
+#:   1  the original briefing payload
+#:   2  evidence gained `value` and `role`; insights gained `entities`;
+#:      the body gained `thresholds` and `series`; ids gained a headline digest
+_PAYLOAD_VERSION = 2
 
-def _resolve_evidence(refs: List[str], pack: Any) -> List[Dict[str, Any]]:
+
+#: Theme -> the per-facility field that theme is ABOUT. A chart for a finding
+#: about utilisation plots utilisation; one about footprint plots throughput.
+#: Absent from this map means the theme is not a per-facility statement, and no
+#: entity rows are sent — an empty list is the honest answer, not a fallback to
+#: whichever field happens to be present.
+_FACILITY_THEME_FIELD = {
+    "Capacity": "utilization_pct",
+    "Utilisation": "utilization_pct",
+    "Footprint": "throughput_units",
+    "Resilience": "rei",
+}
+
+#: Themes whose subject is a lane rather than a site.
+_LANE_THEME_FIELD = {
+    "Carbon": "carbon_kg",
+}
+
+#: Ceiling on entity rows in one insight. A 400-facility network would
+#: otherwise put 400 rows on the wire for a chart that can show perhaps 30.
+_MAX_ENTITY_ROWS = 30
+
+
+def _headline_digest(insight: Any) -> str:
+    """
+    A short, stable discriminator for two findings sharing a theme.
+
+    Derived from the headline rather than from the position in the list: rank
+    shifts when a different insight outranks it, and an id that moves is an id
+    a dismissal cannot follow.
+    """
+    import hashlib
+
+    headline = str(getattr(insight, "headline", "") or "")
+    return hashlib.sha1(headline.encode("utf-8")).hexdigest()[:8].upper()
+
+
+def _finite(value: Any) -> Optional[float]:
+    """The value as a plottable float, or None. Bools are not numbers here."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value) if math.isfinite(value) else None
+
+
+def _resolve_entities(insight: Any, pack: Any) -> List[Dict[str, Any]]:
+    """
+    The facilities or lanes a finding was computed OVER.
+
+    `_utilization_insights` sorts every site by utilisation, names the worst
+    three in prose, and discards the list. The sentence "3 sites are above the
+    90% threshold" therefore reached the browser citing one scalar, so a screen
+    could draw the maximum and nothing else. These are those rows — already
+    built, already authoritative, previously thrown away.
+
+    Sorted by the field the theme is about, descending, so a bar chart drawn in
+    array order is ranked without the client sorting formatted strings.
+    """
+    if pack is None:
+        return []
+    payload = getattr(pack, "payload", {}) or {}
+    theme = str(getattr(insight, "theme", "") or "")
+
+    field = _FACILITY_THEME_FIELD.get(theme)
+    if field:
+        rows = []
+        for item in payload.get("facilities", []) or []:
+            value = _finite(item.get(field))
+            if value is None:
+                continue
+            rows.append({
+                "kind": "FACILITY",
+                "entity_id": item.get("facility_id"),
+                "label": item.get("facility_name") or item.get("facility_id"),
+                "metric": field,
+                "value": value,
+                # Second-order facts a chart legend or tooltip needs, and which
+                # a client must never recompute: a utilisation bar means one
+                # thing for an open site and another for a closed one.
+                "is_open": bool(item.get("is_open")),
+                "role": item.get("role"),
+                "capacity_units": _finite(item.get("capacity_units")),
+                "throughput_units": _finite(item.get("throughput_units")),
+            })
+        rows.sort(key=lambda r: r["value"], reverse=True)
+        return rows[:_MAX_ENTITY_ROWS]
+
+    lane_field = _LANE_THEME_FIELD.get(theme)
+    if lane_field:
+        rows = []
+        for item in payload.get("flows", []) or []:
+            value = _finite(item.get(lane_field))
+            if value is None:
+                continue
+            origin, dest = item.get("origin_id"), item.get("destination_id")
+            rows.append({
+                "kind": "LANE",
+                "entity_id": f"{origin}->{dest}",
+                "label": f"{origin} → {dest}",
+                "metric": lane_field,
+                "value": value,
+                "flow_units": _finite(item.get("flow_units")),
+                "distance_km": _finite(item.get("distance_km")),
+            })
+        rows.sort(key=lambda r: r["value"], reverse=True)
+        return rows[:_MAX_ENTITY_ROWS]
+
+    return []
+
+
+def _thresholds_from(pack: Any) -> Dict[str, Any]:
+    """The policy thresholds indexed into the pack, or an empty block."""
+    payload = getattr(pack, "payload", {}) or {}
+    block = payload.get("thresholds") or {}
+    return {k: v for k, v in block.items() if _finite(v) is not None}
+
+
+def _network_series(pack: Any) -> Dict[str, Any]:
+    """
+    Whole-network breakdowns a chart can draw, with raw values.
+
+    Only what the solve actually produced. There is deliberately no utilisation
+    time series here: see `_period_series`, which returns one when — and only
+    when — the network states more than one demand period.
+    """
+    if pack is None:
+        return {}
+    payload = getattr(pack, "payload", {}) or {}
+    network = payload.get("network_state") or {}
+    out: Dict[str, Any] = {}
+
+    components = network.get("cost_components") or {}
+    if isinstance(components, dict):
+        rows = [{"label": str(k).replace("_", " ").title(), "key": k,
+                 "value": _finite(v)}
+                for k, v in components.items() if _finite(v) is not None]
+        # Ranked, and zero-valued components dropped: a cost breakdown listing
+        # six components of which four are 0.00 reads as a solver failure.
+        rows = [r for r in rows if r["value"] != 0.0]
+        rows.sort(key=lambda r: r["value"], reverse=True)
+        if rows:
+            out["cost_components"] = rows
+
+    return out
+
+
+def _resolve_evidence(refs: List[str], pack: Any,
+                      role: str = "metric") -> List[Dict[str, Any]]:
     """
     The metrics an insight cites, with their authoritative values.
 
@@ -80,6 +235,19 @@ def _resolve_evidence(refs: List[str], pack: Any) -> List[Dict[str, Any]]:
     opaque refs (`network_state.avg_utilization_pct`) is not that. Resolved here
     from the same evidence pack the narrative was written against, so the figure
     on the screen and the figure in the sentence cannot disagree.
+
+    `value` carries the RAW number beside the formatted `display_value`.
+    Without it a chart had two options, both bad: parse `"₹1,234,567.00"` back
+    into a float in the browser — locale grouping, a currency glyph, `"12,000
+    units"`, `"92.41%"` and the literal `"Not available"` all in the same field
+    — or invent its own series. `display_value` stays authoritative for
+    anything a user READS, so a figure in prose and the same figure on an axis
+    cannot drift apart; `value` exists only to be plotted.
+
+    `role` says WHY the figure is cited — the measurement, the thing it was
+    compared against, or the driver behind it. The three ref lists used to be
+    concatenated into one flat array, which threw that distinction away and
+    left a table unable to label its own rows.
     """
     out: List[Dict[str, Any]] = []
     metrics = getattr(pack, "metrics", {}) or {}
@@ -87,13 +255,21 @@ def _resolve_evidence(refs: List[str], pack: Any) -> List[Dict[str, Any]]:
         metric = metrics.get(ref)
         if metric is None:
             continue
+        raw = getattr(metric, "value", None)
         out.append({
             "ref": ref,
             "label": metric.label,
             "display_value": metric.display_value,
+            # Only real, finite numbers. A bool is an int in Python and would
+            # plot as 0/1; None means the engine could not compute it, and a
+            # chart must render that as a gap rather than as zero.
+            "value": (raw if isinstance(raw, (int, float))
+                      and not isinstance(raw, bool)
+                      and math.isfinite(raw) else None),
             "unit": metric.unit,
             "source": metric.source,
             "entity_id": metric.entity_id,
+            "role": role,
         })
     return out
 
@@ -113,8 +289,18 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
     slug = theme.upper().replace(" ", "_")
     entity = (entity_id or "NETWORK").replace(" ", "_")
     severity = getattr(insight, "severity", None)
+    metric_refs = list(getattr(insight, "metric_refs", []) or [])
+    comparison_refs = list(getattr(insight, "comparison_refs", []) or [])
+    driver_refs = list(getattr(insight, "driver_refs", []) or [])
     return {
-        "id": f"INS_{scope}_{entity}_{slug}",
+        # The theme alone is not unique within a scope: `_service_insights` can
+        # emit two `theme="Service"` findings (unserved demand, and SLA), and
+        # both used to serialise to INS_NETWORK_NETWORK_SERVICE. The deep dive
+        # looks a record up BY id, so the second insight's card opened the
+        # first insight's page. The headline discriminates them, and a short
+        # digest of it keeps the id stable across refreshes — which is what a
+        # dismissable feed needs, and what a UUID per request would destroy.
+        "id": f"INS_{scope}_{entity}_{slug}_{_headline_digest(insight)}",
         "theme": theme,
         "headline": getattr(insight, "headline", ""),
         "narrative": getattr(insight, "narrative", ""),
@@ -125,19 +311,27 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
         # had found.
         "severity": (severity.value if hasattr(severity, "value")
                      else str(severity or "INFORMATION")),
-        "metric_refs": list(getattr(insight, "metric_refs", []) or []),
-        "comparison_refs": list(getattr(insight, "comparison_refs", []) or []),
-        "driver_refs": list(getattr(insight, "driver_refs", []) or []),
+        "metric_refs": metric_refs,
+        "comparison_refs": comparison_refs,
+        "driver_refs": driver_refs,
         # The figures this finding rests on, with their authoritative values.
         # A deep dive needs to show its basis, and the alternative — a screen
         # inventing plausible before/after numbers to fill the space — is what
         # this replaces.
-        "evidence": _resolve_evidence(
-            list(getattr(insight, "metric_refs", []) or [])
-            + list(getattr(insight, "comparison_refs", []) or [])
-            + list(getattr(insight, "driver_refs", []) or []),
-            pack,
+        #
+        # Still one flat list, because that is what the table renders, but each
+        # row now says which role it played.
+        "evidence": (
+            _resolve_evidence(metric_refs, pack, role="metric")
+            + _resolve_evidence(comparison_refs, pack, role="comparison")
+            + _resolve_evidence(driver_refs, pack, role="driver")
         ) if pack is not None else [],
+        # The facilities or lanes this finding was computed OVER, not merely the
+        # one scalar it cites. "3 sites are above the threshold" cited only
+        # `max_utilization_pct`, so a screen could name the worst site and
+        # nothing else — the three rows behind the sentence were built, used to
+        # write the prose, and dropped. A chart needs the rows.
+        "entities": _resolve_entities(insight, pack),
         "rank": index + 1,
     }
 
@@ -195,11 +389,18 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                       allow_llm: bool) -> Any:
         """Returns `(ReasoningResult, ReasoningEvidencePack)`."""
         from netgravity.orchestrator.reasoning.evidence import (
-            build_evidence_pack, twin_reasoning_payload,
+            build_evidence_pack, twin_reasoning_payload, with_policy_thresholds,
         )
 
-        payload = twin_reasoning_payload(
-            state, scope=scope, entity_id=entity_id, comparison=None)
+        # Wrapped, not called bare. `with_policy_thresholds` exists precisely so
+        # a narrative may cite "the 90% threshold" without the numeric validator
+        # adjudicating 90 against whatever unrelated percentage it finds nearest
+        # — and this endpoint was calling the payload builder directly, so the
+        # thresholds reached neither the pack nor the response. A chart drawing
+        # a threshold line would otherwise have to hardcode 90/40, i.e. restate
+        # a policy constant it does not own.
+        payload = with_policy_thresholds(twin_reasoning_payload(
+            state, scope=scope, entity_id=entity_id, comparison=None))
         unavailable = {
             item.field: {"status": item.status.value, "reason": item.reason}
             for item in state.unavailable
@@ -291,7 +492,20 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
         # so neither is cached: an ad-hoc question must not be served to the next
         # caller who asks a different one.
         cacheable = not question and not allow_llm
-        variant = f"insights:{scope_arg}:{entity_id or ''}"
+        # The payload SHAPE is part of the cache key, not just the network.
+        #
+        # A cached briefing is invalidated when the network changes
+        # (`data_version`), which is right for the figures but says nothing
+        # about the fields. Adding `value`, `role`, `entities`, `thresholds`
+        # and `series` to this response changed the shape while leaving every
+        # `data_version` untouched, so every project that had ever loaded its
+        # insights kept being served the older, thinner payload — the browser
+        # showed `thresholds: {}` and `value: null` while the endpoint itself
+        # demonstrably returned both. A stale cache that outlives a deploy is
+        # indistinguishable, from the client's side, from a broken serialiser.
+        #
+        # Bump this whenever a field is added to or removed from the response.
+        variant = f"insights:v{_PAYLOAD_VERSION}:{scope_arg}:{entity_id or ''}"
 
         def compute() -> Dict[str, Any]:
             _, state = _resolve_state(project_id, user_id)
@@ -317,6 +531,15 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                                        entity_id=entity_id, pack=pack)
                     for i, item in enumerate(briefing.kpi_insights)
                 ],
+                # The policy constants a threshold line may be drawn at, so the
+                # chart and the sentence quote the same number and neither
+                # hardcodes it. Sourced from `UTILIZATION_THRESHOLDS`.
+                "thresholds": _thresholds_from(pack),
+                # Whole-network series a chart can plot without inventing one.
+                # `cost_components` was reaching the browser as a single ref —
+                # the largest component only — so a breakdown chart had one
+                # slice and no total.
+                "series": _network_series(pack),
                 # The recommendation is ONE string chosen by the evidence, not a
                 # list of options. A list would imply the engine had ranked
                 # alternatives it has not evaluated.

@@ -358,11 +358,29 @@ def browser_checks() -> None:
         record("H-05", "The fill rate says what it is made of, from the solve",
                "units served" in home["strip"], home["strip"][:180])
 
-        record("H-06", "The period control lists the periods in the data",
-               home["periods"] == ["Period 1"] and home["periodDisabled"],
-               json.dumps(home["periods"]) + f" disabled={home['periodDisabled']}"
-               + "  (was Q3 2026 / Q2 2026 / Q1 2026 / Q4 2025, none of which "
-               "appear in any upload, all showing identical figures)")
+        # This check used to require exactly `["Period 1"]`, disabled.
+        #
+        # That was a faithful description of what the app did, and the thing
+        # the user reported as broken: the assembler keeps only the latest
+        # period of an uploaded demand history, so the control had one option
+        # and disabled itself. Asserting that state froze the defect in place —
+        # a test can describe a bug precisely and still be defending it.
+        #
+        # The control now lists the periods the upload's own capacity history
+        # records, which the collapse never touched. The requirement is still
+        # that every option comes from the data: a label must look like a
+        # period the client stated, and the four invented quarters must never
+        # return. H-07 below continues to search the whole page for those.
+        real_periods = [p for p in home["periods"] if p and p != "Period 1"]
+        record("H-06", "The period control lists periods the upload states",
+               len(home["periods"]) > 1 and not home["periodDisabled"]
+               and bool(real_periods)
+               and all(any(ch.isdigit() for ch in p) for p in home["periods"]),
+               f"{len(home['periods'])} options "
+               f"{json.dumps(home['periods'][:3])}…{json.dumps(home['periods'][-1:])} "
+               f"disabled={home['periodDisabled']}"
+               + "  (was a single disabled 'Period 1'; before that, Q3 2026 / "
+               "Q2 2026 / Q1 2026 / Q4 2025, none of which appear in any upload)")
 
         record("H-07", "No hardcoded quarter appears anywhere on screen",
                "Q3 2026" not in home["body"] and "Q4 2025" not in home["body"],
@@ -406,11 +424,32 @@ def browser_checks() -> None:
                      city: city ? city.options[city.selectedIndex].text : null };
         }""")
         page.screenshot(path=str(SHOTS / "p107_form.png"))
-        record("H-11", "The new-site form opens on the network, not on Nagpur",
-               form["name"] == "" and form["lat"] not in ("21.1458",)
-               and form["capacity"] == "24370",
-               json.dumps(form) + "  (shipped pre-filled with 'Nagpur DC' at "
-               "21.1458/79.0882 with a capacity of 5,000)")
+        # This required the name field to be EMPTY, as proof that the form
+        # proposed no particular site. It was proof of that, and it was also
+        # the defect users hit: every other field pre-filled from the network,
+        # the name did not, and pressing Run returned "Give the new site a
+        # name." without sending a request — reported as being unable to create
+        # a scenario at all.
+        #
+        # The invariant was never "the name is blank"; it was "the product does
+        # not invent a place or a figure". A generic label satisfies that — it
+        # names no location and changes no number — so the check now tests the
+        # thing it meant: the coordinates and capacity come from the loaded
+        # network, and the name is not one of the cities the picker offers.
+        preset_cities = page.evaluate("""() => [...document.querySelectorAll(
+            '#toolbox-site-city option')].map(o => o.text.trim()).filter(Boolean)""")
+        names_a_place = any(
+            c.lower() in (form["name"] or "").lower()
+            for c in preset_cities if c and "choose a city" not in c.lower())
+        record("H-11", "The new-site form opens on the network, not on a city we chose",
+               bool(form["name"])                      # runnable as it opens
+               and not names_a_place                   # but proposes no location
+               and form["lat"] not in ("21.1458",)     # centroid, not Nagpur
+               and form["capacity"] == "24370",        # the network's own median
+               json.dumps(form) + f" names_a_place={names_a_place}"
+               + "  (shipped pre-filled with 'Nagpur DC' at 21.1458/79.0882 "
+               "with a capacity of 5,000; later opened with a blank name that "
+               "blocked submission)")
 
         page.fill("#toolbox-scenario-name", "Greenfield end to end")
         page.select_option("#toolbox-site-city", label="Nagpur")

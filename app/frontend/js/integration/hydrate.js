@@ -34,7 +34,7 @@ import { insightService } from './services/insight-service.js';
 import { getActiveProjectId, setActiveSnapshotId } from './project-context.js';
 import {
   DCS, PLANTS, LANES, FACILITY_KPIS, SCENARIOS, EXTERNAL_SIGNALS,
-  SOLVED_STATE_KEY, setNetworkPeriods,
+  SOLVED_STATE_KEY, setNetworkPeriods, OBSERVED_UTILISATION,
   setAuthoritativeBaseline, clearDemoNarrative, loadNetworkData,
   setForecastSeries, getOptimizedBaseCase, applyInsightResponse,
 } from '../data.js';
@@ -149,6 +149,16 @@ async function loadStructure(projectId) {
   // writes is keyed by the solved-state key and the screens read the period
   // list as soon as they render.
   setNetworkPeriods(res.periods || [], res.costPeriod || null);
+
+  // The client's own recorded utilisation, per period. This is a MEASUREMENT
+  // the upload carried, not a solver output, and it is the only genuine time
+  // series the network has — the demand history is collapsed to its latest
+  // period before the model ever sees it. The period selector and the insight
+  // deep dive's trend chart both read it, and both label it as observed.
+  const observed = res.observedUtilisation || {};
+  OBSERVED_UTILISATION.periods = res.observedPeriods || observed.periods || [];
+  OBSERVED_UTILISATION.points = observed.points || [];
+  OBSERVED_UTILISATION.byFacility = {};
 
   loadNetworkData({
     plants: res.plants || [],

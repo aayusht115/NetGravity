@@ -76,7 +76,7 @@
       "id": "L-03",
       "name": "The loading screen reports real work, not a timer",
       "status": "PASS",
-      "detail": "\u2726 Analysing Phase 10.7 Network Reading the analysis already computed for this network. Progress 3s elapsed 80% \u2014 4 of 5 steps complete \u2713 Reading your network 8 facilities, 36 lanes Done \u2713 Solving the "
+      "detail": "\u2726 Analysing Phase 10.7 Network Reading the analysis already computed for this network. Progress 2s elapsed 80% \u2014 4 of 5 steps complete \u2713 Reading your network 8 facilities, 36 lanes Done \u2713 Solving the "
     },
     {
       "id": "H-04",
@@ -92,9 +92,9 @@
     },
     {
       "id": "H-06",
-      "name": "The period control lists the periods in the data",
+      "name": "The period control lists periods the upload states",
       "status": "PASS",
-      "detail": "[\"Period 1\"] disabled=True  (was Q3 2026 / Q2 2026 / Q1 2026 / Q4 2025, none of which appear in any upload, all showing identical figures)"
+      "detail": "36 options [\"2026-08\", \"2026-07\", \"2026-06\"]\u2026[\"2023-09\"] disabled=False  (was a single disabled 'Period 1'; before that, Q3 2026 / Q2 2026 / Q1 2026 / Q4 2025, none of which appear in any upload)"
     },
     {
       "id": "H-07",
@@ -112,7 +112,7 @@
       "id": "H-09",
       "name": "The analysis timestamp is real, not the literal '5 min ago'",
       "status": "PASS",
-      "detail": "Last analysed: 2 h ago"
+      "detail": "Last analysed: 9 h ago"
     },
     {
       "id": "H-10",
@@ -123,8 +123,8 @@
     {
       "id": "H-11",
       "name": "The new-site form opens on the network, not on Nagpur",
-      "status": "PASS",
-      "detail": "{\"name\": \"\", \"lat\": \"19.4169\", \"lng\": \"78.428\", \"capacity\": \"24370\", \"fixed\": \"15754800\", \"handling\": \"0.00\", \"city\": \"Choose a city, or type coordinates below\"}  (shipped pre-filled with 'Nagpur DC' at 21.1458/79.0882 with a capacity of 5,000)"
+      "status": "FAIL",
+      "detail": "{\"name\": \"New DC\", \"lat\": \"19.4169\", \"lng\": \"78.428\", \"capacity\": \"24370\", \"fixed\": \"15754800\", \"handling\": \"0.00\", \"city\": \"Choose a city, or type coordinates below\"}  (shipped pre-filled with 'Nagpur DC' at 21.1458/79.0882 with a capacity of 5,000)"
     },
     {
       "id": "G-08",
@@ -148,7 +148,7 @@
       "id": "H-12",
       "name": "The assistant does not announce a version that does not exist",
       "status": "PASS",
-      "detail": "\u2190 Back to FAQs & suggestions NetGravity v2.0.0 - grounded answers, model assisted Which DC is most utilised? \u2726 NETWORK_STATE_QUERY I find the Pune Distribution Center is the most utilised DC at 43.1% "
+      "detail": "\u2190 Back to FAQs & suggestions NetGravity v2.0.0 - grounded answers, model assisted Which DC is most utilised? \u2726 NETWORK_STATE_QUERY I find Pune Distribution Center is the most utilised DC at 43.1% util"
     },
     {
       "id": "H-13",
@@ -159,7 +159,7 @@
   ],
   "summary": {
     "total": 26,
-    "passed": 26,
-    "failed": 0
+    "passed": 25,
+    "failed": 1
   }
 }

@@ -145,6 +145,23 @@ def create_network_structure_blueprint(orchestrator: Optional[Any] = None,
             # thirty-fold misstatement of the client's own number.
             "periods": sorted(periods, key=lambda p: (isinstance(p, str), p)),
             "costPeriod": getattr(OptimizationConfig().cost_period, "value", "MONTH"),
+            # The periods the CLIENT'S OWN RECORDS cover, which is a different
+            # and much longer list than the one above.
+            #
+            # `network.demands` carries the periods the MODEL solves, and the
+            # assembler collapses an uploaded history to its latest period — so
+            # `periods` above is `[1]` for every real upload, and a selector
+            # built on it had exactly one disabled option. The recorded capacity
+            # history is per facility per period and untouched by that collapse:
+            # 36 months of stated available and used capacity, which is the one
+            # genuine time series an uploaded network has.
+            #
+            # Reported separately, and named for what it is, because a screen
+            # must not present a measurement of the past as the plan's own
+            # horizon. `observedPeriods` is history; `periods` is the model.
+            "observedPeriods": capacity_history_store.periods(network.network_id),
+            "observedUtilisation": capacity_history_store.utilisation_series(
+                network.network_id),
             "plants": plants,
             "dcs": dcs,
             "markets": markets,

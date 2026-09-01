@@ -12,7 +12,7 @@ import {
   GOVERNANCE_TIERS, SYSTEM_STATUS,
   formatCurrency, formatNumber, fmtNum, getUtilColor, getUtilLabel, getUtilTagClass,
   getFacilityById, getInsightsForFacility, getKpisForFacility, getOptimizedBaseCase,
-  getNetworkInsights, NETWORK_RECOMMENDATION,
+  getNetworkInsights, NETWORK_RECOMMENDATION, OBSERVED_UTILISATION,
   isDCFacility, isPlantFacility, facilityRole, clearNetworkModel,
   perPeriodLabel
 } from './data.js';
@@ -712,27 +712,52 @@ function renderAnalysisTimestamp() {
  * nothing.
  */
 function populatePeriodSelect(select) {
-  const periods = PERIODS || [];
+  // Two different period lists, and the control was reading the wrong one.
+  //
+  // `PERIODS` comes from `network.demands`, and the assembler keeps only the
+  // LATEST period of an uploaded history — so for every real upload it is
+  // `[1]`, the control had a single option, and `periods.length < 2` disabled
+  // it. The dropdown was not broken; it was faithfully reporting a collapse
+  // that happens two layers below it.
+  //
+  // `OBSERVED_UTILISATION.periods` is the client's own recorded capacity
+  // history, which that collapse never touches: 36 months of stated available
+  // and used capacity on the test workbook. That is a real list of real
+  // periods, so it is what the user gets to explore.
+  //
+  // What it selects is the OBSERVED window — the recorded utilisation series
+  // and the figures drawn from it. It does NOT re-solve the network: there is
+  // one solved plan, built from the demand the model was given, and pretending
+  // a dropdown re-optimises it would be a filter that does not exist. The
+  // title says so, and `renderPeriodScopeNote()` says so on screen.
+  const observed = (OBSERVED_UTILISATION.periods || []).map((id) => ({
+    id: String(id), label: String(id),
+  }));
+  const periods = observed.length ? observed : (PERIODS || []);
+
   if (!periods.length) {
     select.innerHTML = '<option value="">No period stated in this data</option>';
     select.disabled = true;
     select.title = 'The uploaded data states no period for its demand rows.';
     return;
   }
-  select.innerHTML = periods
+
+  // Most recent first: a planner opening the control wants the latest month,
+  // not the oldest one three years back.
+  const ordered = observed.length ? [...periods].reverse() : periods;
+  select.innerHTML = ordered
     .map((p) => `<option value="${p.id}">${p.label}</option>`).join('');
   if (!state.selectedPeriod
-      || !periods.some((p) => p.id === state.selectedPeriod)) {
-    state.selectedPeriod = periods[0].id;
+      || !ordered.some((p) => p.id === state.selectedPeriod)) {
+    state.selectedPeriod = ordered[0].id;
   }
   select.value = state.selectedPeriod;
-  // One period is the ordinary case: the MILP aggregates every demand row into
-  // a single solved state, so offering a choice would imply a filter that does
-  // not exist.
-  select.disabled = periods.length < 2;
-  select.title = periods.length < 2
+  select.disabled = ordered.length < 2;
+  select.title = ordered.length < 2
     ? 'Your data states one demand period, and the analysis covers all of it.'
-    : '';
+    : 'Selects which recorded period the observed-utilisation figures cover. '
+      + 'The optimised plan is one solve over the demand the model was given, '
+      + 'and does not change with this control.';
 }
 
 function initHomeSelectors() {
@@ -1463,24 +1488,35 @@ function categorizeAttentionLabel(text) {
   return 'Status';
 }
 
-function attentionCardHtml(kind, id, category, title, subtitle, index) {
+function attentionCardHtml(kind, id, category, title, subtitle, index, headline) {
   const meta = ATTENTION_CATEGORY_META[category] || ATTENTION_CATEGORY_META['Status'];
   const link = kind === 'action' ? 'Run scenario' : meta.link;
   const featured = index === 0;
-  // There was a "₹NNL/month at risk" line here, hashed from the insight's id
-  // between ₹8L and ₹32L. It was a made-up currency figure in the most
-  // prominent position on the page, and it was labelled "purely cosmetic
-  // emphasis" — but nothing on screen said so, and a reader has no way to tell
-  // a cosmetic rupee figure from a computed one. The engine does not produce an
-  // amount-at-risk, so none is shown.
+
+  // The prototype's line here read "₹NNL/month at risk", hashed from the
+  // insight's id between ₹8L and ₹32L — a made-up currency figure in the most
+  // prominent position on the page. It was annotated "purely cosmetic
+  // emphasis", but nothing on screen said so, and a reader cannot tell a
+  // cosmetic rupee figure from a computed one.
+  //
+  // The slot is filled instead with the finding's OWN first evidence figure,
+  // formatted by the engine that computed it (`display_value`). That is the
+  // same number the deep dive's banner shows, because it is the same field —
+  // not a second figure derived for the card. A finding that cites nothing
+  // gets no line, and the card is shorter.
+  const headlineLine = headline
+    ? `<div class="home2-attn-risk-line" style="color:${meta.color}">${escapeInsightText(headline)}</div>`
+    : '';
+
   return `
     <div class="home2-attn-item${featured ? ' featured' : ''}" data-kind="${kind}" data-id="${id}" title="Click for details">
       <span class="home2-attn-badge-num">${index + 1}</span>
       <span class="home2-attn-icon" style="background:${meta.bg};color:${meta.color}">${meta.icon}</span>
       <div class="home2-attn-body">
-        <div class="home2-attn-kicker" style="color:${meta.color}">${category}</div>
-        <div class="home2-attn-item-title">${title}</div>
-        <div class="home2-attn-item-sub">${subtitle}</div>
+        <div class="home2-attn-kicker" style="color:${meta.color}">${escapeInsightText(category)}</div>
+        <div class="home2-attn-item-title">${escapeInsightText(title)}</div>
+        ${headlineLine}
+        <div class="home2-attn-item-sub">${escapeInsightText(subtitle)}</div>
         <span class="home2-attn-link">${link}
           <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
         </span>
@@ -1566,6 +1602,10 @@ function renderHomeAttentionFeed() {
     category: ins.category || categorizeAttentionLabel(ins.impact),
     title: ins.title,
     subtitle: ins.subtitle,
+    // The first figure the finding cites, already formatted by the engine.
+    // Undefined when it cites none, and the card then omits the line.
+    headline: (ins.evidence && ins.evidence[0])
+      ? ins.evidence[0].display_value : '',
   }));
 
   const actionItems = HOME_ACTION_ITEMS
@@ -1580,7 +1620,8 @@ function renderHomeAttentionFeed() {
   // matching Dump/Updated Home Page.png — with the very first item getting
   // extra emphasis (see attentionCardHtml's "featured" treatment).
   const cards = [...insightItems, ...actionItems].map((item, i) =>
-    attentionCardHtml(item.kind, item.id, item.category, item.title, item.subtitle, i));
+    attentionCardHtml(item.kind, item.id, item.category, item.title,
+                      item.subtitle, i, item.headline));
 
   // An empty feed means no insight has been generated for this network — it
   // does NOT mean the network is healthy. The old copy ("network is

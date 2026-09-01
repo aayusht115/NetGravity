@@ -121,6 +121,8 @@ def main() -> int:
                 emptyText: list ? (list.innerText || '').slice(0, 160) : '',
                 recText: rec ? (rec.innerText || '') : '',
                 riskLines: document.querySelectorAll('.home2-attn-risk-line').length,
+                riskLineTexts: [...document.querySelectorAll('.home2-attn-risk-line')]
+                    .map(e => (e.innerText || '').trim()),
             };
         }""")
 
@@ -136,8 +138,6 @@ def main() -> int:
         check("I-04", "each card carries a subtitle drawn from the narrative",
               all(s.strip() for s in state["subs"]),
               json.dumps([s[:60] for s in state["subs"][:3]]))
-        check("I-05", "no fabricated 'amount at risk' line is rendered",
-              state["riskLines"] == 0, f"{state['riskLines']} found")
         titles_lower = [t.strip().lower() for t in state["titles"]]
         check("I-05b", "no finding is shown twice",
               len(titles_lower) == len(set(titles_lower)),
@@ -154,6 +154,46 @@ def main() -> int:
             return {status: r.status, body: await r.json()};
         }""", project["id"])
         body = api["body"] or {}
+
+        # The prototype filled this slot with `8 + hash(id) % 24` lakh — a
+        # rupee figure in the most prominent position on the card, invented
+        # from the insight's id. This used to assert the line was absent, which
+        # forbade the fabrication by forbidding the element.
+        #
+        # The slot now carries the finding's own first evidence value, exactly
+        # as the engine formatted it. So the check is what it always meant:
+        # every rendered line must be a figure the API actually returned. A
+        # hashed value fails this, and so would any figure the frontend derived
+        # for itself.
+        # Every scope the feed draws from, not just the network one: Home
+        # merges the network briefing with the selected facility's, so a card
+        # may carry a figure that only the FACILITY response contains.
+        scoped = page.evaluate('''async (pid) => {
+            const facility = (document.getElementById('home-top-facility') || {}).value || '';
+            const out = [];
+            const net = await fetch(`/api/insights?project_id=${pid}&scope=NETWORK`,
+                                    {credentials: 'include'});
+            out.push(await net.json());
+            if (facility && facility !== 'ALL') {
+                const f = await fetch(
+                    `/api/insights?project_id=${pid}&scope=FACILITY&entity_id=${encodeURIComponent(facility)}`,
+                    {credentials: 'include'});
+                if (f.ok) out.push(await f.json());
+            }
+            return out;
+        }''', project["id"])
+
+        api_values = set()
+        for _payload in (scoped or []):
+            for _ins in ((_payload or {}).get("insights") or []):
+                for _e in (_ins.get("evidence") or []):
+                    if _e.get("display_value"):
+                        api_values.add(str(_e["display_value"]).strip())
+        unbacked = [t for t in state.get("riskLineTexts", []) if t not in api_values]
+        check("I-05", "every headline figure on a card comes from the engine",
+              not unbacked,
+              f"{state['riskLines']} lines rendered; "
+              f"unbacked={json.dumps(unbacked[:4])}")
         check("I-07", "/api/insights answers 200", api["status"] == 200,
               f"status={api['status']}")
         check("I-08", "the response carries themed insights",
@@ -189,7 +229,13 @@ def main() -> int:
                     visible: page_.classList.contains('active'),
                     title: (page_.querySelector('.insd-title') || {}).innerText || '',
                     badge: (page_.querySelector('.insd-badge') || {}).innerText || '',
-                    found: (page_.querySelector('.insd-why-text') || {}).innerText || '',
+                    // The narrative moved into the chart card's note when the
+                    // deep dive gained a chart. `.insd-why-text` now holds the
+                    // recommendation's caveat, so reading it here made this
+                    // check pass while no longer verifying its own claim.
+                    found: (page_.querySelector('.insd-chart-note') || {}).innerText || '',
+                    whyText: (page_.querySelector('.insd-why-text') || {}).innerText || '',
+                    chartCanvas: !!page_.querySelector('#insd-trend-chart'),
                     evidenceRows: page_.querySelectorAll('.insd-table tbody tr').length,
                     rec: (page_.querySelector('.insd-rec-sentence') || {}).innerText || '',
                     text: page_.innerText || '',

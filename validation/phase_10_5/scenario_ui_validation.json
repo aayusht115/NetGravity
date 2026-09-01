@@ -40,7 +40,7 @@
       "id": "U-07",
       "name": "A greenfield site solves and is recorded as a new site",
       "status": "PASS",
-      "detail": "{\"id\": \"SCN_40e12c0d\", \"name\": \"Nagpur greenfield DC\", \"cost\": 11131199.7042, \"fill\": 92.61, \"change\": -38.39, \"maxUtil\": 100, \"risk\": \"High\", \"transport\": 1401680.8783, \"fixed\": 9724700, \"unserved\": 2733, \"open\": 6, \"newSites\": 1, \"overrides\": [\"ADD_FACILITY NEW_NAGPUR_GREENFIELD_DC 'Nagpur greenfield DC' (21.1458, 79.0882) capacity 6,000 units/period, 10 lanes derived\"]}"
+      "detail": "{\"id\": \"SCN_7cc970b4\", \"name\": \"Nagpur greenfield DC\", \"cost\": 11131199.7042, \"fill\": 92.61, \"change\": -38.39, \"maxUtil\": 100, \"risk\": \"High\", \"transport\": 1401680.8783, \"fixed\": 9724700, \"unserved\": 2733, \"open\": 6, \"newSites\": 1, \"overrides\": [\"ADD_FACILITY NEW_NAGPUR_GREENFIELD_DC 'Nagpur greenfield DC' (21.1458, 79.0882) capacity 6,000 units/period, 10 lanes derived\"]}"
     },
     {
       "id": "U-08",
@@ -106,7 +106,7 @@
       "id": "U-18",
       "name": "The scenario drawer shows what was asked and what the solver did",
       "status": "PASS",
-      "detail": "SOLVED MILP EVALUATED Capacity boost  Solved against snapshot snap_bdfd1736bee1 by execution c5ff8a87-22d.  Total network cost \u20b995.6L (\u2193 47.1%) Demand fill rate 76.4% What you asked for Change requested CHANGE CAPACITY Facilities named F005 Capacity adjustment"
+      "detail": "SOLVED MILP EVALUATED Capacity boost  Solved against snapshot snap_bdfd1736bee1 by execution f929c66b-cca.  Total network cost \u20b995.6L (\u2193 47.1%) Demand fill rate 76.4% What you asked for Change requested CHANGE CAPACITY Facilities named F005 Capacity adjustment"
     },
     {
       "id": "U-19",
@@ -124,7 +124,7 @@
       "id": "U-21",
       "name": "Change SLA runs and reports its own solved figures",
       "status": "PASS",
-      "detail": "{\"id\": \"SCN_9a14a8d8\", \"name\": \"Relax SLA by a day\", \"cost\": 11728343.2135, \"fill\": 100, \"change\": -35.09, \"maxUtil\": 96.11, \"risk\": \"High\", \"transport\": 1585552.6589, \"fixed\": 10137400, \"unserved\": 0, \"open\": 6, \"newSites\": 0, \"overrides\": [\"CHANGE_SLA +1.0 days on 14 of 14 demand rows\"]}"
+      "detail": "{\"id\": \"SCN_3ea69991\", \"name\": \"Relax SLA by a day\", \"cost\": 11728343.2135, \"fill\": 100, \"change\": -35.09, \"maxUtil\": 96.11, \"risk\": \"High\", \"transport\": 1585552.6589, \"fixed\": 10137400, \"unserved\": 0, \"open\": 6, \"newSites\": 0, \"overrides\": [\"CHANGE_SLA +1.0 days on 14 of 14 demand rows\"]}"
     },
     {
       "id": "U-22",
@@ -142,7 +142,7 @@
       "id": "U-24",
       "name": "A deleted scenario is removed on the server, not just on screen",
       "status": "PASS",
-      "detail": "{\"id\": \"SCN_ced3f62a\", \"goneLocally\": true, \"goneOnServer\": true}"
+      "detail": "{\"id\": \"SCN_b4054225\", \"goneLocally\": true, \"goneOnServer\": true}"
     },
     {
       "id": "U-25",

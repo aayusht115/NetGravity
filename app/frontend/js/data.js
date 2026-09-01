@@ -302,7 +302,30 @@ export const NETWORK_RECOMMENDATION = {
   groundingStatus: '',
   stateId: '',
   computedAt: null,
+  // The configured policy thresholds, from the module that owns them. A chart
+  // draws its threshold line at `utilization_over_pct` rather than at a 90
+  // written into the chart code — a second copy of a policy constant is a
+  // second definition, and it drifts.
+  thresholds: {},
+  // Whole-network breakdowns the solve produced (currently `cost_components`,
+  // ranked, zero components dropped). Empty when the solve produced none.
+  series: {},
 };
+
+/**
+ * Recorded utilisation per period, from the client's own capacity history.
+ *
+ * The one genuine time series an uploaded network carries, and NOT a solver
+ * output: `used` and `available` are two columns the client supplied on the
+ * same row. Kept separate from every solved figure for that reason — a chart
+ * that mixed "what the plan does" with "what the sites did" would be plotting
+ * two different quantities on one axis.
+ *
+ * `points` is `[{period, available, used, utilisationPct, facilities}]`, in
+ * period order, with `utilisationPct: null` wherever the two figures cannot
+ * form a ratio — a gap in the line, never a zero.
+ */
+export const OBSERVED_UTILISATION = { periods: [], points: [], byFacility: {} };
 
 // ─── HOME ACTION ITEMS ───────────────────────────────────────
 export const HOME_ACTION_ITEMS = [];
@@ -510,6 +533,20 @@ export function toInsightRecord(apiInsight) {
     severity: apiInsight.severity || 'INFORMATION',
     category: insightCategory(apiInsight),
     metricRefs: apiInsight.metric_refs || [],
+    // The figures the finding rests on, each with a label, a formatted value,
+    // the engine that computed it and — since this phase — the raw number.
+    //
+    // This line is the whole reason the deep dive's Evidence table had never
+    // rendered a single row in production. `/api/insights` has always resolved
+    // evidence for thirteen of the fourteen insight themes, and dropping it
+    // here left `record.evidence` undefined, so `evidenceCardHtml` fell to its
+    // "this finding cites no single figure" copy on EVERY insight — a false
+    // statement about findings that cite one.
+    evidence: apiInsight.evidence || [],
+    // The facilities or lanes the finding was computed over, ranked by the
+    // metric its theme is about. This is what a chart plots; `evidence` is what
+    // the table lists.
+    entities: apiInsight.entities || [],
     rank: apiInsight.rank || 0,
   };
 }
@@ -540,6 +577,8 @@ export function applyInsightResponse(response) {
       groundingStatus: (response.grounding && response.grounding.status) || '',
       stateId: response.state_id || '',
       computedAt: response.computed_at || null,
+      thresholds: response.thresholds || {},
+      series: response.series || {},
     });
   }
 

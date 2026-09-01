@@ -1514,7 +1514,7 @@ function renderToolboxDynamicFields(type) {
         <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
           <div class="form-group">
             <label class="form-label">Site name</label>
-            <input type="text" class="form-input" id="toolbox-site-name" placeholder="Name this site" maxlength="48" value="">
+            <input type="text" class="form-input" id="toolbox-site-name" placeholder="Name this site" maxlength="48" value="New DC">
           </div>
           <div class="form-group">
             <label class="form-label">Jump to a city</label>
@@ -1711,9 +1711,40 @@ function renderCreationProgress(activeIndex, failed = false) {
   }
 }
 
-function showCreationError(message) {
+/**
+ * Show why a run stopped, and put the user back on the field that stopped it.
+ *
+ * `fieldId` matters more than it looks. Every field in the new-site form
+ * pre-fills from the loaded network except the site NAME, which opened blank —
+ * so the common first experience of "Open a facility" was: fill nothing, press
+ * Run, and land on an execution view carrying a one-line refusal, with the
+ * offending input hidden behind it on a form the user had already left. No
+ * request was ever sent, which is why nothing appeared in any server log.
+ * Reported as "unable to create a scenario when I chose to open a new facility".
+ *
+ * The name now defaults, so the form is runnable as it opens; this returns the
+ * user to the exact input for every OTHER refusal rather than making them hunt.
+ */
+function showCreationError(message, fieldId = null) {
   const execView = document.getElementById('agent-execution-view');
   if (!execView) return;
+
+  if (fieldId) {
+    const field = document.getElementById(fieldId);
+    if (field) {
+      execView.classList.add('hidden');
+      document.getElementById('toolbox-form-body')?.classList.remove('hidden');
+      field.focus();
+      field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Cleared on the next edit, so the mark tracks the current value rather
+      // than staying red on a field the user has already fixed.
+      field.style.borderColor = 'var(--red, #dc2626)';
+      field.addEventListener('input', function clear() {
+        field.style.borderColor = '';
+        field.removeEventListener('input', clear);
+      });
+    }
+  }
   let banner = document.getElementById('scn-creation-error');
   if (!banner) {
     banner = document.createElement('div');
@@ -1803,19 +1834,23 @@ function readScenarioForm() {
       const handling = num('toolbox-site-handling');
       const role = document.getElementById('toolbox-site-role')?.value || 'DC';
 
-      if (!siteName) return { error: 'Give the new site a name.' };
+      if (!siteName) return { error: 'Give the new site a name.', field: 'toolbox-site-name' };
       if (lat === null || lng === null) {
-        return { error: 'Enter a latitude and longitude for the new site, or pick a city.' };
+        return { error: 'Enter a latitude and longitude for the new site, or pick a city.',
+                 field: lat === null ? 'toolbox-site-lat' : 'toolbox-site-lng' };
       }
       if (capacity === null || capacity <= 0) {
-        return { error: 'A new site needs a capacity above zero — a site with no capacity cannot serve anything.' };
+        return { error: 'A new site needs a capacity above zero — a site with no capacity cannot serve anything.',
+                 field: 'toolbox-site-capacity' };
       }
       if (fixed === null || handling === null) {
         return { error: 'Enter the fixed cost per year and the handling cost per unit. '
-                      + 'They decide whether opening this site pays, so they are not assumed.' };
+                      + 'They decide whether opening this site pays, so they are not assumed.',
+                 field: fixed === null ? 'toolbox-site-fixed' : 'toolbox-site-handling' };
       }
       if (fixed < 0 || handling < 0) {
-        return { error: 'Fixed and handling costs cannot be negative.' };
+        return { error: 'Fixed and handling costs cannot be negative.',
+                 field: fixed < 0 ? 'toolbox-site-fixed' : 'toolbox-site-handling' };
       }
       body.action = 'ADD_FACILITY';
       body.new_facility = {
@@ -1868,10 +1903,10 @@ async function runScenarioCreation() {
   // running this scenario" — which was the wrong advice for the three scenario
   // types that name no facility, and the only advice available for a form that
   // rendered no facility field for them in the first place.
-  const { body, error } = readScenarioForm();
+  const { body, error, field } = readScenarioForm();
   if (error) {
     renderCreationProgress(1, true);
-    showCreationError(error);
+    showCreationError(error, field);
     return;
   }
 

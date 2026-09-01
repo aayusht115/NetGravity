@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +218,78 @@ class CapacityHistoryStore(_DurableByNetwork):
                 "utilisationPct": pct,
             }
         return out
+
+    def periods(self, network_id: str) -> List[str]:
+        """Every period label present in the recorded capacity history, ordered.
+
+        Chronological because the labels the extractor keeps are the client's
+        own (`"2023-09"`), and those sort correctly as strings. A label that
+        does not follow that shape still sorts deterministically, which is what
+        a selector needs — it simply may not read as a calendar.
+        """
+        seen = {str(r.get("period") or "").strip()
+                for r in self.get(network_id)}
+        return sorted(p for p in seen if p)
+
+    def utilisation_series(self, network_id: str,
+                           facility_id: Optional[str] = None
+                           ) -> Dict[str, Any]:
+        """
+        Recorded utilisation per period — the client's own measurement.
+
+        This is the one genuine time series an uploaded network carries. It is
+        NOT a solver output: `used / available` are two columns the client
+        supplied on the same row, and dividing them is what those columns mean.
+        Kept distinct from the solved utilisation for exactly that reason — a
+        chart mixing "what the plan does" with "what the sites did" would be
+        two different quantities on one axis.
+
+        `facility_id=None` aggregates the network: used and available are summed
+        per period before dividing, so a small site cannot swing the ratio the
+        way averaging per-facility percentages would.
+
+        Returns `{"periods": [...], "points": [{"period", "available", "used",
+        "utilisationPct"}], "facility_id": ...}`. A period whose figures cannot
+        form a ratio is present with `utilisationPct: None` — a gap in the line,
+        never a zero.
+        """
+        rows = self.get(network_id)
+        if facility_id:
+            rows = [r for r in rows
+                    if str(r.get("facilityId") or "").strip() == facility_id]
+
+        by_period: Dict[str, Dict[str, float]] = {}
+        for row in rows:
+            period = str(row.get("period") or "").strip()
+            if not period:
+                continue
+            bucket = by_period.setdefault(period, {"available": 0.0, "used": 0.0,
+                                                   "rows": 0})
+            available, used = row.get("available"), row.get("used")
+            if isinstance(available, (int, float)):
+                bucket["available"] += float(available)
+            if isinstance(used, (int, float)):
+                bucket["used"] += float(used)
+            bucket["rows"] += 1
+
+        points = []
+        for period in sorted(by_period):
+            bucket = by_period[period]
+            available, used = bucket["available"], bucket["used"]
+            pct = (round(used / available * 100.0, 2)
+                   if available > 0 else None)
+            points.append({
+                "period": period,
+                "available": round(available, 3),
+                "used": round(used, 3),
+                "utilisationPct": pct,
+                "facilities": int(bucket["rows"]),
+            })
+        return {
+            "facility_id": facility_id,
+            "periods": [p["period"] for p in points],
+            "points": points,
+        }
 
 
 #: One store per process, mirroring the other in-process registries.

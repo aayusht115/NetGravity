@@ -820,6 +820,26 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   outline: none;
 }
 
+/* A disabled selector must not look clickable.
+   Both controls set `cursor: pointer` unconditionally and had no :disabled
+   rule, so a period selector disabled because the data states one period
+   still showed a pointer and a hover highlight — which is precisely why a
+   working single-period control was reported as "not clickable". The title
+   attribute already explains why; this makes the state visible before the
+   user tries. */
+.topbar-facility-select:disabled,
+.topbar-period-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  background: var(--bg-elevated);
+  box-shadow: none;
+}
+
+.topbar-facility-select:disabled:hover,
+.topbar-period-select:disabled:hover {
+  border-color: var(--border);
+}
+
 .topbar-facility-select:hover,
 .topbar-period-select:hover {
   border-color: #9218EA;

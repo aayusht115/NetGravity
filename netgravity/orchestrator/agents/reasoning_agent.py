@@ -893,11 +893,19 @@ class ReasoningAgent:
         parts: List[str] = []
         insights: List[KPIInsight] = []
 
-        def refs_for(field: str) -> List[str]:
+        def refs_for(field: str, limit: int = 1) -> List[str]:
+            """
+            The evidence refs matching one field name.
+
+            `limit` defaults to 1 because a narrative cites one figure per
+            clause, and a six-ref citation list behind a one-figure sentence
+            would claim a basis the sentence does not use. Callers that render
+            a TABLE rather than a sentence pass a higher limit deliberately.
+            """
             if evidence_pack is None:
                 return []
             return [ref for ref in evidence_pack.metrics
-                    if ref == field or ref.endswith(f".{field}")][:1]
+                    if ref == field or ref.endswith(f".{field}")][:limit]
 
         state = payload.get("network_state") or payload.get("optimization") or {}
         scenario = payload.get("scenario") or {}
