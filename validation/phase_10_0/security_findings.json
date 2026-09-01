@@ -1,0 +1,90 @@
+{
+  "generated_at": "2026-08-30T19:16:53",
+  "disclaimer": "This is an engineering review, not a security certification. It records what was verified and what remains open.",
+  "resolved": [
+    {
+      "id": "SEC-01",
+      "severity": "P0",
+      "title": "Password never verified",
+      "evidence": "auth.py::login read `password` and never compared it.",
+      "resolution": "PBKDF2-HMAC-SHA256, 240k iterations, per-user salt, constant-time compare.",
+      "verified_by": "test_login_rejects_wrong_password, E2E-04"
+    },
+    {
+      "id": "SEC-02",
+      "severity": "P0",
+      "title": "Unknown emails auto-provisioned on login",
+      "evidence": "auth.py:47-57 created an account for any unknown email.",
+      "resolution": "authenticate() raises UnauthenticatedError; no account is created.",
+      "verified_by": "test_login_does_not_autoprovision_unknown_accounts"
+    },
+    {
+      "id": "SEC-03",
+      "severity": "P0",
+      "title": "Anonymous fallback user on /me",
+      "evidence": "auth.py:105-108 returned a default planner without a token.",
+      "resolution": "resolve_session() raises; @require_auth guards every scoped route.",
+      "verified_by": "test_me_endpoint_requires_authentication, E2E-02"
+    },
+    {
+      "id": "SEC-04",
+      "severity": "P0",
+      "title": "No authorization / project isolation",
+      "evidence": "Projects had no owner; all state was process-global.",
+      "resolution": "ProjectRegistry enforces ownership; cross-owner access is 403.",
+      "verified_by": "test_user_cannot_read_another_users_project, E2E-08, E2E-09"
+    },
+    {
+      "id": "SEC-05",
+      "severity": "P1",
+      "title": "No upload validation",
+      "evidence": "ingestion_dynamic.py accepted any file, any size, any count.",
+      "resolution": "Extension allowlist, 25 MB/file, 10 files/request, size measured from the stream.",
+      "verified_by": "E2E-17"
+    },
+    {
+      "id": "SEC-06",
+      "severity": "P3",
+      "title": "Debug server and open CORS",
+      "evidence": "app.run(debug=True, host='0.0.0.0'); CORS(app) unrestricted.",
+      "resolution": "Debug opt-in and disabled in production; host defaults to 127.0.0.1; CORS origins from NETGRAVITY_CORS_ORIGINS.",
+      "verified_by": "static inspection of app/backend/app.py"
+    }
+  ],
+  "static_checks": {
+    "debug_not_hardcoded_true": true,
+    "host_not_hardcoded_wildcard": true,
+    "cors_is_configurable": true,
+    "no_credential_literal_in_app_layer": true
+  },
+  "open_risks": [
+    {
+      "id": "SEC-07",
+      "severity": "P2",
+      "title": "Credential and session store is in-process and non-durable",
+      "detail": "Accounts, sessions, projects, snapshots and scenarios are lost on restart and are not shared across workers. A deployment should front this with a real IdP and a persistent store.",
+      "status": "OPEN \u2014 documented, not fixed"
+    },
+    {
+      "id": "SEC-08",
+      "severity": "P2",
+      "title": "No rate limiting",
+      "detail": "Login and solve endpoints accept unlimited requests; a MILP solve is expensive and is reachable by any authenticated user.",
+      "status": "OPEN"
+    },
+    {
+      "id": "SEC-09",
+      "severity": "P3",
+      "title": "No CSRF protection",
+      "detail": "Bearer-token auth in a same-origin SPA limits exposure, but no explicit CSRF defence exists for cookie-based deployments.",
+      "status": "OPEN"
+    },
+    {
+      "id": "SEC-10",
+      "severity": "P3",
+      "title": "Prompt-injection surface unreviewed",
+      "detail": "Chat input reaches the LLM gateway. Numeric grounding constrains what the model may assert, but injection resistance was not systematically tested in this phase.",
+      "status": "OPEN"
+    }
+  ]
+}

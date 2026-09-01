@@ -24,6 +24,7 @@ from netgravity.ingestion.ai.client import LLMClient
 from netgravity.ingestion.schemas.contract import (
     ContractRule,
     ExtractionConfidence,
+    FacilityCommitment,
     SurchargeRule,
     SurchargeType,
 )
@@ -55,6 +56,21 @@ Return ONLY a JSON object with this exact shape:
   "penalty_clauses": ["string"],
   "contract_start_date": "YYYY-MM-DD or null",
   "contract_end_date": "YYYY-MM-DD or null",
+  "facility_commitments": [
+    {{
+      "facility_id": "an ID from the known list below, if the clause names that site recognisably; else empty",
+      "facility_label": "what the document calls the site",
+      "is_active": true | false | null,
+      "allows_early_closure": true | false | null,
+      "early_exit_penalty": number or null,
+      "penalty_currency": "string or empty",
+      "notice_period_days": number or null,
+      "term_start_date": "YYYY-MM-DD or null",
+      "term_end_date": "YYYY-MM-DD or null",
+      "confidence": "HIGH | MEDIUM | LOW",
+      "source_excerpt": "the exact clause text this came from"
+    }}
+  ],
   "extraction_confidence": "HIGH | MEDIUM | LOW",
   "notes": "anything a human should check"
 }}
@@ -66,6 +82,13 @@ RULES:
   distinction determines whether the headline rate is misleading.
 - Always populate source_excerpt with the clause text, for auditability.
 - If a value is absent, use null. Do not guess.
+
+FACILITY COMMITMENTS — read these rules carefully, because they decide whether a site may be CLOSED, not merely what it costs:
+- Return facility_commitments ONLY for clauses about keeping, leasing or committing to a SITE (a lease term, a take-or-pay, a minimum-term or lock-in clause). A clause about freight rates is a surcharge, not a commitment.
+- allows_early_closure must be false ONLY where the document actually prohibits or forbids early exit. If it is silent, use null. Do not infer a lock-in from the existence of an end date — a term that ends is not a term that cannot be exited.
+- is_active is about the MODELLED period. Use null where the document gives dates but no basis for deciding whether the term is currently in force.
+- early_exit_penalty is a stated figure only. Never derive it from a monthly rent times a remaining term.
+- Return an empty list when the document contains no site commitment. An empty list is the correct and common answer for a rate card.
 
 Known location IDs in this network (map named places onto these where \
 possible): {known_locations}
@@ -185,6 +208,7 @@ def _to_contract_rule(data: Dict[str, Any], *, source_key: str,
         overall = ExtractionConfidence.MEDIUM
 
     return ContractRule(
+        facility_commitments=_to_commitments(data.get("facility_commitments")),
         contract_id=str(data.get("contract_id") or source_key),
         vendor_name=str(data.get("vendor_name") or "Unknown vendor"),
         base_rate=float(data.get("base_rate") or 0.0),
@@ -199,3 +223,75 @@ def _to_contract_rule(data: Dict[str, Any], *, source_key: str,
         extracted_by=extracted_by,
         extraction_confidence=overall,
     )
+
+
+def _to_commitments(raw_list: Any) -> List[FacilityCommitment]:
+    """
+    Parse the site-commitment clauses.
+
+    Every field stays None unless the document said it. In particular
+    `allows_early_closure` is only False when the model reports False — a
+    missing value must not become a prohibition, because a prohibition pins a
+    facility open in the MILP and would block a closure the client is free to
+    make.
+    """
+    out: List[FacilityCommitment] = []
+    for raw in raw_list or []:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            conf = ExtractionConfidence(str(raw.get("confidence", "MEDIUM")).upper())
+        except ValueError:
+            conf = ExtractionConfidence.MEDIUM
+
+        commitment = FacilityCommitment(
+            facility_id=str(raw.get("facility_id") or "").strip(),
+            facility_label=str(raw.get("facility_label") or "").strip(),
+            is_active=_tri_state(raw.get("is_active")),
+            allows_early_closure=_tri_state(raw.get("allows_early_closure")),
+            early_exit_penalty=_positive_or_none(raw.get("early_exit_penalty")),
+            penalty_currency=str(raw.get("penalty_currency") or "").strip(),
+            notice_period_days=_int_or_none(raw.get("notice_period_days")),
+            term_start_date=raw.get("term_start_date") or None,
+            term_end_date=raw.get("term_end_date") or None,
+            confidence=conf,
+            source_excerpt=str(raw.get("source_excerpt") or ""),
+        )
+        # A commitment naming nothing and stating nothing is not evidence.
+        if commitment.facility_id or commitment.facility_label:
+            out.append(commitment)
+    return out
+
+
+def _tri_state(value: Any) -> Optional[bool]:
+    """
+    True / False / unstated, keeping the third case distinct.
+
+    Coercing an unstated term to False would silently assert that a site cannot
+    be closed. `bool(None)` is False and that is exactly the wrong answer here.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "yes"}:
+            return True
+        if lowered in {"false", "no"}:
+            return False
+    return None
+
+
+def _positive_or_none(value: Any) -> Optional[float]:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def _int_or_none(value: Any) -> Optional[int]:
+    try:
+        number = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 0 else None

@@ -6,7 +6,7 @@
 
 /* global Chart */
 
-import { DEMAND_HISTORY, FORECAST, SCENARIOS } from './data.js';
+import { DEMAND_HISTORY, FORECAST, SCENARIOS, perPeriodLabel } from './data.js';
 
 const chartInstances = {};
 
@@ -20,6 +20,29 @@ export function renderForecastChart(canvasId) {
   const isCompact = canvasId === 'chart-forecast-home';
   const histLabels = DEMAND_HISTORY.months;
   const foreLabels = FORECAST.months;
+
+  // With no history there is nothing to draw. The padding below is built with
+  // `new Array(histLabels.length - 1)`, which is `new Array(-1)` for an empty
+  // series and throws `RangeError: Invalid array length` — so an empty
+  // forecast took the whole screen down instead of showing an empty state.
+  if (!histLabels.length) {
+    const host = ctx.parentElement;
+    if (host && !host.querySelector('.ng-forecast-empty')) {
+      const note = document.createElement('div');
+      note.className = 'ng-forecast-empty text-xs text-muted';
+      note.style.cssText = 'display:flex;align-items:center;justify-content:center;'
+        + 'height:100%;text-align:center;padding:24px';
+      note.textContent = 'No demand history has been ingested for this network, '
+        + 'so no forecast can be produced.';
+      host.appendChild(note);
+    }
+    ctx.style.display = 'none';
+    return;
+  }
+  ctx.style.display = '';
+  const stale = ctx.parentElement && ctx.parentElement.querySelector('.ng-forecast-empty');
+  if (stale) stale.remove();
+
   const allLabels = [...histLabels, ...foreLabels];
 
   // Historical data + nulls for forecast period
@@ -30,8 +53,13 @@ export function renderForecastChart(canvasId) {
   const upperData = [...new Array(histLabels.length - 1).fill(null), DEMAND_HISTORY.northIndia[histLabels.length - 1], ...FORECAST.upper];
   const lowerData = [...new Array(histLabels.length - 1).fill(null), DEMAND_HISTORY.northIndia[histLabels.length - 1], ...FORECAST.lower];
 
-  // Capacity line
-  const capData = allLabels.map(() => DEMAND_HISTORY.baddiCapacity);
+  // Capacity line — drawn only when a threshold is actually known for this
+  // series. All-null keeps the dataset present (so the legend is stable) but
+  // plots nothing, instead of drawing another network's capacity across the
+  // chart and dragging the y-axis away from the real demand range.
+  const capValue = DEMAND_HISTORY.baddiCapacity;
+  const hasCap = typeof capValue === 'number' && Number.isFinite(capValue);
+  const capData = allLabels.map(() => (hasCap ? capValue : null));
 
   chartInstances[canvasId] = new Chart(ctx, {
     type: 'line',
@@ -80,7 +108,7 @@ export function renderForecastChart(canvasId) {
           tension: 0.3,
         },
         {
-          label: 'Delhi NCR DC Capacity',
+          label: 'Capacity',
           data: capData,
           borderColor: '#dc2626',
           borderWidth: 1.8,
@@ -123,7 +151,11 @@ export function renderForecastChart(canvasId) {
         },
         y: {
           beginAtZero: false,
-          min: 6000,
+          // The floor was pinned at 6,000 — the prototype's own demand range.
+          // Any network whose demand sits below that had its entire history
+          // clipped off the bottom of the chart: the line simply was not
+          // there, and only the forecast tail showed. Chart.js fits the axis
+          // to the data instead.
           grid: { color: '#f0f0f5' },
           ticks: {
             font: { family: 'Inter', size: isCompact ? 9 : 11 },
@@ -131,7 +163,7 @@ export function renderForecastChart(canvasId) {
           },
           title: {
             display: !isCompact,
-            text: 'Demand (units/day)',
+            text: `Demand (${perPeriodLabel()})`,
             font: { family: 'Inter', size: 11, weight: '600' },
           },
         },
@@ -339,71 +371,19 @@ export function renderScenarioSlaChart(canvasId, scenarioList) {
 }
 
 // ─── Scenario Flow Map Diagram ──────────────────────────────
-export function renderScenarioFlowMap(containerId, activeScenarioId) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  container.innerHTML = `
-    <div class="flow-map-container" style="position:relative;width:100%;height:100%;min-height:180px;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 50%, #fbf9fd 0%, #f4f2f8 100%);border-radius:var(--r-md);overflow:hidden">
-      <svg viewBox="0 0 400 240" style="width:100%;height:100%;max-height:210px">
-        <defs>
-          <linearGradient id="flowGreen" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#16a34a" stop-opacity="0.8"/>
-            <stop offset="100%" stop-color="#22c55e" stop-opacity="0.8"/>
-          </linearGradient>
-          <linearGradient id="flowRed" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#dc2626" stop-opacity="0.8"/>
-            <stop offset="100%" stop-color="#ef4444" stop-opacity="0.8"/>
-          </linearGradient>
-        </defs>
-
-        <!-- Background map outline / grid hint -->
-        <path d="M 80,40 Q 200,20 320,50 Q 360,140 280,200 Q 200,230 140,200 Q 60,140 80,40 Z" fill="none" stroke="#e2e8f0" stroke-width="1.5" stroke-dasharray="4,4"/>
-
-        <!-- Flow Arcs -->
-        <!-- Baddi to Delhi NCR (Decrease: Red) -->
-        <path d="M 190,45 Q 185,60 180,80" fill="none" stroke="#ef4444" stroke-width="3.5" stroke-dasharray="4,2"/>
-        <!-- Baddi to Kolkata (Increase: Green) -->
-        <path d="M 190,45 Q 260,70 300,120" fill="none" stroke="#16a34a" stroke-width="3.5"/>
-        <!-- Baddi to Mumbai (No Change: Grey) -->
-        <path d="M 190,45 Q 140,100 130,145" fill="none" stroke="#94a3b8" stroke-width="2"/>
-        <!-- Mumbai to Chennai (No Change: Grey) -->
-        <path d="M 130,145 Q 180,180 220,195" fill="none" stroke="#94a3b8" stroke-width="2"/>
-        <!-- Kolkata to Chennai (No Change: Grey) -->
-        <path d="M 300,120 Q 270,165 220,195" fill="none" stroke="#94a3b8" stroke-width="2"/>
-
-        <!-- Nodes -->
-        <!-- Baddi Plant -->
-        <circle cx="190" cy="45" r="7" fill="#6B2FA0" stroke="#ffffff" stroke-width="2"/>
-        <text x="190" y="32" font-size="10" font-family="Inter" font-weight="700" fill="#1e293b" text-anchor="middle">Baddi</text>
-
-        <!-- Delhi NCR DC -->
-        <circle cx="180" cy="80" r="7" fill="#f59e0b" stroke="#ffffff" stroke-width="2"/>
-        <text x="180" y="97" font-size="10" font-family="Inter" font-weight="700" fill="#1e293b" text-anchor="middle">Delhi NCR</text>
-
-        <!-- Mumbai DC -->
-        <circle cx="130" cy="145" r="6" fill="#6B2FA0" stroke="#ffffff" stroke-width="2"/>
-        <text x="95" y="150" font-size="10" font-family="Inter" font-weight="600" fill="#475569" text-anchor="middle">Mumbai</text>
-
-        <!-- Kolkata DC -->
-        <circle cx="300" cy="120" r="6" fill="#16a34a" stroke="#ffffff" stroke-width="2"/>
-        <text x="335" y="125" font-size="10" font-family="Inter" font-weight="600" fill="#475569" text-anchor="middle">Kolkata</text>
-
-        <!-- Chennai DC -->
-        <circle cx="220" cy="195" r="6" fill="#6B2FA0" stroke="#ffffff" stroke-width="2"/>
-        <text x="220" y="212" font-size="10" font-family="Inter" font-weight="600" fill="#475569" text-anchor="middle">Chennai</text>
-      </svg>
-
-      <!-- Legend -->
-      <div style="position:absolute;bottom:8px;right:12px;display:flex;flex-direction:column;gap:3px;background:rgba(255,255,255,0.92);padding:4px 8px;border-radius:6px;font-size:9.5px;box-shadow:0 1px 3px rgba(0,0,0,0.06)">
-        <div style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:3px;background:#16a34a;border-radius:2px;display:inline-block"></span> <span style="color:#1e293b">Increase Flow</span></div>
-        <div style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:3px;background:#ef4444;border-radius:2px;display:inline-block"></span> <span style="color:#1e293b">Decrease Flow</span></div>
-        <div style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:2px;background:#94a3b8;border-radius:2px;display:inline-block"></span> <span style="color:#64748b">No Change</span></div>
-      </div>
-    </div>
-  `;
-}
-
+// REMOVED — `renderScenarioFlowMap()`
+//
+// A hand-drawn SVG of five fixed nodes (Baddi, Delhi NCR, Mumbai, Kolkata,
+// Chennai) with three fixed arcs colour-coded "Increase / Decrease / No
+// Change". It took a `containerId` and an `activeScenarioId` and used neither:
+// the same picture rendered for every scenario of every network, and the
+// colours asserted flow changes no engine had computed.
+//
+// Deleted rather than left exported: nothing imported it, so it drew for
+// nobody, but an exported function that fabricates a network diagram is one
+// call away from doing so. The real corridor view is `map.js`
+// (`renderScenarioDigitalTwin`), which reads the loaded network and the
+// solver's own per-lane flows.
 
 // ─── Performance Radar ──────────────────────────────────────
 export function renderScenarioRadar(canvasId) {
@@ -628,7 +608,7 @@ export function renderFacilityLaneFlowsChart(canvasId, connectedLanes, facilityI
       labels: labels,
       datasets: [
         {
-          label: 'Daily Flow (units/day)',
+          label: `Flow (${perPeriodLabel()})`,
           data: flows,
           backgroundColor: '#6B2FA0',
           borderRadius: 6,
@@ -644,7 +624,7 @@ export function renderFacilityLaneFlowsChart(canvasId, connectedLanes, facilityI
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx) => `Flow: ${ctx.raw.toLocaleString('en-IN')} units/day · Cost: ₹${costs[ctx.dataIndex]}/unit`,
+            label: (ctx) => `Flow: ${ctx.raw.toLocaleString('en-IN')} ${perPeriodLabel()} · Cost: ₹${costs[ctx.dataIndex]}/unit`,
           },
         },
       },

@@ -3,7 +3,12 @@
    Light theme · Kearney purple · Consulting-grade SaaS
    ═══════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+/* Inter, served from this origin. This was an @import from
+   fonts.googleapis.com: a third-party request on every page load that
+   leaks the visitor's IP and user agent, fails offline, and is blocked
+   by `style-src 'self'` — so the page silently fell back to a system
+   font. See app/frontend/vendor/inter.css. */
+@import url('../vendor/inter.css');
 
 /* ─── Tokens ──────────────────────────────────────────────── */
 :root {
@@ -1929,39 +1934,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   margin-top: 10px;
   border: 1px solid var(--border-light);
 }
-
-/* S10: Future Network View delta callouts, around (not inside) the map */
-.scn-future-callouts-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-}
-.scn-future-callouts-row:empty { margin-top: 0; }
-.scn-future-callout-chip {
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-light);
-  border-radius: var(--r-sm);
-  padding: 6px 10px;
-  font-size: 11px;
-  line-height: 1.35;
-  min-width: 120px;
-  flex: 1 1 150px;
-}
-.scn-future-callout-chip .scn-fc-label {
-  color: var(--text-2);
-  font-size: 9.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  display: block;
-  margin-bottom: 2px;
-}
-.scn-future-callout-chip .scn-fc-value {
-  font-weight: 700;
-  color: var(--text-1);
-}
-.scn-future-callout-chip.good .scn-fc-value { color: var(--green); }
-.scn-future-callout-chip.bad .scn-fc-value { color: var(--red); }
 
 /* Multi-Scenario Table */
 .scn-multi-table-wrap {

@@ -1,0 +1,166 @@
+{
+  "checks": [
+    {
+      "id": "C-01",
+      "name": "Account created",
+      "status": "PASS",
+      "detail": "HTTP 201"
+    },
+    {
+      "id": "C-02",
+      "name": "Project created",
+      "status": "PASS",
+      "detail": "project_id=pr-15df2bdb95"
+    },
+    {
+      "id": "C-03",
+      "name": "Workbook parsed",
+      "status": "PASS",
+      "detail": "HTTP 200, sheets=8"
+    },
+    {
+      "id": "C-04",
+      "name": "Every sheet read, each exactly once",
+      "status": "PASS",
+      "detail": "{\"plants\": 3, \"dcs\": 5, \"markets\": 7, \"lanes\": 36, \"products\": 2, \"demandHistory\": 504, \"capacityHistory\": 288, \"signals\": 10}"
+    },
+    {
+      "id": "C-05",
+      "name": "Facility capacities are the uploaded values",
+      "status": "PASS",
+      "detail": "[('F001', 42150.0), ('F002', 38480.0), ('F003', 35710.0)]"
+    },
+    {
+      "id": "C-06",
+      "name": "Market demand derived from the demand history",
+      "status": "PASS",
+      "detail": "{\"M001\": 9433.0, \"M002\": 5569.0, \"M003\": 4383.0, \"M004\": 3529.0, \"M005\": 5141.0, \"M006\": 4280.0, \"M007\": 4647.0}"
+    },
+    {
+      "id": "C-07",
+      "name": "Market coordinates come from the file, not a hash",
+      "status": "PASS",
+      "detail": "exact for 7/7"
+    },
+    {
+      "id": "C-08",
+      "name": "Freight rates joined from the rates table",
+      "status": "PASS",
+      "detail": "36/36 lanes priced"
+    },
+    {
+      "id": "C-09",
+      "name": "Transit times are the uploaded values",
+      "status": "PASS",
+      "detail": "18 distinct transit times"
+    },
+    {
+      "id": "C-10",
+      "name": "Network assembled and bound",
+      "status": "PASS",
+      "detail": "{\"data_version\": \"bdfd1736bee18675\", \"demand_history_series\": 14, \"demands\": 14, \"facilities\": 15, \"lanes\": 36, \"products\": 2}"
+    },
+    {
+      "id": "C-11",
+      "name": "Product dimension preserved",
+      "status": "PASS",
+      "detail": "products=2"
+    },
+    {
+      "id": "C-12",
+      "name": "Demand history carried to the forecaster",
+      "status": "PASS",
+      "detail": "series=14"
+    },
+    {
+      "id": "C-13",
+      "name": "Unservable markets named before the solve runs",
+      "status": "PASS",
+      "detail": "3 issue(s); 3 name a market"
+    },
+    {
+      "id": "C-14",
+      "name": "KPI endpoint answers for the uploaded network",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "C-15",
+      "name": "Every network KPI carries a value",
+      "status": "PASS",
+      "detail": "25 VALID, 0 INFEASIBLE of 25"
+    },
+    {
+      "id": "C-16",
+      "name": "A reason accompanies an unservable network",
+      "status": "PASS",
+      "detail": "['M001 needs 9,433 units but the 1 lane(s) that meet its 2-day service level carry only 3,230 \u2014 short 6,203. 2 further lane(s) reach it but are too slow.', 'M00"
+    },
+    {
+      "id": "C-15b",
+      "name": "Every figure declares that it came from a relaxed solve",
+      "status": "PASS",
+      "detail": "25 of 25 carry solve_relaxation"
+    },
+    {
+      "id": "C-15c",
+      "name": "The solver's shortfall matches the pre-flight diagnosis",
+      "status": "PASS",
+      "detail": "8733.0 unserved of 36982.0"
+    },
+    {
+      "id": "C-15d",
+      "name": "Cost components are exposed and reconcile with the total",
+      "status": "PASS",
+      "detail": "sum=18,067,793.96 vs total=18067793.9644"
+    },
+    {
+      "id": "C-15e",
+      "name": "The notional shortage penalty is excluded from business cost",
+      "status": "PASS",
+      "detail": "penalty=8,733,000,000 business=18,067,793.96"
+    },
+    {
+      "id": "C-15f",
+      "name": "The shortage penalty is labelled notional",
+      "status": "PASS",
+      "detail": "Notional. The per-unit shortage penalty is a solver device for ranking which demand to strand, not a"
+    },
+    {
+      "id": "C-17",
+      "name": "Digital Twin sees the whole network despite an infeasible solve",
+      "status": "PASS",
+      "detail": "15 nodes (3 plants + 5 DCs + 7 markets), 36 lanes"
+    },
+    {
+      "id": "C-17b",
+      "name": "Markets carry their demand and SLA",
+      "status": "PASS",
+      "detail": "{\"M001\": 9433.0, \"M002\": 5569.0, \"M003\": 4383.0, \"M004\": 3529.0, \"M005\": 5141.0, \"M006\": 4280.0, \"M007\": 4647.0}"
+    },
+    {
+      "id": "C-17c",
+      "name": "Every facility reports a utilisation consistent with its capacity",
+      "status": "PASS",
+      "detail": "8 facilities, 8 consistent"
+    },
+    {
+      "id": "C-17d",
+      "name": "The client's own recorded utilisation is carried through",
+      "status": "PASS",
+      "detail": "{\"F001\": 76.67, \"F002\": 82.01, \"F003\": 79.39, \"F004\": 71.63, \"F005\": 74.06, \"F006\": 98.5, \"F007\": 80.52, \"F008\": 75.53}"
+    },
+    {
+      "id": "C-17e",
+      "name": "Solved lane volumes and costs are exposed",
+      "status": "PASS",
+      "detail": "15 lanes, transport 863,063.14 vs network KPI 863063.1448"
+    },
+    {
+      "id": "C-18",
+      "name": "Forecast runs on the uploaded history",
+      "status": "PASS",
+      "detail": "HTTP 200, 14 series"
+    }
+  ]
+}

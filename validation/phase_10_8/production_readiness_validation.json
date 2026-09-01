@@ -1,0 +1,243 @@
+{
+  "checks": [
+    {
+      "id": "M-01",
+      "name": "The schema is versioned, not CREATE-TABLE-IF-NOT-EXISTS",
+      "status": "PASS",
+      "detail": "at v6 of 6: 1:baseline_schema, 2:auth_hardening, 3:mfa, 4:shared_rate_limits, 5:execution_traces, 6:federated_identity"
+    },
+    {
+      "id": "M-02",
+      "name": "Every migration is recorded with when it was applied",
+      "status": "PASS",
+      "detail": "6 rows in schema_migrations"
+    },
+    {
+      "id": "M-03",
+      "name": "A populated pre-migration database upgrades without data loss",
+      "status": "PASS",
+      "detail": "v0 -> v6, user and session preserved, new columns added"
+    },
+    {
+      "id": "M-04",
+      "name": "Re-opening applies nothing",
+      "status": "PASS",
+      "detail": "applied on second open: []"
+    },
+    {
+      "id": "S-01",
+      "name": "A remote database connection defaults to TLS",
+      "status": "PASS",
+      "detail": "postgresql://u:p@db.example.com:5432/ng?sslmode=require"
+    },
+    {
+      "id": "S-02",
+      "name": "Production refuses an unencrypted remote connection",
+      "status": "PASS",
+      "detail": "sslmode=disable to a remote host is rejected at start-up"
+    },
+    {
+      "id": "S-03",
+      "name": "A local socket is exempt rather than broken",
+      "status": "PASS",
+      "detail": "postgresql://u:p@127.0.0.1:5432/ng"
+    },
+    {
+      "id": "B-01",
+      "name": "A backup is taken AND verified by restoring it",
+      "status": "PASS",
+      "detail": "verified: every table restored with the same row count."
+    },
+    {
+      "id": "C-01",
+      "name": "A password below the floor is refused",
+      "status": "PASS",
+      "detail": "HTTP 400"
+    },
+    {
+      "id": "C-02",
+      "name": "The session is an httpOnly, SameSite cookie",
+      "status": "PASS",
+      "detail": "Expires=Tue, 01 Sep 2026 17:59:23 GMT; Max-Age=28800; HttpOnly; Path=/; SameSite=Lax"
+    },
+    {
+      "id": "C-03",
+      "name": "A cookie-authenticated write needs a CSRF token",
+      "status": "PASS",
+      "detail": "without header 403, with header 201"
+    },
+    {
+      "id": "C-04",
+      "name": "Ten failures lock the account, correct password included",
+      "status": "PASS",
+      "detail": "HTTP 401, failures=10, locked for 899s"
+    },
+    {
+      "id": "C-05",
+      "name": "The lock is in the database, so it survives a restart",
+      "status": "PASS",
+      "detail": "row in login_attempts, not a process dictionary"
+    },
+    {
+      "id": "C-06",
+      "name": "A credential spray is rate limited, not just locked out",
+      "status": "PASS",
+      "detail": "first 429 at attempt 21"
+    },
+    {
+      "id": "R-01",
+      "name": "The reset endpoint is not an account-enumeration oracle",
+      "status": "PASS",
+      "detail": "an unknown address answers identically to a known one"
+    },
+    {
+      "id": "R-02",
+      "name": "Only the HASH of a reset token is stored",
+      "status": "PASS",
+      "detail": "a database read is not an account takeover"
+    },
+    {
+      "id": "R-03",
+      "name": "A reset works once and only once",
+      "status": "PASS",
+      "detail": "first 200, replay 401"
+    },
+    {
+      "id": "R-04",
+      "name": "A reset signs the account out everywhere",
+      "status": "PASS",
+      "detail": "the session issued before the reset is dead"
+    },
+    {
+      "id": "F-01",
+      "name": "Enrolment issues a standard otpauth secret and recovery codes",
+      "status": "PASS",
+      "detail": "10 recovery codes, algorithm SHA1 digits 6 period 30"
+    },
+    {
+      "id": "F-02",
+      "name": "It is not active until a working code confirms it",
+      "status": "PASS",
+      "detail": "a mis-scanned QR cannot lock the user out of their own account"
+    },
+    {
+      "id": "F-03",
+      "name": "The password alone no longer yields a session",
+      "status": "PASS",
+      "detail": "the challenge carries a different prefix and is refused as a session"
+    },
+    {
+      "id": "F-04",
+      "name": "A valid code completes the sign-in",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "F-05",
+      "name": "A code cannot be replayed inside its own 30-second window",
+      "status": "PASS",
+      "detail": "the time step is claimed atomically, so a captured code is spent"
+    },
+    {
+      "id": "F-06",
+      "name": "A recovery code works exactly once",
+      "status": "PASS",
+      "detail": "hashed at rest, single-use"
+    },
+    {
+      "id": "N-01",
+      "name": "Live sessions are listed without returning a token",
+      "status": "PASS",
+      "detail": "2 session(s), identified by digest"
+    },
+    {
+      "id": "N-02",
+      "name": "Sign out everywhere keeps the current session and kills the rest",
+      "status": "PASS",
+      "detail": "revoked 2, this session 200, other 401"
+    },
+    {
+      "id": "H-01",
+      "name": "A Content Security Policy forbids inline and eval'd script",
+      "status": "PASS",
+      "detail": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src ..."
+    },
+    {
+      "id": "H-02",
+      "name": "The usual headers are set",
+      "status": "PASS",
+      "detail": "nosniff, DENY, strict-origin-when-cross-origin, Permissions-Policy"
+    },
+    {
+      "id": "H-03",
+      "name": "API responses are not cacheable by an intermediary",
+      "status": "PASS",
+      "detail": "per-account data behind a cookie"
+    },
+    {
+      "id": "H-04",
+      "name": "No runtime asset comes from a third party",
+      "status": "PASS",
+      "detail": "11 assets vendored locally; third-party hosts remaining: none"
+    },
+    {
+      "id": "H-05",
+      "name": "No inline event handler remains",
+      "status": "PASS",
+      "detail": "0 onclick attributes (they cannot be nonced, so one would break the page under this policy)"
+    },
+    {
+      "id": "P-01",
+      "name": "A multi-period network solves instead of crashing the solver",
+      "status": "PASS",
+      "detail": "3 periods -> 120 units served (this raised PulpError: overlapping constraint names)"
+    },
+    {
+      "id": "P-02",
+      "name": "The result states what it covers and what it does not",
+      "status": "PASS",
+      "detail": "This data states 3 demand periods. multi_period_policy=REPRESENTATIVE_MEAN was requested, so demand was collapsed to one represent"
+    },
+    {
+      "id": "P-03",
+      "name": "PEAK sizes for the worst period and shows the breach",
+      "status": "PASS",
+      "detail": "mean serves 120; peak wants 160 against 150 of capacity and serves 150"
+    },
+    {
+      "id": "P-04",
+      "name": "The solver metadata carries it too",
+      "status": "PASS",
+      "detail": "a reader of the solver result alone is still told"
+    },
+    {
+      "id": "D-01",
+      "name": "Health states which store is in use and its schema version",
+      "status": "PASS",
+      "detail": "{\"engine\": \"sqlite\", \"migrations_applied_now\": [], \"rate_limit_counters\": \"shared\", \"schema_version\": 6, \"target\": \"data/netgravity.db\"}"
+    },
+    {
+      "id": "D-02",
+      "name": "Health states whether a reset can actually be delivered",
+      "status": "PASS",
+      "detail": "{\"channel\": \"log\", \"configured\": true, \"reason\": \"\"}"
+    },
+    {
+      "id": "D-03",
+      "name": "The dead prototype-network module is gone",
+      "status": "PASS",
+      "detail": "graph.js held a hardcoded 18-node network and was imported by nothing"
+    },
+    {
+      "id": "D-04",
+      "name": "An operations runbook exists",
+      "status": "PASS",
+      "detail": "docs/operations.md \u2014 production config, migrations, backups, PITR"
+    }
+  ],
+  "summary": {
+    "total": 39,
+    "passed": 39,
+    "failed": 0
+  }
+}

@@ -1,0 +1,124 @@
+{
+  "checks": [
+    {
+      "id": "P-01",
+      "name": "The store is PostgreSQL, not a local file",
+      "status": "PASS",
+      "detail": "postgresql at postgresql://netgravity@127.0.0.1:55432/netgravity_check"
+    },
+    {
+      "id": "P-02",
+      "name": "The connection string never carries its password onward",
+      "status": "PASS",
+      "detail": "postgresql://netgravity@127.0.0.1:55432/netgravity_check"
+    },
+    {
+      "id": "P-03",
+      "name": "An account is created and a session issued",
+      "status": "PASS",
+      "detail": "HTTP 201"
+    },
+    {
+      "id": "P-04",
+      "name": "A project is created",
+      "status": "PASS",
+      "detail": "pr-657fb7d80f"
+    },
+    {
+      "id": "P-05",
+      "name": "The client workbook is ingested and bound",
+      "status": "PASS",
+      "detail": "{\"data_version\": \"bdfd1736bee18675\", \"demand_history_series\": 14, \"demands\": 14, \"facilities\": 15, \"lanes\": 36, \"products\": 2}"
+    },
+    {
+      "id": "P-06",
+      "name": "The bound network solves and reports a cost",
+      "status": "PASS",
+      "detail": "18067793.9644"
+    },
+    {
+      "id": "P-07",
+      "name": "The analysis reports itself ready without re-solving",
+      "status": "PASS",
+      "detail": "{\"computed_at\": 1788256757.2473135, \"data_version\": \"bdfd1736bee18675\", \"metrics\": 25, \"project_id\": \"pr-657fb7d80f\", \"ready\": true, \"snapshot_id\": \"snap_bdfd1736bee1\"}"
+    },
+    {
+      "id": "P-08",
+      "name": "A greenfield scenario solves and is stored",
+      "status": "PASS",
+      "detail": "HTTP 201 SCN_ec47dca6"
+    },
+    {
+      "id": "P-09",
+      "name": "Every kind of record reached PostgreSQL",
+      "status": "PASS",
+      "detail": "{\"users\": 1, \"sessions\": 1, \"projects\": 1, \"snapshots\": 2, \"scenario_networks\": 2, \"scenarios\": 1, \"network_data\": 3, \"analyses\": 1, \"app_state\": 0, \"login_attempts\": 0, \"password_resets\": 0, \"mfa_enrolments\": 0, \"mfa_recovery_codes\": 0}"
+    },
+    {
+      "id": "P-10",
+      "name": "The uploaded network is stored whole, not summarised",
+      "status": "PASS",
+      "detail": "15 facilities, 36 lanes"
+    },
+    {
+      "id": "P-11",
+      "name": "The application is rebuilt from scratch",
+      "status": "PASS",
+      "detail": "98 modules dropped and re-imported"
+    },
+    {
+      "id": "P-12",
+      "name": "The account survives the restart",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "P-13",
+      "name": "The project survives, still bound to its network",
+      "status": "PASS",
+      "detail": "{\"client\": \"\", \"created_at\": 1788256756.7581108, \"description\": \"\", \"has_network\": true, \"id\": \"pr-657fb7d80f\", \"ingestion_run_ids\": [], \"is_demo\": false, \"name\": \"Postgres Workspace\", \"owner_id\": \"usr_2f89584fbb70\", \"region\": \"India\", \"snapshot_id\": \"snap_bdfd1736bee1\", \"snapshot_label\": \"Postgres Workspace \\u2014 uploaded\", \"status\": \"Analysis ready\", \"updated_at\": 1788256757.1465135}"
+    },
+    {
+      "id": "P-14",
+      "name": "The restored network reports the same cost as before",
+      "status": "PASS",
+      "detail": "18067793.9644 -> 18067793.9644"
+    },
+    {
+      "id": "P-15",
+      "name": "The ANALYSIS survives, so the MILP is not re-run",
+      "status": "PASS",
+      "detail": "computed_at 1788256757.2473135 -> 1788256757.2473135"
+    },
+    {
+      "id": "P-16",
+      "name": "The solved scenario survives with its figures",
+      "status": "PASS",
+      "detail": "[\"ADD_FACILITY NEW_NAGPUR_DC 'Nagpur DC' (21.1458, 79.0882) capacity 24,370 units/period, 10 lanes derived\"]"
+    },
+    {
+      "id": "P-17",
+      "name": "The scenario still knows what it changed",
+      "status": "PASS",
+      "detail": "[{\"capacity\": 24370.0, \"fixedCostPerYear\": 15754800.0, \"handlingCost\": 0.0, \"id\": \"NEW_NAGPUR_DC\", \"lat\": 21.1458, \"lng\": 79.0882, \"name\": \"Nagpur DC\", \"role\": \"DC\"}]"
+    },
+    {
+      "id": "P-18",
+      "name": "The SQLite migration copies and verifies every row",
+      "status": "PASS",
+      "detail": "exit 0, float round-trip 0.30000000000000004, unicode '\u00fc\u00f1icode \u2713'"
+    },
+    {
+      "id": "P-19",
+      "name": "Migration is idempotent \u2014 running it twice is safe",
+      "status": "PASS",
+      "detail": "second run exited 0"
+    }
+  ],
+  "database": "127.0.0.1:55432/netgravity_check",
+  "summary": {
+    "total": 19,
+    "passed": 19,
+    "failed": 0
+  }
+}

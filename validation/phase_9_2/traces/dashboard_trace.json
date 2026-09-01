@@ -1,0 +1,291 @@
+{
+  "stage": "DASHBOARD_KPIS",
+  "network_kpis": {
+    "avg_utilization_pct": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556267+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "avg_utilization_pct",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "business_network_cost": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556211+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "business_network_cost",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "demand_fill_rate": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556253+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "demand_fill_rate",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "max_utilization_pct": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556272+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "max_utilization_pct",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "n_facilities_closed": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556262+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "n_facilities_closed",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "n_facilities_open": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556258+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "n_facilities_open",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "pct_demand_in_sla": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556282+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "pct_demand_in_sla",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "served_demand": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556244+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "served_demand",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "shortage_penalty_cost": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556235+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "shortage_penalty_cost",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "solver_objective": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556228+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "solver_objective",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "total_carbon_kg": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556278+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "total_carbon_kg",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "total_demand": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556239+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "total_demand",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    },
+    "unserved_demand": {
+      "authoritative_owner": "",
+      "calculated_at": "2026-08-30T11:48:50.556249+00:00",
+      "display_name": "",
+      "entity_id": null,
+      "execution_id": "ecfe1538-792",
+      "formula_id": "",
+      "input_evidence": {},
+      "metadata": {
+        "reason": "no optimization.solve or optimization.solve_scenario result is present in this execution"
+      },
+      "metric_id": "unserved_demand",
+      "scenario_id": null,
+      "scope": "NETWORK",
+      "snapshot_id": null,
+      "source_capability": "optimization.solve",
+      "status": "INSUFFICIENT_EVIDENCE",
+      "threshold": null,
+      "triggered": null,
+      "unit": "",
+      "value": null
+    }
+  }
+}

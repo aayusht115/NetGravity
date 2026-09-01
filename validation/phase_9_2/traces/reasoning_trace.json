@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "\"No Digital Twin state 'st_case16_default' has been published.\""
+  }
+}

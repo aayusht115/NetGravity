@@ -19,7 +19,12 @@ from __future__ import annotations
 import logging
 from typing import List, Optional, Tuple
 
-from netgravity.schemas.network import CanonicalNetwork, FacilityStatus, NodeRole
+from netgravity.schemas.network import (
+    CanonicalNetwork,
+    FacilityRecord,
+    FacilityStatus,
+    NodeRole,
+)
 from netgravity.schemas.scenario import FacilityChange, Scenario
 
 from netgravity.orchestrator.exceptions import InvalidScenarioError
@@ -71,6 +76,14 @@ class ScenarioBuilder:
             working, overrides = self._shift_volume(
                 working, spec.facility_ids, spec.target_facility_id,
             )
+        elif spec.action == ScenarioActionType.ADD_FACILITY:
+            working, overrides = self._add_facility(working, spec)
+        elif spec.action == ScenarioActionType.CHANGE_TRANSPORT_COST:
+            working, overrides = self._change_transport_cost(
+                working, spec.facility_ids, spec.transport_cost_multiplier,
+            )
+        elif spec.action == ScenarioActionType.CHANGE_SLA:
+            working, overrides = self._change_sla(working, spec.sla_days_delta)
         else:  # pragma: no cover - enum is exhaustive above
             raise InvalidScenarioError(
                 f"Unsupported scenario action '{spec.action.value}'.",
@@ -235,6 +248,200 @@ class ScenarioBuilder:
         ]
         return (network.model_copy(update={"demands": demands}),
                 [f"CHANGE_DEMAND all x{multiplier}"])
+
+    def _add_facility(
+        self,
+        network: CanonicalNetwork,
+        spec: ScenarioIntentSpec,
+    ) -> Tuple[CanonicalNetwork, List[str]]:
+        """
+        Introduce a site the client does not operate today.
+
+        Delegated to `ScenarioEngine` for the same reason `_close` is: the
+        engine already knows how to connect a new node to a network — inbound
+        lanes from every plant, outbound lanes to every market, each priced at
+        the NETWORK'S OWN average rate per km over its existing road lanes and
+        the haversine distance between the two points. Deriving the rate from
+        the client's own freight instead of a constant is what makes the answer
+        theirs; re-deriving it here would be a second implementation of a
+        transport tariff, which is exactly what must not happen.
+
+        The site is added as a CANDIDATE the MILP may leave shut, not as a
+        facility pinned open. If opening it does not pay, the solver says so by
+        not opening it — which is the answer the user is asking for.
+        """
+        from netgravity.scenarios.engine import ScenarioEngine
+
+        site = spec.new_facility
+        if site is None:  # pragma: no cover — the validator refuses first
+            raise InvalidScenarioError("ADD_FACILITY requires a new_facility.")
+
+        role = NodeRole.PLANT if site.role.upper() == "PLANT" else NodeRole.DC
+        facility_id = self._greenfield_id(network, site.name)
+        capacity = float(site.capacity_units_per_period)
+
+        new_facility = FacilityRecord(
+            id=facility_id,
+            name=site.name.strip(),
+            role=role,
+            # CANDIDATE, not EXISTING: it is not operating, and the opening cost
+            # must be charged if the solver decides to use it.
+            status=FacilityStatus.CANDIDATE,
+            latitude=float(site.latitude),
+            longitude=float(site.longitude),
+            capacity_units_per_period=capacity,
+            # A DC keeps the schema's "not a producer" default (1e12).
+            #
+            # This said `0.0` for anything that is not a plant, reading
+            # "produces nothing" — but the field means "may not SHIP more than
+            # this", and the MILP's capacity constraint takes the smaller of the
+            # two limits. Every greenfield DC was therefore pinned to zero
+            # outbound flow: it appeared in the solve, reported its capacity,
+            # and could not carry a single unit or ever be opened. A free
+            # 100,000-unit DC placed on top of an unserved market stayed shut
+            # while 8,733 units of that market's demand went unserved at a
+            # penalty of ₹1,000,000 each.
+            production_capacity_units_per_period=(
+                capacity if role is NodeRole.PLANT else 1e12),
+            fixed_cost_per_year=float(site.fixed_cost_per_year),
+            handling_cost_per_unit=float(site.handling_cost_per_unit),
+            is_closable=True,
+            is_mandatory=False,
+            is_forced_closed=False,
+        )
+
+        scenario = Scenario(
+            scenario_id="orchestrator_add_facility",
+            scenario_name=f"Open {new_facility.name}",
+            facility_changes=[FacilityChange(
+                facility_id=facility_id, action="ADD_FACILITY",
+                new_facility=new_facility,
+            )],
+        )
+        engine = ScenarioEngine()
+        try:
+            modified = engine._apply_overrides(network, scenario)  # noqa: SLF001
+        except Exception as exc:  # noqa: BLE001
+            raise InvalidScenarioError(
+                f"The new site '{site.name}' could not be connected to this "
+                f"network: {exc}",
+                context={"facility_id": facility_id,
+                         "latitude": site.latitude, "longitude": site.longitude},
+                cause=exc,
+            ) from exc
+
+        new_lanes = len(modified.lanes) - len(network.lanes)
+        return modified, [
+            f"ADD_FACILITY {facility_id} '{new_facility.name}' "
+            f"({site.latitude:.4f}, {site.longitude:.4f}) "
+            f"capacity {capacity:,.0f} units/period, {new_lanes} lanes derived"
+        ]
+
+    @staticmethod
+    def _greenfield_id(network: CanonicalNetwork, name: str) -> str:
+        """
+        A stable, readable id that cannot collide with an existing facility.
+
+        Derived from the name the user typed rather than a UUID, so the site is
+        recognisable everywhere it appears — the map tooltip, the comparison
+        table, the audit trail.
+        """
+        slug = "".join(ch if ch.isalnum() else "_" for ch in name.strip().upper())
+        slug = "_".join(part for part in slug.split("_") if part)[:24] or "SITE"
+        taken = {f.id for f in network.facilities}
+        candidate = f"NEW_{slug}"
+        suffix = 2
+        while candidate in taken:
+            candidate = f"NEW_{slug}_{suffix}"
+            suffix += 1
+        return candidate
+
+    @staticmethod
+    def _change_transport_cost(
+        network: CanonicalNetwork,
+        facility_ids: List[str],
+        multiplier: Optional[float],
+    ) -> Tuple[CanonicalNetwork, List[str]]:
+        """
+        Scale freight rates on the lanes in scope.
+
+        `rate_per_km` moves with `rate_per_unit` where the lane carries one, so
+        a later relocation re-derives its distance cost from the scenario's
+        rates rather than reverting to the baseline's.
+
+        Naming facilities narrows this to the lanes touching them — "our Pune
+        carrier raised rates" is a real question, and applying it network-wide
+        would answer a different one.
+        """
+        if multiplier is None:  # pragma: no cover — the validator refuses first
+            raise InvalidScenarioError(
+                "CHANGE_TRANSPORT_COST requires a transport_cost_multiplier.")
+
+        targets = set(facility_ids)
+
+        def in_scope(lane) -> bool:
+            if not targets:
+                return True
+            return lane.origin_id in targets or lane.destination_id in targets
+
+        touched = 0
+        lanes = []
+        for lane in network.lanes:
+            if not in_scope(lane):
+                lanes.append(lane)
+                continue
+            touched += 1
+            update = {"rate_per_unit": lane.rate_per_unit * multiplier}
+            if lane.rate_per_km is not None:
+                update["rate_per_km"] = lane.rate_per_km * multiplier
+            lanes.append(lane.model_copy(update=update))
+
+        if touched == 0:
+            raise InvalidScenarioError(
+                f"No lane in this network touches {sorted(targets)}, so there is "
+                f"no freight rate to change.",
+                context={"facility_ids": sorted(targets)},
+            )
+
+        scope = f"lanes touching {sorted(targets)}" if targets else "every lane"
+        return network.model_copy(update={"lanes": lanes}), [
+            f"CHANGE_TRANSPORT_COST x{multiplier} on {scope} ({touched} lanes)"
+        ]
+
+    @staticmethod
+    def _change_sla(
+        network: CanonicalNetwork,
+        days_delta: Optional[float],
+    ) -> Tuple[CanonicalNetwork, List[str]]:
+        """
+        Tighten or relax the delivery promise by a number of days.
+
+        Refuses outright when no demand row states an SLA. The alternative —
+        applying the change to nothing and returning a "scenario" identical to
+        the baseline — reports a change that did not happen, and the user reads
+        the unchanged cost as evidence that tightening service is free.
+        """
+        if days_delta is None:  # pragma: no cover — the validator refuses first
+            raise InvalidScenarioError("CHANGE_SLA requires an sla_days_delta.")
+
+        stated = [d for d in network.demands if d.sla_days is not None]
+        if not stated:
+            raise InvalidScenarioError(
+                "No demand row in this network states an SLA in days, so there "
+                "is no delivery promise to tighten or relax. Add an SLA column "
+                "to the demand data to run this scenario.",
+                context={"demand_rows": len(network.demands)},
+            )
+
+        demands = [
+            d.model_copy(update={"sla_days": max(0.0, d.sla_days + days_delta)})
+            if d.sla_days is not None else d
+            for d in network.demands
+        ]
+        return network.model_copy(update={"demands": demands}), [
+            f"CHANGE_SLA {days_delta:+.1f} days on {len(stated)} of "
+            f"{len(network.demands)} demand rows"
+        ]
 
     def _shift_volume(
         self,

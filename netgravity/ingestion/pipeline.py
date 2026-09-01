@@ -236,6 +236,30 @@ def run_ingestion(
     if build_issues and report.files:
         report.files[0].issues.extend(build_issues)
 
+    # --- 4b. Contractual site commitments --------------------------------
+    #
+    # `build_network(contracts=...)` applies the RATE side of a contract. The
+    # commitment side — whether a site may be closed at all — is applied here,
+    # onto the assembled network, because it changes `FacilityRecord` fields the
+    # MILP constrains rather than a lane's cost.
+    #
+    # Until now nothing set those fields, so constraint C5c and validation check
+    # V-015 were both structurally present and permanently inert: a plan could
+    # recommend closing a site the client was contractually unable to close.
+    from netgravity.ingestion.contracts_to_network import apply_contract_rules
+
+    commitment_result = apply_contract_rules(network, contracts)
+    if commitment_result.changed_anything:
+        network = commitment_result.network
+        report.extras["Contractual commitments"] = (
+            f"{commitment_result.n_applied} site commitment(s) applied; "
+            f"{len(commitment_result.pinned_open)} facility(ies) held open, "
+            f"{len(commitment_result.priced_exit)} with a stated exit penalty"
+        )
+    if commitment_result.assumptions or commitment_result.warnings:
+        report.extras["Contract notes"] = " | ".join(
+            commitment_result.assumptions + commitment_result.warnings)
+
     report.network_assembled = True
     report.counts = summarise(network)
     report.data_version = network.data_version

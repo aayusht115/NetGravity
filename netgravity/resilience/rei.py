@@ -72,7 +72,7 @@ from netgravity.costs.business_cost import (
     compute_business_network_cost,
 )
 from netgravity.optimization.milp import solve as milp_solve
-from netgravity.resilience.engine import compute_rerouted_volume
+from netgravity.resilience.engine import compute_rerouted_volume, shortage_config
 from netgravity.resilience.fingerprint import compute_material_fingerprint
 from netgravity.schemas.network import (
     CanonicalNetwork,
@@ -252,6 +252,40 @@ def compute_baseline(
 
     started = time.perf_counter()
     result = solve_fn(network, eff_config, "REI_BASELINE")
+
+    if not result.is_solved and getattr(
+            eff_config, "relax_to_shortage_when_infeasible", False) \
+            and not eff_config.allow_shortage:
+        # Measure against the best achievable plan when no fully-served one
+        # exists.
+        #
+        # A real client network frequently cannot serve all its demand within
+        # its own service levels, and this baseline is solved with the STRICT
+        # config — so `assess_network_resilience()` raised on every such
+        # network and `resilience.assess` failed with ENGINE_FAILURE on every
+        # orchestrator run. The disruption solves below already run with
+        # `allow_shortage=True` (see `resilience/engine.py`), so the baseline
+        # was the only part of the assessment refusing to permit shortage: it
+        # was being held to a stricter standard than the disruptions it exists
+        # to be compared against.
+        #
+        # Same relaxation as the optimizer's, and only when the caller asked
+        # for it. `unserved_demand` on the baseline records the shortfall, so
+        # a comparison against it is not mistaken for a fully-served reference.
+        logger.info(
+            "resilience.baseline.relaxed network_id=%s reason=strict_infeasible",
+            network.network_id,
+        )
+        # `shortage_config` also sets an ABSOLUTE optimality gap. Permitting
+        # shortage inflates the objective by `shortage_penalty x unserved`, at
+        # which point the 0.1% relative gap is worth millions of rupees of real
+        # cost — and every REI figure is a DIFFERENCE of two such costs, so the
+        # difference can be swamped by how far each solve stopped short. That is
+        # what produces a negative performance impact for a facility whose
+        # closure cannot possibly save money.
+        eff_config = shortage_config(network, eff_config)
+        result = solve_fn(network, eff_config, "REI_BASELINE_RELAXED")
+
     elapsed = round(time.perf_counter() - started, 4)
 
     if not result.is_solved:
@@ -560,7 +594,7 @@ def _service_diagnostic(
     Returns:
         (service_fields, applied, seconds)
     """
-    diag_config = baseline.effective_config.model_copy(update={"allow_shortage": True})
+    diag_config = shortage_config(disrupted_network, baseline.effective_config)
 
     started = time.perf_counter()
     diag_result = solve_fn(
@@ -1004,6 +1038,43 @@ def assess_network_resilience(
 
     facilities = discover_eligible_facilities(network, disruption_config, baseline.result)
     if not facilities:
+        # Two very different causes produce an empty list, and they used to
+        # produce the same message.
+        #
+        # (a) The FILTERS exclude everything — asking for DCs in a network that
+        #     has none. The configuration is wrong, and naming it is the fix.
+        #
+        # (b) The BASELINE opened nothing. `is_solved` accepts SolverStatus
+        #     TIME_LIMIT, so a solve that ran out of time before finding any
+        #     incumbent returns "solved" with every facility closed, and
+        #     `only_baseline_open_facilities` then filters out a network that
+        #     is perfectly assessable. The message blamed the filters and sent
+        #     the reader to look at a configuration that was correct.
+        #
+        # Distinguished by re-running the filters WITHOUT the baseline
+        # restriction: if that finds facilities, the baseline is the cause.
+        unrestricted = discover_eligible_facilities(
+            network,
+            disruption_config.model_copy(
+                update={"only_baseline_open_facilities": False}),
+            None,
+        )
+        if unrestricted and disruption_config.only_baseline_open_facilities:
+            status = getattr(baseline.result.solver.status, "value",
+                             str(baseline.result.solver.status))
+            raise NoEligibleFacilitiesError(
+                f"The baseline solve of network '{network.network_id}' opened no "
+                f"facility, so there is nothing whose loss can be measured — but "
+                f"{len(unrestricted)} facility(ies) match the configured filters. "
+                f"The baseline, not the configuration, is what produced nothing "
+                f"(solver status: {status}"
+                + (f", MIP gap {baseline.result.solver.mip_gap}"
+                   if baseline.result.solver.mip_gap is not None else "")
+                + "). A solve that reached its time limit before finding any "
+                f"incumbent reports as solved with every site closed; re-run with "
+                f"a longer time limit, or set only_baseline_open_facilities=False "
+                f"to assess the footprint as declared."
+            )
         raise NoEligibleFacilitiesError(
             f"No eligible facilities found in network '{network.network_id}' under the "
             f"configured filters (eligible_roles={disruption_config.eligible_roles}, "

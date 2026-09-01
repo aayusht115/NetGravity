@@ -1,0 +1,328 @@
+{
+  "checks": [
+    {
+      "id": "E2E-01",
+      "name": "Application boots with all subsystems mounted",
+      "status": "PASS",
+      "detail": "capabilities=16",
+      "evidence": {
+        "application_api": {
+          "blueprints": [
+            "auth",
+            "projects",
+            "kpis",
+            "scenarios",
+            "forecast",
+            "signals",
+            "ingestion_preview"
+          ],
+          "demo_project_seeded": true,
+          "mounted": true
+        },
+        "engine": "netgravity MILP (PuLP/HiGHS)",
+        "environment": "development",
+        "ingestion": {
+          "mounted": true,
+          "url_prefix": "/api/ingestions"
+        },
+        "orchestrator": {
+          "capabilities": 16,
+          "llm_available": true,
+          "mounted": true,
+          "url_prefix": "/orchestrator"
+        },
+        "status": "ok",
+        "version": "2.0.0"
+      }
+    },
+    {
+      "id": "E2E-02",
+      "name": "Protected endpoints refuse anonymous access",
+      "status": "PASS",
+      "detail": "{'/api/projects': 401, '/api/auth/me': 401, '/api/kpis/network?project_id=x': 401}",
+      "evidence": {
+        "/api/projects": 401,
+        "/api/auth/me": 401,
+        "/api/kpis/network?project_id=x": 401
+      }
+    },
+    {
+      "id": "E2E-03",
+      "name": "User can register and receive a session",
+      "status": "PASS",
+      "detail": "HTTP 201",
+      "evidence": null
+    },
+    {
+      "id": "E2E-04",
+      "name": "Login rejects an incorrect password",
+      "status": "PASS",
+      "detail": "HTTP 401",
+      "evidence": null
+    },
+    {
+      "id": "E2E-05",
+      "name": "Project created and owned by the caller",
+      "status": "PASS",
+      "detail": "HTTP 201",
+      "evidence": {
+        "client": "",
+        "created_at": 1788097553.091487,
+        "description": "",
+        "has_network": false,
+        "id": "pr-c295f2f92b",
+        "ingestion_run_ids": [],
+        "is_demo": false,
+        "name": "E2E Workspace",
+        "owner_id": "usr_e367668e4e0c",
+        "region": "India",
+        "snapshot_id": null,
+        "snapshot_label": "",
+        "status": "Awaiting data",
+        "updated_at": 1788097553.0914872
+      }
+    },
+    {
+      "id": "E2E-06",
+      "name": "New project starts with no network bound",
+      "status": "PASS",
+      "detail": "snapshot_id=None",
+      "evidence": null
+    },
+    {
+      "id": "E2E-07",
+      "name": "KPIs for an unbound project refuse rather than substitute",
+      "status": "PASS",
+      "detail": "HTTP 409 NO_NETWORK_BOUND",
+      "evidence": null
+    },
+    {
+      "id": "E2E-08",
+      "name": "A second user cannot read the first user's project",
+      "status": "PASS",
+      "detail": "HTTP 403",
+      "evidence": null
+    },
+    {
+      "id": "E2E-09",
+      "name": "Project listing excludes other users' projects",
+      "status": "PASS",
+      "detail": "1 visible",
+      "evidence": null
+    },
+    {
+      "id": "E2E-10",
+      "name": "Every network KPI carries a status; none fabricates a value",
+      "status": "PASS",
+      "detail": "18 KPIs, 0 violations",
+      "evidence": {
+        "avg_utilization_pct": {
+          "status": "VALID",
+          "value": 56.23,
+          "unit": "%"
+        },
+        "business_network_cost": {
+          "status": "VALID",
+          "value": 150627.7036,
+          "unit": "INR"
+        },
+        "carbon_per_unit": {
+          "status": "VALID",
+          "value": 0.021384,
+          "unit": "kg/unit"
+        },
+        "demand_fill_rate": {
+          "status": "VALID",
+          "value": 1.0,
+          "unit": "fraction"
+        },
+        "inbound_avg_distance_km": {
+          "status": "VALID",
+          "value": 127.12,
+          "unit": "km"
+        },
+        "max_utilization_pct": {
+          "status": "VALID",
+          "value": 77.14,
+          "unit": "%"
+        },
+        "min_utilization_pct": {
+          "status": "VALID",
+          "value": 45.0,
+          "unit": "%"
+        },
+        "n_facilities_closed": {
+          "status": "VALID",
+          "value": 2,
+          "unit": "count"
+        },
+        "n_facilities_open": {
+          "status": "VALID",
+          "value": 5,
+          "unit": "count"
+        },
+        "outbound_avg_distance_km": {
+          "status": "VALID",
+          "value": 80.55,
+          "unit": "km"
+        },
+        "pct_demand_in_sla": {
+          "status": "VALID",
+          "value": 100.0,
+          "unit": "%"
+        },
+        "served_demand": {
+          "status": "VALID",
+          "value": 7300.0,
+          "unit": "units"
+        },
+        "shortage_penalty_cost": {
+          "status": "VALID",
+          "value": 0.0,
+          "unit": "INR"
+        },
+        "solver_objective": {
+          "status": "VALID",
+          "value": 150627.7036,
+          "unit": "INR"
+        },
+        "total_carbon_kg": {
+          "status": "VALID",
+          "value": 156.1,
+          "unit": "kg"
+        },
+        "total_demand": {
+          "status": "VALID",
+          "value": 7300.0,
+          "unit": "units"
+        },
+        "unserved_demand": {
+          "status": "VALID",
+          "value": 0.0,
+          "unit": "units"
+        },
+        "weighted_avg_distance_km": {
+          "status": "VALID",
+          "value": 103.84,
+          "unit": "km"
+        }
+      }
+    },
+    {
+      "id": "E2E-11",
+      "name": "AuthoritativeEvidencePackage is exposed over HTTP",
+      "status": "PASS",
+      "detail": "HTTP 200",
+      "evidence": null
+    },
+    {
+      "id": "E2E-12",
+      "name": "Scenario is solved by the real engine and returns authoritative KPIs",
+      "status": "PASS",
+      "detail": "HTTP 201",
+      "evidence": {
+        "execution_id": "b8633607-ad8",
+        "provenance": {
+          "authoritative_source": "KPIRegistry (Phase 9.1)",
+          "computed_by": "orchestrator.run_sync",
+          "engine": "netgravity MILP (PuLP/HiGHS)",
+          "llm_used": false
+        },
+        "delta_metrics": [
+          "avg_utilization_pct",
+          "business_network_cost",
+          "demand_fill_rate",
+          "pct_demand_in_sla",
+          "risk_factor",
+          "total_carbon_kg"
+        ]
+      }
+    },
+    {
+      "id": "E2E-13",
+      "name": "Scenario response contains no known fabricated constant",
+      "status": "PASS",
+      "detail": "hits=[]",
+      "evidence": null
+    },
+    {
+      "id": "E2E-14",
+      "name": "Baseline is retrievable independently of any scenario",
+      "status": "PASS",
+      "detail": "HTTP 200",
+      "evidence": null
+    },
+    {
+      "id": "E2E-15",
+      "name": "Forecast reports an explicit status and never a fabricated cone",
+      "status": "PASS",
+      "detail": "status=FORECAST_UNAVAILABLE series=0",
+      "evidence": null
+    },
+    {
+      "id": "E2E-16",
+      "name": "Signals endpoint does not serve fabricated market bulletins",
+      "status": "PASS",
+      "detail": "status=NO_SIGNAL_SOURCE_CONFIGURED count=0",
+      "evidence": null
+    },
+    {
+      "id": "E2E-17",
+      "name": "Upload rejects a disallowed file type",
+      "status": "PASS",
+      "detail": "HTTP 400",
+      "evidence": null
+    },
+    {
+      "id": "E2E-18",
+      "name": "Ingestion measures real data quality (not a hardcoded 98%)",
+      "status": "PASS",
+      "detail": "validPct=50.0 dupes=1 empty=0",
+      "evidence": {
+        "duplicateRows": 1,
+        "emptyRows": 0,
+        "invalidRecords": 1,
+        "issues": [
+          {
+            "count": 1,
+            "detail": "1 duplicate row(s) in 'facilities.csv::facilities'.",
+            "severity": "warning",
+            "table": "facilities.csv::facilities",
+            "type": "Duplicate rows"
+          }
+        ],
+        "nullCellPct": 0.0,
+        "totalRecords": 2,
+        "validPct": 50.0,
+        "validRecords": 1
+      }
+    },
+    {
+      "id": "E2E-19",
+      "name": "Upload preview performs no optimisation",
+      "status": "PASS",
+      "detail": "structure carries no solver output",
+      "evidence": null
+    },
+    {
+      "id": "E2E-20",
+      "name": "Frontend loads with no module or syntax error",
+      "status": "PASS",
+      "detail": "title='NetGravity \u2014 AI Decision Intelligence for Logistics Networks', 0 blocking of 4 console msgs",
+      "evidence": []
+    }
+  ],
+  "console_errors": [
+    "Error: <path> attribute d: Expected number, \"\u2026 8-4 8-11 8-11-8z\".",
+    "Error: <path> attribute d: Expected number, \"\u2026 8-4 8-11 8-11-8z\".",
+    "renderHome error: ReferenceError: Cannot access 'resolvedInsightIds' before initialization\n    at http://127.0.0.1:5099/js/app.js:1013:20\n    at Array.filter (<anonymous>)\n    at renderHomeAttentionFeed (http://127.0.0.1:5099/js/app.js:1013:6)\n    at renderHome (http://127.0.0.1:5099/js/app.js:602:3)\n    at bootApp (http://127.0.0.1:5099/js/app.js:66:9)\n    at http://127.0.0.1:5099/js/app.js:76:3",
+    "Failed to load resource: the server responded with a status of 401 (UNAUTHORIZED)"
+  ],
+  "summary": {
+    "total": 20,
+    "passed": 20,
+    "failed": 0,
+    "errors": 0,
+    "generated_at": "2026-08-30T19:16:06"
+  }
+}

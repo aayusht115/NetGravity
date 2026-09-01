@@ -24,7 +24,7 @@ import logging
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Protocol
 
 from netgravity.orchestrator.audit import events
 
@@ -203,6 +203,57 @@ class ExecutionTrace:
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent, default=str)
 
+    @classmethod
+    def from_dict(cls, document: Dict[str, Any]) -> "ExecutionTrace":
+        """
+        Rebuild a trace from what `to_dict()` wrote.
+
+        The exact inverse, so a trace read back from a durable store answers
+        the same questions as one still in memory. Written beside `to_dict()`
+        deliberately: the two must be changed together, and a test asserts a
+        round trip preserves every field.
+        """
+        actor = document.get("actor") or {}
+        intent = document.get("intent") or {}
+        refs = document.get("data_references") or {}
+        outcome = document.get("outcome") or {}
+        trace = cls(
+            execution_id      = str(document.get("execution_id") or ""),
+            request_id        = str(document.get("request_id") or ""),
+            actor_id          = str(actor.get("actor_id") or ""),
+            actor_role        = str(actor.get("role") or ""),
+            started_at        = str(document.get("started_at") or _utc_now()),
+            completed_at      = document.get("completed_at"),
+            raw_input         = str(document.get("input") or ""),
+            interpreted_intent= intent.get("interpreted"),
+            intent_source     = intent.get("source"),
+            intent_confidence = intent.get("confidence"),
+            workflow_id       = document.get("workflow_id"),
+            plan_steps        = list(document.get("plan_steps") or []),
+            baseline_snapshot_id = refs.get("baseline_snapshot_id"),
+            data_version      = refs.get("data_version"),
+            scenario_ids      = list(refs.get("scenario_ids") or []),
+            scenario_overrides= list(refs.get("scenario_overrides") or []),
+            tool_invocations  = list(document.get("tool_invocations") or []),
+            engine_results    = dict(document.get("engine_results") or {}),
+            risk_calculation  = document.get("risk_calculation"),
+            governance_decision = document.get("governance_decision"),
+            llm_outputs       = list(document.get("llm_outputs") or []),
+            errors            = list(document.get("errors") or []),
+            state_history     = list(document.get("state_history") or []),
+            final_status      = outcome.get("status"),
+            final_summary     = str(outcome.get("summary") or ""),
+            action_taken      = outcome.get("action_taken"),
+            approval          = outcome.get("approval"),
+        )
+        trace.events = [
+            AuditEvent(sequence=int(e.get("sequence") or 0), at=str(e.get("at") or ""),
+                       event_type=str(e.get("type") or ""), detail=dict(e.get("detail") or {}))
+            for e in (document.get("events") or [])
+        ]
+        trace._seq = max((e.sequence for e in trace.events), default=0)
+        return trace
+
     def explain(self) -> str:
         """Human-readable provenance narrative — the 'why' in one block."""
         lines = [
@@ -236,19 +287,57 @@ class ExecutionTrace:
         return "\n".join(lines)
 
 
+class TraceSink(Protocol):
+    """
+    Somewhere a sealed trace can be kept beyond this process.
+
+    A protocol rather than an import, so `netgravity.orchestrator` keeps
+    knowing nothing about the application's database. The application supplies
+    an implementation at start-up; without one the logger behaves exactly as it
+    did.
+    """
+
+    def save(self, trace: "ExecutionTrace") -> None: ...
+
+    def load(self, execution_id: str) -> Optional[Dict[str, Any]]: ...
+
+    def recent(self, n: int) -> List[Dict[str, Any]]: ...
+
+
 class AuditLogger:
     """
     Creates, stores and retrieves execution traces.
 
-    In-memory with a bounded ring buffer, behind an interface a durable store
-    can replace. Bounded so a long-running process cannot grow without limit.
+    A bounded in-memory ring buffer in front of an optional durable sink.
+
+    The ring buffer alone was the whole store, which meant the answers outlived
+    the workings: a KPI survived a restart because it was persisted, while the
+    record of which capability produced it, from which snapshot, with which
+    warnings and which governance verdict, did not. It also meant the 501st
+    execution silently evicted the 1st. Both are the wrong way round for the
+    one record whose entire purpose is to be readable long afterwards.
+
+    With a sink attached, `finish()` writes the sealed trace through and `get()`
+    reads back from it on a miss, so an eviction or a restart costs a database
+    round trip rather than the trail. Writes are guarded: a trace that cannot be
+    stored is logged and the execution still returns its answer.
     """
 
-    def __init__(self, max_traces: int = 500) -> None:
+    def __init__(self, max_traces: int = 500,
+                 sink: Optional[TraceSink] = None) -> None:
         self._traces: Dict[str, ExecutionTrace] = {}
         self._order: List[str] = []
         self._max = max_traces
         self._lock = threading.RLock()
+        self._sink = sink
+
+    def attach_sink(self, sink: Optional[TraceSink]) -> None:
+        """Install (or remove) the durable store. Called once at start-up."""
+        self._sink = sink
+
+    @property
+    def is_durable(self) -> bool:
+        return self._sink is not None
 
     def start(self, context: Any) -> ExecutionTrace:
         trace = ExecutionTrace(
@@ -314,12 +403,51 @@ class AuditLogger:
             len(trace.tool_invocations), len(trace.errors),
         )
 
+        # Written once, when the trace is sealed and complete. Writing on every
+        # event would put a database round trip inside the execution loop for a
+        # record nobody can read until it is finished anyway.
+        if self._sink is not None:
+            try:
+                self._sink.save(trace)
+            except Exception as exc:  # noqa: BLE001
+                # A trace that cannot be stored must not fail an execution that
+                # has already succeeded — but it is never silent.
+                logger.error("orchestrator.audit.persist_failed execution_id=%s error=%s",
+                             trace.execution_id, exc)
+
     def get(self, execution_id: str) -> Optional[ExecutionTrace]:
-        return self._traces.get(execution_id)
+        trace = self._traces.get(execution_id)
+        if trace is not None or self._sink is None:
+            return trace
+        # Evicted from the buffer, or written by a process that has since
+        # restarted. Read it back rather than reporting that it never happened.
+        try:
+            document = self._sink.load(execution_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("orchestrator.audit.read_failed execution_id=%s error=%s",
+                         execution_id, exc)
+            return None
+        return ExecutionTrace.from_dict(document) if document else None
 
     def list_ids(self) -> List[str]:
         return list(self._order)
 
     def recent(self, n: int = 10) -> List[ExecutionTrace]:
+        """
+        The most recent traces, oldest first.
+
+        Drawn from the durable store when there is one, so "recent" means
+        recent across the deployment rather than recent in this process since
+        its last restart.
+        """
+        if self._sink is not None:
+            try:
+                documents = self._sink.recent(n)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("orchestrator.audit.recent_failed error=%s", exc)
+            else:
+                if documents:
+                    return list(reversed(
+                        [ExecutionTrace.from_dict(d) for d in documents]))
         with self._lock:
             return [self._traces[i] for i in self._order[-n:] if i in self._traces]

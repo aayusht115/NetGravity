@@ -74,9 +74,30 @@ class SnapshotManager:
     rather than silently producing results from mixed network versions.
     """
 
+    #: Optional durable backing, supplied by the hosting application.
+    #:
+    #: A callable pair rather than a database handle, so this package keeps no
+    #: dependency on the application layer or on any storage technology:
+    #:
+    #:     persist(snapshot)  -> None      called after each new registration
+    #:     restore()          -> Iterable[NetworkSnapshot]
+    #:
+    #: Left unset the manager behaves exactly as before: in memory, for the
+    #: lifetime of the process.
+    persist_hook = None
+    restore_hook = None
+
     def __init__(self) -> None:
         self._snapshots: Dict[str, NetworkSnapshot] = {}
         self._current_id: Optional[str] = None
+        #: Current snapshot PER NETWORK LINEAGE, keyed by `network_id`.
+        #:
+        #: Staleness is a statement about one network moving on, not about the
+        #: process holding several networks at once. With a single network this
+        #: is always {network_id: _current_id} and behaviour is unchanged; with
+        #: several (one per project) it is what stops project B's snapshot from
+        #: being called stale merely because project A ingested more recently.
+        self._current_by_network: Dict[str, str] = {}
         self._lock = threading.RLock()
 
     def register(
@@ -99,6 +120,9 @@ class SnapshotManager:
 
             existing = self._snapshots.get(snapshot_id)
             if existing is not None:
+                # Re-registering identical content is not a new version, but it
+                # does re-assert that this is the live snapshot for its network.
+                self._current_by_network[existing.network_id] = snapshot_id
                 if make_current:
                     self._current_id = snapshot_id
                 return existing
@@ -111,6 +135,11 @@ class SnapshotManager:
                 label=label,
             )
             self._snapshots[snapshot_id] = snapshot
+            # Newest registration always becomes current FOR ITS OWN NETWORK,
+            # regardless of `make_current` — that flag governs the global
+            # pointer used by callers that ask for "the" current snapshot, not
+            # which version of this network is live.
+            self._current_by_network[frozen.network_id] = snapshot_id
             if make_current or self._current_id is None:
                 self._current_id = snapshot_id
 
@@ -118,7 +147,42 @@ class SnapshotManager:
                 "orchestrator.snapshot.registered snapshot_id=%s network_id=%s version=%s",
                 snapshot_id, frozen.network_id, data_version,
             )
-            return snapshot
+
+        # Outside the lock: a durable write must not hold up other registrations,
+        # and a store that fails must not lose the in-memory snapshot with it.
+        if self.persist_hook is not None:
+            try:
+                self.persist_hook(snapshot)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "orchestrator.snapshot.persist_failed snapshot_id=%s error=%s",
+                    snapshot_id, exc,
+                )
+        return snapshot
+
+    def restore(self) -> int:
+        """
+        Reload snapshots from the durable store, if one is configured.
+
+        Registered directly into the map rather than through `register()`, so
+        reloading does not re-derive ids or move the current pointer. Returns
+        how many were restored.
+        """
+        if self.restore_hook is None:
+            return 0
+        restored = 0
+        for snapshot in self.restore_hook():
+            with self._lock:
+                if snapshot.snapshot_id in self._snapshots:
+                    continue
+                self._snapshots[snapshot.snapshot_id] = snapshot
+                self._current_by_network[snapshot.network_id] = snapshot.snapshot_id
+                if self._current_id is None:
+                    self._current_id = snapshot.snapshot_id
+            restored += 1
+        if restored:
+            logger.info("orchestrator.snapshots.restored count=%d", restored)
+        return restored
 
     def get(self, snapshot_id: str) -> NetworkSnapshot:
         snap = self._snapshots.get(snapshot_id)
@@ -143,20 +207,34 @@ class SnapshotManager:
 
     def assert_fresh(self, snapshot_id: str) -> NetworkSnapshot:
         """
-        Verify a snapshot is still the current observed state.
+        Verify a snapshot is still the current observed state OF ITS NETWORK.
+
+        Freshness is scoped to one network's own lineage. A snapshot is stale
+        only when a newer snapshot of the SAME `network_id` has been
+        registered — which is exactly the situation the guard exists for: the
+        observed network moved on, and results from two versions of it must not
+        be combined.
+
+        A snapshot belonging to a different network is not stale. In a
+        multi-project deployment each project holds its own network, and
+        comparing them against one global pointer would reject every project but
+        whichever ingested most recently. With a single network this is
+        identical to the previous behaviour.
 
         Raises:
-            StaleSnapshotError: the observed network has moved on. Results from
-                incompatible versions must never be combined, so the run stops.
+            StaleSnapshotError: a newer version of this network exists.
         """
         snap = self.get(snapshot_id)
-        if self._current_id is not None and snapshot_id != self._current_id:
+        current_for_network = self._current_by_network.get(snap.network_id)
+        if current_for_network is not None and snapshot_id != current_for_network:
             raise StaleSnapshotError(
                 f"Execution is pinned to snapshot '{snapshot_id}' but the current "
-                f"observed snapshot is '{self._current_id}'. Results from different "
-                f"network versions must not be combined; re-plan against the "
-                f"current snapshot or escalate.",
-                context={"pinned": snapshot_id, "current": self._current_id},
+                f"observed snapshot for network '{snap.network_id}' is "
+                f"'{current_for_network}'. Results from different network versions "
+                f"must not be combined; re-plan against the current snapshot or "
+                f"escalate.",
+                context={"pinned": snapshot_id, "current": current_for_network,
+                         "network_id": snap.network_id},
             )
         return snap
 
@@ -212,6 +290,14 @@ class ScenarioStore:
     plane, not something a what-if run can do to itself.
     """
 
+    #: Durable backing, supplied by the hosting application. Same shape and
+    #: same reasoning as `SnapshotManager.persist_hook`: the materialised
+    #: scenario network is what `/api/scenarios` reads to report which sites a
+    #: scenario introduced and what the builder actually changed, so losing it
+    #: on restart leaves a stored scenario unable to explain itself.
+    persist_hook = None
+    restore_hook = None
+
     def __init__(self) -> None:
         self._scenarios: Dict[str, ScenarioRecord] = {}
         self._lock = threading.RLock()
@@ -254,7 +340,31 @@ class ScenarioStore:
                 "orchestrator.scenario.created scenario_id=%s parent=%s overrides=%s",
                 sid, parent_snapshot_id, overrides,
             )
-            return record
+
+        if self.persist_hook is not None:
+            try:
+                self.persist_hook(record)
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "orchestrator.scenario.persist_failed scenario_id=%s error=%s",
+                    sid, exc,
+                )
+        return record
+
+    def restore(self) -> int:
+        """Reload materialised scenario networks from the durable store."""
+        if self.restore_hook is None:
+            return 0
+        restored = 0
+        for record in self.restore_hook():
+            with self._lock:
+                if record.scenario_id in self._scenarios:
+                    continue
+                self._scenarios[record.scenario_id] = record
+            restored += 1
+        if restored:
+            logger.info("orchestrator.scenarios.restored count=%d", restored)
+        return restored
 
     def get(self, scenario_id: str) -> ScenarioRecord:
         rec = self._scenarios.get(scenario_id)

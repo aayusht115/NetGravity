@@ -412,15 +412,37 @@ class ScenarioEngine:
 
         lanes_created = 0
 
-        # Calculate network baseline average rate_per_km for ROAD mode across existing active lanes
-        road_lanes = [
-            l for l in lanes
-            if l.mode == TransportMode.ROAD and l.distance_km > 0 and l.rate_per_unit > 0
-        ]
-        if road_lanes:
-            base_rate_per_km = sum(l.rate_per_unit / l.distance_km for l in road_lanes) / len(road_lanes)
-        else:
-            base_rate_per_km = 0.025
+        # Price the new site's freight at THIS network's own tariff.
+        #
+        # This used to be a single rate per km estimated as the mean of each
+        # lane's rate/distance ratio, with a hardcoded 0.025 fallback and a
+        # hardcoded 500 km/day for transit. The mean of ratios is dominated by
+        # short last-mile legs: on one client network it reproduced their own
+        # lanes with a MEDIAN error of 419%, quoting ₹216.86 for a haul they
+        # price at ₹34.17. Every greenfield site was therefore priced several
+        # times out of the market and the MILP declined to open any of them —
+        # which is what "I cannot create a scenario that opens a new facility"
+        # actually looked like from the screen.
+        #
+        # `derive_lane_tariff` fits the affine tariff real freight has (a fixed
+        # leg plus a per-km line haul) and the matching transit model. See
+        # `netgravity/scenarios/tariff.py`.
+        from netgravity.scenarios.tariff import derive_lane_tariff
+        tariff = derive_lane_tariff(lanes, mode="ROAD")
+        if not tariff.is_derived:
+            # No invented constant. A site that cannot be priced from the
+            # client's own freight is refused, and the reason names the data
+            # that would make it answerable.
+            return {
+                "facility_added": True,
+                "eligible": False,
+                "lanes_created": 0,
+                "tariff": tariff.describe(),
+                "reason_if_ineligible": (
+                    f"freight to and from a new site cannot be priced: "
+                    f"{tariff.reason}"
+                ),
+            }
 
         for f in facilities:
             if f.id == new_fac.id:
@@ -433,19 +455,27 @@ class ScenarioEngine:
                 else:
                     # F-13 Rule 3: Support virtual/source node without coordinates using existing supply relationships
                     existing_inbound = [l.distance_km for l in lanes if l.origin_id == f.id and l.distance_km > 0]
-                    dist = sum(existing_inbound) / len(existing_inbound) if existing_inbound else 100.0
-
-                rate = max(0.01, round(dist * base_rate_per_km, 4))
-                lt   = max(0.1, round(dist / 500.0, 2))
+                    if not existing_inbound:
+                        # No coordinates and no comparable haul: this supply
+                        # relationship cannot be measured, so it is not invented.
+                        # (The previous code assumed 100 km.)
+                        continue
+                    dist = sum(existing_inbound) / len(existing_inbound)
 
                 lanes.append(LaneRecord(
                     origin_id      = f.id,
                     destination_id = new_fac.id,
                     mode           = TransportMode.ROAD,
-                    rate_per_unit  = rate,
+                    rate_per_unit  = tariff.rate_for(dist),
                     distance_km    = round(dist, 2),
-                    lead_time_days = lt,
-                    rate_per_km    = base_rate_per_km,
+                    lead_time_days = tariff.lead_time_for(dist),
+                    # The tariff's components travel with the lane, so a later
+                    # relocation re-prices it from the same structure rather
+                    # than from the ratio of one derived pair.
+                    rate_per_km        = tariff.rate_per_km,
+                    fixed_leg_cost     = tariff.fixed_leg_cost,
+                    speed_km_per_day   = tariff.speed_km_per_day,
+                    terminal_time_days = tariff.terminal_time_days,
                 ))
                 lanes_created += 1
 
@@ -453,17 +483,18 @@ class ScenarioEngine:
             if f.role in market_roles:
                 if new_fac.latitude is not None and new_fac.longitude is not None and f.latitude is not None and f.longitude is not None:
                     dist = haversine_distance(new_fac.latitude, new_fac.longitude, f.latitude, f.longitude)
-                    rate = max(0.01, round(dist * base_rate_per_km, 4))
-                    lt   = max(0.1, round(dist / 500.0, 2))
 
                     lanes.append(LaneRecord(
                         origin_id      = new_fac.id,
                         destination_id = f.id,
                         mode           = TransportMode.ROAD,
-                        rate_per_unit  = rate,
+                        rate_per_unit  = tariff.rate_for(dist),
                         distance_km    = round(dist, 2),
-                        lead_time_days = lt,
-                        rate_per_km    = base_rate_per_km,
+                        lead_time_days = tariff.lead_time_for(dist),
+                        rate_per_km        = tariff.rate_per_km,
+                        fixed_leg_cost     = tariff.fixed_leg_cost,
+                        speed_km_per_day   = tariff.speed_km_per_day,
+                        terminal_time_days = tariff.terminal_time_days,
                     ))
                     lanes_created += 1
 
@@ -471,6 +502,7 @@ class ScenarioEngine:
             "facility_added": True,
             "eligible": lanes_created > 0,
             "lanes_created": lanes_created,
+            "tariff": tariff.describe(),
             "reason_if_ineligible": None if lanes_created > 0 else "Insufficient data to establish valid inbound/outbound connectivity",
         }
 

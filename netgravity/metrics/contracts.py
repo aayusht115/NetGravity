@@ -212,6 +212,14 @@ def build_network_state_result(
         overutilized_facilities  = list(analytics.overutilized_facilities) if analytics else [],
         underutilized_facilities = list(analytics.underutilized_facilities) if analytics else [],
         total_carbon_kg   = round(kpis.total_carbon_kg, 6) if kpis else 0.0,
+        # Phase 10.0 (GAP-01): these five were computed by `compute_kpis()` and
+        # then dropped here, so they never reached any consumer. Copied across
+        # verbatim; None when there is no KPI object, never a fabricated 0.
+        weighted_avg_distance_km = kpis.weighted_avg_distance_km if kpis else None,
+        inbound_avg_distance_km  = kpis.inbound_avg_distance_km if kpis else None,
+        outbound_avg_distance_km = kpis.outbound_avg_distance_km if kpis else None,
+        min_utilization_pct      = kpis.min_utilization_pct if kpis else None,
+        carbon_per_unit          = kpis.carbon_per_unit if kpis else None,
         metadata          = metadata,
     )
 

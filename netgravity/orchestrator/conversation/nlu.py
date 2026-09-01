@@ -116,6 +116,27 @@ _HAZARD_WORDS = ("flood", "flooding", "storm", "cyclone", "hurricane", "typhoon"
                  "curfew", "unrest", "disaster", "tsunami")
 _EXPLAIN_WORDS = ("why is", "why are", "why does", "why did", "explain",
                   "what makes", "reason for", "how come", "why")
+#: Outcomes that exist ONLY in a solve. An explanatory question about one of
+#: these needs the optimum, not the resilience registry — see `_classify`.
+_SOLVED_OUTCOME_WORDS = ("unserved", "unmet", "not served", "shortfall",
+                         "stranded", "infeasible", "capacity breach",
+                         "open facilit", "closed facilit", "below 100")
+
+#: Words that point back at the previous turn, making a short message a genuine
+#: follow-up rather than a new request. See `_is_elliptical`.
+_BACK_REFERENCES = ("it", "that", "this", "these", "those", "them", "there",
+                    "same", "instead", "again", "one")
+
+#: Verbs that carry a request of their own. A short message containing one is
+#: NOT elliptical — it stands by itself, whether or not this system can answer
+#: it. Kept deliberately small: every addition makes the follow-up path
+#: narrower, and the failure it guards against (answering a question nobody
+#: asked) is worse than declining to inherit context.
+_STANDALONE_VERBS = {
+    "tell", "give", "write", "sing", "draw", "make", "translate", "define",
+    "recommend", "suggest", "help", "teach", "send", "email", "call",
+    "book", "buy", "order", "play", "search", "google", "remind",
+}
 _RISK_WORDS = ("risk exposure", "exposure of", "risk of", "how exposed",
                "resilience of", "impact if", "rei", "how critical",
                "how important", "criticality")
@@ -212,6 +233,16 @@ _AMBIGUITY_FREE_INTENTS = frozenset({
     # As with the others, this does NOT skip unknown-entity detection: if the
     # user names a site that does not exist, that is still caught.
     Intent.MARKET_INTELLIGENCE,
+    # An UNKNOWN request has no action to disambiguate FOR.
+    #
+    # "What is the weather in Mumbai tomorrow?" is not a question this system
+    # can answer, and it was met with "I found 2 facilities matching 'mumbai':
+    # F001, M002. Which one do you mean?" — a clarification implying the
+    # question was understood and only the subject was unclear. Naming a city
+    # is not asking about a facility. Where the intent is unknown, saying so is
+    # the honest reply, and it is what `_unsupported_response` already exists
+    # to give.
+    Intent.UNKNOWN,
 })
 
 
@@ -492,6 +523,7 @@ class ConversationalNLU:
 
         mentions_metric = any(w in lowered for w in _METRIC_WORDS)
         is_explanatory = any(w in lowered for w in _EXPLAIN_WORDS)
+        mentions_risk = any(w in lowered for w in _RISK_WORDS)
 
         # An inventory question, and NOT one about a computed quantity.
         if any(w in lowered for w in _STATUS_WORDS) and not mentions_metric:
@@ -506,6 +538,32 @@ class ConversationalNLU:
                 and any(w in lowered for w in _CURRENT_STATE_WORDS)):
             return (Intent.NETWORK_STATE_QUERY, [], "rules", 0.8,
                     "Question about a computed metric; requires an optimum.",
+                    None, False)
+
+        # "Why is my demand unserved?" — explanatory, but about a FEASIBILITY
+        # outcome that exists nowhere except in a solve.
+        #
+        # `wf_explanation` is deliberately REI-only and runs no optimization.
+        # That is the right default and `test_a_cost_explanation_does_not_launch
+        # _an_optimization` pins it: an explanation must not silently start work
+        # the user did not ask for, and a cost question can be answered from
+        # exposure evidence.
+        #
+        # Unserved demand cannot. Asked why demand was unserved, the
+        # explanation narrator answered about facility F003's relative economic
+        # exposure — a real figure, about a different question, which is the
+        # most misleading kind of wrong answer available. No amount of REI data
+        # contains the reason some demand could not be served; only the solve
+        # does.
+        #
+        # Deliberately NARROW: feasibility vocabulary only, and risk vocabulary
+        # still wins. Cost, utilisation and SLA explanations are unchanged.
+        if (is_explanatory and not mentions_risk
+                and any(w in lowered for w in _SOLVED_OUTCOME_WORDS)):
+            return (Intent.NETWORK_STATE_QUERY, [], "rules", 0.75,
+                    "Explanation of a feasibility outcome. Unserved demand "
+                    "exists only in a solve, so the resilience registry cannot "
+                    "answer it.",
                     None, False)
 
         known_ids = [
@@ -721,14 +779,38 @@ class ConversationalNLU:
     @staticmethod
     def _is_elliptical(text: str) -> bool:
         """
-        Whether a message is too short to stand on its own.
+        Whether a message DEPENDS on the previous turn to make sense.
 
-        Six words is the same threshold `_inherit_context` uses, deliberately:
-        a message that was short enough to inherit a subject is short enough to
-        be a further question about it.
+        Being short is not enough, and treating it as enough is what let "Tell
+        me a joke" — four words, classified UNKNOWN — be promoted to EXPLANATION
+        and answered with a briefing about facility F003's economic exposure. A
+        confident, correct figure about something nobody asked about is the
+        worst failure this layer can produce, and it was reachable from any
+        short sentence at all.
+
+        A genuine follow-up REFERS BACK. It either continues the previous
+        sentence ("and the cost?"), points at it ("what about that one?"), or is
+        a bare fragment with no verb of its own ("the cost impact?"). A short
+        message with its own subject and verb and no back-reference is a new
+        request, and is left as UNKNOWN so the assistant says it did not
+        understand rather than answering something else.
         """
-        stripped = (text or "").strip()
-        return bool(stripped) and len(stripped.split()) <= 6
+        stripped = (text or "").strip().lower().rstrip("?!. ")
+        if not stripped:
+            return False
+        words = stripped.split()
+        if len(words) > 6:
+            return False
+
+        # Continues the previous turn.
+        if stripped.startswith(("and ", "but ", "or ", "also ", "then ",
+                                "what about", "how about", "what if")):
+            return True
+        # Points back at it.
+        if any(f" {p} " in f" {stripped} " for p in _BACK_REFERENCES):
+            return True
+        # A bare fragment: no verb of its own to make it a request.
+        return not any(w in _STANDALONE_VERBS for w in words)
 
     @staticmethod
     def _inherit_context(

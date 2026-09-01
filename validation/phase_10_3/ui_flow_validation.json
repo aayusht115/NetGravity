@@ -1,0 +1,156 @@
+{
+  "checks": [
+    {
+      "id": "U-01",
+      "name": "Upload table shows a real file size",
+      "status": "PASS",
+      "detail": [
+        "\tEXCEL\t32.9 KB\tJust now\t"
+      ]
+    },
+    {
+      "id": "U-02",
+      "name": "Mapping lists the workbook's own columns",
+      "status": "PASS",
+      "detail": "51 rows; first=['Facility_ID', 'Facility_Name', 'Facility_Type']"
+    },
+    {
+      "id": "U-03",
+      "name": "No prototype mapping rows survive",
+      "status": "PASS",
+      "detail": "demo columns present: []"
+    },
+    {
+      "id": "U-04",
+      "name": "Each column maps to the field the parser reads",
+      "status": "PASS",
+      "detail": "{}"
+    },
+    {
+      "id": "U-05",
+      "name": "The same column name resolves per sheet",
+      "status": "PASS",
+      "detail": "Capacity_Units -> ['Facility capacity', 'Lane capacity']"
+    },
+    {
+      "id": "U-06",
+      "name": "Only genuinely unused columns are marked unused",
+      "status": "PASS",
+      "detail": "unused=['Product_Category']"
+    },
+    {
+      "id": "U-07",
+      "name": "Nothing on the review screen overflows the viewport",
+      "status": "PASS",
+      "detail": "{\"pageScrollsX\": false, \"offenders\": []}"
+    },
+    {
+      "id": "U-08",
+      "name": "Long sample values wrap inside their cell",
+      "status": "PASS",
+      "detail": "{\"chars\": 263, \"whiteSpace\": \"normal\", \"display\": \"block\", \"withinCell\": true}"
+    },
+    {
+      "id": "U-09",
+      "name": "The confirm control is reachable on screen",
+      "status": "PASS",
+      "detail": "{\"visible\": true, \"disabled\": false}"
+    },
+    {
+      "id": "U-10",
+      "name": "Rows read is the file's real row count",
+      "status": "PASS",
+      "detail": "XLSX | File: NetGravity_Test_Data_Clean.xlsx | Rows read | 927 | Sheets | 8 | File size | 32.9 KB | Facilities | Markets | Lanes | Products | Demand_History | C"
+    },
+    {
+      "id": "U-11",
+      "name": "The 2D twin draws the uploaded network without a toggle click",
+      "status": "PASS",
+      "detail": "{\"host\": true, \"markers\": 51, \"tiles\": 0}"
+    },
+    {
+      "id": "U-12",
+      "name": "Map markers are the client's own facilities",
+      "status": "PASS",
+      "detail": "[\"\\ud83c\\udfed\", \"\\ud83c\\udfed\", \"\\ud83c\\udfed\", \"\\ud83c\\udfea\", \"\\ud83c\\udfea\", \"\\ud83c\\udfea\"]"
+    },
+    {
+      "id": "U-13",
+      "name": "The KPI screen renders cards and corridors",
+      "status": "PASS",
+      "detail": "6 cards, 8 corridor rows"
+    },
+    {
+      "id": "U-14",
+      "name": "The facility selector offers this network's facilities",
+      "status": "PASS",
+      "detail": "[{\"v\": \"F004\", \"t\": \"Delhi Distribution Center\"}, {\"v\": \"F005\", \"t\": \"Bangalore Distribution Center\"}, {\"v\": \"F006\", \"t\": \"Kolkata Distribution Center\"}, {\"v\": \"F007\", \"t\": \"Pune Distribution Center\"}, {\"v\": \"F008\", \"t\": \"Hyderabad Distribution Center\"}, {\"v\": \"ALL\", \"t\": \"All DCs (Network Overview)\"}]"
+    },
+    {
+      "id": "U-15",
+      "name": "A distribution centre is recognised as one",
+      "status": "PASS",
+      "detail": "F004 -> DC"
+    },
+    {
+      "id": "U-19",
+      "name": "No fabricated deltas remain on the KPI cards",
+      "status": "PASS",
+      "detail": "[]"
+    },
+    {
+      "id": "U-20",
+      "name": "The forecast card reports the engine's own run",
+      "status": "PASS",
+      "detail": "{\"model\": \"QuantileRegression_HiGHS\", \"series\": \"M001/P001\", \"periods\": \"36 periods\", \"accuracy\": \"0.49 (better than naive)\", \"count\": \"14 market-product pair(s)\"}"
+    },
+    {
+      "id": "U-21",
+      "name": "No prototype forecast copy survives",
+      "status": "PASS",
+      "detail": "QuantileRegression_HiGHS"
+    },
+    {
+      "id": "U-22",
+      "name": "Scenario screen shows no prototype scenarios",
+      "status": "PASS",
+      "detail": "Compare up to 3 scenarios side-by-side against your current network. Create New Scenario COMPARING No scenario yet \u2014 create one to compare against your network. + Add scenario to c"
+    },
+    {
+      "id": "U-23",
+      "name": "Scenario screen says it has nothing rather than nothing at all",
+      "status": "PASS",
+      "detail": "747 chars rendered"
+    },
+    {
+      "id": "U-24",
+      "name": "Home KPI strip carries the uploaded network's cost",
+      "status": "PASS",
+      "detail": "\u20b9 \u20b9180.7L Total cost Source: Your network, as uploaded \u2705 76.4% Fill Rate 28,249 of 36,982 units served \ud83c\udfaf Not available Savings opportunity No scenario beats your network yet"
+    },
+    {
+      "id": "U-25",
+      "name": "Home strip shows no null or demo values",
+      "status": "PASS",
+      "detail": "\u20b9 \u20b9180.7L Total cost Source: Your network, as uploaded \u2705 76.4% Fill Rate 28,249 of 36,982 units served \ud83c\udfaf Not available Savings opportunity No scenario beats your network yet"
+    },
+    {
+      "id": "U-16",
+      "name": "The assistant returns a grounded answer",
+      "status": "PASS",
+      "detail": "\u2726 NETWORK_STATE_QUERY I find the current network state is feasible with 8 open facilities, serving 28,249 of 36,982 demand (76.4% fill rate) and average utilization 24.1%. Total business network cost "
+    },
+    {
+      "id": "U-17",
+      "name": "The answer is about the user's network, not the demo one",
+      "status": "PASS",
+      "detail": "\u2726 NETWORK_STATE_QUERY I find the current network state is feasible with 8 open facilities, serving 28,249 of 36,982 demand (76.4% fill rate) and average utiliza"
+    },
+    {
+      "id": "U-18",
+      "name": "No uncaught page errors on the journey",
+      "status": "PASS",
+      "detail": ""
+    }
+  ]
+}

@@ -8,36 +8,39 @@
  *                  → (network-loading pop-up) → app (Home)
  *
  * Excel/CSV files are queued before PDFs (matching the walkthrough the
- * product spec gave), each rendered by its own template. All extraction
- * content is mocked — there is no real parsing — so it's generated
- * deterministically from the file's name/size so the same file always
- * shows the same numbers.
+ * product spec gave), each rendered by its own template.
  *
- * STATUS: PROTOTYPE / MOCKED
+ * The Excel/CSV path is REAL: every column, sample value, row count, mapped
+ * field and quality issue on the review screen comes from
+ * `/api/ingestions/preview/upload-and-parse`, which parses the actual file. If
+ * that call fails the screen says so and refuses to continue, rather than
+ * showing a plausible mapping for a file nobody read.
+ *
+ * The PDF path is still demo content — see CONTRACT_VENDOR below, which says
+ * so on the screen itself.
  */
 
-import { DATA_QUALITY, CONTRACT_DEMO } from './data.js';
+import { DATA_QUALITY, CONTRACT_DEMO, loadNetworkData } from './data.js';
+import { getActiveProjectId, setActiveProject } from './integration/project-context.js';
+import { hydrateFromBackend } from './integration/hydrate.js';
+import {
+  beginAnalysisLoading, endAnalysisLoading, reportAnalysisStage,
+} from './analysis-loading.js';
+import { ingestionService } from './integration/services/ingestion-service.js';
 
-const SCHEMA_FIELDS = [
-  'Customer ID', 'Distribution Centre', 'Demand Market', 'Service Level SLA',
-  'Transit Time (Days)', 'Facility Name', 'Region / Zone', 'Total Cost', 'No match found',
-];
+/* The "mapped to" dropdown's options.
+   Served by the parser (`schemaFields`) so the list is exactly the set of
+   fields this build reads, produced by the same table that decided each row's
+   suggestion. The screen used to ship its own nine-item list — 'Customer ID',
+   'Distribution Centre', 'Demand Market', … — and a `<select>` whose value is
+   absent from its options falls back to the FIRST option, so every row of a
+   real workbook rendered as "Customer ID" regardless of what the server said.
+   The fallback below is used only before the first parse returns. */
+const FALLBACK_SCHEMA_FIELDS = ['Not used by the model'];
 
-/* Base mapping template — mirrors Dump/Excel ingestion.jpeg exactly.
-   Re-used for every Excel/CSV file; only the file summary (name, rows,
-   timestamp) is bound to the actual upload. */
-function baseMappingRows() {
-  return [
-    { source: 'customer_id', sample: 'C1021, C2044, C3198', mapped: 'Customer ID', confidence: 'high', status: 'auto' },
-    { source: 'origin_dc', sample: 'Mumbai DC, Delhi NCR, Kolkata DC', mapped: 'Distribution Centre', confidence: 'high', status: 'auto' },
-    { source: 'destination_market', sample: 'Lucknow, Patna, Bengaluru', mapped: 'Demand Market', confidence: 'high', status: 'auto' },
-    { source: 'sla_target', sample: '95%, 96%, 94%', mapped: 'Service Level SLA', confidence: 'high', status: 'auto' },
-    { source: 'transit_days', sample: '2, 3, 5', mapped: 'Transit Time (Days)', confidence: 'medium', status: 'review' },
-    { source: 'whse_name', sample: 'Ahmedabad Hub, Baddi Plant', mapped: 'Facility Name', confidence: 'medium', status: 'review' },
-    { source: 'zone_code', sample: 'N1, E2, S1', mapped: 'Region / Zone', confidence: 'medium', status: 'review' },
-    { source: 'amt_rs', sample: '120000, 540000, 88000', mapped: 'Total Cost', confidence: 'high', status: 'auto' },
-    { source: 'misc_ref', sample: 'alpha-09, batch-x, internal', mapped: 'No match found', confidence: 'low', status: 'ignored' },
-  ];
+function schemaFields() {
+  return (flow.schemaFields && flow.schemaFields.length)
+    ? flow.schemaFields : FALLBACK_SCHEMA_FIELDS;
 }
 
 // ─── S4: Contract Intelligence (PDF review) ───────────────────
@@ -69,15 +72,28 @@ function getReviewTerms(vendor) {
   return vendor.extractedTerms.filter(t => t.confidence !== 'HIGH');
 }
 
-/* ─── Deterministic mock numbers (no real parsing happens) ───── */
-function hashStr(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-  return Math.abs(h);
+
+// Rows are counted by the parser, per file. This used to be
+// `6000 + hash(name) % 9000` — a number derived from the FILE NAME, shown
+// under the label "Rows analyzed". The 927-row sample workbook reported 12,655.
+function rowsAnalyzed(file) {
+  const summary = (flow.fileSummaries || {})[file.name];
+  return summary && typeof summary.rows === 'number' ? summary.rows : null;
+}
+function sheetsOf(file) {
+  const summary = (flow.fileSummaries || {})[file.name];
+  return (summary && summary.sheets) || [];
 }
 
-function mockRowsAnalyzed(file) { return 6000 + (hashStr(file.name) % 9000); }
-function mockPages(file) { return 8 + (hashStr(file.name) % 34); }
+/* File size, in the unit that makes it legible.
+   `(bytes / 1024 / 1024).toFixed(1)` renders the 33 KB sample workbook as
+   "0.0 MB", which reads as "nothing was uploaded". */
+function formatFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return '—';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 /* ─── Icons ──────────────────────────────────────────────────── */
 const I = {
@@ -112,11 +128,14 @@ const I = {
 /* ─── Flow flow ─────────────────────────────────────────────── */
 const flow = {
   project: null,
-  files: [],          // [{ id, name, ext, kind: 'excel'|'csv'|'pdf', sizeMB, uploadedAt, status }]
+  files: [],          // [{ id, name, ext, kind: 'excel'|'csv'|'pdf', sizeBytes, uploadedAt, status }]
   queue: [],          // subset of files.id, ordered excel/csv first then pdf
   queueIndex: 0,
-  mapping: {},         // fileId -> row[] (mutable copy of baseMappingRows())
+  mapping: {},         // fileId -> row[] from the parser, one per source column
   mapStats: {},        // fileId -> { detected, auto, review, ignored }
+  fileSummaries: {},   // file name -> { rows, sheets, columnsCount } from the parser
+  schemaFields: null,  // the canonical field list the parser offers
+  parseError: null,    // why the parse failed, when it did
   pdfReview: {},       // fileId -> { expanded: bool, reviewed: Set<termId> }
   cameFromApp: false,  // true when entered mid-session (app shell was showing), so Back should return there rather than to Create Project
 };
@@ -149,7 +168,22 @@ const LOGO_SVG = `<svg class="ing-brand-logo" viewBox="0 0 48 48" fill="none">
     </svg>`;
 
 /* ─── Shared chrome ──────────────────────────────────────────── */
+/**
+ * The ingestion screens' own top bar.
+ *
+ * The avatar chip is left empty and filled by `applyIdentity()` — these
+ * screens re-render several times during an upload, and each render used to
+ * restore the hard-coded "AK" for "Amit Kumar" over whoever was signed in.
+ */
 function topbar() {
+  // Re-apply after this markup lands in the DOM.
+  setTimeout(() => {
+    if (typeof window.applyIdentity === 'function') window.applyIdentity();
+  }, 0);
+  return topbarHtml();
+}
+
+function topbarHtml() {
   return `<div class="ing-topbar">
       <div class="ing-topbar-left">
         <div class="ing-brand">
@@ -160,7 +194,7 @@ function topbar() {
       <div class="ing-topbar-right">
         <button class="ing-back-home-btn" type="button">${I.chevronLeft}<span>Back</span></button>
         <button class="topbar-icon-btn" type="button" title="Help & Documentation">${I.help}</button>
-        <div class="user-avatar-ak" title="Amit Kumar">AK</div>
+        <div class="user-avatar-ak"></div>
       </div>
     </div>`;
 }
@@ -203,7 +237,7 @@ function fileRowHtml(f) {
         </div>
       </td>
       <td><span class="ing-type-chip type-${f.kind}">${label}</span></td>
-      <td>${f.sizeMB.toFixed(1)} MB</td>
+      <td>${formatFileSize(f.sizeBytes)}</td>
       <td>${ingEsc(f.uploadedAt)}</td>
       <td><span class="ing-status-chip">${I.checkCircle}Uploaded</span></td>
       <td><button class="ing-row-delete" type="button" data-remove="${f.id}" title="Remove file">${I.trash}</button></td>
@@ -276,30 +310,97 @@ function refreshFileTable() {
   if (continueBtn) continueBtn.disabled = flow.files.length === 0;
 }
 
-function addFiles(fileList) {
+async function addFiles(fileList) {
   const errorEl = document.getElementById('ing-upload-error');
   if (errorEl) errorEl.textContent = '';
   const rejected = [];
 
-  Array.from(fileList || []).forEach(file => {
+  const rawList = Array.from(fileList || []);
+  if (!rawList.length) return;
+
+  const validRawFiles = [];
+  rawList.forEach(file => {
     const { ext, kind } = classifyExt(file.name);
     if (!kind) { rejected.push(`${file.name} (unsupported type)`); return; }
     if (file.size > 25 * 1024 * 1024) { rejected.push(`${file.name} (over 25MB)`); return; }
+    const id = nextId('file');
     flow.files.push({
-      id: nextId('file'),
+      id,
       name: file.name,
       ext,
       kind,
-      sizeMB: file.size / 1024 / 1024,
+      sizeBytes: file.size,
       uploadedAt: 'Just now',
       status: 'uploaded',
     });
+    validRawFiles.push({ id, file, name: file.name });
   });
 
   if (rejected.length && errorEl) {
     errorEl.textContent = `Couldn't add: ${rejected.join(', ')}.`;
   }
   refreshFileTable();
+
+  // Send real files to backend parser
+  if (validRawFiles.length > 0) {
+    try {
+      const formData = new FormData();
+      validRawFiles.forEach(item => {
+        formData.append('files', item.file);
+      });
+      // Scoped to the active project and authenticated. The parse endpoint
+      // moved under /preview in Phase 10.0 to separate "read the file" from
+      // "commit a network the solver may run on".
+      const projectId = (window.getCurrentProject && window.getCurrentProject()?.id)
+        || getActiveProjectId();
+      const data = await ingestionService.uploadAndParse(formData, projectId);
+      flow.parseError = null;
+      if (data) {
+        flow.extractedNetwork = data.structure;
+        flow.projectId = projectId;
+        flow.schemaFields = data.schemaFields || flow.schemaFields;
+
+        (data.files || []).forEach(summary => {
+          if (summary && summary.name) flow.fileSummaries[summary.name] = summary;
+        });
+
+        if (data.mapping) {
+          validRawFiles.forEach(item => {
+            // Keyed by file name. Never fall back to "whatever the first key
+            // is": with two uploads that showed one file's columns under the
+            // other file's name.
+            const mappedRows = Array.isArray(data.mapping)
+              ? data.mapping : data.mapping[item.name];
+            if (mappedRows && mappedRows.length) flow.mapping[item.id] = mappedRows;
+            if (data.mapStats) flow.mapStats[item.id] = data.mapStats;
+          });
+        }
+        // A file the parser could not read is named, not silently dropped.
+        (data.parse_errors || []).forEach(pe => {
+          const match = validRawFiles.find(v => v.name === pe.file);
+          if (match) flow.parseErrors = { ...(flow.parseErrors || {}), [match.id]: pe.error };
+        });
+        if (data.dataQuality) {
+          DATA_QUALITY.totalRecords = data.dataQuality.totalRecords ?? DATA_QUALITY.totalRecords;
+          DATA_QUALITY.validRecords = data.dataQuality.validRecords ?? DATA_QUALITY.validRecords;
+          DATA_QUALITY.validPct = data.dataQuality.validPct ?? DATA_QUALITY.validPct;
+          DATA_QUALITY.nullCellPct = data.dataQuality.nullCellPct ?? null;
+          DATA_QUALITY.duplicateRows = data.dataQuality.duplicateRows ?? null;
+          DATA_QUALITY.emptyRows = data.dataQuality.emptyRows ?? null;
+          // Replace, never merge: the demo issues describe the prototype's own
+          // facilities and would sit alongside the real ones as if measured.
+          DATA_QUALITY.issues = data.dataQuality.issues || [];
+        }
+      }
+    } catch (err) {
+      // The review screen's entire purpose is to show what was parsed. With no
+      // parse there is nothing to review, and continuing would present a
+      // mapping for a file nobody read.
+      flow.parseError = (err && err.message) || 'the file could not be parsed';
+      console.warn('Backend extraction notice:', err);
+    }
+    refreshFileTable();
+  }
 }
 
 function bindUploadData() {
@@ -477,11 +578,118 @@ function finishIngestion() {
     stepSub: 'Almost there!',
   }, () => {
     hideIngestionPages();
+
+    // Render the parsed topology immediately so the twin and tables are
+    // populated while the network binds.
+    if (flow.extractedNetwork && typeof loadNetworkData === 'function') {
+      loadNetworkData(flow.extractedNetwork);
+    }
     if (flow.project && typeof window.markProjectInProgress === 'function') {
       window.markProjectInProgress(flow.project.id);
     }
-    if (typeof window.enterApp === 'function') window.enterApp();
+    // Reveal the shell WITHOUT hydrating: the network is not bound yet, so
+    // `enterApp`'s own hydration would fail with NO_NETWORK_BOUND. The commit
+    // and the analysis below run behind the analysis loading screen instead.
+    if (typeof window.enterApp === 'function') window.enterApp({ hydrate: false });
+    beginAnalysisLoading(
+      (flow.project && flow.project.name) || 'your network', false);
+
+    // Commit: assemble a CanonicalNetwork from the confirmed upload, register
+    // it as a snapshot, bind it to this project — then hydrate every screen
+    // from the authoritative KPI layer. Until this succeeds the user is
+    // looking at their own topology but not yet at solved results, and the
+    // banner says so rather than implying an analysis has run.
+    const projectId = flow.projectId
+      || (window.getCurrentProject && window.getCurrentProject()?.id)
+      || getActiveProjectId();
+
+    ingestionService.commitPreview(projectId)
+      .then(async (res) => {
+        setActiveProject(projectId);
+        showNetworkNotice(
+          `Network bound — ${res.network_summary.facilities} facilities, `
+          + `${res.network_summary.lanes} lanes, `
+          + `${res.network_summary.demands} demand rows. Running analysis…`,
+          'info',
+        );
+        if (res.assumptions?.length) {
+          console.info('Ingestion assumptions applied:', res.assumptions);
+        }
+        const report = await hydrateFromBackend(projectId, reportAnalysisStage);
+        endAnalysisLoading();
+
+        // "Analysis complete" used to be shown unconditionally, including when
+        // the solver had proved the network infeasible and there was therefore
+        // no figure below at all. A proved infeasibility is a real answer and
+        // the most useful thing on the screen — so it is stated, with the
+        // reason, instead of being papered over with a success message.
+        if (report?.infeasible) {
+          const why = (res.issues && res.issues.length)
+            ? res.issues.join('  ')
+            : (report.infeasibleReason
+               || 'the solver proved no feasible plan exists for this network');
+          showNetworkNotice(
+            `No feasible plan exists for this network, so no cost or service `
+            + `figure can be reported. ${why}`,
+            'error',
+          );
+        } else if (report?.relaxed) {
+          // Solved, but not fully. Every figure below describes a plan that
+          // leaves part of the demand unserved, and saying "Analysis complete"
+          // over the top of that would read as a clean bill of health.
+          const short = report.relaxed.unservedDemand;
+          const total = report.relaxed.totalDemand;
+          const pct = (short != null && total)
+            ? ` (${((short / total) * 100).toFixed(1)}% of demand)` : '';
+          const why = (res.issues && res.issues.length) ? ` ${res.issues.join('  ')}` : '';
+          showNetworkNotice(
+            `Analysis complete, but your network cannot serve all of its demand `
+            + `within its own service levels. The figures below are the best `
+            + `achievable plan; `
+            + `${short != null ? Number(short).toLocaleString() : 'some'} units`
+            + `${pct} are left unserved.${why}`,
+            'warning',
+          );
+        } else {
+          showNetworkNotice(
+            'Analysis complete. Every figure below is computed from your uploaded data.',
+            'success',
+          );
+        }
+      })
+      .catch((err) => {
+        endAnalysisLoading(`The network could not be built: ${err?.message || 'unknown error'}`);
+        // Explicit. The user sees their topology but is told no analysis ran,
+        // rather than being shown figures that describe nothing.
+        showNetworkNotice(
+          `Your files were parsed, but the network could not be built, so no `
+          + `analysis has run: ${err?.message || 'unknown error'}`,
+          'error',
+        );
+      });
   });
+}
+
+/** A dismissible banner on Home reporting the true state of the analysis. */
+function showNetworkNotice(message, tone = 'info') {
+  const host = document.getElementById('tab-home') || document.body;
+  let el = document.getElementById('ng-network-notice');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ng-network-notice';
+    host.prepend(el);
+  }
+  const colour = tone === 'error' ? 'var(--red)'
+    : tone === 'success' ? 'var(--green)'
+    : tone === 'warning' ? 'var(--amber)' : 'var(--blue)';
+  const bg = tone === 'error' ? 'var(--red-bg)'
+    : tone === 'success' ? 'var(--green-bg)'
+    : tone === 'warning' ? 'var(--amber-bg)' : 'var(--blue-bg)';
+  el.setAttribute('role', 'status');
+  el.style.cssText = `margin:0 0 var(--space-md);padding:10px 14px;border-radius:var(--r-md);`
+    + `background:${bg};color:${colour};border:1px solid ${colour}33;`
+    + `font-size:12.5px;font-weight:600`;
+  el.textContent = message;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -493,10 +701,14 @@ function buildQueue() {
   flow.queue = [...excelLike, ...pdfs].map(f => f.id);
   flow.queueIndex = 0;
 
+  // No fallback mapping. A file the parser did not read has no columns to
+  // review, and the screen says that instead of showing nine invented rows
+  // under the stats "48 detected, 42 auto-mapped, 4 need review, 2 ignored" —
+  // figures that were the same for every file ever uploaded.
   excelLike.forEach(f => {
-    if (!flow.mapping[f.id]) {
-      flow.mapping[f.id] = baseMappingRows();
-      flow.mapStats[f.id] = { detected: 48, auto: 42, review: 4, ignored: 2 };
+    if (!flow.mapping[f.id]) flow.mapping[f.id] = [];
+    if (!flow.mapStats[f.id]) {
+      flow.mapStats[f.id] = { detected: 0, auto: 0, review: 0, ignored: 0 };
     }
   });
   pdfs.forEach(f => {
@@ -544,30 +756,89 @@ function confidenceIcon(c) { return c === 'high' ? I.check : c === 'medium' ? I.
 function confidenceIconTone(c) { return c === 'high' ? 'tone-green' : c === 'medium' ? 'tone-amber' : 'tone-red'; }
 
 function actionPillHtml(row) {
-  if (row.status === 'auto') return `<span class="ing-action-pill tone-auto">${I.check}Auto-mapped</span>`;
+  if (row.status === 'auto') return `<span class="ing-action-pill tone-auto">${I.check}Used</span>`;
   if (row.status === 'review') return `<span class="ing-action-pill tone-review">${I.warning}Review</span>`;
-  return `<span class="ing-action-pill tone-ignored">${I.ban}Ignore or map</span>`;
+  // "Ignore or map" implied the column could be mapped to something useful.
+  // It cannot: this build reads no field from it, and says so.
+  return `<span class="ing-action-pill tone-ignored">${I.ban}Not used</span>`;
 }
 
 function mapRowHtml(row, idx) {
   const hidden = row.__filtered ? ' row-hidden' : '';
-  const opts = SCHEMA_FIELDS.map(f =>
+  const fields = schemaFields();
+  // A server-suggested field that is somehow absent from the option list is
+  // added rather than silently swapped for the list's first entry.
+  const options = fields.includes(row.mapped) ? fields : [row.mapped, ...fields];
+  const opts = options.map(f =>
     `<option value="${ingEsc(f)}"${f === row.mapped ? ' selected' : ''}>${ingEsc(f)}</option>`).join('');
+  const unused = row.status === 'ignored';
   return `<tr class="${hidden.trim()}" data-row="${idx}">
       <td><span class="ing-map-source">${confidenceIcon(row.confidence).replace('<svg ', `<svg class="${confidenceIconTone(row.confidence)}" `)}${ingEsc(row.source)}</span></td>
       <td><span class="ing-map-sample" title="${ingEsc(row.sample)}">${ingEsc(row.sample)}</span></td>
-      <td><select class="ing-map-select${row.mapped === 'No match found' ? ' no-match' : ''}" data-row-select="${idx}">${opts}</select></td>
+      <td><select class="ing-map-select${unused ? ' no-match' : ''}" data-row-select="${idx}">${opts}</select></td>
       <td><span class="ing-confidence-pill tone-${confidenceTone(row.confidence)}">${row.confidence[0].toUpperCase()}${row.confidence.slice(1)}</span></td>
       <td>${actionPillHtml(row)}</td>
     </tr>`;
 }
 
+/* One table per sheet.
+   A real workbook is 51 columns across 8 sheets; a single flat list of 51 rows
+   gives no way to tell which "Capacity_Units" is which, which is exactly what
+   this screen is for. Rows keep their index in the original array so the
+   change handler and the stats still address the right row. */
 function mappingTableHtml(rows, reviewOnly) {
-  return `<table class="ing-map-table">
-      <thead><tr><th>Source column</th><th>Sample values</th><th>Mapped to schema</th><th>Confidence <span title="AI's confidence in this suggestion">ⓘ</span></th><th>Status / Action</th></tr></thead>
-      <tbody>${rows.map((r, i) => mapRowHtml({ ...r, __filtered: reviewOnly && r.status === 'auto' }, i)).join('')}</tbody>
+  const indexed = rows.map((r, i) => ({ row: r, idx: i }));
+  const bySheet = new Map();
+  indexed.forEach(({ row, idx }) => {
+    const key = row.sheet || '';
+    if (!bySheet.has(key)) bySheet.set(key, []);
+    bySheet.get(key).push({ row, idx });
+  });
+
+  const head = `<colgroup>
+        <col class="c-source"><col class="c-sample"><col class="c-mapped">
+        <col class="c-conf"><col class="c-status">
+      </colgroup>
+      <thead><tr>
+        <th>Source column</th><th>Sample values</th><th>Mapped to field</th>
+        <th>Confidence</th><th>Status</th>
+      </tr></thead>`;
+
+  const table = (entries) => `<table class="ing-map-table">${head}
+      <tbody>${entries.map(({ row, idx }) =>
+        mapRowHtml({ ...row, __filtered: reviewOnly && row.status === 'auto' }, idx)
+      ).join('')}</tbody>
     </table>`;
+
+  if (bySheet.size <= 1) return table(indexed);
+
+  return [...bySheet.entries()].map(([sheet, entries]) => {
+    const role = entries[0].row.sheetRole;
+    const used = entries.filter(e => e.row.status !== 'ignored').length;
+    return `<div class="ing-map-sheet-group">
+        <div class="ing-map-sheet-head">
+          <span class="ing-map-sheet-name">${ingEsc(sheet)}</span>
+          <span class="ing-map-sheet-meta">${SHEET_ROLE_LABELS[role] || 'Not recognised'}
+            &middot; ${used}/${entries.length} columns used</span>
+        </div>
+        ${table(entries)}
+      </div>`;
+  }).join('');
 }
+
+/* What the parser decided each sheet IS. Shown so the user can catch a
+   misread sheet here, before it reaches the model. */
+const SHEET_ROLE_LABELS = {
+  facilities: 'Read as: facilities',
+  markets: 'Read as: demand markets',
+  lanes: 'Read as: lanes',
+  products: 'Read as: products',
+  demand_history: 'Read as: demand history',
+  capacity_history: 'Read as: capacity history',
+  lane_rates: 'Read as: freight rates',
+  signals: 'Read as: external signals',
+  unknown: 'Not recognised — no columns from this sheet are used',
+};
 
 function statsRowHtml(stats) {
   return `<div class="ing-stats-row">
@@ -605,46 +876,63 @@ function severityLabel(sev) {
   return sev === 'warning' ? 'Warning' : sev === 'info' ? 'Info' : 'Critical';
 }
 
+/* Data quality, as measured by the parser on the uploaded file.
+   Every figure here is from `dataQuality` in the parse response. The demo
+   dataset this once read described the prototype's own facilities ("Baddi
+   Plant", "DC Delhi NCR") and was shown for any upload; its issue records also
+   carried a `status` field the measured ones do not, so "need review" counted
+   whatever the demo happened to say. */
 function dataQualitySectionHtml() {
   const dq = DATA_QUALITY;
-  const invalid = dq.totalRecords - dq.validRecords;
-  const needsReview = dq.issues.filter((i) => i.status === 'needs_review').length;
+  const total = Number(dq.totalRecords) || 0;
+  const valid = Number(dq.validRecords) || 0;
+  const invalid = Math.max(0, total - valid);
+  const issues = dq.issues || [];
+  const warnings = issues.filter((i) => i.severity === 'warning').length;
+  const critical = issues.filter((i) => i.severity === 'critical').length;
 
-  const issueRows = dq.issues.map((iss) => {
-    const done = iss.status === 'reviewed' || iss.status === 'auto_mapped';
-    const location = iss.facility || iss.market || iss.lane || iss.source || '';
-    return `<div class="ing-review-item${done ? ' reviewed' : ''}">
-        <div>
-          <div class="ing-review-item-name">${ingEsc(iss.type)}${location ? ` — ${ingEsc(location)}` : ''}</div>
-          <div class="ing-review-item-note">${ingEsc(iss.detail)}</div>
+  const issueRows = issues.length ? issues.map((iss) => {
+    // Measured issues are located by table and column; the demo ones used
+    // facility/market/lane. Both are read so a mixed shape cannot blank the row.
+    const location = iss.column || iss.table || iss.facility || iss.market
+      || iss.lane || iss.source || '';
+    return `<div class="ing-review-item">
+        <div class="ing-review-item-text">
+          <div class="ing-review-item-name">${ingEsc(iss.type || 'Issue')}${location ? ` — ${ingEsc(location)}` : ''}</div>
+          <div class="ing-review-item-note">${ingEsc(iss.detail || '')}</div>
         </div>
         <span class="ing-confidence-pill tone-${severityTone(iss.severity)}">${severityLabel(iss.severity)}</span>
       </div>`;
-  }).join('');
+  }).join('') : `<div class="ing-review-item"><div class="ing-review-item-text">
+        <div class="ing-review-item-name">No issues found</div>
+        <div class="ing-review-item-note">Every cell the parser read was usable.</div>
+      </div></div>`;
 
   return `
     <div class="ing-card" id="ing-dq-section" style="margin-top:16px">
-      <div class="ing-card-title">Data Quality</div>
-      <div class="ing-card-sub">Can this data be trusted to run the model? ${invalid} of ${dq.totalRecords.toLocaleString('en-IN')} records need attention.</div>
+      <div class="ing-card-title">Data quality</div>
+      <div class="ing-card-sub">Measured on your file. ${invalid
+        ? `${invalid.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')} records need attention.`
+        : `All ${total.toLocaleString('en-IN')} records read cleanly.`}</div>
       <div class="ing-stats-row" style="margin-top:14px">
         <div class="ing-stat-item">
           <span class="ing-stat-icon tone-green">${I.checkCircle}</span>
-          <div><div class="ing-stat-value">${dq.validRecords.toLocaleString('en-IN')} / ${dq.totalRecords.toLocaleString('en-IN')}</div><div class="ing-stat-label">records valid (${dq.validPct}%)</div></div>
+          <div><div class="ing-stat-value">${valid.toLocaleString('en-IN')} / ${total.toLocaleString('en-IN')}</div><div class="ing-stat-label">records valid (${dq.validPct ?? '—'}%)</div></div>
         </div>
         <div class="ing-stat-item">
           <span class="ing-stat-icon ${invalid > 0 ? 'tone-amber' : 'tone-green'}">${I.warning}</span>
-          <div><div class="ing-stat-value">${invalid}</div><div class="ing-stat-label">invalid records</div></div>
+          <div><div class="ing-stat-value">${invalid.toLocaleString('en-IN')}</div><div class="ing-stat-label">invalid records</div></div>
         </div>
         <div class="ing-stat-item">
-          <span class="ing-stat-icon tone-amber">${I.warning}</span>
-          <div><div class="ing-stat-value">${dq.issues.length}</div><div class="ing-stat-label">issues found</div></div>
+          <span class="ing-stat-icon ${issues.length ? 'tone-amber' : 'tone-green'}">${I.warning}</span>
+          <div><div class="ing-stat-value">${issues.length}</div><div class="ing-stat-label">issues found</div></div>
         </div>
         <div class="ing-stat-item">
-          <span class="ing-stat-icon tone-gray">${I.ban}</span>
-          <div><div class="ing-stat-value">${needsReview}</div><div class="ing-stat-label">need review</div></div>
+          <span class="ing-stat-icon ${critical ? 'tone-amber' : 'tone-gray'}">${I.ban}</span>
+          <div><div class="ing-stat-value">${critical || warnings}</div><div class="ing-stat-label">${critical ? 'critical' : 'warnings'}</div></div>
         </div>
       </div>
-      <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">${issueRows}</div>
+      <div class="ing-dq-issue-list">${issueRows}</div>
     </div>`;
 }
 
@@ -652,10 +940,17 @@ function renderExcelIngestion(file) {
   const page = document.getElementById('ingestion-page');
   if (!page) return;
 
-  const rows = flow.mapping[file.id];
-  const stats = flow.mapStats[file.id];
-  const rowsAnalyzed = mockRowsAnalyzed(file).toLocaleString('en-IN');
-  const acceptPct = 99;
+  const rows = flow.mapping[file.id] || [];
+  const stats = flow.mapStats[file.id] || { detected: 0, auto: 0, review: 0, ignored: 0 };
+  const nRows = rowsAnalyzed(file);
+  const rowsText = nRows === null ? 'Not read' : nRows.toLocaleString('en-IN');
+  const sheets = sheetsOf(file);
+  const parseError = (flow.parseErrors || {})[file.id] || flow.parseError;
+  // Share of columns this build actually reads. Was a fixed 99% under the
+  // label "of fields are typically accepted as-is" — a statistic about no
+  // particular file.
+  const usedPct = stats.detected
+    ? Math.round((stats.auto / stats.detected) * 100) : 0;
   const r = 26, c = 2 * Math.PI * r;
 
   page.innerHTML = `
@@ -672,10 +967,14 @@ function renderExcelIngestion(file) {
           <div>
             <div class="ing-file-summary-name">File: ${ingEsc(file.name)}</div>
             <div class="ing-file-summary-meta">
-              <div><div class="ing-file-summary-meta-label">Rows analyzed</div><div class="ing-file-summary-meta-value">${rowsAnalyzed}</div></div>
-              <div><div class="ing-file-summary-meta-label">Last uploaded</div><div class="ing-file-summary-meta-value">Just now</div></div>
+              <div><div class="ing-file-summary-meta-label">Rows read</div><div class="ing-file-summary-meta-value">${rowsText}</div></div>
+              <div><div class="ing-file-summary-meta-label">Sheets</div><div class="ing-file-summary-meta-value">${sheets.length || '—'}</div></div>
+              <div><div class="ing-file-summary-meta-label">File size</div><div class="ing-file-summary-meta-value">${formatFileSize(file.sizeBytes)}</div></div>
             </div>
-            <div class="ing-file-summary-badge"><span class="ing-status-chip">${I.checkCircle}File processed successfully</span></div>
+            ${sheets.length ? `<div class="ing-file-summary-sheets">${sheets.map(s => `<span class="ing-sheet-chip">${ingEsc(s)}</span>`).join('')}</div>` : ''}
+            <div class="ing-file-summary-badge">${parseError
+              ? `<span class="ing-status-chip tone-error">${I.warning}Could not read this file</span>`
+              : `<span class="ing-status-chip">${I.checkCircle}Read ${rowsText} rows across ${sheets.length} sheet(s)</span>`}</div>
           </div>
         </div>
       </div>
@@ -687,12 +986,17 @@ function renderExcelIngestion(file) {
         <div class="ing-mapping-main">
           <div class="ing-mapping-main-head">
             <div>
-              <div class="ing-card-title">Suggested field mapping</div>
-              <div class="ing-card-sub">Most fields are ready. Only review rows with medium confidence or no match.</div>
+              <div class="ing-card-title">Field mapping</div>
+              <div class="ing-card-sub">${stats.detected} column(s) read from your file.
+                ${stats.ignored ? `${stats.ignored} are not used by the model.` : 'All are used by the model.'}
+                Change any row that is wrong before continuing.</div>
             </div>
-            <button type="button" class="ing-filters-btn">${I.filter}<span>Filters (1)</span></button>
           </div>
-          <div id="ing-map-table-slot">${mappingTableHtml(rows, false)}</div>
+          <div id="ing-map-table-slot">${rows.length
+            ? mappingTableHtml(rows, false)
+            : `<div class="ing-empty-files">${parseError
+                ? `This file could not be parsed, so there is nothing to review: ${ingEsc(parseError)}`
+                : 'No columns were read from this file.'}</div>`}</div>
         </div>
 
         <div class="ing-sidebar-card">
@@ -706,13 +1010,13 @@ function renderExcelIngestion(file) {
             <div class="ing-accept-ring">
               <svg viewBox="0 0 64 64">
                 <circle class="track" cx="32" cy="32" r="${r}"/>
-                <circle class="fill" cx="32" cy="32" r="${r}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${(c * (1 - acceptPct / 100)).toFixed(2)}"/>
+                <circle class="fill" cx="32" cy="32" r="${r}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${(c * (1 - usedPct / 100)).toFixed(2)}"/>
               </svg>
-              <div class="ing-accept-ring-pct">${acceptPct}%</div>
+              <div class="ing-accept-ring-pct">${usedPct}%</div>
             </div>
-            <div class="ing-accept-ring-label">of fields are typically accepted as-is</div>
+            <div class="ing-accept-ring-label">of this file's columns are read by the model</div>
           </div>
-          <div class="ing-sidebar-note">You can edit mappings later in project settings.</div>
+          <div class="ing-sidebar-note">A column marked "Not used" is parsed but reaches no calculation in this build.</div>
         </div>
       </div>
 
@@ -776,6 +1080,14 @@ function bindExcelIngestion(file) {
     file.status = 'mapped';
     advanceQueue();
   });
+
+  // Confirming a mapping that does not exist would carry an unparsed file into
+  // the network build, where it can only fail later and less clearly.
+  const confirmBtn = document.getElementById('ing-confirm-mapping-btn');
+  if (confirmBtn && !(flow.mapping[file.id] || []).length) {
+    confirmBtn.disabled = true;
+    confirmBtn.title = 'This file produced no readable columns.';
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -858,7 +1170,9 @@ function renderPdfIngestion(file) {
   if (!page) return;
 
   const review = flow.pdfReview[file.id];
-  const pages = mockPages(file);
+  // Derived from the file name: there is no PDF parser in this build, so the
+  // page count is not a measurement either. Shown as unknown rather than as a
+  // number nobody counted.
   const highConfidence = CONTRACT_VENDOR.extractedTerms.filter((t) => t.confidence === 'HIGH').length;
 
   page.innerHTML = `
@@ -866,19 +1180,32 @@ function renderPdfIngestion(file) {
       ${topbar()}
 
       <div class="ing-pdf-layout">
-        <h1 class="ing-title" style="font-size:calc(26*var(--u))">AI is understanding your document</h1>
-        <p class="ing-subtitle">Your file has been uploaded. NetGravity is extracting key information and identifying what matters.</p>
+        <h1 class="ing-title" style="font-size:calc(26*var(--u))">Contract terms</h1>
+        <p class="ing-subtitle">Your file has been uploaded and stored.</p>
+
+        <!-- The Excel/CSV path parses the real file. This one does not: there
+             is no contract extractor in this build, and the terms below are a
+             worked example. Presenting them as "what I've found in your
+             document" would put a rate card nobody read in front of a user who
+             would reasonably act on it. -->
+        <div class="ing-demo-notice">
+          <strong>No terms were extracted from this PDF.</strong>
+          This build has no contract parser, so nothing below was read from your
+          file. The terms shown are a worked example of the output format, and
+          none of them reach the optimiser — freight rates come from your
+          spreadsheet, not from an uploaded contract.
+        </div>
 
         <div class="ing-pdf-file-card">
           <span class="ing-file-icon type-pdf" style="width:calc(40*var(--u));height:calc(40*var(--u))">PDF</span>
           <div class="ing-pdf-file-meta">
             <div class="ing-pdf-file-name">${ingEsc(file.name)}</div>
-            <div class="ing-pdf-file-sub">${pages} pages &middot; ${file.sizeMB.toFixed(1)} MB</div>
+            <div class="ing-pdf-file-sub">${formatFileSize(file.sizeBytes)} &middot; stored, not parsed</div>
           </div>
           <span class="ing-status-chip">${I.checkCircle}Upload successful</span>
         </div>
 
-        <div class="ing-findings-title">${I.docSearch}What I've found so far</div>
+        <div class="ing-findings-title">${I.docSearch}Example of extracted terms</div>
         <div id="ing-findings-slot" class="ing-findings-grid">${findingCardsHtml(file, review)}</div>
       </div>
 
@@ -886,7 +1213,7 @@ function renderPdfIngestion(file) {
         <div class="ing-pdf-actions" style="margin-top:0;flex:1;max-width:calc(560*var(--u));margin-left:auto">
           <div class="ing-pdf-actions-col">
             <button type="button" class="proj-btn-primary" id="ing-pdf-continue-btn"><span>Continue &amp; confirm</span>${I.arrowRight}</button>
-            <div class="ing-pdf-action-caption">Proceed with ${highConfidence} high-confidence terms</div>
+            <div class="ing-pdf-action-caption">Continue — no contract term is carried into the model</div>
           </div>
           <div class="ing-pdf-actions-col">
             <button type="button" class="ing-btn-secondary" id="ing-pdf-review-btn" style="justify-content:center"><span>Review extracted terms</span>${I.arrowRight}</button>

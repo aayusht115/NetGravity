@@ -21,6 +21,7 @@ from netgravity.orchestrator.exceptions import (
     ValidationFailureError,
 )
 from netgravity.orchestrator.schemas.requests import (
+    NETWORK_WIDE_ACTIONS,
     OrchestratorRequest,
     ScenarioActionType,
     ScenarioIntentSpec,
@@ -84,7 +85,15 @@ class ScenarioValidator:
         """
         fac_map = {f.id: f for f in network.facilities}
 
-        if not spec.facility_ids:
+        # A greenfield site is validated on its own terms: it deliberately
+        # names no existing facility, because it is not one yet.
+        if spec.action == ScenarioActionType.ADD_FACILITY:
+            self._validate_greenfield(spec, network, fac_map)
+            return
+
+        # Demand, freight rates and the delivery promise describe the whole
+        # network. Naming a facility narrows them; naming none is not an error.
+        if not spec.facility_ids and spec.action not in NETWORK_WIDE_ACTIONS:
             raise InvalidScenarioError(
                 f"Scenario action '{spec.action.value}' names no facility.",
                 context={"action": spec.action.value},
@@ -168,6 +177,89 @@ class ScenarioValidator:
         if spec.demand_multiplier is not None and spec.demand_multiplier < 0:
             raise InvalidScenarioError(
                 f"demand_multiplier must be >= 0, got {spec.demand_multiplier}.",
+            )
+
+        if spec.action == ScenarioActionType.CHANGE_TRANSPORT_COST:
+            if spec.transport_cost_multiplier is None:
+                raise InvalidScenarioError(
+                    "CHANGE_TRANSPORT_COST requires a transport_cost_multiplier.",
+                )
+            if spec.transport_cost_multiplier <= 0:
+                raise InvalidScenarioError(
+                    f"transport_cost_multiplier must be > 0, got "
+                    f"{spec.transport_cost_multiplier}. A rate of zero is not a "
+                    f"freight-rate change; it removes transport cost from the "
+                    f"model entirely.",
+                )
+
+        if spec.action == ScenarioActionType.CHANGE_SLA:
+            if spec.sla_days_delta is None:
+                raise InvalidScenarioError(
+                    "CHANGE_SLA requires an sla_days_delta, in days.",
+                )
+            # A promise can only be tightened as far as same-day. Which rows
+            # actually carry an SLA is the builder's business — it refuses when
+            # the network states none, rather than silently changing nothing.
+            stated = [d.sla_days for d in network.demands if d.sla_days is not None]
+            if stated and min(stated) + spec.sla_days_delta < 0:
+                raise InvalidScenarioError(
+                    f"sla_days_delta {spec.sla_days_delta:+.1f} would take the "
+                    f"tightest stated SLA ({min(stated):.1f} days) below zero. "
+                    f"A negative delivery promise is not meaningful.",
+                    context={"tightest_sla_days": min(stated)},
+                )
+
+    # ------------------------------------------------------------------
+    def _validate_greenfield(
+        self,
+        spec: ScenarioIntentSpec,
+        network: CanonicalNetwork,
+        fac_map: Dict[str, Any],
+    ) -> None:
+        """
+        Check a proposed new site before any network is built from it.
+
+        A greenfield site is the one scenario action whose target does NOT have
+        to exist — so the existence check that protects every other action
+        against a hallucinated identifier is replaced by checks on the thing
+        being proposed instead.
+        """
+        site = spec.new_facility
+        if site is None:
+            raise InvalidScenarioError(
+                "ADD_FACILITY requires a new_facility: the site to open, with a "
+                "name, coordinates and a capacity.",
+                context={"action": spec.action.value},
+            )
+        if not site.name.strip():
+            raise InvalidScenarioError("A new facility needs a name.")
+        if site.capacity_units_per_period <= 0:
+            raise InvalidScenarioError(
+                f"A new facility needs a capacity above zero, got "
+                f"{site.capacity_units_per_period}. A site with no capacity "
+                f"cannot serve anything, so opening it is not a scenario.",
+            )
+        if site.fixed_cost_per_year < 0 or site.handling_cost_per_unit < 0:
+            raise InvalidScenarioError("Facility costs must not be negative.")
+        if site.role.upper() not in {"DC", "PLANT", "WAREHOUSE", "HUB"}:
+            raise InvalidScenarioError(
+                f"A new site must be a DC or a PLANT, got '{site.role}'. Markets "
+                f"are demand rather than capacity, and adding one is a change to "
+                f"the demand data, not a footprint scenario.",
+            )
+        # The MILP needs somewhere to send the volume. A network with no market
+        # nodes cannot absorb a new distribution centre.
+        markets = [f for f in network.facilities if f.role in MARKET_ROLES]
+        if not markets:
+            raise InvalidScenarioError(
+                "This network has no market or customer nodes, so a new "
+                "distribution centre has nothing to serve.",
+            )
+        located = [f for f in markets if f.latitude is not None and f.longitude is not None]
+        if not located:
+            raise InvalidScenarioError(
+                "No market in this network carries coordinates, so the freight "
+                "cost from a new site to it cannot be derived from distance.",
             )
 
     def validate_all(

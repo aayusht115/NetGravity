@@ -1,0 +1,261 @@
+{
+  "stage": "FORECASTING",
+  "response": {
+    "forecast": {
+      "breachFacility": "DC_DELHI",
+      "breachMonth": "Dec'26",
+      "breachProjectedUtil": 108,
+      "engine": "QuantileRegression_HiGHS",
+      "growthRate": 14.2,
+      "lower": [
+        9439.2,
+        9895.2,
+        10207.4,
+        10172.7,
+        10065.5,
+        10308.8
+      ],
+      "months": [
+        "Jan'27",
+        "Feb'27",
+        "Mar'27",
+        "Apr'27",
+        "May'27",
+        "Jun'27"
+      ],
+      "northIndia": [
+        9971.2,
+        10056.5,
+        10231.5,
+        10274.6,
+        10294.0,
+        10427.2
+      ],
+      "pattern": "SMOOTH",
+      "upper": [
+        11280.4,
+        11436.4,
+        11603.3,
+        11604.2,
+        10940.9,
+        10996.6
+      ]
+    },
+    "history": {
+      "baddiCapacity": 10000,
+      "months": [
+        "Jan'25",
+        "Feb'25",
+        "Mar'25",
+        "Apr'25",
+        "May'25",
+        "Jun'25",
+        "Jul'25",
+        "Aug'25",
+        "Sep'25",
+        "Oct'25",
+        "Nov'25",
+        "Dec'25",
+        "Jan'26",
+        "Feb'26",
+        "Mar'26",
+        "Apr'26",
+        "May'26",
+        "Jun'26",
+        "Jul'26",
+        "Aug'26",
+        "Sep'26",
+        "Oct'26",
+        "Nov'26",
+        "Dec'26"
+      ],
+      "northIndia": [
+        7100,
+        7000,
+        7300,
+        7200,
+        7400,
+        7100,
+        7500,
+        7600,
+        7800,
+        8000,
+        8200,
+        8800,
+        8400,
+        8300,
+        8600,
+        8500,
+        8800,
+        8600,
+        9000,
+        9200,
+        9400,
+        9600,
+        9800,
+        10800
+      ]
+    }
+  },
+  "service_result": {
+    "status": "OK",
+    "provenance": {
+      "snapshot_id": "snap_case16_synthetic",
+      "data_version": null,
+      "network_id": null,
+      "target": "DEMAND",
+      "horizon": 6,
+      "frequency": "MONTH",
+      "execution_id": null,
+      "request_id": null,
+      "scenario_id": null,
+      "engines_used": [
+        "QuantileRegression_HiGHS"
+      ],
+      "selection_mode": "PATTERN",
+      "model_version": "1.0.0",
+      "signal_ids": [],
+      "adapted_series": [],
+      "generated_at": "2026-08-30T11:48:50.571454+00:00",
+      "source": "forecasting_service",
+      "reproducibility": {
+        "model_version": "1.0.0",
+        "engine_override": null,
+        "selection_mode": "PATTERN",
+        "signal_enrichment": false,
+        "backtest": false,
+        "backtest_folds": 0,
+        "min_history": 2,
+        "max_horizon": 12,
+        "change_point_detection": true,
+        "change_point_method": "SUP_F_LEVEL_SHIFT",
+        "change_point_threshold": 8.85
+      }
+    },
+    "series": [
+      {
+        "market_id": "MKT_DELHI",
+        "product_id": "PROD_1",
+        "target": "DEMAND",
+        "status": "OK",
+        "points": [
+          {
+            "period": 1,
+            "mean": 9971.203650027697,
+            "std_dev": 718.3460940912948,
+            "p10": 9439.243837611695,
+            "p50": 9971.203650027697,
+            "p90": 11280.364876767684,
+            "baseline_mean": null,
+            "baseline_std_dev": null
+          },
+          {
+            "period": 2,
+            "mean": 10056.542345095086,
+            "std_dev": 601.3238026715237,
+            "p10": 9895.158054432122,
+            "p50": 10056.542345095086,
+            "p90": 11436.350960679238,
+            "baseline_mean": null,
+            "baseline_std_dev": null
+          },
+          {
+            "period": 3,
+            "mean": 10231.46254982481,
+            "std_dev": 544.6511357439427,
+            "p10": 10207.371798624254,
+            "p50": 10231.46254982481,
+            "p90": 11603.312659535979,
+            "baseline_mean": null,
+            "baseline_std_dev": null
+          },
+          {
+            "period": 4,
+            "mean": 10274.596727076207,
+            "std_dev": 558.5027391326798,
+            "p10": 10172.743613891567,
+            "p50": 10274.596727076207,
+            "p90": 11604.186134288626,
+            "baseline_mean": null,
+            "baseline_std_dev": null
+          },
+          {
+            "period": 5,
+            "mean": 10293.990643229467,
+            "std_dev": 341.539628470043,
+            "p10": 10065.525622743366,
+            "p50": 10293.990643229467,
+            "p90": 10940.891690512086,
+            "baseline_mean": null,
+            "baseline_std_dev": null
+          },
+          {
+            "period": 6,
+            "mean": 10427.165482497714,
+            "std_dev": 268.38376187900195,
+            "p10": 10308.757882939548,
+            "p50": 10427.165482497714,
+            "p90": 10996.62546463543,
+            "baseline_mean": null,
+            "baseline_std_dev": null
+          }
+        ],
+        "engine": "QuantileRegression_HiGHS",
+        "engine_version": "1.0.0",
+        "pattern": "SMOOTH",
+        "metrics": {
+          "adi": 1.0,
+          "cv2": 0.014070260869565216,
+          "non_zero_periods": 24,
+          "total_periods": 24,
+          "zero_ratio": 0.0,
+          "pattern": "SMOOTH"
+        },
+        "accuracy": null,
+        "signal_adjustments": [],
+        "n_history_periods": 24,
+        "frequency": "MONTH",
+        "selection_scores": {},
+        "structural_break": {
+          "detected": false,
+          "status": "BELOW_MATERIALITY",
+          "kind": "LEVEL_SHIFT",
+          "change_index": 12,
+          "change_period": 13,
+          "pre_break_level": 7583.333333,
+          "post_break_level": 9083.333333,
+          "magnitude": -728.116773,
+          "relative_magnitude": 0.096015,
+          "sigma_magnitude": 4.321827,
+          "swing_magnitude": 1.14008,
+          "sup_f": 12.335315,
+          "threshold": 8.85,
+          "strong_evidence": false,
+          "detection_method": "SUP_F_LEVEL_SHIFT",
+          "n_observations": 24,
+          "n_pre_break": 12,
+          "n_post_break": 12,
+          "reason": "step of -728.12 at period 13 (sup-F 12.34) is 9.6% of the prior level, under the 15% required. Real, but not large enough to justify discarding history."
+        },
+        "regime": {
+          "strategy": "FULL_HISTORY",
+          "basis": "NO_BREAK",
+          "window_start": 0,
+          "n_periods_used": 24,
+          "full_history_mae": null,
+          "recent_regime_mae": null,
+          "n_folds": 0,
+          "eval_horizon": 0,
+          "full_history_engine": "",
+          "recent_regime_engine": "",
+          "selected_engine": "",
+          "reason": "no structural break detected; forecasting from the full history, which is the unchanged default path."
+        },
+        "reason": "",
+        "warnings": []
+      }
+    ],
+    "warnings": [],
+    "errors": []
+  }
+}

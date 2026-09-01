@@ -73,6 +73,47 @@ def _ref(path: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_.>\-]", "_", path).strip("_")[:180]
 
 
+def policy_thresholds() -> Dict[str, float]:
+    """
+    Configured thresholds a narrative may cite, as percentages.
+
+    Imported from the module that owns them rather than restated here. If
+    `UTILIZATION_THRESHOLDS` changes, the number a briefing quotes changes with
+    it — a second copy in this file would be a second definition that drifts.
+    """
+    from netgravity.config.defaults import UTILIZATION_THRESHOLDS
+    return {
+        "utilization_over_pct":  UTILIZATION_THRESHOLDS["over_threshold"] * 100.0,
+        "utilization_under_pct": UTILIZATION_THRESHOLDS["under_threshold"] * 100.0,
+    }
+
+
+def with_policy_thresholds(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    The payload plus the policy constants a narrative is allowed to CITE.
+
+    A threshold is a fact about the CONFIGURATION rather than a measurement of
+    the network — but the numeric-claim validator checks every number in
+    generated prose and cannot tell "90% is where we draw the line" apart from
+    "90% is what this network measured". Left out of the evidence, the sentence
+    "no site reaches the 90% threshold" was adjudicated CONTRADICTED against
+    `pct_demand_in_sla = 100` and the figure was stripped out mid-sentence.
+
+    Applied HERE, over whatever payload a caller supplies, rather than inside
+    one payload builder. `twin_reasoning_payload` is not the only source: the
+    orchestrator assembles its own payload for `reasoning.synthesise` from the
+    execution context, so adding the thresholds to the twin builder alone left
+    every scenario comparison quoting a threshold it could not ground — four
+    contradicted claims on a real client network, and a grounding failure on
+    the one path a planner uses most.
+
+    Never overwrites a `thresholds` block a caller already supplied.
+    """
+    if payload.get("thresholds"):
+        return payload
+    return {**payload, "thresholds": policy_thresholds()}
+
+
 def _iter_values(node: Any, path: str = "") -> Iterable[tuple[str, str, Any, Optional[str]]]:
     if isinstance(node, dict):
         entity = node.get("facility_id")

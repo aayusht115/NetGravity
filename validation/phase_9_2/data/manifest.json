@@ -1,0 +1,48 @@
+{
+  "dataset_name": "Phase 9.2 Controlled Synthetic Case-16 Network",
+  "generated_at": "2026-08-30T17:14:00Z",
+  "entities": {
+    "plants": 4,
+    "distribution_centres": 5,
+    "demand_markets": 10,
+    "products": 1,
+    "lanes": 24,
+    "historical_periods": 24
+  },
+  "files": [
+    {
+      "file": "facilities.csv",
+      "rows": 9,
+      "purpose": "Plant and DC capacities, fixed costs, handling costs, geographical coordinates"
+    },
+    {
+      "file": "lanes.csv",
+      "rows": 24,
+      "purpose": "Multi-echelon transportation corridors, freight rates, transit times, capacities"
+    },
+    {
+      "file": "demand_history.csv",
+      "rows": 34,
+      "purpose": "24-month historical demand curve with North India trend and regime shift at month 20"
+    },
+    {
+      "file": "orders_raw.csv",
+      "rows": 9,
+      "purpose": "Raw customer orders with valid dispatches and 4 deliberate validation test cases"
+    }
+  ],
+  "intentional_edge_cases": {
+    "A_normal_valid_data": "Standard multi-echelon network flows across North, West, South, East, and Northeast corridors.",
+    "B_meaningful_demand_trend": "North India demand growing steadily from 7,100 u/d to 10,800 u/d over 24 periods.",
+    "C_structural_change_regime_shift": "North India demand accelerating steeply from period 20 onward (9,200 -> 10,800).",
+    "D_forecast_history_depth": "24 full monthly historical observations allowing QuantileRegression_HiGHS with 6-month horizon.",
+    "E_network_redundancy_disruption": "Kolkata DC (53% util) and Mumbai DC (75% util) have spare capacity to absorb Delhi NCR DC (94% util) overflow.",
+    "F_controlled_infeasible_scenario": "Capacity reduction of Delhi NCR DC by >8,000 units with locked corridors causing unserved demand penalty.",
+    "G_ingestion_edge_cases": [
+      {"id": "ORD_1006_ERR1", "type": "MISSING_FIELD", "field": "quantity_units"},
+      {"id": "ORD_1007_ERR2", "type": "INVALID_VALUE", "field": "freight_amt_inr", "value": -500},
+      {"id": "ORD_1008_DUP", "type": "DUPLICATE_ORDER", "field": "order_id"},
+      {"id": "ORD_1009_ERR3", "type": "UNMAPPED_ENTITY", "field": "destination_market", "value": "MKT_UNKNOWN_REGION"}
+    ]
+  }
+}

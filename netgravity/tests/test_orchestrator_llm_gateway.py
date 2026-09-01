@@ -238,6 +238,55 @@ class TestLocalGuards:
             gw.generate("3")
         assert len(captured) == 2
 
+    def test_the_per_execution_budget_is_restored_for_the_next_execution(
+            self, monkeypatch):
+        """
+        The budget is per EXECUTION, and the orchestrator says when one starts.
+
+        It was counted on the gateway instance and never reset. One gateway is
+        built per orchestrator and the orchestrator lives as long as the
+        server, so the fifth question anyone asked the assistant — for the
+        whole life of the process — was refused and silently answered from the
+        deterministic template instead.
+        """
+        gw = LLMGateway(LLMGatewayConfig(
+            base_url="https://gateway.example", token="t", enabled=True,
+            max_requests_per_execution=2, backoff_seconds=0.0,
+        ))
+        captured: list = []
+        _patch_post(monkeypatch, [FakeResponse(200, {"output": "x"}) for _ in range(9)],
+                    captured)
+
+        for _ in range(3):
+            gw.begin_execution()
+            gw.generate("a")
+            gw.generate("b")
+            with pytest.raises(LLMNonRetryableError, match="per execution"):
+                gw.generate("c")
+
+        assert len(captured) == 6, "each execution gets its own budget"
+        assert gw.stats()["requests_made_total"] == 6
+
+    def test_a_cumulative_cap_still_guards_a_long_lived_process(self, monkeypatch):
+        """Resetting per execution must not remove the runaway guard entirely."""
+        gw = LLMGateway(LLMGatewayConfig(
+            base_url="https://gateway.example", token="t", enabled=True,
+            max_requests_per_execution=2, max_requests_total=3,
+            backoff_seconds=0.0,
+        ))
+        captured: list = []
+        _patch_post(monkeypatch, [FakeResponse(200, {"output": "x"}) for _ in range(9)],
+                    captured)
+
+        gw.begin_execution()
+        gw.generate("a")
+        gw.generate("b")
+        gw.begin_execution()
+        gw.generate("c")
+        with pytest.raises(LLMNonRetryableError, match="Cumulative"):
+            gw.generate("d")
+        assert len(captured) == 3
+
 
 # ---------------------------------------------------------------------------
 # Response handling

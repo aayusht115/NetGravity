@@ -18,7 +18,31 @@ works fine since that happens after this fixture runs.
 """
 from __future__ import annotations
 
+import os
+import tempfile
+import uuid
+
 import pytest
+
+# ---------------------------------------------------------------------------
+# The test suite must never touch the real database.
+#
+# Set at conftest IMPORT time — before any test module, and therefore before
+# `app.backend.app` is imported and `persistence.database` is constructed. A
+# fixture would run too late: the connection is opened when the module is
+# imported, which happens during collection.
+#
+# Accounts, projects and uploads are now persisted, so without this the suite
+# would write into `data/netgravity.db` and, worse, would start FAILING on the
+# second run — `test_signup_success` registers a fixed address, and signup
+# correctly refuses an email that already exists. A test that passes only on a
+# clean machine is not a passing test.
+#
+# One file per pytest process, in the OS temp directory, removed by the OS.
+_TEST_DB = os.path.join(
+    tempfile.gettempdir(), f"netgravity-test-{uuid.uuid4().hex[:12]}.db"
+)
+os.environ["NETGRAVITY_DB_PATH"] = _TEST_DB
 
 _CREDENTIAL_ENV_VARS = (
     "NETGRAVITY_USE_CLAUDE",
@@ -36,6 +60,24 @@ _CREDENTIAL_ENV_VARS = (
     "NETGRAVITY_REASONING_RUNTIME",
     "NETGRAVITY_REASONING_MODEL",
 )
+
+
+@pytest.fixture(autouse=True)
+def _fresh_rate_limit_window():
+    """
+    Give every test its own rate-limit budget.
+
+    The limiter identifies a client by authenticated user or peer address, and
+    in a test client every request comes from the same non-address — so the
+    whole suite lands in ONE bucket and the twentieth login anywhere in it is
+    refused. Resetting between tests keeps the limiter switched on and
+    exercised (a dedicated test asserts it refuses past the threshold) rather
+    than disabling it and shipping it untested.
+    """
+    from app.backend.services.ratelimit import limiter
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest.fixture(autouse=True)

@@ -1,0 +1,107 @@
+{
+  "measured_at": "2026-09-01T09:23:30Z",
+  "served_by": "",
+  "base": "http://127.0.0.1:5050",
+  "project_id": "pr-demo-case16",
+  "clients": 8,
+  "think_seconds": 0.0,
+  "duration_seconds": 40.0,
+  "throughput_rps": 547.16,
+  "endpoints": [
+    {
+      "endpoint": "status",
+      "requests": 4383,
+      "ok": 3183,
+      "rate_limited_429": 0,
+      "connections_refused": 1200,
+      "server_errors_5xx": 0,
+      "statuses": {
+        "0": 1200,
+        "200": 3183
+      },
+      "p50_ms": 11.3,
+      "p90_ms": 24.8,
+      "p99_ms": 31.5,
+      "max_ms": 37.6,
+      "mean_ms": 13.3
+    },
+    {
+      "endpoint": "projects",
+      "requests": 4381,
+      "ok": 3180,
+      "rate_limited_429": 0,
+      "connections_refused": 1201,
+      "server_errors_5xx": 0,
+      "statuses": {
+        "0": 1201,
+        "200": 3180
+      },
+      "p50_ms": 11.7,
+      "p90_ms": 24.7,
+      "p99_ms": 32.3,
+      "max_ms": 53.3,
+      "mean_ms": 13.7
+    },
+    {
+      "endpoint": "kpis.network",
+      "requests": 4379,
+      "ok": 177,
+      "rate_limited_429": 3004,
+      "connections_refused": 1198,
+      "server_errors_5xx": 0,
+      "statuses": {
+        "0": 1198,
+        "200": 177,
+        "429": 3004
+      },
+      "p50_ms": 13.9,
+      "p90_ms": 26.5,
+      "p99_ms": 35.1,
+      "max_ms": 57.4,
+      "mean_ms": 15.4
+    },
+    {
+      "endpoint": "kpis.facilities",
+      "requests": 4378,
+      "ok": 173,
+      "rate_limited_429": 3005,
+      "connections_refused": 1200,
+      "server_errors_5xx": 0,
+      "statuses": {
+        "0": 1200,
+        "200": 173,
+        "429": 3005
+      },
+      "p50_ms": 13.7,
+      "p90_ms": 27.0,
+      "p99_ms": 34.6,
+      "max_ms": 48.3,
+      "mean_ms": 15.3
+    },
+    {
+      "endpoint": "insights",
+      "requests": 4376,
+      "ok": 176,
+      "rate_limited_429": 2999,
+      "connections_refused": 1201,
+      "server_errors_5xx": 0,
+      "statuses": {
+        "0": 1201,
+        "200": 176,
+        "429": 2999
+      },
+      "p50_ms": 13.6,
+      "p90_ms": 26.4,
+      "p99_ms": 34.8,
+      "max_ms": 46.5,
+      "mean_ms": 15.0
+    }
+  ],
+  "first_solve": {},
+  "totals": {
+    "requests": 21897,
+    "rate_limited": 9008,
+    "connections_refused": 6000,
+    "server_errors_5xx": 0
+  }
+}

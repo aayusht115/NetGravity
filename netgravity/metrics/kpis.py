@@ -74,6 +74,9 @@ def compute_kpis(
     transport_cost = obj_comp.get("transport_cost", 0.0)
     handling_cost  = obj_comp.get("handling_cost",  0.0)
     inventory_cost = obj_comp.get("inventory_cost", 0.0)
+    holding_cost   = obj_comp.get("holding_cost",   0.0)
+    opening_cost   = obj_comp.get("opening_cost",   0.0)
+    closure_cost   = obj_comp.get("closure_cost",   0.0)
     shortage_cost  = obj_comp.get("shortage_cost",  0.0)
     carbon_cost    = obj_comp.get("carbon_cost",    0.0)
 
@@ -87,9 +90,16 @@ def compute_kpis(
                 (cfg.objective_mode.value if hasattr(cfg.objective_mode, "value") else str(cfg.objective_mode)) == "WEIGHTED_COST_CARBON"):
             carbon_cost += tot_c * cfg.carbon_weight
 
+    # Every term the solver minimised, so `total_cost` IS the objective.
+    #
+    # Opening and closure costs were omitted, which meant a plan that opened a
+    # candidate or closed a site reported a total that did not match the number
+    # the solver had actually optimised — and the reconciliation check that
+    # compares the two had no way to see it, because it compared the same
+    # incomplete sum on both sides. Holding cost joins them for the same reason.
     total_cost     = (
-        facility_cost + transport_cost + handling_cost +
-        inventory_cost + shortage_cost + carbon_cost
+        facility_cost + opening_cost + closure_cost + transport_cost +
+        handling_cost + inventory_cost + holding_cost + shortage_cost + carbon_cost
     )
 
     # --- Demand ---
@@ -175,6 +185,9 @@ def compute_kpis(
         transport_cost           = round(transport_cost, 2),
         handling_cost            = round(handling_cost, 2),
         inventory_cost           = round(inventory_cost, 2),
+        holding_cost             = round(holding_cost, 2),
+        opening_cost             = round(opening_cost, 2),
+        closure_cost             = round(closure_cost, 2),
         shortage_cost            = round(shortage_cost, 2),
         total_demand             = round(total_demand, 2),
         total_served             = round(total_served, 2),

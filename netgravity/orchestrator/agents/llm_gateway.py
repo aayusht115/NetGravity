@@ -128,6 +128,19 @@ class LLMGatewayConfig:
 
     `max_requests_per_execution` is a local guard: because daily capacity is
     shared and small, one runaway execution must not exhaust it for everyone.
+    It is counted PER EXECUTION and reset by `begin_execution()`.
+
+    It used to be counted on the gateway INSTANCE and never reset. One gateway
+    is built per orchestrator, and the orchestrator lives as long as the server
+    — so the fifth question anyone asked the assistant, for the entire life of
+    the process, was refused with "budget exhausted" and answered from the
+    deterministic template instead. Nothing on screen said so: the same
+    question produced a specific answer in the morning and a generic briefing
+    in the afternoon. A guard named "per execution" that is really "per
+    process" is worse than no guard, because the fallback is silent.
+
+    `max_requests_total` is the actual runaway guard for the process, and is
+    set high enough to be one rather than a four-question limit.
     """
     base_url: str = ""
     token: str = ""
@@ -138,6 +151,9 @@ class LLMGatewayConfig:
     backoff_seconds: float = 1.0
     max_backoff_seconds: float = 8.0
     max_requests_per_execution: int = 4
+    #: Cumulative cap for the whole process, so a server that has been up for a
+    #: week still cannot run away with a shared daily allowance.
+    max_requests_total: int = 500
     #: The gateway offers no model selection and reports no model identifier, so
     #: provenance has to be configured rather than observed. Recorded on every
     #: intent: an audit record saying only "an LLM said so" cannot be
@@ -150,7 +166,20 @@ class LLMGatewayConfig:
         base = os.environ.get("TEXT_API_URL", DEFAULT_BASE_URL).strip().rstrip("/")
         disabled = os.environ.get("NETGRAVITY_DISABLE_LLM", "").strip().lower() in {"1", "true", "yes"}
         model = os.environ.get("TEXT_API_MODEL", DEFAULT_MODEL_NAME).strip() or DEFAULT_MODEL_NAME
+
+        def positive_int(name: str, default: int) -> int:
+            raw = os.environ.get(name, "").strip()
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                return default
+            return value if value > 0 else default
+
         return cls(base_url=base, token=token, model_name=model,
+                   max_requests_per_execution=positive_int(
+                       "NETGRAVITY_LLM_MAX_REQUESTS_PER_EXECUTION", 4),
+                   max_requests_total=positive_int(
+                       "NETGRAVITY_LLM_MAX_REQUESTS_TOTAL", 500),
                    enabled=bool(token) and not disabled)
 
 
@@ -166,9 +195,23 @@ class LLMGateway:
     def __init__(self, config: Optional[LLMGatewayConfig] = None) -> None:
         self.config = config or LLMGatewayConfig.from_env()
         self._lock = threading.Lock()
+        #: Calls made in the CURRENT execution. Reset by `begin_execution()`.
         self._request_count = 0
+        #: Calls made by this process, ever. Never reset.
+        self._total_requests = 0
         self._total_tokens = 0
         self._last_error: Optional[str] = None
+
+    def begin_execution(self) -> None:
+        """
+        Start a new execution's call budget.
+
+        Called by the orchestrator at the top of every run. Without it the
+        per-execution counter was cumulative for the process, so the assistant
+        went permanently deterministic after four questions.
+        """
+        with self._lock:
+            self._request_count = 0
 
     # ------------------------------------------------------------------
     # Availability
@@ -242,10 +285,18 @@ class LLMGateway:
         with self._lock:
             if self._request_count >= self.config.max_requests_per_execution:
                 raise LLMNonRetryableError(
-                    f"Local LLM call budget ({self.config.max_requests_per_execution}) "
-                    f"exhausted for this gateway instance. Daily gateway capacity is "
-                    f"shared, so runaway usage is capped locally.",
+                    f"Local LLM call budget ({self.config.max_requests_per_execution} "
+                    f"per execution) exhausted for THIS execution. Daily gateway "
+                    f"capacity is shared, so runaway usage is capped locally.",
                     context={"purpose": purpose, "calls_made": self._request_count},
+                )
+            if self._total_requests >= self.config.max_requests_total:
+                raise LLMNonRetryableError(
+                    f"Cumulative LLM call budget ({self.config.max_requests_total}) "
+                    f"exhausted for this process. Restart, or raise "
+                    f"NETGRAVITY_LLM_MAX_REQUESTS_TOTAL.",
+                    context={"purpose": purpose,
+                             "calls_made": self._total_requests},
                 )
 
         import requests
@@ -369,6 +420,7 @@ class LLMGateway:
 
         with self._lock:
             self._request_count += 1
+            self._total_requests += 1
             self._total_tokens += usage.total_tokens
 
         # Record into the SHARED token ledger, not only this object's private
@@ -458,6 +510,7 @@ class LLMGateway:
         return {
             "available": self.available,
             "requests_made": self._request_count,
+            "requests_made_total": self._total_requests,
             "total_tokens": self._total_tokens,
             "last_error": self._last_error,
             "base_url": self.config.base_url,

@@ -263,8 +263,13 @@ def diagnose_infeasibility(
             if ln.destination_id == market.id and ln.is_active_baseline
             and ln.origin_id not in effectively_closed
         }
+        # `effective_supply_capacity` applies the production limit only where it
+        # means something — on a plant or supplier. A raw min() here reported a
+        # DC whose production capacity is zero (which is the truth about a DC)
+        # as contributing no supply at all, so the diagnostic blamed capacity
+        # for an infeasibility that had another cause.
         max_supply = sum(
-            min(f.capacity_units_per_period, f.production_capacity_units_per_period)
+            min(f.capacity_units_per_period, f.effective_supply_capacity)
             for f in non_market_facs
             if f.id in reachable_origin_ids
             and f.capacity_units_per_period < 1e11

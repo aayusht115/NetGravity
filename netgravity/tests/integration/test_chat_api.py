@@ -13,6 +13,7 @@ import pytest
 
 from netgravity.orchestrator import build_orchestrator
 from netgravity.orchestrator.api import create_orchestrator_blueprint
+from netgravity.orchestrator.schemas.requests import Actor, ActorRole
 
 from .conftest import build_delhi_network
 
@@ -25,7 +26,15 @@ def client():
 
     orchestrator = build_orchestrator(network=build_delhi_network(), enable_llm=False)
     app = Flask(__name__)
-    app.register_blueprint(create_orchestrator_blueprint(orchestrator))
+    # The blueprint FAILS CLOSED without an authenticator: it was mounted
+    # with no authentication at all, so every control-plane endpoint was
+    # open to anyone who could reach the process. These tests exercise chat
+    # and twin behaviour, so they supply a fixed test identity rather than
+    # an authentication layer.
+    app.register_blueprint(create_orchestrator_blueprint(
+        orchestrator,
+        authenticator=lambda: Actor(actor_id='test-user', role=ActorRole.PLANNER),
+    ))
     app.config.update(TESTING=True)
     return app.test_client()
 

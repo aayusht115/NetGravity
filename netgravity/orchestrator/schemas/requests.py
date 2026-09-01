@@ -82,6 +82,65 @@ class ScenarioActionType(str, Enum):
     CHANGE_CAPACITY = "CHANGE_CAPACITY"
     CHANGE_DEMAND   = "CHANGE_DEMAND"
     SHIFT_VOLUME    = "SHIFT_VOLUME"
+    # A GREENFIELD site: somewhere the client does not operate today.
+    #
+    # Distinct from OPEN_FACILITY, and the distinction matters. OPEN_FACILITY
+    # pins an existing facility open — it can only ever name a site already in
+    # the network. "Open a DC in Nagpur" when there is no Nagpur site is a
+    # different question, and answering it by pinning open the nearest existing
+    # facility answers a question nobody asked.
+    ADD_FACILITY    = "ADD_FACILITY"
+    # Freight rates move. Scales `rate_per_unit` on the lanes in scope.
+    CHANGE_TRANSPORT_COST = "CHANGE_TRANSPORT_COST"
+    # Tighten or relax the delivery promise: shifts `sla_days` on demand rows.
+    CHANGE_SLA      = "CHANGE_SLA"
+
+
+#: Actions that describe the whole network rather than named facilities.
+#: `facility_ids` is optional for these — a demand uplift or a freight-rate
+#: move applies everywhere unless the caller narrows it.
+NETWORK_WIDE_ACTIONS = frozenset({
+    ScenarioActionType.CHANGE_DEMAND,
+    ScenarioActionType.CHANGE_TRANSPORT_COST,
+    ScenarioActionType.CHANGE_SLA,
+})
+
+
+class GreenfieldSiteSpec(BaseModel):
+    """
+    A site that does not exist in the network yet.
+
+    Deliberately NOT a `FacilityRecord`: the caller supplies where and how big,
+    and the builder derives the rest (id, status, connecting lanes) from the
+    network it is being added to. Accepting a full record here would let a
+    caller inject arbitrary baseline_status / is_mandatory flags into a
+    hypothetical network.
+    """
+    name: str
+    latitude: float
+    longitude: float
+    capacity_units_per_period: float
+    fixed_cost_per_year: float = 0.0
+    handling_cost_per_unit: float = 0.0
+    #: "DC" | "PLANT". Markets are demand, not capacity, and cannot be added
+    #: this way — a new market is new demand, which is a data change.
+    role: str = "DC"
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("latitude")
+    @classmethod
+    def _lat_range(cls, v: float) -> float:
+        if not -90.0 <= v <= 90.0:
+            raise ValueError(f"latitude must be between -90 and 90, got {v}")
+        return v
+
+    @field_validator("longitude")
+    @classmethod
+    def _lon_range(cls, v: float) -> float:
+        if not -180.0 <= v <= 180.0:
+            raise ValueError(f"longitude must be between -180 and 180, got {v}")
+        return v
 
 
 class ScenarioIntentSpec(BaseModel):
@@ -112,6 +171,16 @@ class ScenarioIntentSpec(BaseModel):
     # exclusive with the other two — see ScenarioValidator.
     capacity_set_units: Optional[float] = None
     demand_multiplier: Optional[float] = None
+    #: CHANGE_TRANSPORT_COST. A ratio on `rate_per_unit`: 1.10 is "freight up
+    #: 10%". Applied to lanes touching `facility_ids`, or to every lane when
+    #: none are named.
+    transport_cost_multiplier: Optional[float] = None
+    #: CHANGE_SLA. Signed days added to each demand row's `sla_days`: -1.0
+    #: tightens the promise by a day, +1.0 relaxes it. Absolute days rather than
+    #: a ratio, because that is how a delivery promise is actually stated.
+    sla_days_delta: Optional[float] = None
+    #: ADD_FACILITY. The greenfield site to introduce.
+    new_facility: Optional[GreenfieldSiteSpec] = None
     label: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")

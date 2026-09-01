@@ -1,0 +1,92 @@
+{
+  "checks": [
+    {
+      "id": "UI-01",
+      "name": "Application opens at the authentication gate",
+      "status": "PASS",
+      "detail": "gate=True shell_hidden=True"
+    },
+    {
+      "id": "UI-02",
+      "name": "Sign-up succeeds and reveals the workspace gate",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "UI-03",
+      "name": "Workspaces list with an explicit network-binding state",
+      "status": "PASS",
+      "detail": "1 workspace(s)"
+    },
+    {
+      "id": "UI-04",
+      "name": "A project with no data shows an explicit empty state, not numbers",
+      "status": "PASS",
+      "detail": "This project has no network yet. Upload and confirm a dataset first."
+    },
+    {
+      "id": "UI-05",
+      "name": "Authoritative KPIs render with a status badge on every card",
+      "status": "PASS",
+      "detail": "18 cards, 18 status badges"
+    },
+    {
+      "id": "UI-06",
+      "name": "Provenance line names the snapshot, execution and source",
+      "status": "PASS",
+      "detail": "snapshot snap_762b4d277ffb \u00b7 execution 0b043198-e43 \u00b7 source KPIRegistry \u00b7 computed 19:16:20"
+    },
+    {
+      "id": "UI-07",
+      "name": "Facility table renders per-facility authoritative metrics",
+      "status": "PASS",
+      "detail": "7 facilities"
+    },
+    {
+      "id": "UI-08",
+      "name": "Forecast panel reports a real status, never a fabricated cone",
+      "status": "PASS",
+      "detail": "No observed demand history is available for this network, so no forecast can be produced. History reaches the "
+    },
+    {
+      "id": "UI-09",
+      "name": "Scenario is solved by the MILP engine and reports its execution",
+      "status": "PASS",
+      "detail": "Solved. execution cb1dd6e1-77d \u00b7 engine netgravity MILP (PuLP/HiGHS) \u00b7 LLM not used."
+    },
+    {
+      "id": "UI-10",
+      "name": "Scenario table shows no known fabricated constant",
+      "status": "PASS",
+      "detail": "hits=[]"
+    },
+    {
+      "id": "UI-11",
+      "name": "Evidence package loads and is inspectable in the UI",
+      "status": "PASS",
+      "detail": "31175 chars"
+    },
+    {
+      "id": "UI-12",
+      "name": "Assistant never emits the prototype's fabricated briefing",
+      "status": "PASS",
+      "detail": "hits=[]"
+    },
+    {
+      "id": "UI-13",
+      "name": "No blocking JavaScript error during the full journey",
+      "status": "PASS",
+      "detail": "0 blocking of 2 console messages"
+    }
+  ],
+  "console_errors": [
+    "Failed to load resource: the server responded with a status of 409 (CONFLICT)",
+    "Failed to load resource: the server responded with a status of 409 (CONFLICT)"
+  ],
+  "summary": {
+    "total": 13,
+    "passed": 13,
+    "failed": 0,
+    "generated_at": "2026-08-30T19:16:44"
+  }
+}

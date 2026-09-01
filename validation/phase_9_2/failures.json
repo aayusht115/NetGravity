@@ -1,0 +1,2396 @@
+[
+  {
+    "id": "ING_01",
+    "severity": "P1",
+    "component": "DATA_INGESTION",
+    "expected": "HTTP 200/201 on multipart upload",
+    "actual": "HTTP 202",
+    "root_cause": "API_CONTRACT",
+    "evidence": {
+      "client_id": "phase9_2_val_client",
+      "content_type_overrides": {},
+      "created_at": "2026-08-30T11:47:36+00:00",
+      "error": "not enough data to assemble a network (0 facilities, 0 products)",
+      "links": {
+        "draft": "/api/ingestions/ing_a4e360aa7d10/draft",
+        "finalize": "/api/ingestions/ing_a4e360aa7d10/finalize",
+        "reviews": "/api/ingestions/ing_a4e360aa7d10/reviews",
+        "self": "/api/ingestions/ing_a4e360aa7d10"
+      },
+      "next_actions": [
+        "review_blocking_items",
+        "ask_ai_about_a_field"
+      ],
+      "report": {
+        "ai_failure_count": 0,
+        "ai_mode": "live",
+        "counts": {},
+        "data_version": null,
+        "errors": 0,
+        "network_assembled": false,
+        "rows_accepted": 0,
+        "rows_read": 42,
+        "warnings": 0
+      },
+      "review": {
+        "blocking_count": 23,
+        "has_blocking": true,
+        "item_count": 28,
+        "items": [
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "FACILITY",
+            "context": {
+              "alias_table_said": "facility_id",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.95,
+              "model_reasoning": "Values are alphanumeric site codes (PLT_..., DC_...) matching canonical facility_id semantics",
+              "model_said": "facility_id",
+              "sample_values": [
+                "PLT_BADDI",
+                "PLT_PUNE",
+                "PLT_HYD",
+                "PLT_KOL",
+                "DC_DELHI"
+              ]
+            },
+            "item_id": "facilities.csv::facility_id",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "facility_id",
+                "rationale": "Values are alphanumeric site codes (PLT_..., DC_...) matching canonical facility_id semantics; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "facility_id"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "facilities.csv",
+            "proposed_value": "facility_id",
+            "question": "\"facility_id\" looks like 'facility_id'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "FACILITY data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "facilities.csv",
+            "source_column": "facility_id",
+            "source_id": "facilities",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "FACILITY",
+            "context": {
+              "alias_table_said": "facility_name",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.95,
+              "model_reasoning": "Values are human-readable names (Baddi Plant, Pune Plant) matching canonical facility_name",
+              "model_said": "facility_name",
+              "sample_values": [
+                "Baddi Plant",
+                "Pune Plant",
+                "Hyderabad Plant",
+                "Kolkata Plant",
+                "Delhi NCR DC"
+              ]
+            },
+            "item_id": "facilities.csv::facility_name",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "facility_name",
+                "rationale": "Values are human-readable names (Baddi Plant, Pune Plant) matching canonical facility_name; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "facility_name"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "facilities.csv",
+            "proposed_value": "facility_name",
+            "question": "\"facility_name\" looks like 'facility_name'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "FACILITY data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "facilities.csv",
+            "source_column": "facility_name",
+            "source_id": "facilities",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "FACILITY",
+            "context": {
+              "alias_table_said": "role",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.9,
+              "model_reasoning": "Values (PLANT, DC) describe facility role/type, matching canonical role/Facility_Type",
+              "model_said": "role",
+              "sample_values": [
+                "PLANT",
+                "PLANT",
+                "PLANT",
+                "PLANT",
+                "DC"
+              ]
+            },
+            "item_id": "facilities.csv::facility_type",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "role",
+                "rationale": "Values (PLANT, DC) describe facility role/type, matching canonical role/Facility_Type; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "role"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "facilities.csv",
+            "proposed_value": "role",
+            "question": "\"facility_type\" looks like 'role'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "FACILITY data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "facilities.csv",
+            "source_column": "facility_type",
+            "source_id": "facilities",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "FACILITY",
+            "context": {
+              "alias_table_said": "city",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.95,
+              "model_reasoning": "Values are city names (Baddi, Pune, Delhi NCR) matching canonical city field",
+              "model_said": "city",
+              "sample_values": [
+                "Baddi",
+                "Pune",
+                "Hyderabad",
+                "Kolkata",
+                "Delhi NCR"
+              ]
+            },
+            "item_id": "facilities.csv::city",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "city",
+                "rationale": "Values are city names (Baddi, Pune, Delhi NCR) matching canonical city field; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "city"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "facilities.csv",
+            "proposed_value": "city",
+            "question": "\"city\" looks like 'city'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "FACILITY data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "facilities.csv",
+            "source_column": "city",
+            "source_id": "facilities",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "FACILITY",
+            "context": {
+              "alias_table_said": "state",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.95,
+              "model_reasoning": "Values are state names (Himachal Pradesh, Maharashtra) matching canonical state",
+              "model_said": "state",
+              "sample_values": [
+                "Himachal Pradesh",
+                "Maharashtra",
+                "Telangana",
+                "West Bengal",
+                "Delhi"
+              ]
+            },
+            "item_id": "facilities.csv::state",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "state",
+                "rationale": "Values are state names (Himachal Pradesh, Maharashtra) matching canonical state; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "state"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "facilities.csv",
+            "proposed_value": "state",
+            "question": "\"state\" looks like 'state'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "FACILITY data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "facilities.csv",
+            "source_column": "state",
+            "source_id": "facilities",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "FACILITY",
+            "context": {
+              "alias_table_said": "region",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.95,
+              "model_reasoning": "Values are regional groupings (North, West, South, East) matching canonical region",
+              "model_said": "region",
+              "sample_values": [
+                "North",
+                "West",
+                "South",
+                "East",
+                "North"
+              ]
+            },
+            "item_id": "facilities.csv::region",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "region",
+                "rationale": "Values are regional groupings (North, West, South, East) matching canonical region; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "region"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "facilities.csv",
+            "proposed_value": "region",
+            "question": "\"region\" looks like 'region'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "FACILITY data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "facilities.csv",
+            "source_column": "region",
+            "source_id": "facilities",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.85,
+            "content_type": "FACILITY",
+            "context": {
+              "alias_table_said": null,
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.85,
+              "model_reasoning": "Numeric values labeled per_day indicate capacity expressed as units per period; canonical field is capacity_units_per_period",
+              "model_said": "capacity_units_per_period",
+              "sample_values": [
+                "12000",
+                "10000",
+                "8000",
+                "6000",
+                "10000"
+              ]
+            },
+            "item_id": "facilities.csv::capacity_units_per_day",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "capacity_units_per_period",
+                "rationale": "Numeric values labeled per_day indicate capacity expressed as units per period; canonical field is capacity_units_per_period",
+                "recommended": true,
+                "suggested_by": "ai",
+                "support": 0,
+                "value": "capacity_units_per_period"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "facilities.csv",
+            "proposed_value": "capacity_units_per_period",
+            "question": "\"capacity_units_per_day\" looks like 'capacity_units_per_period'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "FACILITY data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "facilities.csv",
+            "source_column": "capacity_units_per_day",
+            "source_id": "facilities",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.9,
+            "content_type": "FACILITY",
+            "context": {
+              "alias_table_said": null,
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.9,
+              "model_reasoning": "Header and values are monthly fixed costs; canonical field is annual fixed cost so convert monthly->yearly",
+              "model_said": "fixed_cost_per_year",
+              "sample_values": [
+                "450000",
+                "400000",
+                "380000",
+                "320000",
+                "312000"
+              ]
+            },
+            "item_id": "facilities.csv::fixed_cost_monthly",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "fixed_cost_per_year",
+                "rationale": "Header and values are monthly fixed costs; canonical field is annual fixed cost so convert monthly->yearly",
+                "recommended": true,
+                "suggested_by": "ai",
+                "support": 0,
+                "value": "fixed_cost_per_year"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "facilities.csv",
+            "proposed_value": "fixed_cost_per_year",
+            "question": "\"fixed_cost_monthly\" looks like 'fixed_cost_per_year'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "FACILITY data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "facilities.csv",
+            "source_column": "fixed_cost_monthly",
+            "source_id": "facilities",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "FACILITY",
+            "context": {
+              "alias_table_said": "handling_cost_per_unit",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.95,
+              "model_reasoning": "Values are per-unit handling costs matching canonical handling_cost_per_unit",
+              "model_said": "handling_cost_per_unit",
+              "sample_values": [
+                "3.2",
+                "3.5",
+                "3.4",
+                "3.6",
+                "4.5"
+              ]
+            },
+            "item_id": "facilities.csv::handling_cost_per_unit",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "handling_cost_per_unit",
+                "rationale": "Values are per-unit handling costs matching canonical handling_cost_per_unit; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "handling_cost_per_unit"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "facilities.csv",
+            "proposed_value": "handling_cost_per_unit",
+            "question": "\"handling_cost_per_unit\" looks like 'handling_cost_per_unit'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "FACILITY data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "facilities.csv",
+            "source_column": "handling_cost_per_unit",
+            "source_id": "facilities",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.8,
+            "content_type": "FACILITY",
+            "context": {
+              "alias_table_said": null,
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.8,
+              "model_reasoning": "Boolean TRUE/FALSE indicates facility open status; canonical status/Facility_Status fits this information",
+              "model_said": "status",
+              "sample_values": [
+                "TRUE",
+                "TRUE",
+                "TRUE",
+                "TRUE",
+                "TRUE"
+              ]
+            },
+            "item_id": "facilities.csv::is_open",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "status",
+                "rationale": "Boolean TRUE/FALSE indicates facility open status; canonical status/Facility_Status fits this information",
+                "recommended": true,
+                "suggested_by": "ai",
+                "support": 0,
+                "value": "status"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "facilities.csv",
+            "proposed_value": "status",
+            "question": "\"is_open\" looks like 'status'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "FACILITY data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "facilities.csv",
+            "source_column": "is_open",
+            "source_id": "facilities",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.99,
+            "content_type": "LANE",
+            "context": {
+              "alias_table_said": "origin_id",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.99,
+              "model_reasoning": "Header exactly matches canonical origin_id and values look like plant codes (PLT_...), consistent with origin identifiers.",
+              "model_said": "origin_id",
+              "sample_values": [
+                "PLT_BADDI",
+                "PLT_BADDI",
+                "PLT_BADDI",
+                "PLT_PUNE",
+                "PLT_PUNE"
+              ]
+            },
+            "item_id": "lanes.csv::origin_id",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "origin_id",
+                "rationale": "Header exactly matches canonical origin_id and values look like plant codes (PLT_...), consistent with origin identifiers.; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "origin_id"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "lanes.csv",
+            "proposed_value": "origin_id",
+            "question": "\"origin_id\" looks like 'origin_id'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "LANE data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "lanes.csv",
+            "source_column": "origin_id",
+            "source_id": "lanes",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.99,
+            "content_type": "LANE",
+            "context": {
+              "alias_table_said": "destination_id",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.99,
+              "model_reasoning": "Header exactly matches canonical destination_id and values look like DC location codes (DC_...), consistent with destination identifiers.",
+              "model_said": "destination_id",
+              "sample_values": [
+                "DC_DELHI",
+                "DC_KOLKATA",
+                "DC_MUMBAI",
+                "DC_MUMBAI",
+                "DC_BLR"
+              ]
+            },
+            "item_id": "lanes.csv::destination_id",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "destination_id",
+                "rationale": "Header exactly matches canonical destination_id and values look like DC location codes (DC_...), consistent with destination identifiers.; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "destination_id"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "lanes.csv",
+            "proposed_value": "destination_id",
+            "question": "\"destination_id\" looks like 'destination_id'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "LANE data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "lanes.csv",
+            "source_column": "destination_id",
+            "source_id": "lanes",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.98,
+            "content_type": "LANE",
+            "context": {
+              "alias_table_said": "distance_km",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.98,
+              "model_reasoning": "Header includes km and values are numeric distances (e.g., 320, 1540) clearly in kilometers.",
+              "model_said": "distance_km",
+              "sample_values": [
+                "320",
+                "1540",
+                "1420",
+                "150",
+                "840"
+              ]
+            },
+            "item_id": "lanes.csv::distance_km",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "distance_km",
+                "rationale": "Header includes km and values are numeric distances (e.g., 320, 1540) clearly in kilometers.; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "distance_km"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "lanes.csv",
+            "proposed_value": "distance_km",
+            "question": "\"distance_km\" looks like 'distance_km'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "LANE data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "lanes.csv",
+            "source_column": "distance_km",
+            "source_id": "lanes",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.9,
+            "content_type": "LANE",
+            "context": {
+              "alias_table_said": null,
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.9,
+              "model_reasoning": "Column name and numeric values (e.g., 12.5, 32.0) indicate a per-unit transport cost matching rate_per_unit.",
+              "model_said": "rate_per_unit",
+              "sample_values": [
+                "12.5",
+                "32.0",
+                "28.5",
+                "8.0",
+                "18.5"
+              ]
+            },
+            "item_id": "lanes.csv::transport_cost_per_unit",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "rate_per_unit",
+                "rationale": "Column name and numeric values (e.g., 12.5, 32.0) indicate a per-unit transport cost matching rate_per_unit.",
+                "recommended": true,
+                "suggested_by": "ai",
+                "support": 0,
+                "value": "rate_per_unit"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "lanes.csv",
+            "proposed_value": "rate_per_unit",
+            "question": "\"transport_cost_per_unit\" looks like 'rate_per_unit'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "LANE data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "lanes.csv",
+            "source_column": "transport_cost_per_unit",
+            "source_id": "lanes",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.96,
+            "content_type": "LANE",
+            "context": {
+              "alias_table_said": "lead_time_days",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.96,
+              "model_reasoning": "Header explicitly states days and sample values are numeric transit times (e.g., 1.0, 3.5), matching lead_time_days.",
+              "model_said": "lead_time_days",
+              "sample_values": [
+                "1.0",
+                "3.5",
+                "3.0",
+                "0.5",
+                "2.0"
+              ]
+            },
+            "item_id": "lanes.csv::lead_time_days",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "lead_time_days",
+                "rationale": "Header explicitly states days and sample values are numeric transit times (e.g., 1.0, 3.5), matching lead_time_days.; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "lead_time_days"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "lanes.csv",
+            "proposed_value": "lead_time_days",
+            "question": "\"lead_time_days\" looks like 'lead_time_days'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "LANE data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "lanes.csv",
+            "source_column": "lead_time_days",
+            "source_id": "lanes",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.98,
+            "content_type": "LANE",
+            "context": {
+              "alias_table_said": "mode",
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.98,
+              "model_reasoning": "Values are transport modes (e.g., ROAD) and header matches canonical mode field.",
+              "model_said": "mode",
+              "sample_values": [
+                "ROAD",
+                "ROAD",
+                "ROAD",
+                "ROAD",
+                "ROAD"
+              ]
+            },
+            "item_id": "lanes.csv::mode",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "mode",
+                "rationale": "Values are transport modes (e.g., ROAD) and header matches canonical mode field.; matches a known column name in the alias table",
+                "recommended": true,
+                "suggested_by": "ai+dictionary",
+                "support": 0,
+                "value": "mode"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "lanes.csv",
+            "proposed_value": "mode",
+            "question": "\"mode\" looks like 'mode'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "LANE data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "lanes.csv",
+            "source_column": "mode",
+            "source_id": "lanes",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.75,
+            "content_type": "LANE",
+            "context": {
+              "alias_table_said": null,
+              "feeds_optimizer": true,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.75,
+              "model_reasoning": "Name indicates capacity in units per day; closest canonical is lane_capacity though canonical label sometimes implies per-trip capacity\u2014units/day interpreted as capacity.",
+              "model_said": "lane_capacity",
+              "sample_values": [
+                "8000",
+                "4000",
+                "4000",
+                "6000",
+                "5000"
+              ]
+            },
+            "item_id": "lanes.csv::capacity_units_per_day",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "lane_capacity",
+                "rationale": "Name indicates capacity in units per day; closest canonical is lane_capacity though canonical label sometimes implies per-trip capacity\u2014units/day interpreted as capacity.",
+                "recommended": true,
+                "suggested_by": "ai",
+                "support": 0,
+                "value": "lane_capacity"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "lanes.csv",
+            "proposed_value": "lane_capacity",
+            "question": "\"capacity_units_per_day\" looks like 'lane_capacity'. This file feeds the optimiser directly, so please confirm before it is used \u2014 it will be remembered afterwards.",
+            "reasons": [
+              "LANE data feeds the optimiser directly, so a mapping is confirmed once by a human before it is trusted; after that it is remembered"
+            ],
+            "record_key": "lanes.csv",
+            "source_column": "capacity_units_per_day",
+            "source_id": "lanes",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.86,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "alias_table_said": "MARKET",
+              "alias_table_scores": {
+                "DEMAND": 0.0,
+                "FACILITY": 0.0,
+                "HISTORICAL_VOLUME": 0.0,
+                "LANE": 0.0,
+                "MARKET": 0.1,
+                "MARKET_SIGNAL": 0.0,
+                "PRODUCT": 0.0,
+                "SHIPMENT_LOG": 0.0
+              },
+              "columns": [
+                "order_id",
+                "customer_id",
+                "origin_dc",
+                "destination_market",
+                "product_code",
+                "quantity_units",
+                "freight_amt_inr",
+                "sla_target_pct",
+                "transit_days_expected",
+                "custom_notes"
+              ],
+              "destination_if_accepted": "staging",
+              "model_said": "SHIPMENT_LOG",
+              "reasoning": "Each row represents an individual order/dispatch (order_id) with origin_dc, destination_market, product_code, quantity and freight amount, matching transactional shipment records."
+            },
+            "item_id": "orders_raw.csv::__content_type__",
+            "kind": "content_type",
+            "options": [
+              {
+                "label": "FACILITY",
+                "rationale": "routes to the network zone",
+                "recommended": false,
+                "suggested_by": "",
+                "support": 0,
+                "value": "FACILITY"
+              },
+              {
+                "label": "MARKET",
+                "rationale": "routes to the network zone",
+                "recommended": false,
+                "suggested_by": "alias table",
+                "support": 0,
+                "value": "MARKET"
+              },
+              {
+                "label": "PRODUCT",
+                "rationale": "routes to the network zone",
+                "recommended": false,
+                "suggested_by": "",
+                "support": 0,
+                "value": "PRODUCT"
+              },
+              {
+                "label": "DEMAND",
+                "rationale": "routes to the network zone",
+                "recommended": false,
+                "suggested_by": "",
+                "support": 0,
+                "value": "DEMAND"
+              },
+              {
+                "label": "LANE",
+                "rationale": "routes to the network zone",
+                "recommended": false,
+                "suggested_by": "",
+                "support": 0,
+                "value": "LANE"
+              },
+              {
+                "label": "SHIPMENT_LOG",
+                "rationale": "routes to the staging zone",
+                "recommended": true,
+                "suggested_by": "model",
+                "support": 0,
+                "value": "SHIPMENT_LOG"
+              },
+              {
+                "label": "MARKET_SIGNAL",
+                "rationale": "routes to the staging zone",
+                "recommended": false,
+                "suggested_by": "",
+                "support": 0,
+                "value": "MARKET_SIGNAL"
+              },
+              {
+                "label": "HISTORICAL_VOLUME",
+                "rationale": "routes to the staging zone",
+                "recommended": false,
+                "suggested_by": "",
+                "support": 0,
+                "value": "HISTORICAL_VOLUME"
+              },
+              {
+                "label": "UNKNOWN",
+                "rationale": "routes to the hold zone",
+                "recommended": false,
+                "suggested_by": "",
+                "support": 0,
+                "value": "UNKNOWN"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": "SHIPMENT_LOG",
+            "question": "'orders_raw.csv' was read as SHIPMENT_LOG by the model, but the column names look more like MARKET. Which is it?",
+            "reasons": [
+              "the alias table scored this as MARKET (10% of columns) but the model read it as SHIPMENT_LOG \u2014 two independent methods disagreed"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": null,
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "choose_content_type"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.9,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "alias_table_said": null,
+              "feeds_optimizer": false,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.9,
+              "model_reasoning": "Values are origin distribution centres matching origin facility identifier",
+              "model_said": "facility_id",
+              "sample_values": [
+                "DC_DELHI",
+                "DC_DELHI",
+                "DC_MUMBAI",
+                "DC_BLR",
+                "DC_KOLKATA"
+              ]
+            },
+            "item_id": "orders_raw.csv::origin_dc",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "facility_id",
+                "rationale": "Values are origin distribution centres matching origin facility identifier",
+                "recommended": true,
+                "suggested_by": "ai",
+                "support": 0,
+                "value": "facility_id"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": "facility_id",
+            "question": "\"origin_dc\" looks like 'facility_id', but this is the first time it has been seen and the alias table does not recognise it. Is that right?",
+            "reasons": [
+              "first time this column has been seen, and the alias table does not recognise it either \u2014 so this rests on a single opinion. Confirmed once, then remembered"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": "origin_dc",
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "alias_table_said": null,
+              "feeds_optimizer": false,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.95,
+              "model_reasoning": "Values are destination market codes matching delivery zone identifier",
+              "model_said": "market_id",
+              "sample_values": [
+                "MKT_DELHI",
+                "MKT_LUCKNOW",
+                "MKT_MUMBAI",
+                "MKT_CHENNAI",
+                "MKT_KOLKATA"
+              ]
+            },
+            "item_id": "orders_raw.csv::destination_market",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "market_id",
+                "rationale": "Values are destination market codes matching delivery zone identifier",
+                "recommended": true,
+                "suggested_by": "ai",
+                "support": 0,
+                "value": "market_id"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": "market_id",
+            "question": "\"destination_market\" looks like 'market_id', but this is the first time it has been seen and the alias table does not recognise it. Is that right?",
+            "reasons": [
+              "first time this column has been seen, and the alias table does not recognise it either \u2014 so this rests on a single opinion. Confirmed once, then remembered"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": "destination_market",
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "alias_table_said": null,
+              "feeds_optimizer": false,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.95,
+              "model_reasoning": "Product/SKU codes map directly to product identifier",
+              "model_said": "product_id",
+              "sample_values": [
+                "PROD_1",
+                "PROD_1",
+                "PROD_1",
+                "PROD_1",
+                "PROD_1"
+              ]
+            },
+            "item_id": "orders_raw.csv::product_code",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "product_id",
+                "rationale": "Product/SKU codes map directly to product identifier",
+                "recommended": true,
+                "suggested_by": "ai",
+                "support": 0,
+                "value": "product_id"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": "product_id",
+            "question": "\"product_code\" looks like 'product_id', but this is the first time it has been seen and the alias table does not recognise it. Is that right?",
+            "reasons": [
+              "first time this column has been seen, and the alias table does not recognise it either \u2014 so this rests on a single opinion. Confirmed once, then remembered"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": "product_code",
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "alias_table_said": null,
+              "feeds_optimizer": false,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.95,
+              "model_reasoning": "Numeric counts (e.g., 150, 220) represent units moved",
+              "model_said": "quantity",
+              "sample_values": [
+                "150",
+                "220",
+                "310",
+                "180",
+                "290"
+              ]
+            },
+            "item_id": "orders_raw.csv::quantity_units",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "quantity",
+                "rationale": "Numeric counts (e.g., 150, 220) represent units moved",
+                "recommended": true,
+                "suggested_by": "ai",
+                "support": 0,
+                "value": "quantity"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": "quantity",
+            "question": "\"quantity_units\" looks like 'quantity', but this is the first time it has been seen and the alias table does not recognise it. Is that right?",
+            "reasons": [
+              "first time this column has been seen, and the alias table does not recognise it either \u2014 so this rests on a single opinion. Confirmed once, then remembered"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": "quantity_units",
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": true,
+            "confidence": 0.95,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "alias_table_said": null,
+              "feeds_optimizer": false,
+              "memory_rationale": "no prior confirmation for this column in this content type",
+              "memory_scope": "none",
+              "model_confidence": 0.95,
+              "model_reasoning": "Numeric days (1,2,...) represent expected transit time matching lead_time_days",
+              "model_said": "lead_time_days",
+              "sample_values": [
+                "1",
+                "2",
+                "1",
+                "1",
+                "1"
+              ]
+            },
+            "item_id": "orders_raw.csv::transit_days_expected",
+            "kind": "column_mapping",
+            "options": [
+              {
+                "label": "lead_time_days",
+                "rationale": "Numeric days (1,2,...) represent expected transit time matching lead_time_days",
+                "recommended": true,
+                "suggested_by": "ai",
+                "support": 0,
+                "value": "lead_time_days"
+              },
+              {
+                "label": "not needed \u2014 do not import this column",
+                "rationale": "choose this when the column has no canonical meaning",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": "lead_time_days",
+            "question": "\"transit_days_expected\" looks like 'lead_time_days', but this is the first time it has been seen and the alias table does not recognise it. Is that right?",
+            "reasons": [
+              "first time this column has been seen, and the alias table does not recognise it either \u2014 so this rests on a single opinion. Confirmed once, then remembered"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": "transit_days_expected",
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "confirm_recommendation",
+                "choose_alternative"
+              ],
+              "component": "evidence_choice_card",
+              "section": "required_review"
+            }
+          },
+          {
+            "blocking": false,
+            "confidence": 0.0,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "allowed_canonical_fields": [
+                "distance_km",
+                "facility_id",
+                "lead_time_days",
+                "market_id",
+                "order_count",
+                "period",
+                "product_id",
+                "quantity",
+                "rate_per_unit",
+                "returns_volume",
+                "weight_kg"
+              ],
+              "feeds_optimizer": false,
+              "profile": {
+                "adjacent_columns": [
+                  "customer_id",
+                  "origin_dc"
+                ],
+                "data_type": "text",
+                "known_id_matches": 0,
+                "maximum": null,
+                "minimum": null,
+                "non_empty_count": 9,
+                "null_count": 0,
+                "null_percentage": 0.0,
+                "possible_period": null,
+                "possible_unit": null,
+                "unique_count": 9
+              },
+              "raw_preserved": true,
+              "sample_values": [
+                "ORD_1001",
+                "ORD_1002",
+                "ORD_1003",
+                "ORD_1004",
+                "ORD_1005"
+              ]
+            },
+            "item_id": "orders_raw.csv::order_id",
+            "kind": "unfamiliar_field",
+            "options": [
+              {
+                "label": "keep as supplementary context",
+                "rationale": "preserve and display it, but never send it to the optimiser",
+                "recommended": true,
+                "suggested_by": "safety policy",
+                "support": 0,
+                "value": "__supplementary__"
+              },
+              {
+                "label": "I don't know yet",
+                "rationale": "keep the raw field unresolved for later investigation",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__unresolved__"
+              },
+              {
+                "label": "propose a new business field",
+                "rationale": "record the concept for governed schema review",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__proposed_new__"
+              },
+              {
+                "label": "ignore intentionally",
+                "rationale": "preserve the raw source, but exclude this field from further review",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": null,
+            "question": "\"order_id\" is not in the current schema. How should it be kept?",
+            "reasons": [
+              "no approved canonical field was identified"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": "order_id",
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "map_existing",
+                "keep_supplementary",
+                "propose_new",
+                "leave_unresolved",
+                "ignore"
+              ],
+              "component": "evidence_choice_card",
+              "section": "unfamiliar_fields"
+            }
+          },
+          {
+            "blocking": false,
+            "confidence": 0.0,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "allowed_canonical_fields": [
+                "distance_km",
+                "facility_id",
+                "lead_time_days",
+                "market_id",
+                "order_count",
+                "period",
+                "product_id",
+                "quantity",
+                "rate_per_unit",
+                "returns_volume",
+                "weight_kg"
+              ],
+              "feeds_optimizer": false,
+              "profile": {
+                "adjacent_columns": [
+                  "order_id",
+                  "origin_dc",
+                  "destination_market"
+                ],
+                "data_type": "text",
+                "known_id_matches": 0,
+                "maximum": null,
+                "minimum": null,
+                "non_empty_count": 9,
+                "null_count": 0,
+                "null_percentage": 0.0,
+                "possible_period": null,
+                "possible_unit": null,
+                "unique_count": 8
+              },
+              "raw_preserved": true,
+              "sample_values": [
+                "C1021",
+                "C1022",
+                "C1023",
+                "C1024",
+                "C1025"
+              ]
+            },
+            "item_id": "orders_raw.csv::customer_id",
+            "kind": "unfamiliar_field",
+            "options": [
+              {
+                "label": "keep as supplementary context",
+                "rationale": "preserve and display it, but never send it to the optimiser",
+                "recommended": true,
+                "suggested_by": "safety policy",
+                "support": 0,
+                "value": "__supplementary__"
+              },
+              {
+                "label": "I don't know yet",
+                "rationale": "keep the raw field unresolved for later investigation",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__unresolved__"
+              },
+              {
+                "label": "propose a new business field",
+                "rationale": "record the concept for governed schema review",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__proposed_new__"
+              },
+              {
+                "label": "ignore intentionally",
+                "rationale": "preserve the raw source, but exclude this field from further review",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": null,
+            "question": "\"customer_id\" is not in the current schema. How should it be kept?",
+            "reasons": [
+              "no approved canonical field was identified"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": "customer_id",
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "map_existing",
+                "keep_supplementary",
+                "propose_new",
+                "leave_unresolved",
+                "ignore"
+              ],
+              "component": "evidence_choice_card",
+              "section": "unfamiliar_fields"
+            }
+          },
+          {
+            "blocking": false,
+            "confidence": 0.0,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "allowed_canonical_fields": [
+                "distance_km",
+                "facility_id",
+                "lead_time_days",
+                "market_id",
+                "order_count",
+                "period",
+                "product_id",
+                "quantity",
+                "rate_per_unit",
+                "returns_volume",
+                "weight_kg"
+              ],
+              "feeds_optimizer": false,
+              "profile": {
+                "adjacent_columns": [
+                  "product_code",
+                  "quantity_units",
+                  "sla_target_pct",
+                  "transit_days_expected"
+                ],
+                "data_type": "numeric",
+                "known_id_matches": 0,
+                "maximum": 4400.0,
+                "minimum": -500.0,
+                "non_empty_count": 9,
+                "null_count": 0,
+                "null_percentage": 0.0,
+                "possible_period": null,
+                "possible_unit": "INR",
+                "unique_count": 8
+              },
+              "raw_preserved": true,
+              "sample_values": [
+                "1800",
+                "4400",
+                "2480",
+                "2700",
+                "2030"
+              ]
+            },
+            "item_id": "orders_raw.csv::freight_amt_inr",
+            "kind": "unfamiliar_field",
+            "options": [
+              {
+                "label": "keep as supplementary context",
+                "rationale": "preserve and display it, but never send it to the optimiser",
+                "recommended": true,
+                "suggested_by": "safety policy",
+                "support": 0,
+                "value": "__supplementary__"
+              },
+              {
+                "label": "I don't know yet",
+                "rationale": "keep the raw field unresolved for later investigation",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__unresolved__"
+              },
+              {
+                "label": "propose a new business field",
+                "rationale": "record the concept for governed schema review",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__proposed_new__"
+              },
+              {
+                "label": "ignore intentionally",
+                "rationale": "preserve the raw source, but exclude this field from further review",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": null,
+            "question": "\"freight_amt_inr\" is not in the current schema. How should it be kept?",
+            "reasons": [
+              "no approved canonical field was identified"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": "freight_amt_inr",
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "map_existing",
+                "keep_supplementary",
+                "propose_new",
+                "leave_unresolved",
+                "ignore"
+              ],
+              "component": "evidence_choice_card",
+              "section": "unfamiliar_fields"
+            }
+          },
+          {
+            "blocking": false,
+            "confidence": 0.0,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "allowed_canonical_fields": [
+                "distance_km",
+                "facility_id",
+                "lead_time_days",
+                "market_id",
+                "order_count",
+                "period",
+                "product_id",
+                "quantity",
+                "rate_per_unit",
+                "returns_volume",
+                "weight_kg"
+              ],
+              "feeds_optimizer": false,
+              "profile": {
+                "adjacent_columns": [
+                  "quantity_units",
+                  "freight_amt_inr",
+                  "transit_days_expected",
+                  "custom_notes"
+                ],
+                "data_type": "numeric",
+                "known_id_matches": 0,
+                "maximum": 96.0,
+                "minimum": 94.0,
+                "non_empty_count": 9,
+                "null_count": 0,
+                "null_percentage": 0.0,
+                "possible_period": null,
+                "possible_unit": "%",
+                "unique_count": 3
+              },
+              "raw_preserved": true,
+              "sample_values": [
+                "95",
+                "95",
+                "96",
+                "95",
+                "94"
+              ]
+            },
+            "item_id": "orders_raw.csv::sla_target_pct",
+            "kind": "unfamiliar_field",
+            "options": [
+              {
+                "label": "keep as supplementary context",
+                "rationale": "preserve and display it, but never send it to the optimiser",
+                "recommended": true,
+                "suggested_by": "safety policy",
+                "support": 0,
+                "value": "__supplementary__"
+              },
+              {
+                "label": "I don't know yet",
+                "rationale": "keep the raw field unresolved for later investigation",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__unresolved__"
+              },
+              {
+                "label": "propose a new business field",
+                "rationale": "record the concept for governed schema review",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__proposed_new__"
+              },
+              {
+                "label": "ignore intentionally",
+                "rationale": "preserve the raw source, but exclude this field from further review",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": null,
+            "question": "\"sla_target_pct\" is not in the current schema. How should it be kept?",
+            "reasons": [
+              "no approved canonical field was identified"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": "sla_target_pct",
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "map_existing",
+                "keep_supplementary",
+                "propose_new",
+                "leave_unresolved",
+                "ignore"
+              ],
+              "component": "evidence_choice_card",
+              "section": "unfamiliar_fields"
+            }
+          },
+          {
+            "blocking": false,
+            "confidence": 0.0,
+            "content_type": "SHIPMENT_LOG",
+            "context": {
+              "allowed_canonical_fields": [
+                "distance_km",
+                "facility_id",
+                "lead_time_days",
+                "market_id",
+                "order_count",
+                "period",
+                "product_id",
+                "quantity",
+                "rate_per_unit",
+                "returns_volume",
+                "weight_kg"
+              ],
+              "feeds_optimizer": false,
+              "profile": {
+                "adjacent_columns": [
+                  "sla_target_pct",
+                  "transit_days_expected"
+                ],
+                "data_type": "text",
+                "known_id_matches": 0,
+                "maximum": null,
+                "minimum": null,
+                "non_empty_count": 9,
+                "null_count": 0,
+                "null_percentage": 0.0,
+                "possible_period": null,
+                "possible_unit": null,
+                "unique_count": 9
+              },
+              "raw_preserved": true,
+              "sample_values": [
+                "Priority direct dispatch",
+                "Standard corridor",
+                "Regional hub drop",
+                "Southern connector",
+                "Eastern distribution"
+              ]
+            },
+            "item_id": "orders_raw.csv::custom_notes",
+            "kind": "unfamiliar_field",
+            "options": [
+              {
+                "label": "keep as supplementary context",
+                "rationale": "preserve and display it, but never send it to the optimiser",
+                "recommended": true,
+                "suggested_by": "safety policy",
+                "support": 0,
+                "value": "__supplementary__"
+              },
+              {
+                "label": "I don't know yet",
+                "rationale": "keep the raw field unresolved for later investigation",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__unresolved__"
+              },
+              {
+                "label": "propose a new business field",
+                "rationale": "record the concept for governed schema review",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__proposed_new__"
+              },
+              {
+                "label": "ignore intentionally",
+                "rationale": "preserve the raw source, but exclude this field from further review",
+                "recommended": false,
+                "suggested_by": "reviewer",
+                "support": 0,
+                "value": "__not_needed__"
+              }
+            ],
+            "origin_label": "orders_raw.csv",
+            "proposed_value": null,
+            "question": "\"custom_notes\" is not in the current schema. How should it be kept?",
+            "reasons": [
+              "no approved canonical field was identified"
+            ],
+            "record_key": "orders_raw.csv",
+            "source_column": "custom_notes",
+            "source_id": "orders_raw",
+            "ui": {
+              "actions": [
+                "ask_ai",
+                "map_existing",
+                "keep_supplementary",
+                "propose_new",
+                "leave_unresolved",
+                "ignore"
+              ],
+              "component": "evidence_choice_card",
+              "section": "unfamiliar_fields"
+            }
+          }
+        ],
+        "run_id": "ing_a4e360aa7d10",
+        "summary": "1 file(s) whose type could not be confirmed and 22 column(s) awaiting confirmation and 5 unfamiliar column(s) preserved for review"
+      },
+      "revision": 1,
+      "run_id": "ing_a4e360aa7d10",
+      "snapshot_path": null,
+      "status": "AWAITING_REVIEW",
+      "updated_at": "2026-08-30T11:48:50+00:00",
+      "uploaded_files": [
+        {
+          "category": "tabular",
+          "filename": "facilities.csv"
+        },
+        {
+          "category": "tabular",
+          "filename": "lanes.csv"
+        },
+        {
+          "category": "tabular",
+          "filename": "orders_raw.csv"
+        }
+      ]
+    }
+  },
+  {
+    "id": "CHAT_SCENARIO_ANALYSIS",
+    "severity": "P2",
+    "component": "ORCHESTRATOR",
+    "expected": "HTTP 200 on chat query",
+    "actual": "HTTP 500",
+    "root_cause": "ORCHESTRATOR",
+    "evidence": {
+      "briefing": {
+        "context": "I see the highest relative economic exposure at PLANT_SOUTH (REI 1.00). I could not use the following analyses; their values are UNKNOWN (not zero): kpi.summarise (NOT_RUN); optimization.solve_scenario (NOT_RUN); scenario.create (UNAVAILABLE); scenario.validate (NOT_RUN).",
+        "entity_id": null,
+        "evidence_completeness": "PARTIAL",
+        "key_drivers": [
+          "PLANT_SOUTH carries the greatest disruption exposure"
+        ],
+        "kpi_insights": [
+          {
+            "comparison_refs": [],
+            "driver_refs": [],
+            "headline": "I see the current cost position clearly",
+            "metric_refs": [
+              "network_state.business_network_cost"
+            ],
+            "narrative": "I see business network cost at 150,627.70 per period. I use this as the decision baseline for comparing any scenario.",
+            "theme": "Cost"
+          }
+        ],
+        "limitation": "Incomplete evidence: kpi.summarise (NOT_RUN); optimization.solve_scenario (NOT_RUN); scenario.create (UNAVAILABLE); scenario.validate (NOT_RUN).",
+        "missing_information": [
+          {
+            "blocking": false,
+            "impact": "It would let me strengthen or complete this briefing.",
+            "question": "Can you provide the missing kpi.summarise evidence?",
+            "question_ref": "kpi.summarise"
+          },
+          {
+            "blocking": false,
+            "impact": "It would let me strengthen or complete this briefing.",
+            "question": "Can you provide the missing optimization.solve_scenario evidence?",
+            "question_ref": "optimization.solve_scenario"
+          }
+        ],
+        "opening": "I see a business network cost of 150,627.70 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty.",
+        "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+        "schema_version": "2.0",
+        "scope": "NETWORK",
+        "suggested_questions": [
+          "What is driving this result?",
+          "Which node or lane should I examine?"
+        ]
+      },
+      "clarification": null,
+      "clarity": "CLEAR",
+      "conversation_id": "conv_b7210b90817a",
+      "duration_seconds": 0.0171,
+      "errors": [
+        {
+          "capability": "scenario.create",
+          "code": "MISSING_DATA",
+          "failure_class": "REQUIRES_HUMAN",
+          "message": "No scenario specification at index 0. The request did not describe a concrete scenario (e.g. which facility to close).",
+          "step_id": "create_scenario"
+        }
+      ],
+      "execution_id": "8842b54b-8b6",
+      "governance": {
+        "action_type": "NONE",
+        "approval_request_id": null,
+        "blocked_by_missing_evidence": false,
+        "classification": "NO_ACTION",
+        "eligible_approver_roles": [],
+        "evaluated": {
+          "action_requires_risk_evidence": false,
+          "action_type": "NONE",
+          "confidence": "MEDIUM",
+          "cost_impact_pct": null,
+          "data_quality_ok": true,
+          "grounding_failed": false,
+          "is_feasible": true,
+          "missing_critical_evidence": [
+            "optimization.solve_scenario"
+          ],
+          "missing_evidence": {
+            "kpi.summarise": "NOT_RUN: blocked by ['optimize_scenario']",
+            "optimization.solve_scenario": "NOT_RUN: blocked by ['validate_scenario']",
+            "scenario.create": "UNAVAILABLE: No scenario specification at index 0. The request did not describe a concrete scenario (e.g. which facility to close).",
+            "scenario.validate": "NOT_RUN: blocked by ['create_scenario']"
+          },
+          "rei": 1.0,
+          "risk_factor": null,
+          "unresolved_evidence": {},
+          "unserved_demand_rate": 0.0
+        },
+        "evidence_status": {
+          "optimization.solve_scenario": "UNAVAILABLE"
+        },
+        "governing_rule": "R0_NO_ACTION_PROPOSED",
+        "reason": "No action was proposed by this run.",
+        "requires_approval": false,
+        "triggered_rules": [
+          "R0_NO_ACTION_PROPOSED"
+        ]
+      },
+      "grounding_status": "GROUNDED",
+      "intent": "SCENARIO_ANALYSIS",
+      "intent_confidence": 0.4,
+      "intent_schema_version": "1.0",
+      "intent_source": "rules",
+      "network_snapshot_id": "snap_762b4d277ffb",
+      "provenance": "OBSERVED",
+      "reply": "I see a business network cost of 150,627.70 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see the highest relative economic exposure at PLANT_SOUTH (REI 1.00). I could not use the following analyses; their values are UNKNOWN (not zero): kpi.summarise (NOT_RUN); optimization.solve_scenario (NOT_RUN); scenario.create (UNAVAILABLE); scenario.validate (NOT_RUN). Suggested next step: I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "resolved_entity_ids": [],
+      "results": {
+        "network": {
+          "avg_utilization_pct": 56.23,
+          "baseline_snapshot_id": "snap_762b4d277ffb",
+          "business_network_cost": 150627.7036,
+          "closed_facilities": [
+            "DC_NORTH_NEW",
+            "DC_SOUTH_NEW"
+          ],
+          "cost_components": {
+            "carbon_cost": 0.0,
+            "closure_cost": 0.0,
+            "facility_cost": 95000.0,
+            "handling_cost": 8030.0,
+            "inventory_cost": 1707.7036,
+            "opening_cost": 0.0,
+            "transport_cost": 45890.0
+          },
+          "data_version": "762b4d277ffbf18e",
+          "demand_fill_rate": 1.0,
+          "execution_id": "8842b54b-8b6",
+          "is_feasible": true,
+          "is_hypothetical": false,
+          "model_version": "1.2.0",
+          "network_id": "CASE16_SYNTHETIC",
+          "open_facilities": [
+            "DC_CENTRAL",
+            "DC_EAST",
+            "DC_WEST",
+            "PLANT_NORTH",
+            "PLANT_SOUTH"
+          ],
+          "optimization_mode": "BROWNFIELD_SCENARIO_OPTIMIZATION",
+          "pct_demand_in_sla": 100.0,
+          "reconciliation_is_closed": true,
+          "result_kind": "OBSERVED_RESULT",
+          "run_id": "9d79d1fb",
+          "served_demand": 7300.0,
+          "service_unsupported_features": [],
+          "shortage_penalty_cost": 0.0,
+          "sla_mode": "LAST_MILE",
+          "solver_objective": 150627.7036,
+          "solver_status": "OPTIMAL",
+          "total_carbon_kg": 156.1,
+          "total_demand": 7300.0,
+          "unserved_demand": 0.0,
+          "unserved_demand_rate": 0.0
+        },
+        "resilience": {
+          "baseline_business_cost": 150627.7036,
+          "baseline_solver_status": "OPTIMAL",
+          "batch_id": "rei_5de1d376b905",
+          "batch_status": "COMPLETED_WITH_ERRORS",
+          "computed_for_snapshot_id": null,
+          "data_version": "762b4d277ffbf18e",
+          "disruption_summary": "FACILITY_FAILURE for the modelled planning period (allow_shortage=False)",
+          "facilities": [
+            {
+              "calculation_status": "OK",
+              "cost_impact_pct": 3.226498,
+              "diagnostics": [
+                "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective."
+              ],
+              "economic_impact": 4860.0,
+              "facility_id": "PLANT_SOUTH",
+              "facility_name": "Southern Manufacturing Plant",
+              "facility_role": "PLANT",
+              "failure_reason": null,
+              "is_feasible": true,
+              "performance_impact": 4860.0,
+              "rank": 1,
+              "rei": 1.0,
+              "rerouted_volume": 2700.0,
+              "risk_classification": "NOT_CLASSIFIED",
+              "service_loss": 0.0,
+              "solver_status": "OPTIMAL",
+              "unserved_demand": 0.0,
+              "unserved_demand_rate": 0.0
+            },
+            {
+              "calculation_status": "OK",
+              "cost_impact_pct": -9.79918,
+              "diagnostics": [
+                "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+                "NEGATIVE PERFORMANCE IMPACT: disrupting 'DC_WEST' produced a business network cost 14,760.2799 LOWER than baseline (135,867.4237 vs 150,627.7036) with all demand still served. The raw value is retained. Investigate whether this reflects genuine model behaviour (e.g. an open facility whose fixed cost exceeded its routing benefit, meaning the baseline network itself is suboptimal), a cost configuration issue, or an invalid comparison."
+              ],
+              "economic_impact": 0.0,
+              "facility_id": "DC_WEST",
+              "facility_name": "Western Distribution Centre",
+              "facility_role": "DC",
+              "failure_reason": null,
+              "is_feasible": true,
+              "performance_impact": -14760.2799,
+              "rank": 2,
+              "rei": 0.0,
+              "rerouted_volume": 5400.0,
+              "risk_classification": "NOT_CLASSIFIED",
+              "service_loss": 0.0,
+              "solver_status": "OPTIMAL",
+              "unserved_demand": 0.0,
+              "unserved_demand_rate": 0.0
+            },
+            {
+              "calculation_status": "OK",
+              "cost_impact_pct": -18.56373,
+              "diagnostics": [
+                "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+                "NEGATIVE PERFORMANCE IMPACT: disrupting 'DC_EAST' produced a business network cost 27,962.1203 LOWER than baseline (122,665.5833 vs 150,627.7036) with all demand still served. The raw value is retained. Investigate whether this reflects genuine model behaviour (e.g. an open facility whose fixed cost exceeded its routing benefit, meaning the baseline network itself is suboptimal), a cost configuration issue, or an invalid comparison."
+              ],
+              "economic_impact": 0.0,
+              "facility_id": "DC_EAST",
+              "facility_name": "Eastern Distribution Centre",
+              "facility_role": "DC",
+              "failure_reason": null,
+              "is_feasible": true,
+              "performance_impact": -27962.1203,
+              "rank": 3,
+              "rei": 0.0,
+              "rerouted_volume": 3800.0,
+              "risk_classification": "NOT_CLASSIFIED",
+              "service_loss": 0.0,
+              "solver_status": "OPTIMAL",
+              "unserved_demand": 0.0,
+              "unserved_demand_rate": 0.0
+            },
+            {
+              "calculation_status": "OK",
+              "cost_impact_pct": -23.229167,
+              "diagnostics": [
+                "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+                "NEGATIVE PERFORMANCE IMPACT: disrupting 'DC_CENTRAL' produced a business network cost 34,989.5603 LOWER than baseline (115,638.1433 vs 150,627.7036) with all demand still served. The raw value is retained. Investigate whether this reflects genuine model behaviour (e.g. an open facility whose fixed cost exceeded its routing benefit, meaning the baseline network itself is suboptimal), a cost configuration issue, or an invalid comparison."
+              ],
+              "economic_impact": 0.0,
+              "facility_id": "DC_CENTRAL",
+              "facility_name": "Central Distribution Centre",
+              "facility_role": "DC",
+              "failure_reason": null,
+              "is_feasible": true,
+              "performance_impact": -34989.5603,
+              "rank": 4,
+              "rei": 0.0,
+              "rerouted_volume": 5400.0,
+              "risk_classification": "NOT_CLASSIFIED",
+              "service_loss": 0.0,
+              "solver_status": "OPTIMAL",
+              "unserved_demand": 0.0,
+              "unserved_demand_rate": 0.0
+            },
+            {
+              "calculation_status": "INFEASIBLE",
+              "cost_impact_pct": null,
+              "diagnostics": [
+                "Disruption of 'PLANT_NORTH' left the network without a feasible solution (solver status: INFEASIBLE). The network cannot absorb this disruption under the current constraints. Performance Impact and REI are undefined and reported as None rather than estimated.",
+                "Service diagnostic: re-solved 'PLANT_NORTH' with shortage enabled to quantify the damage. 1,300.00 units (17.81% of demand) cannot be served. These service figures are diagnostic only \u2014 cost, Performance Impact and REI remain undefined for this facility."
+              ],
+              "economic_impact": null,
+              "facility_id": "PLANT_NORTH",
+              "facility_name": "Northern Manufacturing Plant",
+              "facility_role": "PLANT",
+              "failure_reason": "disruption produced solver status INFEASIBLE",
+              "is_feasible": false,
+              "performance_impact": null,
+              "rank": null,
+              "rei": null,
+              "rerouted_volume": 5400.0,
+              "risk_classification": "CRITICAL",
+              "service_loss": 0.178082,
+              "solver_status": "INFEASIBLE",
+              "unserved_demand": 1300.0,
+              "unserved_demand_rate": 0.178082
+            }
+          ],
+          "highest_exposure_facility": "PLANT_SOUTH",
+          "material_fingerprint": "fp1_90326be22f8ba134",
+          "max_performance_impact": 4860.0,
+          "max_rei": 1.0,
+          "model_version": "1.2.0",
+          "n_facilities_assessed": 5,
+          "n_failed": 0,
+          "n_infeasible": 1,
+          "n_milp_solves": 0,
+          "n_successful": 4,
+          "network_id": "CASE16_SYNTHETIC",
+          "network_snapshot_id": "snap_762b4d277ffb",
+          "rei_by_facility": {
+            "DC_CENTRAL": 0.0,
+            "DC_EAST": 0.0,
+            "DC_WEST": 0.0,
+            "PLANT_NORTH": null,
+            "PLANT_SOUTH": 1.0
+          },
+          "rei_status": "COMPUTED",
+          "served_from_cache": true,
+          "warnings": [
+            "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+            "PLANT_NORTH: INFEASIBLE - disruption produced solver status INFEASIBLE"
+          ]
+        }
+      },
+      "risk": null,
+      "scenario_id": null,
+      "status": "FAILED",
+      "turn_id": "a30beca6-3b7",
+      "warnings": [
+        "Escalation on capability 'scenario.create': Capability 'scenario.create' failed after 1 attempt(s): No scenario specification at index 0. The request did not describe a concrete scenario (e.g. which facility to close).",
+        "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
+        "PLANT_NORTH: INFEASIBLE - disruption produced solver status INFEASIBLE",
+        "step 'validate_scenario' blocked by failed required dependency: create_scenario",
+        "step 'optimize_scenario' blocked by failed required dependency: validate_scenario",
+        "step 'kpi' blocked by failed required dependency: optimize_scenario",
+        "step 'reason' running with degraded evidence; unavailable: optimization.solve_scenario, kpi.summarise",
+        "step 'govern' running with degraded evidence; unavailable: optimization.solve_scenario, kpi.summarise"
+      ],
+      "workflow_id": "wf_scenario_analysis"
+    }
+  },
+  {
+    "id": "AGENT_01",
+    "severity": "P1",
+    "component": "AGENTIC_FLOW",
+    "expected": "Successful orchestrator execution",
+    "actual": "REQUIRES_HUMAN",
+    "root_cause": "AGENTIC_FLOW",
+    "evidence": {
+      "execution_id": "eb2ba516-778",
+      "request_id": "4362ee82-50b9-4a11-b072-80f1efd12d7c",
+      "status": "REQUIRES_HUMAN",
+      "intent": "UNKNOWN",
+      "network_snapshot_id": "snap_762b4d277ffb",
+      "scenario_id": null,
+      "scenario_version": null,
+      "is_hypothetical": false,
+      "summary": "",
+      "results": {},
+      "risk": null,
+      "reasoning": null,
+      "governance": null,
+      "approval": null,
+      "twin_states": [
+        {
+          "state_id": "tws_snap_762b4d277ffb_optimized",
+          "snapshot_id": "snap_762b4d277ffb",
+          "scenario_id": null,
+          "state_type": "OPTIMIZED",
+          "calculation_status": "PARTIAL",
+          "n_facilities": 0,
+          "n_flows": 0,
+          "generated_at": "2026-08-30T11:48:50.727865+00:00"
+        }
+      ],
+      "errors": [
+        {
+          "code": "INVALID_REQUEST",
+          "message": "Unable to determine intent. No rule matched the request. (rule-based only; LLM not used)",
+          "failure_class": "REQUIRES_HUMAN"
+        }
+      ],
+      "warnings": [
+        "The request could not be classified into a known workflow."
+      ],
+      "duration_seconds": 0.0005,
+      "started_at": "2026-08-30T11:48:50.727480+00:00",
+      "completed_at": "2026-08-30T11:48:50.727941+00:00",
+      "steps": []
+    }
+  },
+  {
+    "id": "REASON_01",
+    "severity": "P1",
+    "component": "REASONING",
+    "expected": "HTTP 200 on insight query",
+    "actual": "HTTP 404",
+    "root_cause": "REASONING",
+    "evidence": {
+      "error": {
+        "code": "NOT_FOUND",
+        "message": "\"No Digital Twin state 'st_case16_default' has been published.\""
+      }
+    }
+  }
+]

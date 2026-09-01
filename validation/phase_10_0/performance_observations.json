@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-08-30T19:16:53",
+  "method": "Flask test client, single process, warm caches unless noted.",
+  "measurements": {
+    "GET /api/status": {
+      "runs": 3,
+      "min_ms": 0.2,
+      "max_ms": 0.4,
+      "mean_ms": 0.3
+    },
+    "GET /api/projects": {
+      "runs": 3,
+      "min_ms": 0.2,
+      "max_ms": 0.3,
+      "mean_ms": 0.2
+    },
+    "GET /api/kpis/network (cached ctx)": {
+      "runs": 3,
+      "min_ms": 0.4,
+      "max_ms": 0.5,
+      "mean_ms": 0.5
+    },
+    "GET /api/kpis/evidence": {
+      "runs": 3,
+      "min_ms": 0.8,
+      "max_ms": 0.9,
+      "mean_ms": 0.9
+    },
+    "POST /api/scenarios/simulate (full MILP)": {
+      "runs": 2,
+      "min_ms": 32.7,
+      "max_ms": 52.7,
+      "mean_ms": 42.7
+    }
+  },
+  "notes": [
+    "The KPI context cache has a 120s TTL keyed by snapshot; the first request after expiry pays a full MILP solve.",
+    "Every scenario simulate is an uncached solve by design \u2014 a cached scenario result would be a stale answer to a what-if question.",
+    "Measured on the Case-16 synthetic network (7 facilities). These figures do not characterise production-scale networks; no load testing was performed in this phase."
+  ]
+}

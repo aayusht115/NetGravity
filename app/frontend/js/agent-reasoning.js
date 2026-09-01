@@ -8,26 +8,50 @@
  * - Pareto Optimization & Prescriptive Synthesis
  */
 
+/**
+ * The stages of the pipeline that actually runs.
+ *
+ * Phase 10.0 rewrite. The previous list was theatre, and it described a system
+ * that does not exist:
+ *
+ *   - "19 network nodes … 14,200 active SKU flow vectors … SAP WMS dispatch
+ *     logs" — invented telemetry, and a facility count unrelated to whatever
+ *     network was loaded;
+ *   - "Google OR-Tools Simplex engine initialized · converged in 320ms" — the
+ *     WRONG SOLVER. This system uses PuLP/HiGHS branch-and-cut. Naming a
+ *     different engine, with a fabricated runtime, in the one screen a user
+ *     opens to understand how an answer was reached is the most misleading
+ *     thing the UI could say;
+ *   - "Multi-Agent Challenger Debate … adversarial debate: 0 SLA violations" —
+ *     no such architecture exists; and
+ *   - a fully fabricated verdict ("Rebalance Baddi volume to Kolkata DC,
+ *     -7.8% cost variance, 96.7% SLA guaranteed") presented as the model's
+ *     conclusion.
+ *
+ * These stages now name the real control plane and carry no numbers. Concrete
+ * figures belong to the execution trace at
+ * `/orchestrator/executions/<id>/trace`, which reports what actually ran.
+ */
 const REASONING_STAGES = [
   {
-    name: "Multi-Source Telemetry Ingestion & Graph Synthesis",
-    desc: "Ingesting real-time data feeds across 19 network nodes, 24-month demand history, SAP WMS dispatch logs, and weather vulnerability matrices.",
-    log: "[INGEST] 19 network facilities synced · Verified 14,200 active SKU flow vectors."
+    name: "Intent resolution & planning",
+    desc: "Interpreting the request and selecting a workflow. The planner is deterministic; when a language model is available it may propose a plan, but the plan is validated before anything executes.",
+    log: "[PLAN] Intent resolved · execution plan proposed."
   },
   {
-    name: "Mathematical Formulation & Mixed-Integer Linear Program (MILP)",
-    desc: "Formulating multi-echelon cost minimization objective function subject to DC capacity ceilings, throughput constraints, and minimum SLA bounds (≥95%).",
-    log: "[SOLVER] Google OR-Tools Simplex engine initialized · Primal-dual iterations converged in 320ms."
+    name: "Plan validation & dependency check",
+    desc: "Checking every step against the capability registry: that each capability exists, its inputs are satisfied, and its hard dependencies are met. An invalid plan is refused rather than partially run.",
+    log: "[VALIDATE] Capability dependencies verified."
   },
   {
-    name: "Multi-Agent Challenger Debate & Stress-Testing",
-    desc: "Network Cost Optimizer Agent evaluated 4 topology candidates; Resilience Challenger Agent injected 14.2% festive surge stress to verify fault tolerance.",
-    log: "[AGENTS] Cost Optimizer Agent & Risk Challenger completed adversarial debate: 0 SLA violations."
+    name: "Capability execution (MILP)",
+    desc: "Running the specialist engines through the capability executor. Network optimisation is solved exactly by PuLP/HiGHS branch-and-cut; the language model cannot calculate, alter or override a solver result.",
+    log: "[SOLVE] PuLP/HiGHS branch-and-cut executed."
   },
   {
-    name: "Pareto Optimal Frontier & Prescriptive Verdict",
-    desc: "Synthesized final decision recommendation: Rebalance Baddi volume to Kolkata DC (-7.8% cost variance, 100% capacity relief, 96.7% SLA guaranteed).",
-    log: "[SYNTHESIS] Decision synthesized successfully. Ready for executive simulation."
+    name: "Observation, reasoning & governance",
+    desc: "Observing each result, deciding whether to continue, and converting the authoritative evidence package into an explanation. Governance then classifies any recommended action before it can be acted on.",
+    log: "[GOVERN] Evidence assembled · action classified."
   }
 ];
 

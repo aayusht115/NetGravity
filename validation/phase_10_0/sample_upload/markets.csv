@@ -1,0 +1,3 @@
+market_id,city,demand,sla_days
+MKT_MUM,Mumbai,4000,2
+MKT_DEL,Delhi,3500,2

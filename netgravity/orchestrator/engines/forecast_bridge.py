@@ -107,7 +107,12 @@ class ForecastApplication:
     unavailable: Dict[str, str] = field(default_factory=dict)
 
     quantile_mode: QuantileMode = QuantileMode.P50
+    #: The first period applied. Retained as a scalar because a single-period
+    #: application is still the common case and every existing caller reads it.
     period: int = 1
+    #: Every period applied, in order. One entry for a single-period
+    #: application; the whole horizon when one was applied.
+    periods: List[int] = field(default_factory=lambda: [1])
     #: Data version of the produced network. Always differs from the observed
     #: one when any demand actually changed.
     data_version: Optional[str] = None
@@ -140,6 +145,7 @@ def validate_forecast_for_network(
     *,
     snapshot_id: str,
     period: int = 1,
+    periods: Optional[Sequence[int]] = None,
 ) -> List[str]:
     """
     Check a forecast may be applied to a network.
@@ -150,8 +156,14 @@ def validate_forecast_for_network(
     Staleness is checked on `snapshot_id` rather than on a timestamp: a forecast
     built from one network's history says nothing dependable about a different
     network, however recently it was produced.
+
+    `periods` checks a whole horizon at once; `period` remains for the
+    single-period case. The horizon bound is checked against the LAST period
+    asked for, because that is the one that can fall off the end.
     """
     reasons: List[str] = []
+    if periods:
+        period = max(periods)
 
     if result.provenance.snapshot_id != snapshot_id:
         reasons.append(
@@ -214,24 +226,83 @@ def apply_forecast_to_network(
     unforecast_policy: UnforecastPolicy = UnforecastPolicy.REJECT,
 ) -> ForecastApplication:
     """
-    Build a MILP-ready network from a forecast.
+    Build a MILP-ready network from ONE period of a forecast.
 
     Every demand record in the observed network survives into the output. A
     record the forecast covered takes the forecast quantity and standard
-    deviation; a record it did not covered is governed by `unforecast_policy`,
+    deviation; a record it did not cover is governed by `unforecast_policy`,
     and is never dropped under either setting.
 
     Service terms — `sla_days`, `service_level`, `priority` — are carried over
     from the observed record. A forecast estimates how much, not how fast; the
     commercial commitment is unchanged by it.
     """
+    return _apply(
+        result, network, snapshot_id=snapshot_id, periods=[period],
+        quantile_mode=quantile_mode, unforecast_policy=unforecast_policy,
+    )
+
+
+def apply_forecast_horizon_to_network(
+    result: ForecastResult,
+    network: CanonicalNetwork,
+    *,
+    snapshot_id: str,
+    periods: Optional[Sequence[int]] = None,
+    quantile_mode: QuantileMode = QuantileMode.P50,
+    unforecast_policy: UnforecastPolicy = UnforecastPolicy.REJECT,
+) -> ForecastApplication:
+    """
+    Build a MILP-ready network from the WHOLE forecast horizon.
+
+    A forecast is produced over six to twenty-four periods and then, until now,
+    exactly one of them was ever optimised against — the other eleven months of
+    a twelve-month forecast were computed, returned to the screen, and dropped
+    on the way to the solver. That is the shape of question the seasonality in
+    the forecast exists to answer, and nothing could ask it.
+
+    The demand table this produces carries one row per (market, product,
+    period), which the MILP models as a horizon under `FULL_HORIZON`: demand
+    and capacity bind month by month, and stock may be carried from a quiet
+    month into a busy one.
+
+    `periods` defaults to every period the forecast covers.
+    """
+    horizon = list(periods) if periods else list(
+        range(1, int(getattr(result.provenance, "horizon", 1) or 1) + 1))
+    return _apply(
+        result, network, snapshot_id=snapshot_id, periods=horizon,
+        quantile_mode=quantile_mode, unforecast_policy=unforecast_policy,
+    )
+
+
+def _apply(
+    result: ForecastResult,
+    network: CanonicalNetwork,
+    *,
+    snapshot_id: str,
+    periods: Sequence[int],
+    quantile_mode: QuantileMode,
+    unforecast_policy: UnforecastPolicy,
+) -> ForecastApplication:
+    """
+    One implementation behind both entry points.
+
+    A single period and a horizon differ only in how many periods are written;
+    the coverage rules, the provenance, the substitution policy and the
+    identity of the produced network are the same question either way, and
+    having them in one place is what stops them from drifting apart.
+    """
+    horizon = [int(p) for p in periods] or [1]
+    first = horizon[0]
+
     reasons = validate_forecast_for_network(
-        result, network, snapshot_id=snapshot_id, period=period,
+        result, network, snapshot_id=snapshot_id, periods=horizon,
     )
     if reasons:
         logger.warning("forecast_bridge.rejected reasons=%s", reasons)
         return ForecastApplication(
-            ok=False, reasons=reasons, period=period,
+            ok=False, reasons=reasons, period=first, periods=horizon,
             quantile_mode=quantile_mode, source_snapshot_id=snapshot_id,
         )
 
@@ -247,37 +318,52 @@ def apply_forecast_to_network(
 
     for demand in network.demands:
         key = (demand.market_id, demand.product_id)
+        label = f"{key[0]}/{key[1]}"
         series = by_key.get(key)
-        forecast_value = None
 
+        if series is None:
+            unavailable[label] = "no forecast was requested for this pair"
+        elif not series.ok:
+            unavailable[label] = f"{series.status.value}: {series.reason}"
+
+        # A pair is FORECAST only if the forecast covers EVERY period asked
+        # for. Covering some of a horizon and not the rest would produce a
+        # demand table that is forecast in March and observed in April, which
+        # no reader could attribute and no optimum could be defended.
+        values: Dict[int, Tuple[float, float]] = {}
         if series is not None and series.ok:
-            forecast_value = _quantity_for(series, period, quantile_mode)
-            if forecast_value is None:
-                unavailable[f"{key[0]}/{key[1]}"] = (
-                    f"forecast has no point for period {period}"
-                )
-        elif series is not None:
-            unavailable[f"{key[0]}/{key[1]}"] = f"{series.status.value}: {series.reason}"
-        else:
-            unavailable[f"{key[0]}/{key[1]}"] = "no forecast was requested for this pair"
+            for p in horizon:
+                got = _quantity_for(series, p, quantile_mode)
+                if got is None:
+                    unavailable[label] = f"forecast has no point for period {p}"
+                    values = {}
+                    break
+                values[p] = got
 
-        if forecast_value is not None:
-            quantity, std_dev = forecast_value
-            new_demands.append(demand.model_copy(update={
-                "period": period,
-                "quantity": round(quantity, 4),
-                # Forecast dispersion feeds safety stock through the existing
-                # inventory terms. This is the seam the MILP already had for
-                # demand uncertainty; no new field was needed.
-                "std_dev": round(std_dev, 4),
-            }))
+        if values:
+            for p in horizon:
+                quantity, std_dev = values[p]
+                new_demands.append(demand.model_copy(update={
+                    "period": p,
+                    "quantity": round(quantity, 4),
+                    # Forecast dispersion feeds safety stock through the
+                    # existing inventory terms. This is the seam the MILP
+                    # already had for demand uncertainty; no new field was
+                    # needed.
+                    "std_dev": round(std_dev, 4),
+                }))
             provenance[key] = DemandProvenance.FORECAST
         else:
-            # Never dropped. The record survives with its observed value, and
-            # the policy decides whether the run may proceed.
-            new_demands.append(demand.model_copy(update={"period": period}))
+            # Never dropped. The record survives with its observed value in
+            # every period of the horizon, and the policy decides whether the
+            # run may proceed. Repeating the observed figure across the horizon
+            # is the only reading available — an observation describes one
+            # period and says nothing about seasonality — and it is labelled
+            # OBSERVED so nobody mistakes it for a flat forecast.
+            for p in horizon:
+                new_demands.append(demand.model_copy(update={"period": p}))
             provenance[key] = DemandProvenance.OBSERVED
-            substituted.append(f"{key[0]}/{key[1]}")
+            substituted.append(label)
 
     if substituted and unforecast_policy is UnforecastPolicy.REJECT:
         detail = ", ".join(sorted(substituted)[:10])
@@ -292,16 +378,20 @@ def apply_forecast_to_network(
             ],
             unavailable=unavailable,
             substituted_observed=sorted(substituted),
-            period=period, quantile_mode=quantile_mode,
+            period=first, periods=horizon, quantile_mode=quantile_mode,
             source_snapshot_id=snapshot_id,
         )
 
     if substituted:
+        span = (f"each of the {len(horizon)} periods" if len(horizon) > 1
+                else "the period")
         warnings.append(
             f"{len(substituted)} demand record(s) kept their OBSERVED value because "
             f"no forecast covered them: {', '.join(sorted(substituted)[:10])}"
             f"{'...' if len(substituted) > 10 else ''}. The resulting network mixes "
-            f"forecast and observed demand; see `provenance` for which is which."
+            f"forecast and observed demand; see `provenance` for which is which. "
+            f"The observed figure is repeated in {span}, so those pairs carry no "
+            f"seasonality of their own."
         )
 
     # Give the network its own identity. Without this it would carry the
@@ -311,11 +401,11 @@ def apply_forecast_to_network(
     updated = updated.model_copy(update={"data_version": updated.compute_data_version()})
 
     logger.info(
-        "forecast_bridge.applied snapshot=%s period=%d mode=%s forecast=%d observed=%d "
-        "data_version=%s",
-        snapshot_id, period, quantile_mode.value,
+        "forecast_bridge.applied snapshot=%s periods=%d mode=%s forecast=%d observed=%d "
+        "rows=%d data_version=%s",
+        snapshot_id, len(horizon), quantile_mode.value,
         sum(1 for p in provenance.values() if p is DemandProvenance.FORECAST),
-        len(substituted), (updated.data_version or "")[:12],
+        len(substituted), len(new_demands), (updated.data_version or "")[:12],
     )
 
     return ForecastApplication(
@@ -325,7 +415,8 @@ def apply_forecast_to_network(
         substituted_observed=sorted(substituted),
         unavailable=unavailable,
         quantile_mode=quantile_mode,
-        period=period,
+        period=first,
+        periods=horizon,
         data_version=updated.data_version,
         source_snapshot_id=snapshot_id,
         warnings=warnings,
@@ -366,5 +457,6 @@ __all__ = [
     "ForecastApplication",
     "validate_forecast_for_network",
     "apply_forecast_to_network",
+    "apply_forecast_horizon_to_network",
     "build_quantile_networks",
 ]

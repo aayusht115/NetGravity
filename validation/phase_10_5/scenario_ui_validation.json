@@ -1,0 +1,178 @@
+{
+  "checks": [
+    {
+      "id": "U-01",
+      "name": "A baseline row exists, built from the solved network",
+      "status": "PASS",
+      "detail": "{\"id\": \"SCN_ACTUAL\", \"name\": \"Current Baseline\", \"cost\": 18067793.9644, \"fill\": 76.39, \"change\": 0, \"maxUtil\": 43.12, \"risk\": \"Low\", \"transport\": 863063.1448, \"fixed\": 17201200, \"unserved\": 8733, \"open\": 8, \"newSites\": 0, \"overrides\": []}"
+    },
+    {
+      "id": "U-02",
+      "name": "The map offers a Baseline toggle",
+      "status": "PASS",
+      "detail": "[\"Baseline\"]"
+    },
+    {
+      "id": "U-03",
+      "name": "Change Capacity runs and appears in the comparison table",
+      "status": "PASS",
+      "detail": "Metric Current Baseline Capacity boost \u2726 \ud83d\udcb0 Total Network Cost (\u20b9 per period) \u20b9180.7L \u20b995.6L \u2193 47.1% \ud83d\udcb9 Savings % (vs baseline) Reference \u2193 47.1% \u2193 47.1 pts \u2705 Demand Fill Rate (% of demand served) 76.4%"
+    },
+    {
+      "id": "U-04",
+      "name": "The recommendation panel names the scenario just created",
+      "status": "PASS",
+      "detail": "\u2728 NetGravity's Recommendation Capacity boost is the cheapest of the 1 compared, at \u20b985.1L below your current network The change itself moves nothing. All \u20b985.1L of the difference comes from re-optimising the footprint yo"
+    },
+    {
+      "id": "U-05",
+      "name": "Close Facility runs and appears alongside the first",
+      "status": "PASS",
+      "detail": "Metric Current Baseline Capacity boost \u2726 Close a DC \ud83d\udcb0 Total Network Cost (\u20b9 per period) \u20b9180.7L \u20b995.6L \u2193 47.1% \u20b996.1L \u2193 46.8% \ud83d\udcb9 Savings % (vs baseline) Reference \u2193 47.1% \u2193 47.1 pts \u2193 46.8% \u2193 46.8 pts \u2705 Demand Fill Rate (% of demand served) "
+    },
+    {
+      "id": "U-06",
+      "name": "Open Facility offers locations anywhere in India, not existing sites",
+      "status": "PASS",
+      "detail": "{\"hasCityList\": true, \"cityCount\": 33, \"hasLat\": true, \"hasLng\": true, \"latEditable\": true, \"cities\": [\"Ahmedabad\", \"Bengaluru\", \"Bhopal\", \"Bhubaneswar\", \"Chandigarh\"]}"
+    },
+    {
+      "id": "U-07",
+      "name": "A greenfield site solves and is recorded as a new site",
+      "status": "PASS",
+      "detail": "{\"id\": \"SCN_40e12c0d\", \"name\": \"Nagpur greenfield DC\", \"cost\": 11131199.7042, \"fill\": 92.61, \"change\": -38.39, \"maxUtil\": 100, \"risk\": \"High\", \"transport\": 1401680.8783, \"fixed\": 9724700, \"unserved\": 2733, \"open\": 6, \"newSites\": 1, \"overrides\": [\"ADD_FACILITY NEW_NAGPUR_GREENFIELD_DC 'Nagpur greenfield DC' (21.1458, 79.0882) capacity 6,000 units/period, 10 lanes derived\"]}"
+    },
+    {
+      "id": "U-08",
+      "name": "Three scenarios are compared side by side",
+      "status": "PASS",
+      "detail": "[\"Capacity boost\", \"Close a DC\", \"Nagpur greenfield DC\"]"
+    },
+    {
+      "id": "U-09",
+      "name": "The table has a baseline column plus three scenario columns",
+      "status": "PASS",
+      "detail": "[\"Metric\", \"Current Baseline\", \"Capacity boost \\u2726\", \"Close a DC\", \"Nagpur greenfield DC\"]"
+    },
+    {
+      "id": "U-10",
+      "name": "Each scenario reports its own effect, apart from the re-optimisation",
+      "status": "PASS",
+      "detail": "{\"effects\": [{\"name\": \"Capacity boost\", \"cost\": 9561047.4808, \"reference\": 9561047.4808, \"changeEffect\": 0, \"reoptEffect\": -8506746.48}, {\"name\": \"Close a DC\", \"cost\": 9612573.259, \"reference\": 9561047.4808, \"changeEffect\": 51525.78, \"reoptEffect\": -8506746.48}, {\"name\": \"Nagpur greenfield DC\", \"cost\": 11131199.7042, \"reference\": 9561047.4808, \"changeEffect\": 1570152.22, \"reoptEffect\": -8506746.48}], \"row\": [\"No effect\\n\\u2014\", \"\\u2191 \\u20b951.5K\\n\\u2014\", \"\\u2191 \\u20b915.7L\\n\\u2014\"]}"
+    },
+    {
+      "id": "U-11",
+      "name": "No metric row in the comparison table is blank or NaN",
+      "status": "PASS",
+      "detail": "[]"
+    },
+    {
+      "id": "U-12",
+      "name": "The cost-component rows carry real values on every column",
+      "status": "PASS",
+      "detail": "{\"missing\": [], \"empty\": []}"
+    },
+    {
+      "id": "U-13",
+      "name": "The recommendation panel names a scenario on screen and ranks the rest",
+      "status": "PASS",
+      "detail": "\u2728 NetGravity's Recommendation Capacity boost is the cheapest of the 3 compared, at \u20b985.1L below your current network  The change itself moves nothing. All \u20b985.1L of the difference comes from re-optimising the footprint you already have \u2014 the solver reaches the same plan with or w"
+    },
+    {
+      "id": "U-14",
+      "name": "The recommendation panel shows no undefined text",
+      "status": "PASS",
+      "detail": "\u2728 NetGravity's Recommendation Capacity boost is the cheapest of the 3 compared, at \u20b985.1L below your current network  The change itself moves nothing. All \u20b985.1L of the difference comes from re-optimi"
+    },
+    {
+      "id": "U-15",
+      "name": "The Digital Twin draws a different network per scenario",
+      "status": "PASS",
+      "detail": "{\"Baseline\": 36, \"Capacity boost\": 13, \"Close a DC\": 12, \"Nagpur greenfield DC\": 16}"
+    },
+    {
+      "id": "U-16",
+      "name": "The map says what each scenario changed",
+      "status": "PASS",
+      "detail": "{\"Baseline\": \"Current network. Ring colour is the solved utilisation of each distribution centre; line w\", \"Capacity boost\": \"Capacity boost. 3 facility sites closes (F001, F002, F008) \\u00b7 12 corridors carry different \", \"Close a DC\": \"Close a DC. 3 facility sites closes (F001, F002, F006) \\u00b7 12 corridors carry different volu\", \"Nagpur greenfield DC\": \"Nagpur greenfield DC. New site Nagpur greenfield DC opens, moving 6,000 units \\u00b7 3 facility\"}"
+    },
+    {
+      "id": "U-17",
+      "name": "A scenario that opens a new site draws that site on the map",
+      "status": "PASS",
+      "detail": "{\"found\": true, \"hasNewBadge\": true}"
+    },
+    {
+      "id": "U-18",
+      "name": "The scenario drawer shows what was asked and what the solver did",
+      "status": "PASS",
+      "detail": "SOLVED MILP EVALUATED Capacity boost  Solved against snapshot snap_bdfd1736bee1 by execution c5ff8a87-22d.  Total network cost \u20b995.6L (\u2193 47.1%) Demand fill rate 76.4% What you asked for Change requested CHANGE CAPACITY Facilities named F005 Capacity adjustment"
+    },
+    {
+      "id": "U-19",
+      "name": "Change Demand runs without asking for a facility",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "U-20",
+      "name": "Change Transport Cost runs and freight cost actually rises",
+      "status": "PASS",
+      "detail": "{\"baseline\": 863063.1448, \"scenario\": 1431589.8633}"
+    },
+    {
+      "id": "U-21",
+      "name": "Change SLA runs and reports its own solved figures",
+      "status": "PASS",
+      "detail": "{\"id\": \"SCN_9a14a8d8\", \"name\": \"Relax SLA by a day\", \"cost\": 11728343.2135, \"fill\": 100, \"change\": -35.09, \"maxUtil\": 96.11, \"risk\": \"High\", \"transport\": 1585552.6589, \"fixed\": 10137400, \"unserved\": 0, \"open\": 6, \"newSites\": 0, \"overrides\": [\"CHANGE_SLA +1.0 days on 14 of 14 demand rows\"]}"
+    },
+    {
+      "id": "U-22",
+      "name": "Every scenario is kept, and exactly three are compared",
+      "status": "PASS",
+      "detail": "{\"solved\": 6, \"compared\": [\"Peak demand +20%\", \"Freight +25%\", \"Relax SLA by a day\"]}"
+    },
+    {
+      "id": "U-23",
+      "name": "Swapping a compared scenario changes the table",
+      "status": "PASS",
+      "detail": "{\"added\": \"Capacity boost\"}"
+    },
+    {
+      "id": "U-24",
+      "name": "A deleted scenario is removed on the server, not just on screen",
+      "status": "PASS",
+      "detail": "{\"id\": \"SCN_ced3f62a\", \"goneLocally\": true, \"goneOnServer\": true}"
+    },
+    {
+      "id": "U-25",
+      "name": "A scenario the engine refuses is reported, not stored as a result",
+      "status": "PASS",
+      "detail": "{\"rejected\": true, \"message\": \"This scenario could not be run: A new facility needs a capacity above zero, got 0.0. A site with no capacity cannot serve anything, so opening it is not a scenario.\"}"
+    },
+    {
+      "id": "U-26",
+      "name": "A page refresh restores the signed-in session and project",
+      "status": "PASS",
+      "detail": "{\"landingHidden\": true, \"shellVisible\": true}"
+    },
+    {
+      "id": "U-27",
+      "name": "Scenarios and the baseline survive a page reload",
+      "status": "PASS",
+      "detail": "{\"count\": 6, \"chips\": [\"Relax SLA by a day\", \"Freight +25%\", \"Peak demand +20%\"]}"
+    },
+    {
+      "id": "U-28",
+      "name": "No prototype facility or scenario appears anywhere",
+      "status": "PASS",
+      "detail": "Metric Current Baseline Relax SLA by a day \u2726 Freight +25% Peak demand +20% \ud83d\udcb0 Total Network Cost (\u20b9 per period) \u20b9180.7L \u20b9117.3L \u2193 35.1% \u20b998.5L \u2193 45.5% \u20b997.4L \u2193 46.1% \ud83d\udcb9 Savings % (vs baseline) Reference"
+    },
+    {
+      "id": "U-29",
+      "name": "No uncaught page errors",
+      "status": "PASS",
+      "detail": ""
+    }
+  ]
+}

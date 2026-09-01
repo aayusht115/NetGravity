@@ -55,12 +55,33 @@ class MissingInformation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class InsightSeverity(str, Enum):
+    """
+    What KIND of finding an insight is.
+
+    Stated by the engine that made the finding, because the engine is the only
+    thing that knows. The dashboard was deciding this by keyword-matching the
+    prose — looking for the strings "high impact", "opportunity", "positive" —
+    which meant the colour, the icon and the priority of every card on the Home
+    feed depended on incidental wording, and any insight phrased differently
+    fell through to a neutral "Status" whatever it had found.
+    """
+    #: Something is wrong, at its limit, or unserved. Needs attention.
+    RISK = "RISK"
+    #: Nothing is wrong, but there is money or service to be had by changing
+    #: something. Worth testing, not urgent.
+    OPPORTUNITY = "OPPORTUNITY"
+    #: A fact worth stating that asks for no decision.
+    INFORMATION = "INFORMATION"
+
+
 class KPIInsight(BaseModel):
     """Narrative-first KPI interpretation for an executive UI card."""
 
     theme: str = Field(max_length=60)
     headline: str = Field(max_length=140)
     narrative: str = Field(max_length=700)
+    severity: InsightSeverity = InsightSeverity.INFORMATION
     metric_refs: List[str] = Field(default_factory=list, max_length=6)
     comparison_refs: List[str] = Field(default_factory=list, max_length=4)
     driver_refs: List[str] = Field(default_factory=list, max_length=6)
@@ -76,7 +97,13 @@ class ExecutiveBriefing(BaseModel):
     entity_id: Optional[str] = None
     opening: str = Field(default="", max_length=500)
     context: str = Field(default="", max_length=700)
-    kpi_insights: List[KPIInsight] = Field(default_factory=list, max_length=4)
+    #: Raised from 4 to 6 when the deterministic template stopped emitting only
+    #: a cost card. Six themes can genuinely apply to one network at once —
+    #: service, capacity, cost structure, footprint, resilience, carbon — and a
+    #: cap of four silently dropped the last two, which on a stressed network
+    #: were the ones a planner most needed. It is still a cap: a briefing is a
+    #: briefing, not a report.
+    kpi_insights: List[KPIInsight] = Field(default_factory=list, max_length=6)
     key_drivers: List[str] = Field(default_factory=list, max_length=4)
     recommendation: str = Field(default="", max_length=350)
     limitation: str = Field(default="", max_length=350)

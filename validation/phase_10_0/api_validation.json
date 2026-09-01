@@ -1,0 +1,439 @@
+{
+  "generated_at": "2026-08-30T19:16:52",
+  "total_routes": 47,
+  "routes": [
+    {
+      "rule": "/",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "serve_index"
+    },
+    {
+      "rule": "/<path:path>",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "serve_static"
+    },
+    {
+      "rule": "/api/auth/login",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "auth.login"
+    },
+    {
+      "rule": "/api/auth/logout",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "auth.logout"
+    },
+    {
+      "rule": "/api/auth/me",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "auth.me"
+    },
+    {
+      "rule": "/api/auth/signup",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "auth.signup"
+    },
+    {
+      "rule": "/api/forecast",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "forecast.get_forecast"
+    },
+    {
+      "rule": "/api/ingestions",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "ingestions.upload"
+    },
+    {
+      "rule": "/api/ingestions/<run_id>",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "ingestions.get_run"
+    },
+    {
+      "rule": "/api/ingestions/<run_id>/draft",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "ingestions.get_draft"
+    },
+    {
+      "rule": "/api/ingestions/<run_id>/finalize",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "ingestions.finalize"
+    },
+    {
+      "rule": "/api/ingestions/<run_id>/reviews",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "ingestions.get_reviews"
+    },
+    {
+      "rule": "/api/ingestions/<run_id>/reviews",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "ingestions.answer_reviews"
+    },
+    {
+      "rule": "/api/ingestions/<run_id>/reviews/<path:item_id>/analyse",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "ingestions.analyse_item"
+    },
+    {
+      "rule": "/api/ingestions/<run_id>/reviews/analyse",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "ingestions.analyse_item_from_body"
+    },
+    {
+      "rule": "/api/ingestions/preview/active",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "ingestion_dynamic.get_active_preview"
+    },
+    {
+      "rule": "/api/ingestions/preview/upload-and-parse",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "ingestion_dynamic.upload_and_parse"
+    },
+    {
+      "rule": "/api/kpis/evidence",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "kpis.get_evidence_package"
+    },
+    {
+      "rule": "/api/kpis/facilities",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "kpis.get_facility_kpis"
+    },
+    {
+      "rule": "/api/kpis/facilities/<facility_id>",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "kpis.get_single_facility_kpis"
+    },
+    {
+      "rule": "/api/kpis/network",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "kpis.get_network_kpis"
+    },
+    {
+      "rule": "/api/kpis/thresholds",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "kpis.get_thresholds"
+    },
+    {
+      "rule": "/api/projects",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "projects.list_projects"
+    },
+    {
+      "rule": "/api/projects",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "projects.create_project"
+    },
+    {
+      "rule": "/api/projects/<project_id>",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "projects.get_project"
+    },
+    {
+      "rule": "/api/projects/<project_id>",
+      "methods": [
+        "PATCH",
+        "PUT"
+      ],
+      "endpoint": "projects.update_project"
+    },
+    {
+      "rule": "/api/projects/<project_id>/snapshot",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "projects.get_project_snapshot"
+    },
+    {
+      "rule": "/api/scenarios",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "scenarios.list_scenarios"
+    },
+    {
+      "rule": "/api/scenarios/<scenario_id>",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "scenarios.get_scenario"
+    },
+    {
+      "rule": "/api/scenarios/baseline",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "scenarios.get_baseline"
+    },
+    {
+      "rule": "/api/scenarios/simulate",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "scenarios.simulate_scenario"
+    },
+    {
+      "rule": "/api/signals",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "signals.get_signals"
+    },
+    {
+      "rule": "/api/status",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "api_status"
+    },
+    {
+      "rule": "/orchestrator/approvals/<approval_id>",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "orchestrator.decide_approval"
+    },
+    {
+      "rule": "/orchestrator/capabilities",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "orchestrator.capabilities"
+    },
+    {
+      "rule": "/orchestrator/chat",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "orchestrator.chat"
+    },
+    {
+      "rule": "/orchestrator/chat/<conversation_id>/history",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "orchestrator.chat_history"
+    },
+    {
+      "rule": "/orchestrator/executions/<execution_id>",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "orchestrator.get_execution"
+    },
+    {
+      "rule": "/orchestrator/executions/<execution_id>/trace",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "orchestrator.get_trace"
+    },
+    {
+      "rule": "/orchestrator/health",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "orchestrator.health"
+    },
+    {
+      "rule": "/orchestrator/insights",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "orchestrator.insights"
+    },
+    {
+      "rule": "/orchestrator/run",
+      "methods": [
+        "POST"
+      ],
+      "endpoint": "orchestrator.run"
+    },
+    {
+      "rule": "/orchestrator/twin/compare",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "orchestrator.twin_compare"
+    },
+    {
+      "rule": "/orchestrator/twin/snapshots/<snapshot_id>",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "orchestrator.twin_snapshot_state"
+    },
+    {
+      "rule": "/orchestrator/twin/states",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "orchestrator.twin_states"
+    },
+    {
+      "rule": "/orchestrator/twin/states/<state_id>",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "orchestrator.twin_state"
+    },
+    {
+      "rule": "/orchestrator/workflows",
+      "methods": [
+        "GET"
+      ],
+      "endpoint": "orchestrator.workflows"
+    }
+  ],
+  "anonymous_access_probes": [
+    {
+      "path": "/api/status",
+      "anonymous_status": 200,
+      "expected": 200,
+      "ok": true
+    },
+    {
+      "path": "/api/projects",
+      "anonymous_status": 401,
+      "expected": 401,
+      "ok": true
+    },
+    {
+      "path": "/api/auth/me",
+      "anonymous_status": 401,
+      "expected": 401,
+      "ok": true
+    },
+    {
+      "path": "/api/kpis/network?project_id=pr-demo-case16",
+      "anonymous_status": 401,
+      "expected": 401,
+      "ok": true
+    },
+    {
+      "path": "/api/scenarios?project_id=pr-demo-case16",
+      "anonymous_status": 401,
+      "expected": 401,
+      "ok": true
+    },
+    {
+      "path": "/api/forecast?project_id=pr-demo-case16",
+      "anonymous_status": 401,
+      "expected": 401,
+      "ok": true
+    },
+    {
+      "path": "/api/signals",
+      "anonymous_status": 401,
+      "expected": 401,
+      "ok": true
+    },
+    {
+      "path": "/api/kpis/thresholds",
+      "anonymous_status": 401,
+      "expected": 401,
+      "ok": true
+    }
+  ],
+  "anonymous_probes_all_correct": true,
+  "authenticated_probes": [
+    {
+      "path": "/api/projects",
+      "status": 200,
+      "latency_ms": 0.2
+    },
+    {
+      "path": "/api/auth/me",
+      "status": 200,
+      "latency_ms": 0.2
+    },
+    {
+      "path": "/api/kpis/network?project_id=pr-demo-case16",
+      "status": 200,
+      "latency_ms": 21.7
+    },
+    {
+      "path": "/api/kpis/facilities?project_id=pr-demo-case16",
+      "status": 200,
+      "latency_ms": 0.7
+    },
+    {
+      "path": "/api/kpis/thresholds",
+      "status": 200,
+      "latency_ms": 0.4
+    },
+    {
+      "path": "/api/kpis/evidence?project_id=pr-demo-case16",
+      "status": 200,
+      "latency_ms": 1.2
+    },
+    {
+      "path": "/api/scenarios?project_id=pr-demo-case16",
+      "status": 200,
+      "latency_ms": 0.3
+    },
+    {
+      "path": "/api/scenarios/baseline?project_id=pr-demo-case16",
+      "status": 200,
+      "latency_ms": 37.9
+    },
+    {
+      "path": "/api/forecast?project_id=pr-demo-case16",
+      "status": 200,
+      "latency_ms": 23.2
+    },
+    {
+      "path": "/api/signals",
+      "status": 200,
+      "latency_ms": 0.2
+    }
+  ]
+}

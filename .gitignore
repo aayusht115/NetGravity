@@ -166,3 +166,17 @@ _to_delete/
 # them ARE tracked — those are the evidence the docs cite; these are the
 # working data the summaries were computed from.
 forecasting_validation/**/*_raw.json
+
+# Durable application state (accounts, projects, uploaded networks, scenarios).
+# Customer data — never committed. `NETGRAVITY_DB_PATH` selects the location.
+data/netgravity.db
+data/netgravity.db-wal
+data/netgravity.db-shm
+*.db
+*.db-wal
+*.db-shm
+
+# Verified database dumps produced by scripts/backup_database.py
+backups/
+*.dump
+validation/**/backup_check/

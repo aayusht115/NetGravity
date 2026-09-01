@@ -207,7 +207,36 @@ class NetworkStateResult(BaseModel):
     # --- Carbon ---
     total_carbon_kg: float = 0.0
 
+    # --- Distance and intensity indicators (Phase 10.0, closing GAP-01) ---
+    #
+    # `compute_kpis()` has always produced these five figures, but the builder
+    # in `metrics/contracts.py` never copied them across this bridge, so they
+    # could not reach ExecutionContext, the KPI layer, or any caller — and the
+    # information was unrecoverable downstream because the flattened transport
+    # projection derives from THIS object, not from the original NetworkKPIs.
+    #
+    # They are Optional[float] rather than `= 0.0` on purpose: None means "this
+    # solve did not report the figure", which must stay distinguishable from a
+    # genuine measurement of zero. A zero default here would have reintroduced
+    # exactly the fabricated-zero problem the KPI layer exists to prevent.
+    weighted_avg_distance_km: Optional[float] = None
+    inbound_avg_distance_km:  Optional[float] = None
+    outbound_avg_distance_km: Optional[float] = None
+    min_utilization_pct:      Optional[float] = None
+    carbon_per_unit:          Optional[float] = None
+
     metadata: ModelMetadata
+
+    # --- Solve relaxation ---
+    #
+    # Set only when the STRICT model proved infeasible and the engine returned
+    # a relaxed plan instead: identical costs, capacities and service levels,
+    # with unmet demand permitted and priced so the solver has to say which
+    # demand it strands. None means the result came from the model as posed.
+    #
+    # It is a field of its own rather than an entry in `metadata`, which is a
+    # typed `ModelMetadata` the Digital Twin reads attribute by attribute.
+    solve_relaxation: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(extra="forbid")
 

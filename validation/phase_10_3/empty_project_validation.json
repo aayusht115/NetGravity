@@ -1,0 +1,64 @@
+{
+  "checks": [
+    {
+      "id": "E-01",
+      "name": "Home KPI strip reports no result rather than a number",
+      "status": "PASS",
+      "detail": "\u20b9 | \u2014 | Total cost | Source: No solved result yet | \u2705 | \u2014 | Fill Rate | no service target in your data | \ud83c\udfaf | Not available | Savings opportunity | No scenario beats your network ye"
+    },
+    {
+      "id": "E-02",
+      "name": "Facility picker offers no prototype facility",
+      "status": "PASS",
+      "detail": "[\"ALL=No facility in this network\"]"
+    },
+    {
+      "id": "E-03",
+      "name": "The 2D map draws no facility",
+      "status": "PASS",
+      "detail": "0 markers"
+    },
+    {
+      "id": "E-04",
+      "name": "Twin tables list no prototype facility",
+      "status": "PASS",
+      "detail": "{\"plants\": [], \"dcs\": [], \"markets\": []}"
+    },
+    {
+      "id": "E-05",
+      "name": "The KPI screen states it has no facility",
+      "status": "PASS",
+      "detail": "No facility to report on | This project has no distribution centre or plant loaded yet. Upload a dataset to populate these KPIs."
+    },
+    {
+      "id": "E-06",
+      "name": "The forecast card reports no forecast",
+      "status": "PASS",
+      "detail": "{\"model\": \"\\u2014\", \"series\": \"\\u2014\", \"periods\": \"\\u2014\"}"
+    },
+    {
+      "id": "E-07",
+      "name": "Scenario screen shows no prototype scenario",
+      "status": "PASS",
+      "detail": "[]"
+    },
+    {
+      "id": "E-08",
+      "name": "Scenario screen says it has nothing, and shows no figures",
+      "status": "PASS",
+      "detail": "Compare up to 3 scenarios side-by-side against your current network. | Create New Scenario | COMPARING | No scenario yet \u2014 create one to compare against your network. | + Add scenario to compare | Com"
+    },
+    {
+      "id": "E-09",
+      "name": "The assistant refuses rather than answering about another network",
+      "status": "PASS",
+      "detail": "\u2726 NO NETWORK LOADED This project has no analysed network yet, so I have nothing to report on. Upload your dataset and I will answer from your own facilities, corridors and costs."
+    },
+    {
+      "id": "E-10",
+      "name": "No uncaught page errors",
+      "status": "PASS",
+      "detail": ""
+    }
+  ]
+}

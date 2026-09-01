@@ -40,6 +40,7 @@ from netgravity.resilience.registry_store import (
 )
 from netgravity.resilience.rei import (
     BaselineSolveError,
+    _default_solve,
     NoEligibleFacilitiesError,
     assess_network_resilience,
     compute_baseline,
@@ -482,6 +483,40 @@ class TestFailureIsolation:
                 DisruptionConfig(exclude_facility_ids=["PLANT", "DC_HUB",
                                                        "DC_MID", "DC_RED"]),
             )
+
+    def test_a_baseline_that_opens_nothing_is_blamed_on_the_baseline(self):
+        """
+        An empty eligible list has two causes and they need different fixes.
+
+        `is_solved` accepts SolverStatus.TIME_LIMIT, so a solve that ran out of
+        time before finding any incumbent comes back "solved" with every
+        facility closed. `only_baseline_open_facilities` then filters out a
+        network that is perfectly assessable, and the message named the
+        filters — sending the reader to check a configuration that was correct.
+
+        Simulated here with a solve function that returns a time-limited result
+        opening nothing, which is exactly the shape a contended solver produces.
+        """
+        from netgravity.schemas.results import SolverStatus
+
+        net = build_three_dc_network()
+        real = _default_solve(net, net.config, "REAL")
+
+        def timed_out(network, config, scenario_id=None):
+            result = real.model_copy(deep=True)
+            result.solver.status = SolverStatus.TIME_LIMIT
+            for decision in result.facility_decisions:
+                decision.is_open = False
+            return result
+
+        with pytest.raises(NoEligibleFacilitiesError) as excinfo:
+            assess_network_resilience(net, net.config, DC_ONLY, solve_fn=timed_out)
+
+        message = str(excinfo.value)
+        assert "baseline solve" in message.lower()
+        assert "TIME_LIMIT" in message
+        # It must NOT send the reader to the filters, which were correct.
+        assert "3 facility(ies) match the configured filters" in message
 
 
 # ===========================================================================

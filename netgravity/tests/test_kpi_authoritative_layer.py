@@ -321,21 +321,57 @@ class TestEdgeCases:
         # Hand-verified optimum from the fixture's own docstring: total = 5400.
         assert abs(result["business_network_cost"].value - 5400.0) < 1.0
 
-    def test_documented_data_gap_is_reported_not_fabricated(self):
+    def test_distance_and_intensity_metrics_reach_the_kpi_layer(self):
         """
-        `weighted_avg_distance_km` etc. are computed by `compute_kpis` but
-        dropped at the OptimizationResult -> NetworkStateResult bridge
-        (`netgravity/metrics/contracts.py`). Verified absent from
-        `ExecutionContext` entirely — not silently zero, not omitted from the
-        result dict.
+        `weighted_avg_distance_km` and friends are computed by `compute_kpis`.
+
+        Phase 9.1 recorded them as GAP-01: the OptimizationResult ->
+        NetworkStateResult bridge (`netgravity/metrics/contracts.py`) never
+        copied them, so this test asserted INSUFFICIENT_EVIDENCE — the honest
+        report of a real defect. Phase 10.0 closed the gap by carrying the five
+        fields across the bridge, so the metrics now arrive with real values.
+
+        The original intent is preserved and strengthened below: the companion
+        test proves a state WITHOUT these fields still reports
+        INSUFFICIENT_EVIDENCE rather than a fabricated zero.
         """
         _, ctx = _network_state_run()
         result = KPIRegistry().network_kpis(ctx)
         for field in ("weighted_avg_distance_km", "carbon_per_unit", "min_utilization_pct"):
             assert field in result
+            assert result[field].status is KPIStatus.VALID, (
+                f"{field} should now reach the KPI layer: {result[field].metadata}"
+            )
+            assert result[field].value is not None
+            assert result[field].value >= 0
+            assert result[field].authoritative_owner == "netgravity.metrics.kpis"
+
+    def test_absent_distance_metrics_are_never_fabricated_as_zero(self):
+        """
+        The other half of GAP-01's intent: when a solve genuinely does not
+        report these figures, they must stay unavailable rather than default to
+        0.0 — the reason the new schema fields are `Optional[float] = None`
+        rather than `= 0.0`.
+        """
+        from netgravity.schemas.contracts import (
+            CostBreakdown, DemandSummary, ModelMetadata, NetworkStateResult,
+        )
+        from netgravity.schemas.results import SolverStatus
+
+        ctx = ExecutionContext()
+        ctx.network_states["optimization.solve"] = NetworkStateResult(
+            network_id="n", optimization_mode="TEST",
+            solver_status=SolverStatus.OPTIMAL, is_feasible=True,
+            costs=CostBreakdown(business_network_cost=100.0, solver_objective=100.0),
+            demand=DemandSummary(total_demand=100.0, served_demand=100.0,
+                                 unserved_demand=0.0, demand_fill_rate=1.0),
+            metadata=ModelMetadata(run_id="r", solver_status=SolverStatus.OPTIMAL),
+            # the five distance/intensity fields are deliberately left unset
+        )
+        result = KPIRegistry().network_kpis(ctx)
+        for field in ("weighted_avg_distance_km", "carbon_per_unit", "min_utilization_pct"):
             assert result[field].status is KPIStatus.INSUFFICIENT_EVIDENCE
-            assert result[field].value is None
-            assert "bridge" in result[field].metadata["reason"]
+            assert result[field].value is None, f"{field} must not default to zero"
 
     def test_infeasible_optimization_reports_infeasible_not_a_zeroed_success(self):
         """

@@ -1,0 +1,301 @@
+{
+  "stage": "SCENARIOS",
+  "list": {
+    "scenarios": [
+      {
+        "aiAssessment": {
+          "recommendation": "Baseline network is vulnerable to the upcoming December demand surge in North India.",
+          "whatIRejected": "N/A \u2014 This is the baseline starting point.",
+          "why": [
+            "Delhi NCR DC is currently operating at 94% utilisation",
+            "December forecast projects capacity breach to 108%"
+          ]
+        },
+        "assumptions": [
+          {
+            "label": "Demand Horizon",
+            "type": "MODEL FACT",
+            "value": "Historical Observed"
+          },
+          {
+            "label": "Network State",
+            "type": "MODEL FACT",
+            "value": "Actual Observed Footprint"
+          }
+        ],
+        "avgUtil": 72.4,
+        "badge": "Current Baseline",
+        "badgeClass": "tag-muted",
+        "capacityRisk": "High",
+        "capacityRiskClass": "red",
+        "carbonKg": 105688,
+        "cardTitle": "Baseline",
+        "changes": [
+          {
+            "change": "4 Plants, 5 DCs, 10 Markets",
+            "item": "Current Footprint",
+            "note": "No changes applied"
+          }
+        ],
+        "confidence": "\u2014",
+        "costChange": 0,
+        "delhiUtil": 94.0,
+        "description": "Current network configuration and observed flows",
+        "feasible": true,
+        "fixedCost": 312000,
+        "highlight": "Observed network operations without optimization.",
+        "id": "SCN_ACTUAL",
+        "implementationCost": 0,
+        "implementationTime": "10 mins",
+        "inventoryCost": 81000,
+        "inventoryDays": 17,
+        "maxUtil": 94.0,
+        "name": "Current Baseline",
+        "num": 0,
+        "objective": {
+          "constraint": "None (Observed Actuals)",
+          "goal": "Current observed operations",
+          "primaryMetric": "Cost & SLA as-is"
+        },
+        "optimisation": {
+          "allowedDecisions": "None",
+          "lockedDecisions": "All allocations locked as observed",
+          "objective": "Historical Baseline",
+          "slaConstraint": "Observed at 94.3%"
+        },
+        "robustness": "Baseline",
+        "robustnessTests": [
+          {
+            "detail": "Reflects observed operations",
+            "status": "PASS",
+            "test": "Historical Baseline"
+          }
+        ],
+        "shortName": "Current Baseline",
+        "sla": 94.3,
+        "source": "system",
+        "stars": 0,
+        "status": "Baseline",
+        "totalCost": 1285000,
+        "transportCost": 1325000,
+        "type": "BASELINE",
+        "variableCost": 245000
+      },
+      {
+        "aiAssessment": {
+          "recommendation": "I recommend this scenario because it provides the best balance of cost reduction, SLA performance, and capacity protection without requiring capital investment.",
+          "whatIRejected": "The Optimised Base Case (\u20b911.42L) was rejected because it fails the SLA threshold when December peak demand increases by 15%.",
+          "why": [
+            "7.8% lower total network cost (\u20b911.84L vs \u20b912.85L baseline)",
+            "SLA reaches 96.7% (exceeds 95.0% target)",
+            "Relieves Delhi NCR DC peak utilisation from 94% down to 91%",
+            "Passes +15% demand surge stress test without infeasibility"
+          ]
+        },
+        "assumptions": [
+          {
+            "label": "Demand Forecast",
+            "type": "FORECAST",
+            "value": "December Peak Forecast (+14.2% North)"
+          },
+          {
+            "label": "Facility Footprint",
+            "type": "MODEL FACT",
+            "value": "Unchanged (Zero CapEx investment)"
+          },
+          {
+            "label": "SLA Minimum Requirement",
+            "type": "MODEL FACT",
+            "value": "\u226595% on-time delivery"
+          },
+          {
+            "label": "Regional GDP Factor",
+            "type": "EXTERNAL SIGNAL",
+            "value": "+2.1% above trend"
+          }
+        ],
+        "avgUtil": 65.3,
+        "badge": "Recommended",
+        "badgeClass": "tag-success",
+        "capacityRisk": "Low",
+        "capacityRiskClass": "green",
+        "carbonKg": 231737,
+        "cardTitle": "Scenario 1 (Rec.)",
+        "changes": [
+          {
+            "change": "-12% Volume (-1,200 u/d)",
+            "item": "Baddi DC \u2192 Delhi NCR",
+            "note": "Relieve northern bottleneck"
+          },
+          {
+            "change": "+12% Volume (+800 u/d)",
+            "item": "Baddi DC \u2192 Kolkata",
+            "note": "Absorb into spare capacity"
+          },
+          {
+            "change": "+400 u/d",
+            "item": "Pune Plant \u2192 Mumbai DC",
+            "note": "Direct regional routing"
+          }
+        ],
+        "confidence": "High Confidence",
+        "costChange": -7.8,
+        "delhiUtil": 91.0,
+        "description": "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata.",
+        "feasible": true,
+        "fixedCost": 312000,
+        "highlight": "Best balance of cost, service and capacity risk.",
+        "id": "SCN_REBALANCE",
+        "implementationCost": 25000,
+        "implementationTime": "13 mins",
+        "inventoryCost": 54000,
+        "inventoryDays": 24,
+        "maxUtil": 91.0,
+        "name": "Scenario 1 (Rec.)",
+        "num": 1,
+        "objective": {
+          "constraint": "SLA \u2265 95%, Peak Utilisation \u2264 92%",
+          "goal": "Reduce total cost while maintaining SLA \u226595% & mitigating capacity risk",
+          "primaryMetric": "Total Cost"
+        },
+        "optimisation": {
+          "allowedDecisions": "Multi-commodity corridor dispatch volumes",
+          "lockedDecisions": "Facility locations & fixed footprint",
+          "objective": "Minimise total network cost subject to multi-echelon capacity",
+          "slaConstraint": "\u226595% for Tier 1 & Tier 2 customer markets"
+        },
+        "robustness": "High",
+        "robustnessTests": [
+          {
+            "detail": "Network absorbs volume; peak util stays below 95%",
+            "status": "PASS",
+            "test": "+15% Demand Surge"
+          },
+          {
+            "detail": "Kolkata & Mumbai alternate corridors absorb emergency overflow",
+            "status": "PASS",
+            "test": "Major Lane Disruption"
+          },
+          {
+            "detail": "Optimal ranking unchanged under \u00b110% rate fluctuations",
+            "status": "PASS",
+            "test": "Handling Rate Elasticity"
+          }
+        ],
+        "shortName": "Recommended Scenario 1 (Rec.)",
+        "sla": 96.7,
+        "source": "agent",
+        "stars": 5,
+        "status": "Recommended",
+        "totalCost": 1184000,
+        "transportCost": 1216000,
+        "type": "RECOMMENDED",
+        "variableCost": 228000
+      }
+    ],
+    "total": 2
+  },
+  "simulation": {
+    "avgUtil": 68.2,
+    "badge": "User Created",
+    "badgeClass": "tag-primary",
+    "capacityRisk": "Low",
+    "capacityRiskClass": "green",
+    "carbonKg": 102400,
+    "cardTitle": "Validation What-If: Surge +15%",
+    "changes": [
+      {
+        "change": "-2000 units/day",
+        "item": "DC_DELHI",
+        "note": "Simulation override"
+      }
+    ],
+    "confidence": "High Confidence",
+    "costChange": -6.5,
+    "delhiUtil": 88.0,
+    "deltas": {
+      "avg_utilization_pct": {
+        "abs_delta": null,
+        "baseline_value": null,
+        "comparison_value": null,
+        "direction": "NOT_COMPARABLE",
+        "metric_id": "avg_utilization_pct",
+        "pct_delta": null,
+        "reason": "no value on scenario side"
+      },
+      "business_network_cost": {
+        "abs_delta": null,
+        "baseline_value": null,
+        "comparison_value": null,
+        "direction": "NOT_COMPARABLE",
+        "metric_id": "business_network_cost",
+        "pct_delta": null,
+        "reason": "scenario result carries no business_cost_delta (not produced via ScenarioResult, or no scenario present)"
+      },
+      "demand_fill_rate": {
+        "abs_delta": null,
+        "baseline_value": null,
+        "comparison_value": null,
+        "direction": "NOT_COMPARABLE",
+        "metric_id": "demand_fill_rate",
+        "pct_delta": null,
+        "reason": "no value on scenario side"
+      },
+      "pct_demand_in_sla": {
+        "abs_delta": null,
+        "baseline_value": null,
+        "comparison_value": null,
+        "direction": "NOT_COMPARABLE",
+        "metric_id": "pct_demand_in_sla",
+        "pct_delta": null,
+        "reason": "no value on scenario side"
+      },
+      "risk_factor": {
+        "abs_delta": null,
+        "baseline_value": null,
+        "comparison_value": null,
+        "direction": "NOT_COMPARABLE",
+        "metric_id": "risk_factor",
+        "pct_delta": null,
+        "reason": "no risk.compute_rf result is present in this execution"
+      },
+      "total_carbon_kg": {
+        "abs_delta": null,
+        "baseline_value": null,
+        "comparison_value": null,
+        "direction": "NOT_COMPARABLE",
+        "metric_id": "total_carbon_kg",
+        "pct_delta": null,
+        "reason": "no value on scenario side"
+      }
+    },
+    "description": "Custom What-If scenario: Validation What-If: Surge +15%",
+    "execution_id": "83025718-c02",
+    "feasible": true,
+    "fixedCost": 312000,
+    "highlight": "Capacity delta: -2000.0 units across DC_DELHI",
+    "id": "SCN_USER_07188b",
+    "implementationCost": 15000,
+    "implementationTime": "15 mins",
+    "inventoryCost": 58000,
+    "inventoryDays": 19,
+    "maxUtil": 88.0,
+    "name": "Validation What-If: Surge +15%",
+    "num": 3,
+    "objective": {
+      "constraint": "SLA \u2265 95%",
+      "goal": "Validation What-If: Surge +15%",
+      "primaryMetric": "Total Cost & SLA"
+    },
+    "robustness": "High",
+    "shortName": "Validation What-If: Surge +15%",
+    "sla": 95.5,
+    "source": "user",
+    "stars": 4,
+    "status": "User Created",
+    "totalCost": 1205000,
+    "transportCost": 1240000,
+    "type": "USER_CREATED",
+    "variableCost": 235000
+  }
+}
