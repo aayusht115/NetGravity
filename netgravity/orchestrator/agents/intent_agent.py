@@ -492,7 +492,15 @@ class IntentAgent:
         """
         assert self.gateway is not None
         facility_list = ", ".join(known_ids[:60]) or "(none supplied)"
-        intents = ", ".join(i.value for i in Intent if i != Intent.UNKNOWN)
+        # UNKNOWN is OFFERED, not withheld.
+        #
+        # It used to be filtered out of the list, which left the model with no
+        # way to say "this is not a supply-chain question" — so it picked the
+        # nearest thing. "Tell me a joke" and "Who is the prime minister of
+        # India?" both came back as EXPLANATION with high confidence, and the
+        # user was answered with a confident briefing about facility exposure.
+        # A classifier that cannot decline will always misclassify.
+        intents = ", ".join(i.value for i in Intent)
         actions = ", ".join(a.value for a in ScenarioActionType)
 
         prompt = (
@@ -514,6 +522,13 @@ class IntentAgent:
             '  "rationale": "one short sentence"\n'
             "}\n\n"
             "Rules:\n"
+            "- Return UNKNOWN when the request is not about this supply-chain\n"
+            "  network — chit-chat, general knowledge, weather, jokes, questions\n"
+            "  about you, or anything this system holds no data on. UNKNOWN is a\n"
+            "  correct answer and is strongly preferred to a confident guess: a\n"
+            "  misclassified question is answered with real figures about\n"
+            "  something the user did not ask about, which reads as a system\n"
+            "  that has misunderstood its own data.\n"
             "- If no listed facility is clearly referenced, return an empty facility_ids list.\n"
             "- Never output a facility identifier that is not in the list above.\n"
             "- Use SCENARIO_COMPARISON when two or more alternatives are contrasted.\n"

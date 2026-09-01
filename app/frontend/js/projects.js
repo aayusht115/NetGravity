@@ -13,14 +13,24 @@
  * STATUS: PROTOTYPE / MOCKED — project records are in-memory only.
  */
 
-/* ─── Mock workspace data (mirrors Dump/Select Project.jpeg) ─── */
-export const PROJECTS = [
-  { id: 'pr-india-2024',   name: 'India Network 2024',    region: 'India',                updated: '2 hours ago', rank: 1, owner: 'You', status: 'In progress' },
-  { id: 'pr-north-revamp', name: 'North Region Revamp',   region: 'North India',          updated: '3 days ago',  rank: 2, owner: 'You', status: 'In progress' },
-  { id: 'pr-cost-q2',      name: 'Cost Optimization Q2',  region: 'Pan India',            updated: '1 week ago',  rank: 3, owner: 'You', status: 'In progress' },
-  { id: 'pr-dc-consol',    name: 'DC Consolidation Study', region: 'West India',          updated: '2 weeks ago', rank: 4, owner: 'You', status: 'Draft' },
-  { id: 'pr-demand-surge', name: 'Demand Surge Planning', region: 'Central & South India', updated: '3 weeks ago', rank: 5, owner: 'You', status: 'Draft' },
-];
+import { projectService } from './integration/services/project-service.js';
+import { mapProjectRecord } from './integration/mappers/project-mapper.js';
+import { setActiveProject } from './integration/project-context.js';
+import { hydrateFromBackend } from './integration/hydrate.js';
+import { kpiService } from './integration/services/kpi-service.js';
+import {
+  beginAnalysisLoading, endAnalysisLoading, refineAnalysisLoading,
+  reportAnalysisStage,
+} from './analysis-loading.js';
+import { clearNetworkModel } from './data.js';
+
+/* ─── Workspace data ───────────────────────────────────────────────
+   Populated from the backend for the signed-in user. Phase 10.0 removed
+   five hardcoded workspaces ("India Network 2024", "Cost Optimization
+   Q2", …) that were listed for every visitor and all pointed at the same
+   synthetic snapshot, so a user saw projects that were not theirs and did
+   not exist. */
+export const PROJECTS = [];
 
 const REGIONS = [
   'India', 'North India', 'South India', 'East India', 'West India',
@@ -92,7 +102,7 @@ function decorSvg() {
 }
 
 function brandLockup() {
-  return `<div class="proj-brand" onclick="window.returnToLanding && window.returnToLanding()" title="Back to Netgravity">
+  return `<div class="proj-brand" data-action="returnToLanding" title="Back to Netgravity">
       ${ICONS.logo}
       <div>
         <div class="proj-brand-title">Netgravity</div>
@@ -200,24 +210,31 @@ function bindCreateProject() {
       return;
     }
 
-    const project = {
-      id: 'pr-' + Date.now().toString(36),
+    const payload = {
       name,
       region: document.getElementById('proj-region')?.value || 'India',
       client: (document.getElementById('proj-client')?.value || '').trim(),
-      updated: 'Just now',
-      rank: 0,
-      owner: 'You',
-      status: 'Draft',
     };
-    PROJECTS.unshift(project);
-    PROJECTS.forEach((p, i) => { p.rank = i + 1; });
-    currentProject = project;
 
-    // Data upload/AI ingestion is the next step, not the app itself —
-    // see js/ingestion.js for Upload Data → mapping → network build.
-    if (typeof window.showUploadData === 'function') window.showUploadData(project);
-    else enterApp();
+    // The project is created on the server so it is owned, isolated, and
+    // persists for this session. It starts with no network bound; upload is
+    // the next step and is what makes it analysable.
+    projectService.createProject(payload).then((created) => {
+      const project = mapProjectRecord(created);
+      PROJECTS.unshift(project);
+      PROJECTS.forEach((p, i) => { p.rank = i + 1; });
+      currentProject = project;
+      setActiveProject(project.id);
+
+      // Data upload/AI ingestion is the next step, not the app itself —
+      // see js/ingestion.js for Upload Data → mapping → network build.
+      if (typeof window.showUploadData === 'function') window.showUploadData(project);
+      else enterApp();
+    }).catch((err) => {
+      if (errorEl) {
+        errorEl.textContent = err?.message || 'The project could not be created.';
+      }
+    });
   });
 
   document.getElementById('proj-create-cancel')?.addEventListener('click', () => {
@@ -401,6 +418,37 @@ export function markProjectInProgress(id) {
   if (p) p.status = 'In progress';
 }
 
+/**
+ * Fetch this user's projects into `PROJECTS`.
+ *
+ * Split out of `showSelectProject` so a session restored on page load can find
+ * out which projects exist without rendering the picker first.
+ */
+export async function loadProjects() {
+  const remote = await projectService.listProjects();
+  (remote || []).forEach((rp) => {
+    const mapped = mapProjectRecord(rp);
+    const idx = PROJECTS.findIndex(p => p.id === mapped.id);
+    if (idx >= 0) PROJECTS[idx] = mapped;
+    else PROJECTS.push(mapped);
+  });
+  PROJECTS.forEach((p, i) => { if (!p.rank) p.rank = i + 1; });
+  return PROJECTS;
+}
+
+/**
+ * Re-open a project by id, as if the user had clicked it.
+ *
+ * Returns false when the id names nothing this user can open — a project
+ * deleted, or belonging to someone else — so the caller can fall back to the
+ * picker rather than entering a shell with no network behind it.
+ */
+export function openProjectById(id) {
+  if (!id || !PROJECTS.some(p => p.id === id)) return false;
+  openProject(id);
+  return true;
+}
+
 function openProject(id) {
   const p = PROJECTS.find(x => x.id === id);
   if (p) {
@@ -410,6 +458,9 @@ function openProject(id) {
     p.updated = 'Just now';
     currentProject = p;
   }
+  // Scope every subsequent request to this project BEFORE the shell renders,
+  // so one project's figures can never appear under another's name.
+  setActiveProject(id);
   enterApp();
 }
 
@@ -441,14 +492,25 @@ let selectCameFromApp = false;
 
 export function showSelectProject() {
   const shell = document.querySelector('.app-shell');
-  // Only 'flex' means the app was actually showing — a fresh page load
-  // never explicitly sets this style at all, so checking "!== 'none'"
-  // would wrongly treat that empty string as "was showing".
   selectCameFromApp = !!(shell && shell.style.display === 'flex');
 
   hideLanding();
   hideProjectPages();
   if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
+  
+  // Asynchronously fetch projects from backend and update view
+  projectService.listProjects().then(remoteProjects => {
+    if (remoteProjects && remoteProjects.length > 0) {
+      remoteProjects.forEach(rp => {
+        const mapped = mapProjectRecord(rp);
+        const idx = PROJECTS.findIndex(p => p.id === mapped.id);
+        if (idx >= 0) PROJECTS[idx] = mapped;
+        else PROJECTS.push(mapped);
+      });
+      renderSelectProject();
+    }
+  }).catch(e => console.warn('Project listing sync note:', e));
+
   renderSelectProject();
   const page = document.getElementById('select-project-page');
   if (page) {
@@ -491,8 +553,16 @@ export function showCreateProject(origin) {
   }
 }
 
-/** Leave the project screens and hand off to the authenticated app shell. */
-export function enterApp() {
+/**
+ * Leave the project screens and hand off to the authenticated app shell.
+ *
+ * `hydrate: false` reveals the shell without pulling figures — used by the
+ * ingestion flow, which shows the parsed topology first and then commits and
+ * hydrates behind its own loading screen. Without the option, that flow ran
+ * two hydrations of the same project and the first failed with
+ * NO_NETWORK_BOUND because the commit had not happened yet.
+ */
+export function enterApp({ hydrate = true } = {}) {
   hideProjectPages();
   if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
 
@@ -515,6 +585,97 @@ export function enterApp() {
     if (typeof window.renderHome === 'function') window.renderHome();
     window.dispatchEvent(new Event('resize'));
   }, 60);
+
+  // Drop whatever the previously open project left behind BEFORE asking for
+  // this one's figures. Hydration fills the model; nothing else empties it, so
+  // without this the screens keep the last project's network until — and only
+  // if — the new one's hydration succeeds.
+  clearNetworkModel();
+
+  // Pull authoritative figures for this project and write them into the app's
+  // own data structures, so every existing screen renders solved values.
+  //
+  // The loading screen stays up until this settles. It used to be absent
+  // entirely here: the dashboard appeared immediately and the figures arrived
+  // twenty to forty seconds later, so the first thing a user saw after opening
+  // a project was a complete screen of dashes that looked like an answer.
+  if (currentProject && hydrate) {
+    const projectId = currentProject.id;
+    const projectName = currentProject.name;
+
+    // The overlay goes up FIRST, before anything is asked of the server.
+    //
+    // It used to be raised inside `getReadiness().then()`, which meant the
+    // dashboard was visible with no figures behind it for the duration of that
+    // HTTP round trip. Short, and exactly what the loading screen exists to
+    // prevent — check L-02 in
+    // `validation/phase_10_7/run_greenfield_and_hardcoded_check.py` samples
+    // every 80 ms and caught it.
+    //
+    // Readiness only ever affected the WORDING ("this has been solved before,
+    // so it should be quick"), so it is applied when it arrives rather than
+    // waited for. A failure there still only affects the wording.
+    beginAnalysisLoading(projectName, false);
+    kpiService.getReadiness(projectId)
+      .catch(() => null)
+      .then((readiness) => {
+        refineAnalysisLoading(Boolean(readiness && readiness.ready));
+        return hydrateFromBackend(projectId, reportAnalysisStage);
+      })
+      .then((report) => {
+        endAnalysisLoading();
+        if (report?.ok) {
+          showProjectNotice(
+            `${report.kpisValid} of ${report.kpisTotal} KPIs computed from `
+            + `snapshot ${report.snapshotId} · ${report.facilities} facilities.`,
+            'success',
+          );
+        }
+      })
+      .catch((err) => {
+        // A project with no bound network is the ordinary state for a new
+        // workspace, and it is said plainly rather than filled with figures
+        // that describe a different network.
+        const noNetwork = err?.code === 'NO_NETWORK_BOUND';
+        endAnalysisLoading(noNetwork
+          ? 'This project has no network yet.'
+          : `Analysis unavailable: ${err?.message || 'unknown error'}`);
+        // The model stays empty and every screen renders its own empty state.
+        // This branch used to show a banner reading "no network yet" ON TOP OF
+        // a fully populated dashboard, which is worse than either alone: the
+        // numbers look authoritative and the banner is easy to miss.
+        clearNetworkModel();
+        if (typeof window.renderHome === 'function') window.renderHome();
+        if (typeof window.renderTwinTables === 'function') window.renderTwinTables();
+        showProjectNotice(
+          noNetwork
+            ? 'This project has no network yet. Upload your data to run the analysis.'
+            : `Analysis unavailable: ${err?.message || 'unknown error'}`,
+          noNetwork ? 'info' : 'error',
+        );
+      });
+  }
+}
+
+/** A banner on Home stating the true analysis state of the open project. */
+function showProjectNotice(message, tone = 'info') {
+  const host = document.getElementById('tab-home');
+  if (!host) return;
+  let el = document.getElementById('ng-network-notice');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ng-network-notice';
+    host.prepend(el);
+  }
+  const colour = tone === 'error' ? 'var(--red)'
+    : tone === 'success' ? 'var(--green)' : 'var(--blue)';
+  const bg = tone === 'error' ? 'var(--red-bg)'
+    : tone === 'success' ? 'var(--green-bg)' : 'var(--blue-bg)';
+  el.setAttribute('role', 'status');
+  el.style.cssText = `margin:0 0 var(--space-md);padding:10px 14px;`
+    + `border-radius:var(--r-md);background:${bg};color:${colour};`
+    + `border:1px solid ${colour}33;font-size:12.5px;font-weight:600`;
+  el.textContent = message;
 }
 
 export function initProjects() {

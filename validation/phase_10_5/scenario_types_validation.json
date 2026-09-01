@@ -1,0 +1,94 @@
+{
+  "checks": [
+    {
+      "id": "T-01",
+      "name": "CHANGE_CAPACITY solves",
+      "status": "PASS",
+      "detail": "HTTP 201 cost=9561047.4808"
+    },
+    {
+      "id": "T-02",
+      "name": "CLOSE_FACILITY solves and closes the named facility",
+      "status": "PASS",
+      "detail": "HTTP 201 closed=['F001', 'F002', 'F004', 'F008']"
+    },
+    {
+      "id": "T-03",
+      "name": "OPEN_FACILITY solves and pins the facility open",
+      "status": "PASS",
+      "detail": "HTTP 201 {\"capacity\": 28430.0, \"isOpen\": true, \"throughput\": 3230.0, \"utilPct\": 11.36}"
+    },
+    {
+      "id": "T-04",
+      "name": "CHANGE_DEMAND runs without naming a facility, and demand moves",
+      "status": "PASS",
+      "detail": "HTTP 201 total_demand 36982.0 -> 44378.4"
+    },
+    {
+      "id": "T-05",
+      "name": "CHANGE_TRANSPORT_COST solves and freight cost rises",
+      "status": "PASS",
+      "detail": "HTTP 201 transport_cost 863063.1448 -> 1431589.8633"
+    },
+    {
+      "id": "T-06",
+      "name": "CHANGE_SLA solves and relaxing the promise does not lose fill",
+      "status": "PASS",
+      "detail": "HTTP 201 fill 0.763858 -> 1.0 "
+    },
+    {
+      "id": "T-07",
+      "name": "ADD_FACILITY creates a site that is in no uploaded network",
+      "status": "PASS",
+      "detail": "HTTP 201 new_sites=[{\"capacity\": 6000.0, \"fixedCostPerYear\": 4800000.0, \"handlingCost\": 12.0, \"id\": \"NEW_NAGPUR_DC\", \"lat\": 21.1458, \"lng\": 79.0882, \"name\": \"Nagpur DC\", \"role\": \"DC\"}] in_solve=['NEW_NAGPUR_DC']"
+    },
+    {
+      "id": "T-08",
+      "name": "The new site carries coordinates the map can draw",
+      "status": "PASS",
+      "detail": "{\"capacity\": 6000.0, \"fixedCostPerYear\": 4800000.0, \"handlingCost\": 12.0, \"id\": \"NEW_NAGPUR_DC\", \"lat\": 21.1458, \"lng\": 79.0882, \"name\": \"Nagpur DC\", \"role\": \"DC\"}"
+    },
+    {
+      "id": "T-09",
+      "name": "The new site appears in the scenario solve and not the baseline",
+      "status": "PASS",
+      "detail": "added to solve: ['NEW_NAGPUR_DC']"
+    },
+    {
+      "id": "T-10",
+      "name": "Every scenario says what it changed",
+      "status": "PASS",
+      "detail": "[\"ADD_FACILITY NEW_NAGPUR_DC 'Nagpur DC' (21.1458, 79.0882) capacity 6,000 units/period, 10 lanes derived\"]"
+    },
+    {
+      "id": "T-11",
+      "name": "A site with no capacity is refused, not solved as if real",
+      "status": "PASS",
+      "detail": "HTTP 422"
+    },
+    {
+      "id": "T-12",
+      "name": "Every solved scenario is listed for the project",
+      "status": "PASS",
+      "detail": "7 scenarios stored"
+    },
+    {
+      "id": "T-13",
+      "name": "A deleted scenario stays deleted",
+      "status": "PASS",
+      "detail": "HTTP 200 7 -> 6"
+    },
+    {
+      "id": "T-14",
+      "name": "Different scenarios produce different results",
+      "status": "PASS",
+      "detail": "{\"Close a DC\": 7988958.25, \"Pin a DC open\": 9561047.48, \"Demand up 20%\": 9737387.29, \"Freight up 25%\": 9847365.45, \"Relax SLA by a day\": 11728343.21, \"New DC at Nagpur\": 10290299.7}"
+    },
+    {
+      "id": "T-15",
+      "name": "The baseline is the same for every scenario",
+      "status": "PASS",
+      "detail": "baseline cost 18067793.9644"
+    }
+  ]
+}

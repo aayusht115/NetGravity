@@ -1,0 +1,93 @@
+[
+  {
+    "screen": "O1: Landing / Sign In",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /api/auth/login"
+  },
+  {
+    "screen": "O2: Create Account",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /api/auth/signup"
+  },
+  {
+    "screen": "O3: Create Project",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /api/projects POST"
+  },
+  {
+    "screen": "O4: Select Project",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /api/projects GET"
+  },
+  {
+    "screen": "O5/O6: Ingestion & Mapping",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /api/ingestions multipart & reviews"
+  },
+  {
+    "screen": "S1: Home Cockpit",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Authoritative KPIRegistry network KPIs + twin preview"
+  },
+  {
+    "screen": "S2: Digital Twin Workspace",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /orchestrator/twin states & snapshots"
+  },
+  {
+    "screen": "S3: Facility KPIs",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /api/kpis/facilities/<id>"
+  },
+  {
+    "screen": "S4: Demand Forecast",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /api/forecast & QuantileRegression_HiGHS"
+  },
+  {
+    "screen": "S5-S8: Scenario Planning",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /api/scenarios & /api/scenarios/simulate"
+  },
+  {
+    "screen": "S9: Insight Deep Dive",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /orchestrator/insights & approvals"
+  },
+  {
+    "screen": "S10: Ask Netgravity Chatbot",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /orchestrator/chat"
+  },
+  {
+    "screen": "S11/S12: Governance & Traces",
+    "connected": true,
+    "real_data": true,
+    "status": "PASS",
+    "findings": "Connected to /orchestrator/executions/<id>/trace"
+  }
+]

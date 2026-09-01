@@ -1,0 +1,70 @@
+{
+  "checks": [
+    {
+      "id": "S-01",
+      "name": "The scenario solves and reports its own cost",
+      "status": "PASS",
+      "detail": "{\"totalCost\": 9612573.259, \"fillRate\": 66.84, \"maxUtil\": 69.22, \"costChange\": -46.8}"
+    },
+    {
+      "id": "S-02",
+      "name": "The response carries the scenario's own topology",
+      "status": "PASS",
+      "detail": "{\"nScenarioFacilities\": 8, \"nBaselineFacilities\": 8, \"nScenarioFlows\": 12, \"nBaselineFlows\": 15}"
+    },
+    {
+      "id": "S-03",
+      "name": "The scenario closes the facility it was asked to close",
+      "status": "PASS",
+      "detail": "[\"F001\", \"F002\", \"F006\"]"
+    },
+    {
+      "id": "S-04",
+      "name": "Corridors move relative to the baseline",
+      "status": "PASS",
+      "detail": "6 lanes differ"
+    },
+    {
+      "id": "S-05",
+      "name": "Facility utilisation differs from the baseline",
+      "status": "PASS",
+      "detail": "{\"F001\": 0, \"F002\": 0, \"F003\": 69.22, \"F004\": 11.36, \"F005\": 35.38, \"F006\": 0, \"F007\": 54.01, \"F008\": 1.89}"
+    },
+    {
+      "id": "S-06",
+      "name": "No prototype facility appears in the scenario map",
+      "status": "PASS",
+      "detail": "[]"
+    },
+    {
+      "id": "S-07",
+      "name": "The scenario builder offers this network's facilities",
+      "status": "PASS",
+      "detail": "[\"F004\", \"F005\", \"F006\", \"F007\", \"F008\", \"F001\", \"F002\", \"F003\"]"
+    },
+    {
+      "id": "S-08",
+      "name": "The comparison table names the scenario the user created",
+      "status": "PASS",
+      "detail": "Compare up to 3 scenarios side-by-side against your current network. Create New Scenario COMPARING Close Kolkata DC \u2715 Expand Pune DC \u2715 + Add scenario to compare Comparison \ud83d\udee0\ufe0f Customize metrics Metric Current Baseline Close Kolkata DC \u2726 Expand Pune DC \ud83d\udcb0 Total N"
+    },
+    {
+      "id": "S-09",
+      "name": "The UI-created scenario carries solved figures",
+      "status": "PASS",
+      "detail": "[{\"name\": \"Expand Pune DC\", \"cost\": 9561047.4808, \"maxUtil\": 79.11, \"fill\": 76.39, \"change\": -47.08, \"facilities\": 8}]"
+    },
+    {
+      "id": "S-10",
+      "name": "The comparison table shows no prototype scenario",
+      "status": "PASS",
+      "detail": "Compare up to 3 scenarios side-by-side against your current network. Create New Scenario COMPARING Close Kolkata DC \u2715 Expand Pune DC \u2715 + Add scenario to compare Comparison \ud83d\udee0\ufe0f Customize metrics Metric "
+    },
+    {
+      "id": "S-11",
+      "name": "No uncaught page errors",
+      "status": "PASS",
+      "detail": ""
+    }
+  ]
+}

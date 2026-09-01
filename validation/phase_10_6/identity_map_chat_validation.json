@@ -1,0 +1,130 @@
+{
+  "checks": [
+    {
+      "id": "I-01",
+      "name": "The auth forms are not pre-filled with a stranger's details",
+      "status": "PASS",
+      "detail": "{\"signup-name\": \"\", \"signup-email\": \"\", \"signin-email\": \"\", \"panel-reset-email\": \"\"}"
+    },
+    {
+      "id": "I-02",
+      "name": "The upload screen's avatar is the signed-in user",
+      "status": "PASS",
+      "detail": "{\"text\": \"PR\", \"title\": \"Priya Raghavan\"}"
+    },
+    {
+      "id": "I-03",
+      "name": "The header greets the signed-in user, not a fixed name",
+      "status": "PASS",
+      "detail": "{\"greeting\": \"Priya Raghavan\", \"avatar\": \"PR\", \"avatarTitle\": \"Priya Raghavan\", \"profileTitle\": \"User profile: Priya Raghavan\"}"
+    },
+    {
+      "id": "I-04",
+      "name": "No screen still carries the prototype's user",
+      "status": "PASS",
+      "detail": "[]"
+    },
+    {
+      "id": "I-05",
+      "name": "The profile screen reports the account, not a fixed role",
+      "status": "PASS",
+      "detail": "\ud83d\udd12 Account security Priya Raghavan \u00b7 priya-95bf59@acme-logistics.in \u00b7 role PLANNER Change password At least 12 characters. Every other session is signed out. Change password Two-factor authentication Off. A password alone"
+    },
+    {
+      "id": "M-01",
+      "name": "The map makes no third-party request",
+      "status": "PASS",
+      "detail": "[]"
+    },
+    {
+      "id": "M-02",
+      "name": "The basemap is embedded in the application and renders",
+      "status": "PASS",
+      "detail": "{\"found\": true, \"basemap\": true, \"basemapLoaded\": true, \"basemapIsEmbedded\": true, \"tileRequests\": 0, \"markers\": 15, \"corridors\": 36}"
+    },
+    {
+      "id": "M-03",
+      "name": "The network is drawn on top of it",
+      "status": "PASS",
+      "detail": "{\"found\": true, \"basemap\": true, \"basemapLoaded\": true, \"basemapIsEmbedded\": true, \"tileRequests\": 0, \"markers\": 15, \"corridors\": 36}"
+    },
+    {
+      "id": "M-04",
+      "name": "Every facility falls inside the basemap's own bounds",
+      "status": "PASS",
+      "detail": "{\"imgW\": 3186, \"imgH\": 3497, \"containerW\": 1230, \"markersInsideImage\": 15, \"markers\": 15}"
+    },
+    {
+      "id": "C-01",
+      "name": "The assistant greets the signed-in user",
+      "status": "PASS",
+      "detail": "Hi Priya! \ud83d\udc4b"
+    },
+    {
+      "id": "C-02",
+      "name": "It answers a cost question with the network's own cost",
+      "status": "PASS",
+      "detail": "(19.6s) \u2726 NETWORK_STATE_QUERY\nMy total network cost is \u20b918,067,793.96. This is the model's reported business_network_cost for the network. Suggested next step: Investigate facility costs first (facility_cost "
+    },
+    {
+      "id": "C-03",
+      "name": "It names the right facility, not a generic summary",
+      "status": "PASS",
+      "detail": "(19.0s) \u2726 NETWORK_STATE_QUERY\nI find Pune Distribution Center is the most utilised distribution centre at 43.1% utilization. My network average utilization is 24.1% and demand fill rate is 76.4%. Suggested ne"
+    },
+    {
+      "id": "C-04",
+      "name": "It answers a count question from the twin",
+      "status": "PASS",
+      "detail": "(2.0s) \u2726 STATUS_QUERY\nFrom the current network snapshot (snap_bdfd1736bee1): 5 distribution centres (F004, F005, F006, F007, F008), 3 plants, and 7 demand markets. These are observed coun"
+    },
+    {
+      "id": "C-05",
+      "name": "An explanation of unserved demand is about unserved demand",
+      "status": "PASS",
+      "detail": "(18.0s) \u2726 NETWORK_STATE_QUERY\nI cannot determine why demand is unserved from these results. They show 8,733 units unserved (23.6%), 28,249 units served of 36,982 total, average utilization 24.1% and 8 open fa"
+    },
+    {
+      "id": "C-06",
+      "name": "An out-of-scope request is declined, not answered",
+      "status": "PASS",
+      "detail": "(18.5s) \u2726 NOT UNDERSTOOD\nI could not work out what you would like me to do. I can report the current network state, run what-if scenarios (closing a facility, changing capacity), assess re"
+    },
+    {
+      "id": "C-07",
+      "name": "A general-knowledge question is declined",
+      "status": "PASS",
+      "detail": "(6.7s) \u2726 NOT UNDERSTOOD\nI could not work out what you would like me to do. I can report the current network state, run what-if scenarios (closing a facility, changing "
+    },
+    {
+      "id": "C-08",
+      "name": "Naming a city is not treated as naming a facility",
+      "status": "PASS",
+      "detail": "(7.9s) \u2726 NOT UNDERSTOOD\nI could not work out what you would like me to do. I can report the current network state, run what-if scenarios (closing a facility, changing capacity), assess re"
+    },
+    {
+      "id": "C-09",
+      "name": "A scenario request is understood and acted on",
+      "status": "PASS",
+      "detail": "(2.0s) [\u2726 SCENARIO_ANALYSIS] \u2726 SCENARIO_ANALYSIS\nDo you want to simulate closure of the F006 facility, or stop customer allocation from F006?\nExplore in Digital Twin \u2192"
+    },
+    {
+      "id": "C-10",
+      "name": "No answer contains an unformatted raw float",
+      "status": "PASS",
+      "detail": "\u2726 NETWORK_STATE_QUERY My total network cost is \u20b918,067,793.96. This is the model's reported business_network_cost for the network. Suggested next step: Investigate facility costs first (facility_cost "
+    },
+    {
+      "id": "C-11",
+      "name": "No uncaught page errors",
+      "status": "PASS",
+      "detail": ""
+    },
+    {
+      "id": "A-01",
+      "name": "A signed-in browser reaches the control plane; a bare request does not",
+      "status": "PASS",
+      "detail": "{\"authed\": 200, \"anon\": 401}"
+    }
+  ]
+}

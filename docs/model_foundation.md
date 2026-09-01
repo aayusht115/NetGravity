@@ -88,7 +88,7 @@
 
 | C&M Concept | NetGravity Modification | Rationale |
 |---|---|---|
-| Single-period model | Extended to multi-period skeleton (t=1..T activatable) | Future roadmap; single-period is default |
+| Single-period model | Multi-period: flow, demand, capacity and stock all indexed by t=1..T, with stock carried between periods | Implemented in Phase 10.9; `FULL_HORIZON` is the default, and the collapse policies remain for a deliberately single-period answer |
 | Single-product flow | Extended to multi-product K | Case 16 may involve SKUs |
 | Single transport mode | Extended to multi-mode V | Road/rail/air meaningful for real clients |
 | Fixed facility cost annualized | Config-driven unit (annual / daily / monthly) | Avoid hard-coded unit conversions |

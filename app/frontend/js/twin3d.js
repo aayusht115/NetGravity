@@ -139,6 +139,62 @@ export function setTwin3DState(state) {
   setupFlowArcs(state);
 }
 
+/**
+ * Rebuild the scene's nodes and arcs from the network currently in `data.js`.
+ *
+ * `initTwin3D` builds the scene once and returns early on every later call, so
+ * loading a different network left the 3D twin showing the previous one's
+ * geometry — a user who uploaded a five-node network still saw the prototype's
+ * nineteen. The tables beside it were correct, which made the mismatch worse:
+ * two views of "the same" network disagreeing.
+ *
+ * Disposes geometries and materials explicitly; three.js does not free GPU
+ * resources when a mesh is merely removed from its parent.
+ */
+export function rebuildTwin3D() {
+  if (!isInitialised || !scene || !nodeGroup) return;
+
+  const dispose = (obj) => {
+    obj.traverse?.((child) => {
+      if (child.geometry) child.geometry.dispose();
+      if (child.material) {
+        (Array.isArray(child.material) ? child.material : [child.material])
+          .forEach((m) => m.dispose());
+      }
+    });
+  };
+
+  [nodeGroup, flowGroup, pulseGroup].forEach((group) => {
+    if (!group) return;
+    [...group.children].forEach((child) => {
+      dispose(child);
+      group.remove(child);
+    });
+  });
+
+  nodeMeshes = [];
+  flowArcs = [];
+  photonStreams = [];
+  hoveredNode = null;
+
+  setupNetworkNodes();
+  setupFlowArcs(twin3dState);
+  resizeTwin3D();
+}
+
+/** How many nodes the 3D scene currently renders. Diagnostics only. */
+export function twin3dNodeCount() {
+  return nodeMeshes.length;
+}
+
+if (typeof window !== 'undefined') {
+  // Rebuild whenever a different network is loaded, or when authoritative
+  // figures arrive and change utilisation colouring.
+  window.addEventListener('networkDataLoaded', () => rebuildTwin3D());
+  window.addEventListener('authoritativeDataLoaded', () => rebuildTwin3D());
+  window.twin3dNodeCount = twin3dNodeCount;
+}
+
 export function resizeTwin3D() {
   if (!containerEl || !renderer || !camera) return;
   const w = containerEl.clientWidth || 800;
@@ -411,7 +467,13 @@ function createDC3D(data, pos) {
   if (utilBand === 'Critical') dcColor = THEME_COLORS.dcCritical;
   else if (utilBand === 'Stress') dcColor = THEME_COLORS.dcWarning;
 
-  const radius = 1.3 + (data.utilPct / 100) * 0.7;
+  // A DC's radius scales with utilisation, which is a solver output. With no
+  // solve (or an infeasible one) it is null, and `null / 100` produced NaN —
+  // which propagated into the cylinder geometry and made Three.js fail to
+  // compute a bounding sphere, so the whole scene failed to render. An
+  // un-solved DC draws at the base radius instead.
+  const hasUtil = typeof data.utilPct === 'number' && Number.isFinite(data.utilPct);
+  const radius = hasUtil ? 1.3 + (data.utilPct / 100) * 0.7 : 1.3;
 
   // Tiered Base
   const baseGeo = new THREE.CylinderGeometry(radius * 1.1, radius * 1.3, 0.9, 24);
@@ -894,10 +956,11 @@ function renderHUDTooltip(data, type, x, y) {
       <div class="hud-row"><span>Total Capacity:</span><strong>${formatNumber(data.capacity)} u/d</strong></div>
     `;
   } else if (type === 'dc') {
-    const utilColor = getUtilColor(data.utilPct);
+    const hasUtil = typeof data.utilPct === 'number' && Number.isFinite(data.utilPct);
+    const utilColor = hasUtil ? getUtilColor(data.utilPct) : 'var(--text-3)';
     typeBadge = `<span class="hud-badge dc">Distribution Centre</span>`;
     metricLine = `
-      <div class="hud-row"><span>Utilisation:</span><strong style="color:${utilColor}">${data.utilPct}%</strong></div>
+      <div class="hud-row"><span>Utilisation:</span><strong style="color:${utilColor}">${hasUtil ? data.utilPct + '%' : '—'}</strong></div>
       <div class="hud-row"><span>Capacity / Flow:</span><strong>${formatNumber(data.throughput)} / ${formatNumber(data.capacity)} u/d</strong></div>
     `;
   } else {

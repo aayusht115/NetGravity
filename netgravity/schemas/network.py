@@ -304,6 +304,19 @@ class FacilityRecord(BaseModel):
     # Unit: units/period — C3 constraint (optional, see config.minimum_throughput_enabled)
     min_throughput_per_period: float = 0.0
 
+    # How much stock this facility can hold at the end of a period.
+    #
+    # Unit: units. Only meaningful under a multi-period solve, where it caps the
+    # inventory variable I_{i,k,t} that carries stock from one period into the
+    # next (constraint C9).
+    #
+    # None means "not stated", NOT "infinite": the model then bounds carried
+    # stock by total horizon demand, which is the largest quantity that could
+    # ever usefully be held, so an unstated warehouse size cannot silently
+    # become an unlimited one in the plan. Nothing here invents a number — a
+    # facility with no stated storage simply is not the binding constraint.
+    storage_capacity_units: Optional[float] = None
+
     # Products this facility can handle (empty = all products eligible)
     eligible_product_ids: List[str] = Field(default_factory=list)
 
@@ -678,8 +691,40 @@ class OptimizationConfig(BaseModel):
     shortage_penalty:     float           = 1e6    # currency / unit unmet demand
     allow_shortage:       bool            = False
 
+    # When the strict model proves infeasible, re-solve once with
+    # allow_shortage=True and return THAT plan, marked as a relaxation.
+    #
+    # Off by default: a caller that asks for a fully-served plan and gets an
+    # infeasible answer has learned something true, and silently substituting a
+    # different model would hide it. It is switched on for networks assembled
+    # from a client upload, where "no feasible plan exists" is the beginning of
+    # the analysis rather than the end — the planner still needs to know which
+    # facilities to open, what the served volume costs, and exactly how much
+    # demand is stranded. The relaxed result carries
+    # metadata["solve_relaxation"] and a non-zero unserved_demand, so nothing
+    # downstream can mistake it for a fully-served plan.
+    relax_to_shortage_when_infeasible: bool = False
+
     # --- Service ---
     service_metric:       ServiceMetric   = ServiceMetric.TRANSIT_TIME
+    #: What a demand table stating more than one period is solved as. See
+    #: `netgravity/optimization/periods.py`.
+    #:
+    #:   FULL_HORIZON         every period modelled, with stock carried between
+    #:                        them (default)
+    #:   REPRESENTATIVE_MEAN  collapsed to the mean of the periods
+    #:   PEAK                 collapsed to the largest period
+    #:   SUM                  collapsed to every period added together
+    #:
+    #: The default models the horizon because that is the question the data
+    #: asks. A collapse answers a narrower one — PEAK is a genuinely useful
+    #: "can the footprint carry the worst month", and is far cheaper to solve —
+    #: but no averaging rule can tell a planner whether a network that carries
+    #: the mean of twelve months carries the peak of one.
+    #:
+    #: A single-period network ignores this entirely and is solved exactly as
+    #: it always was.
+    multi_period_policy:  str             = "FULL_HORIZON"
     enforce_sla:          bool            = True   # filter lanes by SLA
     sla_mode:             SLAMode         = SLAMode.LAST_MILE
 
@@ -745,6 +790,22 @@ class OptimizationConfig(BaseModel):
     solver_name:          str             = "HiGHS"   # HiGHS / CBC / Gurobi / CPLEX
     time_limit_seconds:   int             = 300
     mip_gap:              float           = 0.001     # 0.1% optimality gap
+    # Absolute optimality tolerance, in the model's currency. None leaves the
+    # relative gap in sole charge.
+    #
+    # It exists because a RELATIVE gap is meaningless once the objective is
+    # dominated by the shortage penalty. When `allow_shortage` is on, the
+    # objective is `business_cost + shortage_penalty x unserved`, and at the
+    # default penalty of 1e6/unit that second term reaches ~8.7bn on a network
+    # whose real cost is ~1.8e7. A 0.1% relative gap is then a tolerance of
+    # ~8.7 MILLION rupees of genuine spend: the solver stops as soon as it has
+    # the right unserved quantity and stops caring about the money. Two solves
+    # of models differing only by a RELAXED constraint came back at
+    # 9,561,047 and 14,512,146 — both reported OPTIMAL, a 52% spread — which is
+    # exactly the "the metrics seem random" symptom seen on the scenario page.
+    #
+    # Set alongside `allow_shortage` so optimality is judged on money.
+    mip_gap_abs:          Optional[float] = None
     threads:              int             = 0         # 0 = auto
     verbose:              bool            = False
 
@@ -804,6 +865,21 @@ class CanonicalNetwork(BaseModel):
     network_id:   str             = "network_default"
     data_version: Optional[str]   = None   # set by builder from input hash
     description:  str             = ""
+
+    #: What each modelled planning period is, in the source's own words —
+    #: `{"1": "2023-09", "2": "2023-10", ...}`.
+    #:
+    #: The engine indexes periods by integer everywhere (`DemandRecord.period`,
+    #: `FlowDecision.period`, constraint names), which is what makes the model
+    #: build. But "period 7" is not a thing a planner can act on, and an upload
+    #: that states months knows perfectly well which month each index is. This
+    #: is the only place that correspondence is recorded, so a screen, an
+    #: assumption line or an evidence reference can say "2024-03" instead of
+    #: silently renumbering the client's own calendar.
+    #:
+    #: Empty when the source stated no period labels, which is the honest
+    #: answer for a single-period upload — not a fabricated "Period 1".
+    period_labels: Dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_network_consistency(self) -> "CanonicalNetwork":

@@ -1,0 +1,8 @@
+{
+  "classification": "C. Controlled agentic workflow",
+  "evidence": "IntentAgent -> PlanValidator -> CapabilityExecutor -> ResultObserver -> AdaptiveDecisionPolicy -> ReasoningAgent -> GovernancePolicy with Authoritative KPIRegistry",
+  "frontend_business_logic": "CLEAN \u2014 0 unauthorized formulas in JS",
+  "kpi_authority": "VERIFIED \u2014 Sourced strictly from KPIRegistry with typed KPIResult",
+  "forecasting_engine": "QuantileRegression_HiGHS with Phase 6.2 Structural Break Detection",
+  "immutability": "VERIFIED \u2014 Baseline snapshot never altered by scenarios"
+}

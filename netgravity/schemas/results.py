@@ -25,7 +25,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # ---------------------------------------------------------------------------
@@ -118,26 +118,83 @@ class FacilityDecision(BaseModel):
     """
     MILP decision for a single facility.
     Directly traceable to y_i decision variable.
+
+    `extra="forbid"` is deliberate. The builder in `optimization/milp.py` passed
+    `fixed_cost_period=`, `status=`, `latitude=` and `longitude=` — none of
+    which were fields — and pydantic's default `extra="ignore"` dropped all four
+    without a word. The visible effect was that `fixed_cost`,
+    `total_facility_cost`, `inventory_cost` and `n_markets_served` were 0.0 on
+    every facility of every result ever produced, and the coordinates the map
+    needed never travelled. A misspelled keyword must now fail loudly at the
+    call site instead of producing a plausible, empty record.
     """
+    model_config = ConfigDict(extra="forbid")
+
     facility_id:          str
     facility_name:        str
     role:                 str
     is_open:              bool             # y_i value
 
-    # Volume metrics
-    throughput_units:     float = 0.0     # Σ outbound flows
-    capacity_units:       float = 0.0     # CAP_i
+    #: Baseline/scenario status of the facility (EXISTING, CANDIDATE, CLOSED …).
+    status:               Optional[str]   = None
+
+    # Where it is, so a consumer of the decision does not have to re-join
+    # against the network to draw it.
+    latitude:             Optional[float] = None
+    longitude:            Optional[float] = None
+
+    # Volume metrics.
+    #
+    # Under a multi-period solve these are HORIZON figures: `throughput_units`
+    # is the total shipped across every modelled period and `capacity_units` is
+    # the per-period capacity multiplied by the number of periods, so their
+    # ratio remains a real utilization. `peak_utilization_pct` is the single
+    # worst period — which is the number that decides whether the footprint
+    # actually works, and the one an average hides.
+    throughput_units:     float = 0.0     # Σ outbound flows over the horizon
+    capacity_units:       float = 0.0     # CAP_i × n_periods
     utilization_pct:      float = 0.0     # throughput / capacity * 100
+    peak_utilization_pct: float = 0.0     # worst single period
+    n_periods:            int   = 1
+    throughput_by_period: Dict[str, float] = Field(default_factory=dict)
 
     # Cost breakdown
-    fixed_cost:           float = 0.0
+    fixed_cost:           float = 0.0     # Σ over periods open
     handling_cost:        float = 0.0
-    inventory_cost:       float = 0.0     # attributed post-solve (iterative)
+    inventory_cost:       float = 0.0     # safety/cycle stock attributed to this site
+    holding_cost:         float = 0.0     # cost of stock carried between periods
     opening_cost:         float = 0.0     # opening_cost × y_i for candidates
+    closure_cost:         float = 0.0     # charged once when open → closed
     total_facility_cost:  float = 0.0
 
     # Service
     n_markets_served:     int   = 0
+
+
+# ---------------------------------------------------------------------------
+# Inventory Decision (multi-period)
+# ---------------------------------------------------------------------------
+
+class InventoryDecision(BaseModel):
+    """
+    Stock held at a facility at the END of one period — the I_{i,k,t} variable
+    that connects one period to the next.
+
+    Only produced by a multi-period solve. A single-period model has nowhere to
+    carry stock to, so this list is empty and says so by being empty rather
+    than by carrying zeros.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    facility_id:    str
+    facility_name:  str
+    product_id:     str
+    period:         int
+    units:          float
+    holding_cost:   float = 0.0
+    #: Units the facility could still hold — `storage_capacity_units` less what
+    #: is held, or None where no storage capacity was stated.
+    headroom_units: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------
@@ -186,11 +243,21 @@ class NetworkKPIs(BaseModel):
         production_cost:           Total production cost (placeholder, 0 in V1.1)
     """
     # Cost breakdown
-    total_cost:          float   # objective value (currency/period)
-    facility_cost:       float   # Σ f_i × y_i (annualized or per-period)
-    transport_cost:      float   # Σ c_{ijvk} × x_{ijvk}
+    #: The solver objective. Over a multi-period horizon this is the HORIZON
+    #: total, not one period — `OptimizationResult.period_report` says which.
+    total_cost:          float
+    facility_cost:       float   # Σ f_i × y_i × |T|
+    transport_cost:      float   # Σ c_{ijvk} × x_{ijvkt}
     handling_cost:       float   # Σ h_i × throughput_i
     inventory_cost:      float   # Σ inventory_cost_i (post-solve attribution)
+    #: Cost of stock carried BETWEEN periods. Zero for a single-period solve,
+    #: which has no next period to carry it into.
+    holding_cost:        float = 0.0
+    #: One-time costs. These are part of the objective and were previously
+    #: absent from `total_cost` entirely, so a plan that opened a candidate
+    #: reported a total that was not the number the solver minimised.
+    opening_cost:        float = 0.0
+    closure_cost:        float = 0.0
     production_cost:     float = 0.0   # V1.1: placeholder (not yet implemented)
     shortage_cost:       float   # Σ pen × u_{mk}
 
@@ -764,6 +831,9 @@ class OptimizationResult(BaseModel):
     facility_decisions:   List[FacilityDecision]   = Field(default_factory=list)
     flow_decisions:       List[FlowDecision]       = Field(default_factory=list)
     assignment_decisions: List[AssignmentDecision] = Field(default_factory=list)
+    #: Stock carried from one period into the next, per facility and product.
+    #: Empty for a single-period solve, which has nowhere to carry it to.
+    inventory_decisions:  List[InventoryDecision]  = Field(default_factory=list)
 
     # --- Optimization mode & observed/hypothetical separation (V1.4) ---
     # Which decision the optimizer was asked to make. Recorded so an optimized
@@ -779,6 +849,14 @@ class OptimizationResult(BaseModel):
     flow_analytics:  Optional[FlowAnalytics]    = None
     # Explicit statement of how service was enforced (V1.4).
     service_report:  Optional[ServiceReport]    = None
+
+    #: What the solve did with a demand table stating more than one period.
+    #:
+    #: Carries the periods found, the policy applied, how many were actually
+    #: modelled (`modelled_periods`) and the per-period totals — so a screen can
+    #: state whether the figures are one period or a horizon total, rather than
+    #: presenting either as though the data had described only one period.
+    period_report:   Dict[str, Any] = Field(default_factory=dict)
 
     # Raw objective components (for auditability)
     objective_components: Dict[str, float]      = Field(default_factory=dict)

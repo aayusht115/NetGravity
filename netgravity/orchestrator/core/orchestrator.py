@@ -233,6 +233,18 @@ class Orchestrator:
         self.state_store.put(context)
         trace = self.audit.start(context)
 
+        # Start this execution's LLM call budget.
+        #
+        # `max_requests_per_execution` was counted on the gateway INSTANCE and
+        # never reset, and one gateway is built per orchestrator — which lives
+        # as long as the server. So the fifth question anyone asked the
+        # assistant, for the whole life of the process, was refused and
+        # answered from the deterministic template instead, with nothing on
+        # screen to say the answer had changed in kind.
+        begin = getattr(self.gateway, "begin_execution", None)
+        if callable(begin):
+            begin()
+
         try:
             await self._execute_lifecycle(request, context, trace)
         except OrchestratorError as exc:
@@ -1321,6 +1333,8 @@ class Orchestrator:
         *,
         snapshot_id: Optional[str] = None,
         period: int = 1,
+        periods: Optional[Any] = None,
+        horizon: bool = False,
         quantile_mode: Any = None,
         unforecast_policy: Any = None,
         label: str = "",
@@ -1356,6 +1370,7 @@ class Orchestrator:
         from netgravity.orchestrator.engines.forecast_bridge import (
             QuantileMode,
             UnforecastPolicy,
+            apply_forecast_horizon_to_network,
             apply_forecast_to_network,
         )
 
@@ -1364,11 +1379,21 @@ class Orchestrator:
         target_snapshot = snapshot_id or self.snapshots.current_id or ""
         snapshot = self.snapshots.get(target_snapshot)
 
-        application = apply_forecast_to_network(
-            forecast_result, snapshot.network,
-            snapshot_id=snapshot.snapshot_id,
-            period=period, quantile_mode=mode, unforecast_policy=policy,
-        )
+        # `horizon=True` or an explicit `periods` list optimises against the
+        # WHOLE forecast rather than one period of it. The default stays one
+        # period so no existing caller changes shape.
+        if horizon or periods:
+            application = apply_forecast_horizon_to_network(
+                forecast_result, snapshot.network,
+                snapshot_id=snapshot.snapshot_id,
+                periods=periods, quantile_mode=mode, unforecast_policy=policy,
+            )
+        else:
+            application = apply_forecast_to_network(
+                forecast_result, snapshot.network,
+                snapshot_id=snapshot.snapshot_id,
+                period=period, quantile_mode=mode, unforecast_policy=policy,
+            )
 
         if not application.ok or application.network is None:
             logger.warning(
@@ -1377,10 +1402,14 @@ class Orchestrator:
             )
             return None, application
 
+        applied = application.periods or [period]
+        span = (f"period {applied[0]}" if len(applied) == 1
+                else f"periods {applied[0]}-{applied[-1]} ({len(applied)} modelled)")
+
         # ASCII only: overrides are echoed into logs and console output, and a
         # cp1252 terminal cannot encode an arrow.
         overrides = [
-            f"demand set from FORECAST {mode.value} period {period} "
+            f"demand set from FORECAST {mode.value} {span} "
             f"({application.n_forecast} of {len(application.provenance)} records)"
         ]
         if application.substituted_observed:
@@ -1393,7 +1422,7 @@ class Orchestrator:
         record = self.scenarios.create(
             parent_snapshot_id=snapshot.snapshot_id,
             network=application.network,
-            label=label or f"Forecast {mode.value} period {period}",
+            label=label or f"Forecast {mode.value} {span}",
             overrides=overrides,
             created_by=created_by,
             source="forecast",
@@ -1403,7 +1432,9 @@ class Orchestrator:
             "engines_used": list(forecast_result.provenance.engines_used),
             "signal_ids": list(forecast_result.provenance.signal_ids),
             "horizon": forecast_result.provenance.horizon,
-            "period": period,
+            "period": applied[0],
+            "periods": list(applied),
+            "n_periods_modelled": len(applied),
             "quantile_mode": mode.value,
             "forecast_data_version": application.data_version,
             "n_forecast": application.n_forecast,

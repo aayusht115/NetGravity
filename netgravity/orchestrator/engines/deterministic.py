@@ -70,6 +70,166 @@ class OptimizationClient:
     wasteful.
     """
 
+    @staticmethod
+    def _money_scale_gap(
+        network: CanonicalNetwork, cfg: OptimizationConfig,
+    ) -> float:
+        """
+        An absolute optimality tolerance sized to the network's real spend.
+
+        A tenth of a percent of the total fixed cost of running every
+        non-market facility for one period — the one cost scale that can be
+        read off the network without solving it — floored at ₹1,000 so a small
+        network still gets a usable tolerance.
+
+        Deliberately derived rather than a constant: on a network an order of
+        magnitude larger, a fixed ₹1,000 would be an unreachable tolerance and
+        every solve would run to the time limit.
+        """
+        market_roles = {"MARKET", "CUSTOMER"}
+        fixed_total = 0.0
+        for facility in network.facilities:
+            role = getattr(facility.role, "value", str(facility.role))
+            if role in market_roles:
+                continue
+            try:
+                fixed_total += float(
+                    facility.get_fixed_cost_for_period(cfg.cost_period))
+            except Exception:  # noqa: BLE001 — a facility without one adds nothing
+                continue
+        return max(1_000.0, 0.001 * fixed_total)
+
+    @staticmethod
+    def _relaxation_note(
+        cfg: OptimizationConfig,
+        unserved: Optional[float],
+        total: Optional[float],
+    ) -> Dict[str, Any]:
+        """What a relaxed result carries so nothing downstream can mistake it."""
+        return {
+            "solve_relaxation": "SHORTAGE_PERMITTED",
+            "strict_solve_status": "INFEASIBLE",
+            "relaxation_reason": (
+                "No plan can serve all demand within the stated service levels. "
+                "This is the lowest-cost plan that serves as much as the network "
+                "physically can under those same service levels; the remainder "
+                "is reported as unserved demand."
+            ),
+            "unserved_demand": unserved,
+            "total_demand": total,
+            "shortage_penalty_per_unit": cfg.shortage_penalty,
+        }
+
+    async def _relaxed_shortage_result(
+        self,
+        network: CanonicalNetwork,
+        cfg: OptimizationConfig,
+        scenario_id: Optional[str],
+    ) -> tuple:
+        """
+        Re-run the MILP with unmet demand permitted; `(config, result)`.
+
+        `(cfg, None)` when the relaxation was not requested, is already in
+        force, or does not itself solve.
+        """
+        if not getattr(cfg, "relax_to_shortage_when_infeasible", False):
+            return cfg, None
+        if cfg.allow_shortage:
+            # Already permitted shortage and still infeasible — the binding
+            # constraint is something else, and re-running the same model
+            # would only reproduce it.
+            return cfg, None
+
+        relaxed_cfg = cfg.model_copy(update={
+            "allow_shortage": True,
+            # Judge optimality on money, not on the shortage penalty.
+            #
+            # With shortage permitted the objective becomes
+            # `business_cost + shortage_penalty x unserved`, and at 1e6/unit the
+            # penalty term dwarfs the spend — ~8.7bn against ~1.8e7 on the
+            # client network. The 0.1% RELATIVE gap is then worth ~₹8.7M of real
+            # money, so the solver stops the moment it has the right unserved
+            # quantity. Two scenario solves whose models differed only by a
+            # relaxed capacity bound returned ₹9,561,047 and ₹14,512,146, both
+            # OPTIMAL — the second is a plan the first proves is beatable by
+            # ₹5M. On the scenario page that reads as results that change at
+            # random between runs.
+            "mip_gap_abs": self._money_scale_gap(network, cfg),
+        })
+        try:
+            relaxed = await _in_thread(milp_solve, network, relaxed_cfg, scenario_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "optimization.relaxation_failed scenario=%s error=%s",
+                scenario_id, exc,
+            )
+            return relaxed_cfg, None
+
+        if relaxed.solver.status == SolverStatus.INFEASIBLE or not relaxed.is_solved:
+            return relaxed_cfg, None
+        return relaxed_cfg, relaxed
+
+    async def _solve_relaxed_to_shortage(
+        self,
+        network: CanonicalNetwork,
+        cfg: OptimizationConfig,
+        scenario_id: Optional[str],
+    ) -> Any:
+        """
+        Re-solve a proved-infeasible network with unmet demand permitted.
+
+        Returns the relaxed `NetworkStateResult`, or None when the caller did
+        not ask for the relaxation, when it is already solving with shortage
+        permitted, or when even the relaxed model fails.
+
+        What this is
+        ------------
+        The strict model asks "serve every unit, within every stated service
+        level". When that is impossible, the useful next question is not "how
+        much shall we make up?" but "serve as much as is physically possible,
+        within the same service levels, and tell me exactly what is left
+        stranded". That is the model solved here: identical costs, identical
+        capacities, identical SLA filtering, with one variable added per demand
+        record for the units that cannot be served, priced at
+        `config.shortage_penalty`.
+
+        What this is NOT
+        ----------------
+        It does not relax the client's service levels, invent capacity, or fill
+        a gap with an assumed number. The stranded demand comes back as
+        `unserved_demand` and depresses `demand_fill_rate`, so a network that
+        cannot meet its commitments reports that in its own KPIs instead of
+        reporting nothing at all. The shortage penalty is a solver device for
+        ranking which demand to strand, not a business cost: it is excluded
+        from `business_network_cost` and reported separately as
+        `shortage_penalty_cost`.
+        """
+        relaxed_cfg, relaxed = await self._relaxed_shortage_result(
+            network, cfg, scenario_id,
+        )
+        if relaxed is None:
+            return None
+
+        state = await _in_thread(
+            build_network_state_result, relaxed, network, relaxed_cfg, None,
+        )
+        unserved = getattr(state.demand, "unserved_demand", None)
+        total = getattr(state.demand, "total_demand", None)
+        # A field of its own. `state.metadata` is a typed `ModelMetadata` whose
+        # consumers read it attribute by attribute (run_id, solver_status,
+        # model_version), so replacing it with a dict breaks them.
+        state.solve_relaxation = self._relaxation_note(relaxed_cfg, unserved, total)
+        if state.mode_description:
+            state.mode_description = (
+                f"{state.mode_description} (relaxed: unmet demand permitted "
+                f"after the strict model proved infeasible)"
+            )
+        logger.info(
+            "optimization.relaxed_to_shortage scenario=%s unserved=%s of %s",
+            scenario_id, unserved, total,
+        )
+        return state
+
     async def solve_result(
         self,
         network: CanonicalNetwork,
@@ -100,6 +260,11 @@ class OptimizationClient:
             ) from exc
 
         if result.solver.status == SolverStatus.INFEASIBLE:
+            relaxed = await self._solve_relaxed_to_shortage(
+                network, cfg, scenario_id,
+            )
+            if relaxed is not None:
+                return relaxed
             raise SolverInfeasibleError(
                 "The MILP proved no feasible solution exists for this network "
                 "configuration. This is a mathematical outcome, not a transient "
@@ -155,6 +320,7 @@ class OptimizationClient:
         cfg = cfg.model_copy(update={
             "optimization_mode": OptimizationMode.BROWNFIELD_SCENARIO_OPTIMIZATION
         })
+        relaxation_note: Optional[Dict[str, Any]] = None
 
         try:
             result = await _in_thread(milp_solve, scenario_network, cfg, scenario_id)
@@ -165,12 +331,26 @@ class OptimizationClient:
             ) from exc
 
         if result.solver.status == SolverStatus.INFEASIBLE:
-            raise SolverInfeasibleError(
-                f"Scenario '{scenario_id}' has no feasible solution. The network cannot "
-                f"absorb these changes under the current constraints.",
-                context={"scenario_id": scenario_id,
-                         "solver_status": result.solver.status.value},
+            # Same relaxation as the baseline, for the same reason: a scenario
+            # run against a network that already cannot serve all its demand
+            # would otherwise fail outright, and the planner would learn
+            # nothing about whether the scenario helped.
+            cfg, relaxed_result = await self._relaxed_shortage_result(
+                scenario_network, cfg, scenario_id,
             )
+            if relaxed_result is not None:
+                result = relaxed_result
+                relaxation_note = self._relaxation_note(
+                    cfg, result.kpis.unmet_demand if result.kpis else None,
+                    result.kpis.total_demand if result.kpis else None,
+                )
+            else:
+                raise SolverInfeasibleError(
+                    f"Scenario '{scenario_id}' has no feasible solution. The network cannot "
+                    f"absorb these changes under the current constraints.",
+                    context={"scenario_id": scenario_id,
+                             "solver_status": result.solver.status.value},
+                )
 
         if not result.is_solved:
             raise EngineFailureError(
@@ -179,11 +359,16 @@ class OptimizationClient:
                 context={"scenario_id": scenario_id},
             )
 
-        return await _in_thread(
+        scenario_result = await _in_thread(
             build_scenario_result,
             result, scenario_network, scenario_id, scenario_name,
             "CUSTOM", baseline_state, list(overrides or []), cfg, None,
         )
+        if relaxation_note is not None:
+            # `ScenarioResult` wraps the same `NetworkStateResult`, so the note
+            # travels with the state exactly as it does for a baseline solve.
+            scenario_result.state.solve_relaxation = relaxation_note
+        return scenario_result
 
     async def solve_scenario(
         self,

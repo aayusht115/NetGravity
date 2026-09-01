@@ -1,0 +1,88 @@
+{
+  "checks": [
+    {
+      "id": "P-01",
+      "name": "The database reports what it restored",
+      "status": "PASS",
+      "detail": "{\"engine\": \"sqlite\", \"database\": \"C:\\\\Users\\\\asish\\\\AppData\\\\Local\\\\Temp\\\\ng-persist-xbuimr1n\\\\netgravity.db\", \"users\": 1, \"sessions\": 1, \"execution_traces\": 4, \"snapshots\": 1, \"scenario_networks\": 2, \"projects\": 1, \"demand_history\": 1, \"signals\": 1, \"capacity_history\": 1, \"analyses\": 1, \"enabled\": true}"
+    },
+    {
+      "id": "P-02",
+      "name": "A session issued before the restart is still valid",
+      "status": "PASS",
+      "detail": "HTTP 200 {\"status\": \"authenticated\", \"user\": {\"email\": \"persist-6dc48f38@example.com\", \"id\": \"usr_dd3d8980dfee\", \"name\": \"Ravi Deshmukh\", \"organization\": \"Client Workspa"
+    },
+    {
+      "id": "P-03",
+      "name": "The account and its password hash survive a restart",
+      "status": "PASS",
+      "detail": "HTTP 200"
+    },
+    {
+      "id": "P-04",
+      "name": "A restored account still rejects the wrong password",
+      "status": "PASS",
+      "detail": "HTTP 401"
+    },
+    {
+      "id": "P-05",
+      "name": "The project survives, still bound to its network",
+      "status": "PASS",
+      "detail": "{\"client\": \"\", \"created_at\": 1788256541.0690527, \"description\": \"\", \"has_network\": true, \"id\": \"pr-7d401ed450\", \"ingestion_run_ids\": [], \"is_demo\": false, \"name\": \"Durable Network\", \"owner_id\": \"usr_dd3d8980dfee\", \"region\": \"India\", \"snapshot_id\": \"snap_bdfd1736bee1\", \"snapshot_label\": \"Durable Network \\u2014 uploaded\", \"status\": \"Analysis ready\", \"updated_at\": 1788256541.278027}"
+    },
+    {
+      "id": "P-06",
+      "name": "The uploaded network is still there, byte-for-byte the same",
+      "status": "PASS",
+      "detail": "HTTP 200 version=bdfd1736bee18675"
+    },
+    {
+      "id": "P-07",
+      "name": "The restored network re-solves to the same cost",
+      "status": "PASS",
+      "detail": "18067793.9644 -> 18067793.9644"
+    },
+    {
+      "id": "P-08",
+      "name": "A solved scenario survives with its figures intact",
+      "status": "PASS",
+      "detail": "1 scenarios, cost=9612573.259"
+    },
+    {
+      "id": "P-09",
+      "name": "A restored scenario still knows what it changed",
+      "status": "PASS",
+      "detail": "[\"CLOSE_FACILITY F006\"]"
+    },
+    {
+      "id": "P-10",
+      "name": "The demand history that arrived with the upload survives",
+      "status": "PASS",
+      "detail": "14 series -> 14"
+    },
+    {
+      "id": "P-11",
+      "name": "The client's recorded capacity history survives",
+      "status": "PASS",
+      "detail": "5 facilities carry a recorded prior"
+    },
+    {
+      "id": "P-12",
+      "name": "A scenario created after the restart joins the earlier ones",
+      "status": "PASS",
+      "detail": "2 scenarios"
+    },
+    {
+      "id": "P-13",
+      "name": "A revoked session stays revoked after a restart",
+      "status": "PASS",
+      "detail": "HTTP 401"
+    },
+    {
+      "id": "P-14",
+      "name": "Ownership is enforced on restored projects too",
+      "status": "PASS",
+      "detail": "HTTP 403"
+    }
+  ]
+}

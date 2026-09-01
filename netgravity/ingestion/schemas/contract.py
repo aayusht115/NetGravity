@@ -79,6 +79,12 @@ class ContractRule(BaseModel):
     contract_start_date: Optional[str] = None
     contract_end_date: Optional[str] = None
 
+    #: Site commitments the same document states — a lease term, a take-or-pay,
+    #: a minimum-term clause. Separate from the surcharges because they answer a
+    #: different question: not what shipping costs, but whether a site may be
+    #: closed. See `FacilityCommitment`.
+    facility_commitments: List["FacilityCommitment"] = Field(default_factory=list)
+
     # Provenance — points back into the raw zone
     source_file_key: str = ""
     extracted_by: str = "stub"        # "stub" | "<provider>:<model>"
@@ -98,4 +104,84 @@ class ContractRule(BaseModel):
         return any(
             s.applies_to_location_ids or s.applies_to_pin_codes
             for s in self.surcharges
+        )
+
+
+class FacilityCommitment(BaseModel):
+    """
+    A contractual commitment to keep a SITE — a lease, a take-or-pay, a
+    minimum-term agreement.
+
+    Why this exists separately from `ContractRule`
+    ---------------------------------------------
+    `ContractRule` is about what shipping COSTS. This is about whether a site
+    may be CLOSED, which is a different question with a different consequence:
+    the first changes a number in the objective, the second changes whether a
+    decision is legal.
+
+    The MILP has enforced it since V1.4. Constraint C5c pins `y_i = 1` for a
+    facility whose `contract_status` is ACTIVE and which does not permit early
+    closure; validation check V-015 names the conflict when a scenario tries to
+    close one anyway; the Digital Twin reports it and `metrics/contracts.py`
+    puts it in the contract summary.
+
+    And nothing had ever set those fields. No ingestion path, no API, no
+    scenario override — `contract_status` defaulted to NONE on every facility of
+    every network, so the constraint was structurally present and permanently
+    inert. A planner could be shown a recommendation to close a site the client
+    was contractually unable to close, and nothing in the system was in a
+    position to object.
+
+    Everything here is read from the document or left None. There is no default
+    lock-in and no assumed notice period: a commitment nobody stated is not a
+    commitment, and inventing one would block a closure the client is free to
+    make.
+    """
+
+    #: The facility this commitment binds, as an id in the client's own network
+    #: where the document names one recognisably.
+    facility_id: str = ""
+    #: What the document called it, kept even when it could not be matched to an
+    #: id — an unmatched commitment must be reportable, not discarded.
+    facility_label: str = ""
+
+    #: Is the commitment in force for the modelled period?
+    is_active: Optional[bool] = None
+    #: May the site be closed before the term ends?
+    allows_early_closure: Optional[bool] = None
+
+    #: What it costs to exit early, in the document's own currency. Feeds
+    #: `FacilityRecord.closure_cost`, which the objective already charges.
+    early_exit_penalty: Optional[float] = None
+    penalty_currency: str = ""
+    notice_period_days: Optional[int] = None
+
+    term_start_date: Optional[str] = None
+    term_end_date: Optional[str] = None
+
+    confidence: ExtractionConfidence = ExtractionConfidence.MEDIUM
+    #: The clause this came from. A commitment that changes whether a site may
+    #: be closed must be traceable to the sentence that says so.
+    source_excerpt: str = ""
+    source_page: Optional[int] = None
+
+    @property
+    def prohibits_closure(self) -> bool:
+        """
+        True only when the document says BOTH that a commitment is in force and
+        that early exit is not permitted.
+
+        `allows_early_closure=None` — the document did not say — is deliberately
+        NOT treated as a prohibition. An unstated term must not pin a facility
+        open; it must be reported as unstated so somebody reads the contract.
+        """
+        return bool(self.is_active) and self.allows_early_closure is False
+
+    @property
+    def is_stated_enough_to_apply(self) -> bool:
+        """Whether this commitment says anything a model can act on."""
+        return bool(self.facility_id) and (
+            self.is_active is not None
+            or self.allows_early_closure is not None
+            or self.early_exit_penalty is not None
         )

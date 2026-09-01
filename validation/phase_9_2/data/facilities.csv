@@ -1,0 +1,10 @@
+facility_id,facility_name,facility_type,city,state,region,capacity_units_per_day,fixed_cost_monthly,handling_cost_per_unit,is_open
+PLT_BADDI,Baddi Plant,PLANT,Baddi,Himachal Pradesh,North,12000,450000,3.2,TRUE
+PLT_PUNE,Pune Plant,PLANT,Pune,Maharashtra,West,10000,400000,3.5,TRUE
+PLT_HYD,Hyderabad Plant,PLANT,Hyderabad,Telangana,South,8000,380000,3.4,TRUE
+PLT_KOL,Kolkata Plant,PLANT,Kolkata,West Bengal,East,6000,320000,3.6,TRUE
+DC_DELHI,Delhi NCR DC,DC,Delhi NCR,Delhi,North,10000,312000,4.5,TRUE
+DC_MUMBAI,Mumbai DC,DC,Mumbai,Maharashtra,West,9000,290000,4.2,TRUE
+DC_BLR,Bengaluru DC,DC,Bengaluru,Karnataka,South,8500,275000,4.0,TRUE
+DC_KOLKATA,Kolkata DC,DC,Kolkata,West Bengal,East,7500,240000,3.8,TRUE
+DC_GUWAHATI,Guwahati DC,DC,Guwahati,Assam,Northeast,4000,180000,4.8,TRUE

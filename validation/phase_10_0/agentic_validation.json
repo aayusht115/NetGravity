@@ -1,0 +1,61 @@
+{
+  "generated_at": "2026-08-30T19:16:53",
+  "capability_count": 16,
+  "capabilities": [
+    "external.interpret_signal",
+    "extraction.parse",
+    "forecast.demand",
+    "governance.classify",
+    "kpi.summarise",
+    "market.score_signal",
+    "network.load_snapshot",
+    "optimization.solve",
+    "optimization.solve_scenario",
+    "reasoning.synthesise",
+    "resilience.assess",
+    "risk.compute_rf",
+    "scenario.create",
+    "scenario.validate",
+    "signal.route_for_forecast",
+    "twin.publish"
+  ],
+  "llm": {
+    "available": true,
+    "requests_made": 0,
+    "total_tokens": 0,
+    "last_error": null,
+    "token_configured": true
+  },
+  "deterministic_fallback_verified": true,
+  "control_plane_modules_present": {
+    "orchestrator": true,
+    "planner": true,
+    "plan_graph": true,
+    "executor": true,
+    "failure_manager": true,
+    "circuit_breaker": true,
+    "result_observer": true,
+    "adaptive_policy": true,
+    "execution_context": true,
+    "execution_state": true
+  },
+  "scenario_solve": {
+    "http_status": 201,
+    "execution_id": "8afe86c1-d55",
+    "provenance": {
+      "authoritative_source": "KPIRegistry (Phase 9.1)",
+      "computed_by": "orchestrator.run_sync",
+      "engine": "netgravity MILP (PuLP/HiGHS)",
+      "llm_used": false
+    },
+    "delta_metrics": [
+      "avg_utilization_pct",
+      "business_network_cost",
+      "demand_fill_rate",
+      "pct_demand_in_sla",
+      "risk_factor",
+      "total_carbon_kg"
+    ],
+    "carries_authoritative_payload": true
+  }
+}

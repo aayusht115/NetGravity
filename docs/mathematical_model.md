@@ -318,7 +318,7 @@ Full registry: `assumptions/registry.py`
 | ID | Statement | Default | Confidence |
 |---|---|---|---|
 | A-001 | Demand distribution is Normal | NORMAL | MEDIUM |
-| A-002 | Planning horizon is 1 period (single-period) | T=1 | HIGH |
+| A-002 | Planning horizon is 1 period (single-period) | T=1 | HIGH | **Superseded in Phase 10.9**: `multi_period_policy=FULL_HORIZON` solves every period the demand table states, with stock carried between them. T=1 remains the behaviour for single-period data and under the collapse policies. |
 | A-003 | Transport cost is linear in flow volume | LINEAR | HIGH |
 | A-004 | Facility available at full capacity once opened | FULL | HIGH |
 | A-005 | Carbon accounting covers transport flows only | TRANSPORT | HIGH |

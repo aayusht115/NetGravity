@@ -9,71 +9,32 @@
  * - Dynamic domain-specific consulting responses
  */
 
-const FAQ_KNOWLEDGE_BASE = {
-  "What is driving the increase in transportation cost?": {
-    topic: "COST & NETWORK TELEMETRY",
-    answer: `Transportation cost increased by <strong>₹3.2L (+8.4%)</strong> primarily driven by two factors:
-      <ol style="margin: 8px 0 10px 18px; padding: 0; line-height: 1.65;">
-        <li><strong>Expedited Freight on Baddi → Delhi:</strong> Peak volume (9,400 u/d) forced high spot-market freight rates (+22% premium).</li>
-        <li><strong>Cross-Regional Inefficiency:</strong> Eastern corridor shipments bypassing regional consolidation added ₹1.4L in auxiliary lane surcharges.</li>
-      </ol>
-      Rebalancing 12% of Baddi volume to Kolkata DC can eliminate expedited surcharges and save <strong>₹2.4L/mo</strong>.`,
-    actionText: "Simulate Rebalancing in Scenario Planner →",
-    actionTab: "scenarios"
-  },
-  "Which DCs are operating near capacity?": {
-    topic: "FACILITY CAPACITY ASSESSMENT",
-    answer: `<strong>Delhi NCR DC</strong> is the critical bottleneck, operating at <strong>94.0% capacity utilization</strong> (9,400 units/day against a 10,000 u/d ceiling).
-      <p style="margin: 8px 0 6px;">Demand forecast projects a <strong>+14.2% demand surge</strong> by December 2026 (108% projected utilization), which will cause severe dispatch spillover and SLA penalties.</p>
-      In contrast, <strong>Kolkata DC (53.3%)</strong> and <strong>Mumbai DC (75.6%)</strong> possess abundant spare buffer.`,
-    actionText: "Inspect Delhi NCR DC in Cockpit →",
-    actionTab: "home"
-  },
-  "Show me the top cost optimization opportunities.": {
-    topic: "PRESCRIPTIVE COST REDUCTION",
-    answer: `NetGravity mathematical engine has identified 3 high-impact cost reduction opportunities:
-      <ol style="margin: 8px 0 10px 18px; padding: 0; line-height: 1.65;">
-        <li><strong>Baddi Flow Rebalancing:</strong> Saves <strong>₹2.4L/mo (-7.8%)</strong> with zero capital expenditure by shifting overflow volume to Kolkata DC.</li>
-        <li><strong>Multi-Drop Western Corridor Consolidation:</strong> Saves <strong>₹1.8L/mo (-5.2%)</strong> on Mumbai–Pune routes.</li>
-        <li><strong>Direct Plant Bypass for Tier-1 Markets:</strong> Saves <strong>₹95K/mo (-2.8%)</strong> by bypassing intermediary cross-docks.</li>
-      </ol>`,
-    actionText: "Review Recommendations →",
-    actionTab: "recommendations"
-  },
-  "What scenarios have the highest cost savings?": {
-    topic: "SCENARIO TRADE-OFF EVALUATION",
-    answer: `Ranking of evaluated MILP optimization scenarios by net savings:
-      <ol style="margin: 8px 0 10px 18px; padding: 0; line-height: 1.65;">
-        <li><strong>Scenario 1 (Rebalance Baddi Volume):</strong> <strong>₹2.4L net monthly savings (-7.8%)</strong> · SLA: 96.7% · CapEx: ₹0.</li>
-        <li><strong>Scenario 3 (Hub Consolidation):</strong> <strong>₹1.9L net monthly savings (-6.1%)</strong> · SLA: 95.8%.</li>
-        <li><strong>Scenario 2 (Delhi NCR Brownfield Expansion):</strong> <strong>₹1.2L net return</strong> after factoring in ₹15L expansion CapEx amortized.</li>
-      </ol>`,
-    actionText: "Open Scenario Planning Workspace →",
-    actionTab: "scenarios"
-  },
-  "How is service level expected to change in Q4?": {
-    topic: "SLA & DEMAND PROJECTIONS",
-    answer: `Current baseline network SLA is healthy at <strong>96.7%</strong> (Target: ≥95.0%).
-      <p style="margin: 8px 0 6px;">However, in Q4 (Oct–Dec 2026), North India festive demand surge (+14.2%) without flow reallocation will breach Delhi DC throughput limits, causing regional dispatch SLA to drop sharply to <strong>91.2%</strong>.</p>
-      Implementing the AI rebalancing strategy preserves SLA at <strong>96.7%</strong> throughout Q4.`,
-    actionText: "View Demand Forecast Projections →",
-    actionTab: "forecast"
-  },
-  "Which lanes are most at risk of disruption?": {
-    topic: "SUPPLY CHAIN RESILIENCE",
-    answer: `Two critical network corridors exhibit high disruption exposure:
-      <ul style="margin: 8px 0 10px 18px; padding: 0; line-height: 1.65;">
-        <li><strong>Baddi → Delhi NCR:</strong> Heavy single-carrier concentration + winter fog corridor delay risk (historical 3.2-day transit variance).</li>
-        <li><strong>Kolkata → Guwahati:</strong> Mountain corridor infrastructure vulnerability with 8.4% shipment delay frequency.</li>
-      </ul>
-      Contracting backup secondary 3PL carriers is recommended to insulate against SLA penalties.`,
-    actionText: "View Digital Twin Topology →",
-    actionTab: "twin"
-  }
-};
+// REMOVED IN PHASE 10.0 — `FAQ_KNOWLEDGE_BASE` and `generateAIResponse()`
+//
+// Together these were the chatbot's offline fabrication path: a canned FAQ plus
+// a generator that, whenever the orchestrator call failed or returned no text,
+// emitted a confident business briefing containing specific figures the engine
+// had never produced ("96.7% On-time SLA", "Delhi NCR DC 94% utilization",
+// "Kolkata DC spare capacity 53.3%", "all 19 India facilities").
+//
+// They are removed rather than left unreferenced so the path cannot be
+// reconnected by accident. Grounded answers come from /orchestrator/chat; when
+// that is unreachable the UI says so.
+
+
+import { getActiveSnapshotId } from './integration/project-context.js';
 
 let chatMessages = [];
 let isGenerating = false;
+
+/* Replies are rendered with innerHTML, and they carry facility names and free
+   text that came from an uploaded file. Escaped so an uploaded value cannot
+   inject markup into the chat surface. */
+function escapeChatText(s) {
+  return String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
 
 /**
  * Initialize Chatbot Modal & Global Listeners
@@ -114,6 +75,10 @@ export function openChatbotModal() {
   overlay.classList.add('active');
   overlay.style.display = 'flex';
 
+  // Greet the person who is actually signed in. The markup greeted "Hi Amit!"
+  // for every user of the application.
+  if (typeof window.applyIdentity === 'function') window.applyIdentity();
+
   setTimeout(() => {
     const input = document.getElementById('chatbot-modal-input');
     if (input) input.focus();
@@ -152,10 +117,14 @@ export function resetChatbotView() {
   }
 }
 
+import { chatService } from './integration/services/chat-service.js';
+
+let conversationId = null;
+
 /**
  * Ask a specific predefined prompt or FAQ
  */
-export function askChatbotPrompt(query) {
+export async function askChatbotPrompt(query) {
   if (!query || isGenerating) return;
 
   const faqSection = document.getElementById('chatbot-faq-section');
@@ -168,24 +137,93 @@ export function askChatbotPrompt(query) {
   chatMessages.push({ role: 'user', text: query });
   renderChatMessages();
 
+  // Refuse before asking, when there is nothing to ask about.
+  //
+  // `/orchestrator/chat` falls back to the network the orchestrator boots with
+  // if no snapshot is supplied, and answers in full: a user who had uploaded
+  // nothing was told "I see a business network cost of 150,627.70 per period"
+  // for a synthetic network they have never seen. The dashboard behind the
+  // assistant was, correctly, showing dashes at the time.
+  if (!getActiveSnapshotId()) {
+    chatMessages.push({
+      role: 'ai',
+      topic: 'NO NETWORK LOADED',
+      text: 'This project has no analysed network yet, so I have nothing to '
+          + 'report on. Upload your dataset and I will answer from your own '
+          + 'facilities, corridors and costs.',
+    });
+    renderChatMessages();
+    return;
+  }
+
   // Show typing indicator & generate response
   isGenerating = true;
   showTypingIndicator();
 
-  setTimeout(() => {
+  try {
+    const res = await chatService.sendMessage(query, conversationId);
     removeTypingIndicator();
     isGenerating = false;
 
-    const response = generateAIResponse(query);
+    if (res && res.conversation_id) conversationId = res.conversation_id;
+
+    // The endpoint's answer field is `reply`. This read `res.response`, which
+    // the API has never returned — so every successful answer fell through to
+    // the "did not return an answer" branch below and the assistant appeared
+    // to fetch nothing at all. `response` is still accepted in case a
+    // deployment predates the rename.
+    const answer = res && (res.reply || res.response);
+    const clarification = res && res.clarification;
+
+    if (answer) {
+      chatMessages.push({
+        role: 'ai',
+        // `intent` is 'UNKNOWN' when the request was not understood; labelling
+        // that "ORCHESTRATOR RESPONSE" made a refusal look like an answer.
+        topic: (res.intent && res.intent !== 'UNKNOWN')
+          ? res.intent
+          : (res.status === 'UNSUPPORTED' ? 'NOT UNDERSTOOD' : 'ORCHESTRATOR RESPONSE'),
+        text: escapeChatText(answer),
+        actionText: 'Explore in Digital Twin →',
+        actionTab: 'twin',
+      });
+    } else if (clarification) {
+      chatMessages.push({
+        role: 'ai',
+        topic: 'NEEDS CLARIFICATION',
+        text: escapeChatText(clarification),
+      });
+    } else {
+      // The orchestrator answered but produced no text. Say so; do not
+      // synthesise a business narrative in its place.
+      chatMessages.push({
+        role: 'ai',
+        topic: 'NO RESPONSE',
+        text: 'The assistant did not return an answer for that question. '
+            + 'Please rephrase it, or open the Digital Twin to inspect the '
+            + 'network directly.',
+        isError: true,
+      });
+    }
+  } catch (err) {
+    removeTypingIndicator();
+    isGenerating = false;
+    // Phase 10.0: this branch previously called generateAIResponse(query),
+    // which emitted a confident fabricated briefing — "96.7% On-time SLA",
+    // "Delhi NCR DC 94% utilization", "all 19 India facilities" — none of it
+    // from the engine, and indistinguishable from a real answer. An assistant
+    // that cannot reach its engine must say that, not invent numbers.
+    const detail = (err && err.message) ? err.message : 'the assistant is unreachable';
     chatMessages.push({
       role: 'ai',
-      topic: response.topic,
-      text: response.answer,
-      actionText: response.actionText,
-      actionTab: response.actionTab
+      topic: 'ASSISTANT UNAVAILABLE',
+      text: `I could not reach the analysis engine, so I have no grounded answer `
+          + `to give (${detail}). The dashboard KPIs and Digital Twin remain `
+          + `available and are unaffected.`,
+      isError: true,
     });
-    renderChatMessages();
-  }, 450);
+  }
+  renderChatMessages();
 }
 
 /**
@@ -204,93 +242,41 @@ export function sendChatbotInput() {
 /**
  * Generate intelligent contextual response
  */
-function generateAIResponse(query) {
-  // Check exact KB match first
-  if (FAQ_KNOWLEDGE_BASE[query]) {
-    return FAQ_KNOWLEDGE_BASE[query];
-  }
-
-  const q = query.toLowerCase();
-
-  if (q.includes('delhi') || q.includes('capacity') || q.includes('utilis') || q.includes('bottleneck')) {
-    return {
-      topic: "FACILITY TELEMETRY & CAPACITY",
-      answer: `<strong>Delhi NCR DC</strong> is operating at <strong>94.0% utilization</strong> with 600 u/d headroom remaining. Demand forecast indicates a <strong>+14.2% growth in Q4</strong> which will exceed total capacity. NetGravity recommends immediate flow diversion to <strong>Kolkata DC</strong>.`,
-      actionText: "Explore Scenario Planning →",
-      actionTab: "scenarios"
-    };
-  }
-
-  if (q.includes('cost') || q.includes('saving') || q.includes('expense') || q.includes('reduce') || q.includes('opportunit')) {
-    return {
-      topic: "PRESCRIPTIVE COST OPTIMIZATION",
-      answer: `NetGravity has identified <strong>₹2.4L/month in actionable cost savings</strong> by reallocating Baddi manufacturing plant volume between Delhi and Kolkata corridors, reducing spot-market transportation penalties while maintaining SLA at <strong>96.7%</strong>.`,
-      actionText: "View Recommendation Details →",
-      actionTab: "recommendations"
-    };
-  }
-
-  if (q.includes('scenario') || q.includes('rebalance') || q.includes('expand') || q.includes('plan')) {
-    return {
-      topic: "OPTIMIZATION SCENARIO SOLVER",
-      answer: `The mathematical solver evaluated 4 distinct network configurations. <strong>Scenario 1 (Rebalance Baddi Volume)</strong> achieved optimal multi-echelon cost efficiency with <strong>-7.8% total network cost</strong> and zero required CapEx.`,
-      actionText: "Open Scenario Planning →",
-      actionTab: "scenarios"
-    };
-  }
-
-  if (q.includes('forecast') || q.includes('demand') || q.includes('future') || q.includes('predict')) {
-    return {
-      topic: "PREDICTIVE DEMAND TELEMETRY",
-      answer: `Demand across North India is forecasted to expand by <strong>14.2% over the next 3 months</strong>. External economic indicators and festive consumption signals suggest sustained volume pressure across North and Western hubs through December 2026.`,
-      actionText: "View Demand Forecast →",
-      actionTab: "forecast"
-    };
-  }
-
-  if (q.includes('insight') || q.includes('summar') || q.includes('key')) {
-    return {
-      topic: "EXECUTIVE NETWORK SUMMARY",
-      answer: `Network executive summary:
-        <ul style="margin: 6px 0 8px 18px; padding: 0; line-height: 1.6;">
-          <li><strong>Cost:</strong> ₹11.8L current period (-3.2% vs previous).</li>
-          <li><strong>Service Level:</strong> 96.7% On-time SLA (Target: 95.0%).</li>
-          <li><strong>Key Bottleneck:</strong> Delhi NCR DC (94% utilization, high Q4 breach risk).</li>
-          <li><strong>Key Opportunity:</strong> Kolkata DC spare capacity (53.3% utilization).</li>
-        </ul>`,
-      actionText: "View Full Insights Page →",
-      actionTab: "insights"
-    };
-  }
-
-  // Fallback intelligent answer
-  return {
-    topic: "NETGRAVITY AI ADVISORY",
-    answer: `Regarding <em>"${query}"</em>: NetGravity's network optimization engine continuously evaluates real-time throughput, demand forecasts, and transportation economics across all 19 India facilities. You can simulate specific parameter adjustments in the <strong>Scenario Planning</strong> workspace.`,
-    actionText: "Open Scenario Planning →",
-    actionTab: "scenarios"
-  };
-}
 
 /**
  * Render Chat Bubbles in Chat View
  */
+/**
+ * What is actually answering, from the server's own status.
+ *
+ * The chat header read "NetGravity AI v2.4" — a version number that appears
+ * nowhere in this codebase (the application reports 2.0.0) and told the user
+ * nothing about whether a language model was even reachable.
+ */
+function engineLabel() {
+  const s = (typeof window !== 'undefined') ? window.__ngServerStatus : null;
+  if (!s) return 'NetGravity analysis engine';
+  const version = s.version ? ` v${s.version}` : '';
+  const llm = s.orchestrator && s.orchestrator.llm_available;
+  return `NetGravity${version} - ${llm ? 'grounded answers, model assisted' : 'grounded answers, deterministic'}`;
+}
+
 function renderChatMessages() {
   const chatView = document.getElementById('chatbot-chat-view');
   if (!chatView) return;
 
   chatView.innerHTML = `
     <div class="chatbot-back-row">
-      <button class="chatbot-back-btn" onclick="window.resetChatbotView && window.resetChatbotView()">
+      <button class="chatbot-back-btn" data-action="resetChatbotView">
         ← Back to FAQs & suggestions
       </button>
-      <span style="font-size: 11.5px; color: #9ca3af; font-weight: 500;">NetGravity AI v2.4</span>
+      <span style="font-size: 11.5px; color: #9ca3af; font-weight: 500;">${escapeChatText(engineLabel())}</span>
     </div>
     ${chatMessages.map(msg => {
       if (msg.role === 'user') {
         return `
           <div class="chat-msg-row user">
-            <div class="chat-bubble-user">${msg.text}</div>
+            <div class="chat-bubble-user">${escapeChatText(msg.text)}</div>
           </div>
         `;
       } else {
@@ -300,7 +286,7 @@ function renderChatMessages() {
               ${msg.topic ? `<div class="ai-badge-chip">✦ ${msg.topic}</div>` : ''}
               <div>${msg.text}</div>
               ${msg.actionText && msg.actionTab ? `
-                <button class="action-link-btn" onclick="window.navigateToTab && window.closeChatbotModal && window.closeChatbotModal(); if (window.triggerAgentReasoning) { window.triggerAgentReasoning('Executing AI Recommended Action: ${msg.topic || 'Network Optimization'}', '${msg.actionTab}'); } else if (window.navigateToTab) { window.navigateToTab('${msg.actionTab}'); }">
+                <button class="action-link-btn" data-action="exploreInTwin" data-arg="${escapeChatText(msg.actionTab)}" data-topic="${escapeChatText(msg.topic || 'Network Optimization')}">
                   ${msg.actionText}
                 </button>
               ` : ''}

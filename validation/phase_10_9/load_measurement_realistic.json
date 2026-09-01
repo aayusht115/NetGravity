@@ -1,0 +1,104 @@
+{
+  "measured_at": "2026-09-01T09:22:34Z",
+  "served_by": "Werkzeug/3.1.8 Python/3.14.3",
+  "base": "http://127.0.0.1:5050",
+  "project_id": "pr-demo-case16",
+  "clients": 8,
+  "think_seconds": 1.0,
+  "duration_seconds": 41.0,
+  "throughput_rps": 7.78,
+  "endpoints": [
+    {
+      "endpoint": "status",
+      "requests": 64,
+      "ok": 64,
+      "rate_limited_429": 0,
+      "connections_refused": 0,
+      "server_errors_5xx": 0,
+      "statuses": {
+        "200": 64
+      },
+      "p50_ms": 16.6,
+      "p90_ms": 26.9,
+      "p99_ms": 28.1,
+      "max_ms": 30.3,
+      "mean_ms": 15.8
+    },
+    {
+      "endpoint": "projects",
+      "requests": 64,
+      "ok": 64,
+      "rate_limited_429": 0,
+      "connections_refused": 0,
+      "server_errors_5xx": 0,
+      "statuses": {
+        "200": 64
+      },
+      "p50_ms": 12.2,
+      "p90_ms": 26.6,
+      "p99_ms": 29.3,
+      "max_ms": 29.4,
+      "mean_ms": 12.7
+    },
+    {
+      "endpoint": "kpis.network",
+      "requests": 64,
+      "ok": 64,
+      "rate_limited_429": 0,
+      "connections_refused": 0,
+      "server_errors_5xx": 0,
+      "statuses": {
+        "200": 64
+      },
+      "p50_ms": 19.8,
+      "p90_ms": 29.2,
+      "p99_ms": 31.4,
+      "max_ms": 32.3,
+      "mean_ms": 17.6
+    },
+    {
+      "endpoint": "kpis.facilities",
+      "requests": 64,
+      "ok": 64,
+      "rate_limited_429": 0,
+      "connections_refused": 0,
+      "server_errors_5xx": 0,
+      "statuses": {
+        "200": 64
+      },
+      "p50_ms": 15.8,
+      "p90_ms": 28.4,
+      "p99_ms": 30.0,
+      "max_ms": 36.5,
+      "mean_ms": 16.9
+    },
+    {
+      "endpoint": "insights",
+      "requests": 63,
+      "ok": 63,
+      "rate_limited_429": 0,
+      "connections_refused": 0,
+      "server_errors_5xx": 0,
+      "statuses": {
+        "200": 63
+      },
+      "p50_ms": 7.6,
+      "p90_ms": 27.4,
+      "p99_ms": 30.3,
+      "max_ms": 30.4,
+      "mean_ms": 13.8
+    }
+  ],
+  "first_solve": {
+    "request_ms": 29.0,
+    "solve_seconds": 0.093,
+    "served_from_store": true,
+    "status": 200
+  },
+  "totals": {
+    "requests": 319,
+    "rate_limited": 0,
+    "connections_refused": 0,
+    "server_errors_5xx": 0
+  }
+}

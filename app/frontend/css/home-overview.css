@@ -224,6 +224,62 @@
   color: #9ca3af;
 }
 
+/* ─── What the engine recommends ────────────────────────────
+   Sits below the scrolling feed, outside it, so the one thing on the card
+   that says what to DO does not scroll out of view behind a long list of
+   findings. */
+.home2-rec {
+  flex: 0 0 auto;
+  border-top: 1px solid #f1f5f9;
+  padding: 14px 16px 16px;
+}
+
+.home2-rec-empty {
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+.home2-rec-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6B2FA0;
+  margin-bottom: 6px;
+}
+
+.home2-rec-text {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: #1f2937;
+}
+
+.home2-rec-drivers {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #4b5563;
+}
+
+.home2-rec-limitation {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #6b7280;
+}
+
+/* Amber rather than red: an incomplete or unverified basis is a caveat on the
+   recommendation, not a failure of the network. */
+.home2-rec-warning {
+  margin-top: 8px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  font-size: 12px;
+  color: #92400e;
+}
+
 .home2-attn-item {
   display: flex;
   align-items: flex-start;

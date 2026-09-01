@@ -221,6 +221,10 @@ def _kpis(state: Any) -> TwinKPIs:
         n_facilities_closed=len(state.closed_facilities),
         avg_utilization_pct=state.avg_utilization_pct,
         max_utilization_pct=state.max_utilization_pct,
+        # What span the cost and volume figures above cover, so prose written
+        # about them can say so instead of assuming one period.
+        periods_modelled=getattr(state, "periods_modelled", None),
+        cost_per_period=getattr(state, "cost_per_period", None),
         total_carbon_kg=state.total_carbon_kg,
         pct_demand_in_sla=(state.service.pct_demand_in_sla if state.service else None),
     )

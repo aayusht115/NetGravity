@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-08-30T19:16:52",
+  "upload_status": 200,
+  "data_quality": {
+    "duplicateRows": 1,
+    "emptyRows": 0,
+    "invalidRecords": 1,
+    "issues": [
+      {
+        "count": 1,
+        "detail": "1 duplicate row(s) in 'f.csv::f'.",
+        "severity": "warning",
+        "table": "f.csv::f",
+        "type": "Duplicate rows"
+      }
+    ],
+    "nullCellPct": 8.3,
+    "totalRecords": 3,
+    "validPct": 66.7,
+    "validRecords": 2
+  },
+  "quality_is_measured_not_asserted": true,
+  "structure_contains_no_solver_output": true,
+  "disallowed_file_type_status": 400,
+  "disallowed_file_type_rejected": true,
+  "guardrails": {
+    "allowed_extensions": [
+      ".csv",
+      ".tsv",
+      ".xlsx",
+      ".xls",
+      ".xlsm"
+    ],
+    "max_file_bytes": 26214400,
+    "max_files_per_request": 10
+  }
+}

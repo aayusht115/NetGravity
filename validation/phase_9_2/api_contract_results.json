@@ -1,0 +1,137 @@
+[
+  {
+    "method": "GET",
+    "endpoint": "/api/status",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.27,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "POST",
+    "endpoint": "/api/auth/login",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.25,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "POST",
+    "endpoint": "/api/auth/login",
+    "expected_status": 400,
+    "actual_status": 400,
+    "latency_ms": 0.21,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/api/auth/me",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.19,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/api/projects",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.22,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/api/projects/pr-nonexistent-id",
+    "expected_status": 404,
+    "actual_status": 404,
+    "latency_ms": 0.2,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/api/kpis/network",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.41,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/api/kpis/facilities",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.22,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/api/kpis/thresholds",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.28,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/api/scenarios",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.25,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "POST",
+    "endpoint": "/api/scenarios/simulate",
+    "expected_status": 201,
+    "actual_status": 201,
+    "latency_ms": 20.26,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/api/forecast",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 6.73,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/api/signals",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.28,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/orchestrator/twin/states",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.26,
+    "pass": true,
+    "response_type": "application/json"
+  },
+  {
+    "method": "GET",
+    "endpoint": "/orchestrator/health",
+    "expected_status": 200,
+    "actual_status": 200,
+    "latency_ms": 0.22,
+    "pass": true,
+    "response_type": "application/json"
+  }
+]

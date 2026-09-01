@@ -513,9 +513,20 @@ signal.
 ## 9. Future TTR support
 
 The HBR resilience framework uses **Time to Recovery** (TTR = 1 / 2 / 4 / 8
-weeks). The NetGravity MILP is a **single-period** model: demand, capacities and
-lane limits are all per planning period, and no decision variable is indexed by
-time. A multi-period recovery therefore cannot be modelled today.
+weeks).
+
+The formulation is no longer the obstacle. Since Phase 10.9 the MILP indexes
+flow, demand, capacity and stock by period, and carries stock between periods
+(`multi_period_policy=FULL_HORIZON`) — so a horizon in which a facility is
+unavailable for weeks 1–2 and available for 3–8 is now expressible by
+the model.
+
+What is still missing is the DISRUPTION side. `DisruptionConfig` expresses one
+thing: a facility unavailable for the whole modelled period. It has no way to
+say "unavailable for periods 1 to 2 of 8", and the REI comparison it feeds
+assumes one uniform disruption across every compared entity. Until that schema
+gains a period range, a TTR figure would be a number the experiment did not
+test.
 
 Rather than fabricate a temporal calculation, V1 defines the experiment
 explicitly as:

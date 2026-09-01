@@ -87,6 +87,78 @@ from netgravity.schemas.network import CanonicalNetwork, OptimizationMode
 
 logger = logging.getLogger(__name__)
 
+#: How many facilities to name in the reasoning payload.
+#:
+#: Enough for a question about the busiest or the emptiest site on a network of
+#: ordinary size, bounded so a 500-facility network does not push the
+#: deterministic results past the gateway's prompt cap and lose the totals.
+_FACILITY_EVIDENCE_LIMIT = 25
+
+
+def _facility_evidence(context: ExecutionContext) -> Dict[str, Any]:
+    """
+    Per-facility figures from the state this execution solved.
+
+    Read verbatim from `NetworkStateResult.facilities` — the solver's own
+    `FacilitySummary` records. Nothing is computed, ranked or rounded into a
+    claim here; the list is ordered by utilisation purely so that a truncated
+    list keeps the facilities a question is most likely to be about.
+
+    Returns {} when no state was solved, which is the honest input for a run
+    that produced no network state.
+    """
+    state = None
+    for key in ("optimization.solve", "optimization.solve_scenario"):
+        candidate = context.network_states.get(key)
+        if candidate is not None:
+            state = candidate
+    if state is None:
+        state = next((v for k, v in context.network_states.items()
+                      if k.startswith("scenario:")), None)
+    if state is None or not getattr(state, "facilities", None):
+        return {}
+
+    rows = sorted(
+        state.facilities,
+        key=lambda f: (f.utilization_pct if f.utilization_pct is not None else -1.0),
+        reverse=True,
+    )[:_FACILITY_EVIDENCE_LIMIT]
+
+    # Solver OUTPUTS only — utilisation and throughput. Stated capacity is
+    # deliberately excluded.
+    #
+    # Everything in this payload becomes an authoritative FACT for numeric
+    # grounding, and grounding matches on kind (currency, units, count) rather
+    # than on metric name — a currency claim is allowed to match a units fact,
+    # because narratives move between the two. So every number added here
+    # widens the space a claim can match against.
+    #
+    # Capacity is an INPUT the user uploaded, not a result of this solve, and
+    # including it bought nothing the note below does not already explain —
+    # while a fixture plant with a stated capacity of 99,999 was enough to make
+    # a hallucinated cost of "99,999.00" verify as grounded. Outputs earn their
+    # place in the fact space; inputs do not.
+    return {
+        "note": (
+            "Per-facility results from the same solve as the totals above. "
+            "utilization_pct is this facility's throughput as a percentage of "
+            "its capacity."
+        ),
+        "count_reported": len(rows),
+        "count_total": len(state.facilities),
+        "rows": [
+            {
+                "facility_id": f.facility_id,
+                "name": f.facility_name,
+                "role": f.role,
+                "is_open": f.is_open,
+                "utilization_pct": f.utilization_pct,
+                "throughput_units": f.throughput_units,
+            }
+            for f in rows
+        ],
+    }
+
 
 def build_orchestrator(
     *,
@@ -795,6 +867,22 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
                 s.model_dump(mode="json") for s in ctx.market_signals
             ]
 
+        # Per-facility detail, for questions that are ABOUT a facility.
+        #
+        # `flatten_network_state()` drops it by design — the flattened dict is a
+        # transport projection carrying totals and id lists. But that dict was
+        # the whole of the reasoning payload, so "which distribution centre is
+        # most utilised?" reached a narrator that had the network's average
+        # utilisation and not one facility's. It answered with a general
+        # summary, every time, for every question.
+        #
+        # Read from the TYPED state the same execution already holds. Nothing is
+        # computed here and nothing is re-derived: these are the solver's own
+        # per-facility figures, named so the narrator can quote them.
+        facilities = _facility_evidence(ctx)
+        if facilities:
+            payload["facilities"] = facilities
+
         unavailable = {
             cap: {"status": ev.status.value, "reason": ev.reason}
             for cap, ev in ctx.unavailable_evidence.items()
@@ -806,6 +894,16 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
                 payload,
                 unavailable_evidence=unavailable,
                 allow_llm=ctx.llm_enabled,
+                # THE QUESTION THAT WAS ASKED.
+                #
+                # The reasoning prompt never received it. It said "explain what
+                # these figures mean for the business", so every question got
+                # the same executive briefing about total cost and fill rate —
+                # which is why asking which DC was most utilised, or why demand
+                # was unserved, returned a network summary that never addressed
+                # either. The figures were right and the answer was to a
+                # different question.
+                user_question=(ctx.raw_input or "").strip(),
                 provenance={
                     "execution_id": ctx.execution_id,
                     "snapshot_id": ctx.baseline_snapshot_id or "",

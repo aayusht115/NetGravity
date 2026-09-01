@@ -40,11 +40,37 @@ from netgravity.orchestrator.schemas.requests import Actor, ActorRole, Orchestra
 logger = logging.getLogger(__name__)
 
 
-def create_orchestrator_blueprint(orchestrator: Orchestrator, url_prefix: str = "/orchestrator"):
+class AuthenticationRequired(Exception):
+    """No usable caller identity for this request."""
+
+    def __init__(self, message: str = "Authentication required.") -> None:
+        super().__init__(message)
+        self.message = message
+
+
+def create_orchestrator_blueprint(
+    orchestrator: Orchestrator,
+    url_prefix: str = "/orchestrator",
+    authenticator: Any = None,
+):
     """
     Build the Flask blueprint.
 
     Imported lazily so the orchestrator package stays usable without Flask.
+
+    `authenticator` is a zero-argument callable returning the `Actor` on whose
+    behalf this request runs, or raising `AuthenticationRequired`. It is how
+    the hosting application supplies its own identity layer without this
+    package depending on one.
+
+    **This blueprint FAILS CLOSED.** With no authenticator every route returns
+    401. That is a deliberate change: the control plane was mounted with no
+    authentication at all, so anyone who could reach the process could run
+    solves, read any snapshot's Digital Twin state, read the full decision
+    trace of any execution, and — through `/approvals/<id>` with a
+    self-declared APPROVER actor — approve a governed action. Mounting it
+    unprotected was a single missing decorator away from being correct, which
+    is exactly the kind of gap a default should not leave open.
     """
     from flask import Blueprint, jsonify, request
 
@@ -54,6 +80,57 @@ def create_orchestrator_blueprint(orchestrator: Orchestrator, url_prefix: str = 
 
     def _error(exc: OrchestratorError, status: int = 400):
         return jsonify({"error": exc.to_dict()}), status
+
+    def _caller() -> Actor:
+        """
+        The authenticated actor for this request.
+
+        Raises `AuthenticationRequired` when no authenticator is configured, so
+        an unprotected mount denies every request rather than serving them.
+        """
+        if authenticator is None:
+            raise AuthenticationRequired(
+                "This control plane was mounted without an authenticator, so it "
+                "will not serve requests. Pass `authenticator=` to "
+                "create_orchestrator_blueprint()."
+            )
+        return authenticator()
+
+    @bp.before_request
+    def _authenticate():
+        """
+        One guard for every route in this blueprint.
+
+        A `before_request` rather than a per-route decorator, because the
+        failure mode being fixed is a route that was never decorated. There is
+        no way to add an endpoint here and forget it.
+        """
+        try:
+            actor = _caller()
+        except AuthenticationRequired as exc:
+            return jsonify({"error": {
+                "code": "UNAUTHENTICATED", "message": exc.message,
+            }}), 401
+        except Exception as exc:  # noqa: BLE001 — an authenticator that throws denies
+            logger.warning("orchestrator.auth.failed error=%s", exc)
+            return jsonify({"error": {
+                "code": "UNAUTHENTICATED", "message": "Authentication failed.",
+            }}), 401
+        request.environ["netgravity.actor"] = actor
+        return None
+
+    def _actor_from_session() -> Actor:
+        """
+        The caller, as established by the authenticator.
+
+        Any `actor` in the request BODY is ignored. It used to be trusted
+        verbatim: `Actor(**body["actor"])` accepted a self-declared
+        `role: "APPROVER"`, and `/approvals/<id>` checks that role to decide
+        whether a governed action may proceed. A caller could approve their own
+        structural change by asking to be an approver.
+        """
+        actor = request.environ.get("netgravity.actor")
+        return actor if isinstance(actor, Actor) else Actor()
 
     def _int_arg(name: str, default: int) -> int:
         """A malformed paging argument falls back rather than 500-ing."""
@@ -99,11 +176,12 @@ def create_orchestrator_blueprint(orchestrator: Orchestrator, url_prefix: str = 
         body: Dict[str, Any] = request.get_json(silent=True) or {}
         try:
             payload = dict(body)
-            actor_raw = payload.pop("actor", None)
-            if isinstance(actor_raw, dict):
-                payload["actor"] = Actor(**actor_raw)
-            elif isinstance(actor_raw, str):
-                payload["actor"] = Actor(actor_id=actor_raw, role=ActorRole.VIEWER)
+            # The actor is the AUTHENTICATED caller, never what the body says.
+            # `Actor(**body["actor"])` let a client name themselves and pick
+            # their own role, which is the input the governance layer reads to
+            # decide what may be actioned without a human.
+            payload.pop("actor", None)
+            payload["actor"] = _actor_from_session()
             req = OrchestratorRequest(**payload)
         except Exception as exc:  # noqa: BLE001 - malformed client input
             return jsonify({"error": {
@@ -133,12 +211,12 @@ def create_orchestrator_blueprint(orchestrator: Orchestrator, url_prefix: str = 
         Body: ``{"approved": true, "actor": {...}, "note": "..."}``
         """
         body: Dict[str, Any] = request.get_json(silent=True) or {}
-        actor_raw = body.get("actor") or {}
-        try:
-            actor = Actor(**actor_raw) if isinstance(actor_raw, dict) else Actor()
-        except Exception as exc:  # noqa: BLE001
-            return jsonify({"error": {"code": "INVALID_REQUEST",
-                                      "message": f"Malformed actor: {exc}"}}), 400
+        # Who is approving is established by the session, not claimed in the
+        # body. `orchestrator.resolve_approval` checks `actor.role` against the
+        # approval's required role — so trusting the body meant a caller could
+        # approve a HUMAN_ONLY structural change by declaring themselves an
+        # APPROVER in the same request that performed it.
+        actor = _actor_from_session()
 
         try:
             response = orchestrator.resolve_approval(

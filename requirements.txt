@@ -15,6 +15,16 @@ pytest>=8.0.0
 flask>=3.0.0
 flask-cors>=4.0.0
 
+# Durable storage — PostgreSQL.
+# Set NETGRAVITY_DATABASE_URL (or DATABASE_URL) and the application stores
+# accounts, projects, uploaded networks, the analysis computed from them and
+# solved scenarios in Postgres. Without it, it falls back to a local SQLite
+# file and says so on /api/status; SQLite is single-writer and is not a
+# multi-instance deployment target.
+#   python scripts/migrate_to_postgres.py --postgres postgresql://…
+psycopg[binary]>=3.1.0
+psycopg_pool>=3.2.0
+
 # Orchestrator LLM gateway client (text-generation gateway over HTTPS)
 requests>=2.31.0
 

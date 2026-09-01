@@ -1,0 +1,50 @@
+{
+  "stage": "AGENTIC_FLOW",
+  "response": {
+    "execution_id": "eb2ba516-778",
+    "request_id": "4362ee82-50b9-4a11-b072-80f1efd12d7c",
+    "status": "REQUIRES_HUMAN",
+    "intent": "UNKNOWN",
+    "network_snapshot_id": "snap_762b4d277ffb",
+    "scenario_id": null,
+    "scenario_version": null,
+    "is_hypothetical": false,
+    "summary": "",
+    "results": {},
+    "risk": null,
+    "reasoning": null,
+    "governance": null,
+    "approval": null,
+    "twin_states": [
+      {
+        "state_id": "tws_snap_762b4d277ffb_optimized",
+        "snapshot_id": "snap_762b4d277ffb",
+        "scenario_id": null,
+        "state_type": "OPTIMIZED",
+        "calculation_status": "PARTIAL",
+        "n_facilities": 0,
+        "n_flows": 0,
+        "generated_at": "2026-08-30T11:48:50.727865+00:00"
+      }
+    ],
+    "errors": [
+      {
+        "code": "INVALID_REQUEST",
+        "message": "Unable to determine intent. No rule matched the request. (rule-based only; LLM not used)",
+        "failure_class": "REQUIRES_HUMAN"
+      }
+    ],
+    "warnings": [
+      "The request could not be classified into a known workflow."
+    ],
+    "duration_seconds": 0.0005,
+    "started_at": "2026-08-30T11:48:50.727480+00:00",
+    "completed_at": "2026-08-30T11:48:50.727941+00:00",
+    "steps": []
+  },
+  "state_history": [
+    "StateTransition(from_state='RECEIVED', to_state='UNDERSTANDING', at='2026-08-30T11:48:50.727511+00:00', note='')",
+    "StateTransition(from_state='UNDERSTANDING', to_state='REQUIRES_HUMAN', at='2026-08-30T11:48:50.727849+00:00', note='intent could not be determined')"
+  ],
+  "execution_id": "eb2ba516-778"
+}

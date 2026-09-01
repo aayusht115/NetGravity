@@ -601,13 +601,19 @@
 .ing-file-summary-card {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: calc(16 * var(--u));
   background: var(--proj-surface);
   border: 1px solid var(--proj-border-soft);
   border-radius: calc(14 * var(--u));
   padding: calc(16 * var(--u)) calc(22 * var(--u));
+  /* Bounded so a long file name cannot squeeze the heading beside it off the
+     page; the name wraps instead. */
+  max-width: calc(420 * var(--u));
+  min-width: 0;
 }
+
+.ing-file-summary-card > div { min-width: 0; }
 
 .ing-file-summary-icon {
   width: calc(44 * var(--u));
@@ -628,7 +634,10 @@
   color: var(--proj-text-1);
 }
 
+.ing-file-summary-name { overflow-wrap: anywhere; }
+
 .ing-file-summary-meta {
+  flex-wrap: wrap;
   display: flex;
   gap: calc(26 * var(--u));
   margin-top: calc(8 * var(--u));
@@ -713,7 +722,69 @@
   border: 1px solid var(--proj-border-soft);
   border-radius: calc(14 * var(--u));
   padding: calc(24 * var(--u)) calc(26 * var(--u)) calc(10 * var(--u));
+  /* A grid item defaults to min-width:auto, which lets its content force the
+     column wider than 1fr. Without this the mapping table pushed the sidebar
+     — and the Confirm button — off the right of the screen. */
+  min-width: 0;
 }
+
+/* One block per sheet in the workbook. */
+.ing-map-sheet-group + .ing-map-sheet-group { margin-top: calc(22 * var(--u)); }
+
+.ing-map-sheet-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: calc(10 * var(--u));
+  padding-bottom: calc(8 * var(--u));
+  border-bottom: 2px solid var(--proj-border-soft);
+  margin-bottom: calc(4 * var(--u));
+}
+
+.ing-map-sheet-name {
+  font-weight: 700;
+  font-size: calc(13.5 * var(--u));
+  color: var(--proj-text-1);
+  overflow-wrap: anywhere;
+}
+
+.ing-map-sheet-meta {
+  font-size: calc(12 * var(--u));
+  color: var(--proj-text-3);
+}
+
+/* Sheet names listed on the file summary card. */
+.ing-file-summary-sheets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(6 * var(--u));
+  margin-top: calc(8 * var(--u));
+}
+
+.ing-sheet-chip {
+  font-size: calc(11.5 * var(--u));
+  padding: calc(2 * var(--u)) calc(8 * var(--u));
+  border-radius: calc(6 * var(--u));
+  background: var(--proj-bg-soft, #f5f3fa);
+  color: var(--proj-text-2);
+  border: 1px solid var(--proj-border-soft);
+  overflow-wrap: anywhere;
+}
+
+.ing-status-chip.tone-error { color: #dc2626; }
+
+.ing-dq-issue-list {
+  margin-top: calc(14 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(8 * var(--u));
+  /* The measured issue list is as long as the file demands; it scrolls inside
+     its card rather than pushing the Confirm button below the fold. */
+  max-height: calc(260 * var(--u));
+  overflow-y: auto;
+}
+
+.ing-review-item-text { min-width: 0; }
 
 .ing-mapping-main-head {
   display: flex;
@@ -747,7 +818,16 @@
   width: 100%;
   border-collapse: collapse;
   font-size: calc(13.5 * var(--u));
+  /* Fixed layout so one long cell cannot widen the whole table; the column
+     widths below are what the review screen needs to stay usable. */
+  table-layout: fixed;
 }
+
+.ing-map-table col.c-source   { width: 22%; }
+.ing-map-table col.c-sample   { width: 30%; }
+.ing-map-table col.c-mapped   { width: 24%; }
+.ing-map-table col.c-conf     { width: 12%; }
+.ing-map-table col.c-status   { width: 12%; }
 
 .ing-map-table th {
   text-align: left;
@@ -789,10 +869,25 @@
 
 .ing-map-sample {
   color: var(--proj-text-3);
-  max-width: calc(190 * var(--u));
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  /* `display` was left at inline, and an inline box ignores max-width — so a
+     long sample (the signals sheet joins three ~90-character descriptions into
+     one cell) stretched the table past the page and the mapping controls on
+     the right went off-screen with no way to reach them.
+     Block + wrapping keeps the value readable inside its column, which is what
+     a review screen needs: the point is to check the sample against the field. */
+  display: block;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.45;
+  /* Long values stay reviewable without letting one row dominate the table. */
+  max-height: calc(56 * var(--u));
+  overflow-y: auto;
+}
+
+.ing-map-source {
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .ing-map-select {
@@ -1129,7 +1224,13 @@
   margin-top: calc(2 * var(--u));
   font-size: calc(12.5 * var(--u));
   color: #92610a;
+  /* Measured issue text names a column and a sheet and runs long; it wraps
+     inside the card instead of stretching it. */
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
+
+.ing-review-item-name { overflow-wrap: anywhere; }
 
 .ing-review-item.reviewed .ing-review-item-note { color: #157f3c; }
 
@@ -1184,4 +1285,75 @@
   .ing-stats-row { flex-wrap: wrap; }
   .ing-stat-item { flex: 1 1 50%; border-bottom: 1px solid var(--proj-border-soft); }
   .ing-pdf-actions { flex-direction: column; }
+}
+
+/* Shown where a screen presents example content rather than something read
+   from the user's file. Deliberately loud: the failure it prevents is a user
+   acting on a rate card nobody parsed. */
+.ing-demo-notice {
+  margin: calc(14 * var(--u)) 0 calc(4 * var(--u));
+  padding: calc(12 * var(--u)) calc(16 * var(--u));
+  border: 1px solid #f6dfab;
+  border-left: 4px solid #d97706;
+  border-radius: calc(10 * var(--u));
+  background: #fffaf0;
+  color: #7c4a03;
+  font-size: calc(13 * var(--u));
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.ing-demo-notice strong { display: block; margin-bottom: calc(3 * var(--u)); }
+
+/* ═══════════════════════════════════════════════════════════
+   ANALYSIS LOADING SCREEN
+   The stage markers for the loading screen that holds the app
+   until a project's KPIs actually exist (js/analysis-loading.js).
+   Reuses the ingestion loading card; only the row marker and the
+   per-stage status colour are new, because these rows report a
+   real state each rather than a single animated step.
+   ═══════════════════════════════════════════════════════════ */
+.ing-stage-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(24 * var(--u));
+  height: calc(24 * var(--u));
+  flex-shrink: 0;
+  border-radius: 50%;
+  font-size: calc(14 * var(--u));
+  font-weight: 700;
+  line-height: 1;
+}
+.ing-stage-mark[data-mark="pending"] { color: var(--proj-text-4); background: #f4f1f9; }
+.ing-stage-mark[data-mark="running"] { color: #6b21a8; background: #f3e8ff; }
+.ing-stage-mark[data-mark="done"]    { color: #157f3c; background: #e6f6ec; }
+
+/* "Waiting" and "Working" must not be green: .ing-loading-status is styled for
+   a completed step, and reusing it unchanged would show every pending stage in
+   the colour of a finished one. */
+.ing-loading-row [data-mark="pending"] ~ div .ing-loading-row-title { color: var(--proj-text-3); }
+.ing-loading-row:has([data-mark="pending"]) .ing-loading-status { color: var(--proj-text-4); }
+.ing-loading-row:has([data-mark="running"]) .ing-loading-status { color: #6b21a8; }
+
+/* ═══════════════════════════════════════════════════════════
+   ACCOUNT SECURITY
+   The one card in this family that is taller than the viewport:
+   it carries a password form, a full TOTP enrolment (secret,
+   otpauth URI and ten recovery codes) and a session list. The
+   loading cards it borrows from are short and never needed to
+   scroll, so its heading scrolled off the top instead.
+   ═══════════════════════════════════════════════════════════ */
+#account-security-overlay { align-items: flex-start; overflow-y: auto; }
+#account-security-overlay .ing-loading-card {
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  margin: 24px auto;
+}
+#account-security-overlay .ing-loading-head {
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  padding-bottom: 8px;
+  z-index: 1;
 }

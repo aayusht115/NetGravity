@@ -37,6 +37,44 @@ from netgravity.metrics.kpis import compute_kpis
 # Shared helpers
 # ---------------------------------------------------------------------------
 
+def shortage_config(
+    network: CanonicalNetwork, config: OptimizationConfig,
+) -> OptimizationConfig:
+    """
+    A disruption config: unmet demand permitted, optimality judged in money.
+
+    Every disruption solve here permits shortage — that is the point, because a
+    disrupted network's answer is "how much can still be served", not
+    "infeasible". But permitting it adds `shortage_penalty x unserved` to the
+    objective, and at the default 1e6 per unit that term is two orders of
+    magnitude larger than the spend. The RELATIVE `mip_gap` is then a tolerance
+    of millions of rupees of real cost, while every resilience metric in this
+    module is a DIFFERENCE of two such costs — so the difference can be
+    dominated entirely by how far each solve happened to stop short of optimal.
+
+    That is not hypothetical: it is what produces a NEGATIVE performance impact
+    for a facility whose closure obviously cannot save money.
+
+    `mip_gap_abs` makes the tolerance a money figure, so the two sides of every
+    difference are optimal to the same, small, absolute amount.
+    """
+    market_roles = {"MARKET", "CUSTOMER"}
+    fixed_total = 0.0
+    for facility in network.facilities:
+        role = getattr(facility.role, "value", str(facility.role))
+        if role in market_roles:
+            continue
+        try:
+            fixed_total += float(
+                facility.get_fixed_cost_for_period(config.cost_period))
+        except Exception:  # noqa: BLE001
+            continue
+    return config.model_copy(update={
+        "allow_shortage": True,
+        "mip_gap_abs": max(1_000.0, 0.001 * fixed_total),
+    })
+
+
 def compute_rerouted_volume(
     pre_result:  OptimizationResult,
     post_result: OptimizationResult,
@@ -100,7 +138,7 @@ class ResilienceEngine:
             config = network.config
 
         # Enable shortage to measure unmet demand rather than infeasibility
-        disruption_config = config.model_copy(update={"allow_shortage": True})
+        disruption_config = shortage_config(network, config)
 
         # Pre-disruption baseline
         pre_result = milp_solve(network=network, config=config, scenario_id="PRE_DISRUPTION")
@@ -161,7 +199,7 @@ class ResilienceEngine:
         if config is None:
             config = network.config
 
-        disruption_config = config.model_copy(update={"allow_shortage": True})
+        disruption_config = shortage_config(network, config)
 
         pre_result = milp_solve(network=network, config=config, scenario_id="PRE_DISRUPTION")
         pre_kpis   = compute_kpis(pre_result, network)
@@ -213,7 +251,7 @@ class ResilienceEngine:
         if config is None:
             config = network.config
 
-        disruption_config = config.model_copy(update={"allow_shortage": True})
+        disruption_config = shortage_config(network, config)
 
         pre_result = milp_solve(network=network, config=config, scenario_id="PRE_DISRUPTION")
         pre_kpis   = compute_kpis(pre_result, network)
@@ -264,7 +302,7 @@ class ResilienceEngine:
         if config is None:
             config = network.config
 
-        disruption_config = config.model_copy(update={"allow_shortage": True})
+        disruption_config = shortage_config(network, config)
 
         pre_result = milp_solve(network=network, config=config, scenario_id="PRE_DISRUPTION")
         pre_kpis   = compute_kpis(pre_result, network)

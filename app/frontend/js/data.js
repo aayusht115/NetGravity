@@ -1,41 +1,32 @@
 /**
- * NetGravity — Central Mock Data Layer
- * ======================================
- * All prototype data in one place. Internally consistent.
- * Storyline: December capacity risk at Baddi DC.
+ * NetGravity — Client-Side Model
+ * ==============================
+ * The structures every screen reads. They are DECLARATIONS, not data: each one
+ * starts empty and is filled by `loadNetworkData()` and `hydrateFromBackend()`
+ * from the network bound to the open project.
  *
- * STATUS: PROTOTYPE / MOCKED
- * In production, this data comes from the Python MILP engine via API.
+ * They used to ship populated with the prototype's own network — Baddi Plant,
+ * DC Delhi NCR, MKT_LUCKNOW, two solved scenarios, a costed recommendation and
+ * a full per-facility performance profile. Because the screens read these
+ * arrays directly, a user who had opened a project and uploaded nothing was
+ * shown a complete, confident dashboard of a network they had never seen:
+ * ₹12.8L total cost, 94% utilisation, 89.5% fill rate, and a 7.8% savings
+ * opportunity. The banner above it said "no network yet".
+ *
+ * Nothing in this file may describe a network. Where the shape of a record
+ * matters it is documented in a comment, not demonstrated with a fake row.
  */
 
 // ─── FACILITIES ─────────────────────────────────────────────
-export const PLANTS = [
-  { id: "PLT_BADDI", name: "Baddi Plant", city: "Baddi", state: "Himachal Pradesh", lat: 30.96, lng: 76.79, capacity: 12000, throughput: 11200, region: "North", status: "EXISTING" },
-  { id: "PLT_PUNE", name: "Pune Plant", city: "Pune", state: "Maharashtra", lat: 18.52, lng: 73.86, capacity: 10000, throughput: 7800, region: "West", status: "EXISTING" },
-  { id: "PLT_HYDERABAD", name: "Hyderabad Plant", city: "Hyderabad", state: "Telangana", lat: 17.38, lng: 78.49, capacity: 8000, throughput: 6100, region: "South", status: "EXISTING" },
-  { id: "PLT_KOLKATA", name: "Kolkata Plant", city: "Kolkata", state: "West Bengal", lat: 22.57, lng: 88.36, capacity: 6000, throughput: 4200, region: "East", status: "EXISTING" },
-];
+// Filled by `loadNetworkData()` from the bound network. EMPTY until then:
+// this shipped holding the prototype's own network, and every screen reads
+// it directly, so a user who had not uploaded anything was shown a full
+// dashboard of somebody else's facilities under the label "Actual".
+export const PLANTS = [];
 
-export const DCS = [
-  { id: "DC_DELHI", name: "Delhi NCR DC", city: "Delhi NCR", state: "Delhi", lat: 28.61, lng: 77.21, capacity: 10000, throughput: 9400, fixedCost: 120, handlingCost: 4.2, region: "North", status: "EXISTING", utilPct: 94.0 },
-  { id: "DC_MUMBAI", name: "Mumbai DC", city: "Mumbai", state: "Maharashtra", lat: 19.08, lng: 72.88, capacity: 9000, throughput: 6800, fixedCost: 140, handlingCost: 4.8, region: "West", status: "EXISTING", utilPct: 75.6 },
-  { id: "DC_BENGALURU", name: "Bengaluru DC", city: "Bengaluru", state: "Karnataka", lat: 12.97, lng: 77.59, capacity: 7500, throughput: 5600, fixedCost: 110, handlingCost: 4.0, region: "South", status: "EXISTING", utilPct: 74.7 },
-  { id: "DC_KOLKATA", name: "Kolkata DC", city: "Kolkata", state: "West Bengal", lat: 22.57, lng: 88.36, capacity: 6000, throughput: 3200, fixedCost: 85, handlingCost: 3.5, region: "East", status: "EXISTING", utilPct: 53.3 },
-  { id: "DC_GUWAHATI", name: "Guwahati DC", city: "Guwahati", state: "Assam", lat: 26.14, lng: 91.74, capacity: 4000, throughput: 2100, fixedCost: 65, handlingCost: 3.8, region: "Northeast", status: "EXISTING", utilPct: 52.5 },
-];
+export const DCS = [];
 
-export const MARKETS = [
-  { id: "MKT_DELHI", name: "Delhi", lat: 28.70, lng: 77.10, demand: 4200, slaDays: 2, priority: "High", region: "North" },
-  { id: "MKT_MUMBAI", name: "Mumbai", lat: 19.08, lng: 72.88, demand: 3800, slaDays: 2, priority: "High", region: "West" },
-  { id: "MKT_BENGALURU", name: "Bengaluru", lat: 12.97, lng: 77.59, demand: 3200, slaDays: 2, priority: "High", region: "South" },
-  { id: "MKT_CHENNAI", name: "Chennai", lat: 13.08, lng: 80.27, demand: 2400, slaDays: 3, priority: "Medium", region: "South" },
-  { id: "MKT_HYDERABAD", name: "Hyderabad", lat: 17.38, lng: 78.49, demand: 2800, slaDays: 3, priority: "Medium", region: "South" },
-  { id: "MKT_KOLKATA", name: "Kolkata", lat: 22.57, lng: 88.36, demand: 2200, slaDays: 3, priority: "Medium", region: "East" },
-  { id: "MKT_AHMEDABAD", name: "Ahmedabad", lat: 23.03, lng: 72.57, demand: 1800, slaDays: 3, priority: "Medium", region: "West" },
-  { id: "MKT_JAIPUR", name: "Jaipur", lat: 26.91, lng: 75.79, demand: 1500, slaDays: 3, priority: "Medium", region: "North" },
-  { id: "MKT_LUCKNOW", name: "Lucknow", lat: 26.85, lng: 80.95, demand: 1400, slaDays: 3, priority: "Medium", region: "North" },
-  { id: "MKT_GUWAHATI", name: "Guwahati", lat: 26.14, lng: 91.74, demand: 1100, slaDays: 4, priority: "Low", region: "Northeast" },
-];
+export const MARKETS = [];
 
 // ─── S2: de-overlap co-located nodes ──────────────────────────
 // Several plants/DCs/markets share a city and were given the exact same
@@ -65,143 +56,58 @@ function deoverlapNodes(nodeArrays) {
 }
 deoverlapNodes([PLANTS, DCS, MARKETS]);
 
-export const FACILITIES = [
-  ...PLANTS.map((p) => ({ ...p, type: 'Plant' })),
-  ...DCS.map((d) => ({ ...d, type: 'DC' })),
-];
+export const FACILITIES = [];
 
 // ─── LANES (key corridors with cost, distance, lead time) ───
-export const LANES = [
-  // Plant → DC
-  { from: "PLT_BADDI", to: "DC_DELHI", cost: 12, distance: 310, leadTime: 1.0, flow: 8200, mode: "ROAD" },
-  { from: "PLT_BADDI", to: "DC_MUMBAI", cost: 28, distance: 1420, leadTime: 2.5, flow: 1800, mode: "ROAD" },
-  { from: "PLT_BADDI", to: "DC_KOLKATA", cost: 32, distance: 1800, leadTime: 3.0, flow: 1200, mode: "ROAD" },
-  { from: "PLT_PUNE", to: "DC_MUMBAI", cost: 8, distance: 150, leadTime: 0.5, flow: 5000, mode: "ROAD" },
-  { from: "PLT_PUNE", to: "DC_BENGALURU", cost: 18, distance: 840, leadTime: 1.5, flow: 2800, mode: "ROAD" },
-  { from: "PLT_HYDERABAD", to: "DC_BENGALURU", cost: 15, distance: 570, leadTime: 1.0, flow: 2800, mode: "ROAD" },
-  { from: "PLT_HYDERABAD", to: "DC_MUMBAI", cost: 20, distance: 710, leadTime: 1.5, flow: 1500, mode: "ROAD" },
-  { from: "PLT_HYDERABAD", to: "DC_KOLKATA", cost: 25, distance: 1500, leadTime: 2.5, flow: 1300, mode: "ROAD" },
-  { from: "PLT_KOLKATA", to: "DC_KOLKATA", cost: 5, distance: 30, leadTime: 0.2, flow: 2700, mode: "ROAD" },
-  { from: "PLT_KOLKATA", to: "DC_GUWAHATI", cost: 22, distance: 1000, leadTime: 2.0, flow: 1500, mode: "ROAD" },
-  { from: "PLT_BADDI", to: "DC_GUWAHATI", cost: 38, distance: 2200, leadTime: 3.5, flow: 600, mode: "ROAD" },
-  // DC → Market (major flows)
-  { from: "DC_DELHI", to: "MKT_DELHI", cost: 4, distance: 40, leadTime: 0.3, flow: 4200, mode: "ROAD" },
-  { from: "DC_DELHI", to: "MKT_JAIPUR", cost: 10, distance: 270, leadTime: 0.8, flow: 1500, mode: "ROAD" },
-  { from: "DC_DELHI", to: "MKT_LUCKNOW", cost: 14, distance: 500, leadTime: 1.2, flow: 1400, mode: "ROAD" },
-  { from: "DC_DELHI", to: "MKT_AHMEDABAD", cost: 22, distance: 950, leadTime: 1.8, flow: 800, mode: "ROAD" },
-  { from: "DC_MUMBAI", to: "MKT_MUMBAI", cost: 3, distance: 25, leadTime: 0.2, flow: 3800, mode: "ROAD" },
-  { from: "DC_MUMBAI", to: "MKT_AHMEDABAD", cost: 12, distance: 530, leadTime: 1.0, flow: 1000, mode: "ROAD" },
-  { from: "DC_MUMBAI", to: "MKT_HYDERABAD", cost: 18, distance: 710, leadTime: 1.5, flow: 1200, mode: "ROAD" },
-  { from: "DC_BENGALURU", to: "MKT_BENGALURU", cost: 3, distance: 20, leadTime: 0.2, flow: 3200, mode: "ROAD" },
-  { from: "DC_BENGALURU", to: "MKT_CHENNAI", cost: 10, distance: 350, leadTime: 0.8, flow: 2400, mode: "ROAD" },
-  { from: "DC_KOLKATA", to: "MKT_KOLKATA", cost: 3, distance: 15, leadTime: 0.2, flow: 2200, mode: "ROAD" },
-  { from: "DC_KOLKATA", to: "MKT_HYDERABAD", cost: 22, distance: 1500, leadTime: 2.5, flow: 600, mode: "ROAD" },
-  { from: "DC_GUWAHATI", to: "MKT_GUWAHATI", cost: 4, distance: 30, leadTime: 0.3, flow: 1100, mode: "ROAD" },
-  { from: "DC_DELHI", to: "MKT_HYDERABAD", cost: 28, distance: 1500, leadTime: 2.5, flow: 500, mode: "ROAD" },
-  { from: "DC_GUWAHATI", to: "MKT_KOLKATA", cost: 18, distance: 1000, leadTime: 2.0, flow: 600, mode: "ROAD" },
-  { from: "DC_MUMBAI", to: "MKT_CHENNAI", cost: 24, distance: 1330, leadTime: 2.2, flow: 500, mode: "ROAD" },
-];
+export const LANES = [];
 
 // ─── DEMAND HISTORY (24 months) & FORECAST ──────────────────
+// Observed demand, written by `setForecastSeries()` from the forecasting
+// engine's own history. `northIndia` is the prototype's name for the
+// plotted series; it holds whichever market-product pair the engine
+// returned for THIS network.
 export const DEMAND_HISTORY = {
-  months: [
-    "Jan'25", "Feb'25", "Mar'25", "Apr'25", "May'25", "Jun'25",
-    "Jul'25", "Aug'25", "Sep'25", "Oct'25", "Nov'25", "Dec'25",
-    "Jan'26", "Feb'26", "Mar'26", "Apr'26", "May'26", "Jun'26",
-    "Jul'26", "Aug'26", "Sep'26", "Oct'26", "Nov'26", "Dec'26",
-  ],
-  // North India aggregate demand (units/day)
-  northIndia: [
-    7100, 7000, 7300, 7200, 7400, 7100,
-    7500, 7600, 7800, 8000, 8200, 8800,
-    8400, 8300, 8600, 8500, 8800, 8600,
-    9000, 9200, 9400, 9600, 9800, 10800,
-  ],
-  // Baddi DC capacity line (constant)
-  baddiCapacity: 10000,
+  months: [],
+  northIndia: [],
+  baddiCapacity: null,
 };
 
+// Produced forecast, written by `setForecastSeries()`.
 export const FORECAST = {
-  months: ["Jan'27", "Feb'27", "Mar'27", "Apr'27", "May'27", "Jun'27"],
-  northIndia: [10200, 10400, 10100, 10600, 10900, 11200],
-  upper: [10800, 11200, 10900, 11500, 11800, 12400],
-  lower: [9600, 9700, 9400, 9800, 10000, 10100],
-  growthRate: 14.2,
-  breachMonth: "Dec'26",
-  breachFacility: "DC_DELHI",
-  breachProjectedUtil: 108,
+  months: [],
+  northIndia: [],
+  upper: [],
+  lower: [],
+  seriesLabel: '',
+  growthRate: null,
+  breachMonth: null,
+  breachFacility: null,
+  breachProjectedUtil: null,
 };
 
 // ─── EXTERNAL SIGNALS ───────────────────────────────────────
-export const EXTERNAL_SIGNALS = [
-  {
-    id: "SIG_01",
-    title: "North India GDP Growth Accelerating",
-    source: "RBI Quarterly Bulletin",
-    publishedDate: "2026-07-15",
-    effectiveDate: "2026-Q4",
-    geography: "North India",
-    direction: "UP",
-    magnitude: "+2.1% above trend",
-    confidence: "HIGH",
-    rationale: "Strong industrial output and consumer spending in NCR, Punjab, Haryana",
-    intendedUse: "Demand forecast enrichment — supports +14% North India demand growth estimate",
-    type: "signal",
-    icon: "📈",
-    color: "#dc2626",
-  },
-  {
-    id: "SIG_02",
-    title: "Diesel Prices Expected to Rise 8%",
-    source: "PPAC / Ministry of Petroleum",
-    publishedDate: "2026-08-01",
-    effectiveDate: "2026-10-01",
-    geography: "Pan-India",
-    direction: "UP",
-    magnitude: "₹8–10/litre increase",
-    confidence: "MEDIUM",
-    rationale: "Global crude price increase + reduced subsidies expected in Q4",
-    intendedUse: "Transport cost sensitivity — scenario with +8% lane costs",
-    type: "signal",
-    icon: "⛽",
-    color: "#f59e0b",
-  },
-  {
-    id: "SIG_03",
-    title: "New Expressway: Delhi–Jaipur Corridor",
-    source: "NHAI Press Release",
-    publishedDate: "2026-06-20",
-    effectiveDate: "2027-03-01",
-    geography: "Delhi → Jaipur",
-    direction: "DOWN",
-    magnitude: "−15% transit time, −5% fuel cost",
-    confidence: "HIGH",
-    rationale: "Six-lane expressway reduces travel time from 5h to 3.5h",
-    intendedUse: "Lane cost/time update for Delhi–Jaipur corridor in future periods",
-    type: "signal",
-    icon: "🛣️",
-    color: "#22c55e",
-  },
-];
+// Signals that arrived with the upload, mapped in by `loadStructure()`.
+// Held the prototype's own ('North India GDP Growth Accelerating', RBI
+// Quarterly Bulletin), shown for every network.
+export const EXTERNAL_SIGNALS = [];
 
 // ─── DATA QUALITY ───────────────────────────────────────────
+// Data quality, measured by the parser on the uploaded file and written here
+// by ingestion.js. It starts EMPTY on purpose: this object used to ship a demo
+// dataset — 4,820 records, 98.4% valid, and eight issues naming the
+// prototype's own DC_GUWAHATI, MKT_LUCKNOW and PLT_BADDI→DC_GUWAHATI — which
+// the ingestion screen rendered under the heading "Can this data be trusted to
+// run the model?" for whatever file the user had just uploaded. A file that
+// fails to parse must show nothing here, not somebody else's clean bill of
+// health.
 export const DATA_QUALITY = {
-  totalRecords: 4820,
-  validRecords: 4743,
-  validPct: 98.4,
-  issues: [
-    { id: "DQ_01", type: "Unit Inconsistency", field: "capacity", facility: "DC_GUWAHATI", detail: "Capacity reported in tonnes, expected units/day", severity: "warning", status: "needs_review" },
-    { id: "DQ_02", type: "Unit Inconsistency", field: "demand", market: "MKT_LUCKNOW", detail: "Q3 demand in cases, rest in units", severity: "warning", status: "needs_review" },
-    { id: "DQ_03", type: "Missing Value", field: "capacity", facility: "DC_GUWAHATI", detail: "Max capacity not specified for expansion scenario", severity: "info", status: "needs_review" },
-    { id: "DQ_04", type: "AI Mapping Uncertain", field: "Qty → Demand", source: "Distributor A", detail: "Field 'Qty' mapped to Demand_Units (87% confidence)", severity: "warning", status: "needs_review" },
-    { id: "DQ_05", type: "AI Mapping Uncertain", field: "Vol → Demand", source: "Distributor B", detail: "Field 'Volume' mapped to Demand_Units (91% confidence)", severity: "info", status: "needs_review" },
-    { id: "DQ_06", type: "AI Mapping Uncertain", field: "Units Shipped", source: "Distributor C", detail: "Field 'Units Shipped' mapped to Demand_Units (95% confidence)", severity: "info", status: "auto_mapped" },
-    { id: "DQ_07", type: "Outlier", field: "transport_cost", lane: "PLT_BADDI→DC_GUWAHATI", detail: "Cost ₹38/unit is 2.1σ above corridor average", severity: "info", status: "reviewed" },
-    { id: "DQ_08", type: "Stale Data", field: "demand", market: "MKT_GUWAHATI", detail: "Last updated 45 days ago", severity: "info", status: "needs_review" },
-  ],
-  reviewCount: 12,
-  uncertainMappings: 3,
-  missingCapacity: 1,
+  totalRecords: 0,
+  validRecords: 0,
+  validPct: null,
+  nullCellPct: null,
+  duplicateRows: null,
+  emptyRows: null,
+  issues: [],
 };
 
 // ─── CONTRACT EXTRACTION DEMO ───────────────────────────────
@@ -248,516 +154,38 @@ export const SCHEMA_MAPPING = {
 };
 
 // ─── SCENARIO RESULTS (Canonical MILP outputs for Decision Cockpit) ──────
-export const SCENARIOS = [
-  {
-    id: "SCN_ACTUAL",
-    num: 0,
-    name: "Current Baseline",
-    shortName: "Current Baseline",
-    cardTitle: "Baseline",
-    type: "BASELINE",
-    source: "system",
-    badge: "Current Baseline",
-    badgeClass: "tag-muted",
-    status: "Baseline",
-    description: "Current network configuration and observed flows",
-    highlight: "Observed network operations without optimization.",
-    totalCost: 1285000,
-    costChange: 0,
-    transportCost: 1325000,
-    fixedCost: 312000,
-    variableCost: 245000,
-    inventoryCost: 81000,
-    inventoryDays: 17,
-    sla: 94.3,
-    avgUtil: 72.4,
-    maxUtil: 94.0,
-    delhiUtil: 94.0,
-    capacityRisk: "High",
-    capacityRiskClass: "red",
-    carbonKg: 105688,
-    implementationCost: 0,
-    implementationTime: "10 mins",
-    confidence: "—",
-    stars: 0,
-    robustness: "Baseline",
-    feasible: true,
-    objective: {
-      goal: "Current observed operations",
-      primaryMetric: "Cost & SLA as-is",
-      constraint: "None (Observed Actuals)",
-    },
-    changes: [
-      { item: "Current Footprint", change: "4 Plants, 5 DCs, 10 Markets", note: "No changes applied" },
-    ],
-    assumptions: [
-      { label: "Demand Horizon", value: "Historical Observed", type: "MODEL FACT" },
-      { label: "Network State", value: "Actual Observed Footprint", type: "MODEL FACT" },
-    ],
-    optimisation: {
-      objective: "Historical Baseline",
-      lockedDecisions: "All allocations locked as observed",
-      allowedDecisions: "None",
-      slaConstraint: "Observed at 94.3%",
-    },
-    robustnessTests: [
-      { test: "Historical Baseline", status: "PASS", detail: "Reflects observed operations" },
-    ],
-    aiAssessment: {
-      recommendation: "Baseline network is vulnerable to the upcoming December demand surge in North India.",
-      why: ["Delhi NCR DC is currently operating at 94% utilisation", "December forecast projects capacity breach to 108%"],
-      whatIRejected: "N/A — This is the baseline starting point.",
-    },
-  },
-  {
-    id: "SCN_REBALANCE",
-    num: 1,
-    name: "Scenario 1 (Rec.)",
-    shortName: "Recommended Scenario 1 (Rec.)",
-    cardTitle: "Scenario 1 (Rec.)",
-    type: "RECOMMENDED",
-    source: "agent",
-    badge: "Recommended",
-    badgeClass: "tag-success",
-    status: "Recommended",
-    description: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata.",
-    highlight: "Best balance of cost, service and capacity risk.",
-    totalCost: 1184000,
-    costChange: -7.8,
-    transportCost: 1216000,
-    fixedCost: 312000,
-    variableCost: 228000,
-    inventoryCost: 54000,
-    inventoryDays: 24,
-    sla: 96.7,
-    avgUtil: 65.3,
-    maxUtil: 91.0,
-    delhiUtil: 91.0,
-    capacityRisk: "Low",
-    capacityRiskClass: "green",
-    carbonKg: 231737,
-    implementationCost: 25000,
-    implementationTime: "13 mins",
-    confidence: "High Confidence",
-    stars: 5,
-    robustness: "High",
-    feasible: true,
-    objective: {
-      goal: "Reduce total cost while maintaining SLA ≥95% & mitigating capacity risk",
-      primaryMetric: "Total Cost",
-      constraint: "SLA ≥ 95%, Peak Utilisation ≤ 92%",
-    },
-    changes: [
-      { item: "Baddi DC → Delhi NCR", change: "-12% Volume (-1,200 u/d)", note: "Relieve northern bottleneck" },
-      { item: "Baddi DC → Kolkata", change: "+12% Volume (+800 u/d)", note: "Absorb into spare capacity" },
-      { item: "Pune Plant → Mumbai DC", change: "+400 u/d", note: "Direct regional routing" },
-    ],
-    assumptions: [
-      { label: "Demand Forecast", value: "December Peak Forecast (+14.2% North)", type: "FORECAST" },
-      { label: "Facility Footprint", value: "Unchanged (Zero CapEx investment)", type: "MODEL FACT" },
-      { label: "SLA Minimum Requirement", value: "≥95% on-time delivery", type: "MODEL FACT" },
-      { label: "Regional GDP Factor", value: "+2.1% above trend", type: "EXTERNAL SIGNAL" },
-    ],
-    optimisation: {
-      objective: "Minimise total network cost subject to multi-echelon capacity",
-      lockedDecisions: "Facility locations & fixed footprint",
-      allowedDecisions: "Multi-commodity corridor dispatch volumes",
-      slaConstraint: "≥95% for Tier 1 & Tier 2 customer markets",
-    },
-    robustnessTests: [
-      { test: "+15% Demand Surge", status: "PASS", detail: "Network absorbs volume; peak util stays below 95%" },
-      { test: "Major Lane Disruption", status: "PASS", detail: "Kolkata & Mumbai alternate corridors absorb emergency overflow" },
-      { test: "Handling Rate Elasticity", status: "PASS", detail: "Optimal ranking unchanged under ±10% rate fluctuations" },
-    ],
-    aiAssessment: {
-      recommendation: "I recommend this scenario because it provides the best balance of cost reduction, SLA performance, and capacity protection without requiring capital investment.",
-      why: [
-        "7.8% lower total network cost (₹11.84L vs ₹12.85L baseline)",
-        "SLA reaches 96.7% (exceeds 95.0% target)",
-        "Relieves Delhi NCR DC peak utilisation from 94% down to 91%",
-        "Passes +15% demand surge stress test without infeasibility",
-      ],
-      whatIRejected: "The Optimised Base Case (₹11.42L) was rejected because it fails the SLA threshold when December peak demand increases by 15%.",
-    },
-  },
-  {
-    id: "SCN_USER_1",
-    num: 2,
-    name: "Scenario 2 (My Scen 1)",
-    shortName: "User Created 2 (My Scen 1)",
-    cardTitle: "Scenario 2 (My Scen 1)",
-    type: "USER_CREATED",
-    source: "user",
-    badge: "User Created",
-    badgeClass: "tag-primary",
-    status: "User Created",
-    description: "User customized flow rebalancing with western corridor routing.",
-    highlight: "Custom what-if rebalancing scenario.",
-    totalCost: 1285000,
-    costChange: -7.7,
-    transportCost: 1315000,
-    fixedCost: 312000,
-    variableCost: 241000,
-    inventoryCost: 52000,
-    inventoryDays: 13,
-    sla: 94.3,
-    avgUtil: 72.4,
-    maxUtil: 94.0,
-    delhiUtil: 94.0,
-    capacityRisk: "High",
-    capacityRiskClass: "red",
-    carbonKg: 104499,
-    implementationCost: 45000,
-    implementationTime: "21 mins",
-    confidence: "Medium Confidence",
-    stars: 3,
-    robustness: "Medium",
-    feasible: true,
-    objective: {
-      goal: "Custom flow optimization focused on Western hub distribution",
-      primaryMetric: "Total Cost",
-      constraint: "SLA ≥ 94%",
-    },
-    changes: [
-      { item: "Baddi DC → Mumbai DC", change: "+15% Volume (+900 u/d)", note: "Western shift" },
-      { item: "Delhi NCR DC", change: "Unchanged allocation", note: "Maintains current flows" },
-    ],
-    assumptions: [
-      { label: "Demand Forecast", value: "December Forecast (+14.2%)", type: "FORECAST" },
-      { label: "Western Route Rates", value: "₹18.2/unit discounted tariff", type: "EXTERNAL SIGNAL" },
-    ],
-    optimisation: {
-      objective: "Minimise Corridor Freight Spend",
-      lockedDecisions: "Northern DC allocation",
-      allowedDecisions: "Western corridor dispatch",
-      slaConstraint: "≥94.0%",
-    },
-    robustnessTests: [
-      { test: "+15% Demand Surge", status: "FAIL", detail: "Delhi NCR breaches 100% capacity threshold" },
-      { test: "SLA Integrity", status: "FAIL", detail: "SLA is 94.3% (below target ≥95%)" },
-    ],
-    aiAssessment: {
-      recommendation: "Achieves cost improvement but leaves Delhi NCR exposed to December capacity breach.",
-      why: [
-        "Transport cost reaches ₹13.15L (↓7.7%)",
-        "Higher average network utilisation at 72.4%",
-      ],
-      whatIRejected: "Not recommended because it fails the SLA target of ≥95% and leaves capacity risk High.",
-    },
-  },
-  {
-    id: "SCN_USER_2",
-    num: 3,
-    name: "Scenario 3",
-    shortName: "User Created 3 (My Scen 2)",
-    cardTitle: "Scenario 3",
-    type: "CANDIDATE",
-    source: "user",
-    badge: "Candidate",
-    badgeClass: "tag-warning",
-    status: "Candidate",
-    description: "Rapid execution capacity redistribution to Kolkata DC.",
-    highlight: "Lowest implementation risk and fastest execution.",
-    totalCost: 1384000,
-    costChange: -7.8,
-    transportCost: 1429000,
-    fixedCost: 312000,
-    variableCost: 260000,
-    inventoryCost: 62000,
-    inventoryDays: 18,
-    sla: 96.7,
-    avgUtil: 65.3,
-    maxUtil: 90.0,
-    delhiUtil: 90.0,
-    capacityRisk: "Low",
-    capacityRiskClass: "green",
-    carbonKg: 97133,
-    implementationCost: 20000,
-    implementationTime: "10 mins",
-    confidence: "High Confidence",
-    stars: 4,
-    robustness: "High",
-    feasible: true,
-    objective: {
-      goal: "Fastest deployment rebalancing with low operational risk",
-      primaryMetric: "Implementation Time",
-      constraint: "SLA ≥ 95%",
-    },
-    changes: [
-      { item: "Baddi DC → Kolkata DC", change: "+1,200 u/d shift", note: "Eastern capacity absorption" },
-      { item: "Delhi NCR DC", change: "-800 u/d volume reduction", note: "Relieve northern bottleneck" },
-    ],
-    assumptions: [
-      { label: "Implementation Speed", value: "10 mins automated WMS switch", type: "MODEL FACT" },
-      { label: "Kolkata Spare Capacity", value: "41% headroom available", type: "MODEL FACT" },
-    ],
-    optimisation: {
-      objective: "Minimise Execution Friction & Implementation Time",
-      lockedDecisions: "Western & Southern nodes locked",
-      allowedDecisions: "East-North reallocations",
-      slaConstraint: "≥95.0%",
-    },
-    robustnessTests: [
-      { test: "+15% Demand Surge", status: "PASS", detail: "Absorbs surge safely; peak util 90%" },
-      { test: "SLA Integrity", status: "PASS", detail: "SLA remains solid at 96.7%" },
-    ],
-    aiAssessment: {
-      recommendation: "Scenario 3 has the lowest implementation risk but only marginal cost improvement relative to S1.",
-      why: [
-        "Fastest implementation timeline: 10 mins",
-        "Delivers 96.7% SLA and Low capacity risk",
-        "Lowest Scope 3 Carbon: 97,133 kg CO₂",
-      ],
-      whatIRejected: "Carries higher transport cost (₹14.29L) than Scenario 1 (₹12.16L) due to longer freight routes.",
-    },
-  },
-  {
-    id: "SCN_AI_REC_4",
-    num: 4,
-    name: "Scenario 4 (AI Rec)",
-    shortName: "AI Recommended 4 (AI Rec)",
-    cardTitle: "Scenario 4 (AI Rec)",
-    type: "CANDIDATE",
-    source: "agent",
-    badge: "Candidate",
-    badgeClass: "tag-warning",
-    status: "Candidate",
-    description: "Consolidated multi-echelon rail corridor routing.",
-    highlight: "High SLA and low carbon footprint.",
-    totalCost: 1184000,
-    costChange: -5.3,
-    transportCost: 1835000,
-    fixedCost: 312000,
-    variableCost: 215000,
-    inventoryCost: 45000,
-    inventoryDays: 15,
-    sla: 96.7,
-    avgUtil: 65.3,
-    maxUtil: 89.0,
-    delhiUtil: 89.0,
-    capacityRisk: "Low",
-    capacityRiskClass: "green",
-    carbonKg: 97777,
-    implementationCost: 75000,
-    implementationTime: "40 mins",
-    confidence: "Medium Confidence",
-    stars: 3,
-    robustness: "High",
-    feasible: true,
-    objective: {
-      goal: "Multi-echelon distribution consolidation with dedicated rail corridors",
-      primaryMetric: "Total Cost & Carbon",
-      constraint: "SLA ≥ 95%",
-    },
-    changes: [
-      { item: "Northern Rail Hub", change: "+1,500 u/d intermodal transfer", note: "Shift from road to rail" },
-      { item: "Delhi NCR DC Throughput", change: "-1,400 u/d volume reduction", note: "Relieve bottleneck" },
-    ],
-    assumptions: [
-      { label: "Rail Freight Schedule", value: "Fixed 36-hr transit window", type: "MODEL FACT" },
-      { label: "Implementation Ramp-up", value: "40 mins setup in TMS", type: "MODEL FACT" },
-    ],
-    optimisation: {
-      objective: "Minimise Operating Cost + Scope 3 Carbon",
-      lockedDecisions: "Plant production volumes",
-      allowedDecisions: "Intermodal corridor selections",
-      slaConstraint: "≥95.0%",
-    },
-    robustnessTests: [
-      { test: "+15% Demand Surge", status: "PASS", detail: "Intermodal rail capacity absorbs surge" },
-      { test: "SLA Integrity", status: "PASS", detail: "SLA maintained at 96.7%" },
-    ],
-    aiAssessment: {
-      recommendation: "Strong environmental performance with Low capacity risk, but carries higher freight handling costs.",
-      why: [
-        "SLA reaches 96.7%",
-        "Low capacity risk on Delhi NCR DC",
-        "Scope 3 Carbon: 97,777 kg CO₂",
-      ],
-      whatIRejected: "Higher freight cost (₹18.35L) and longer implementation timeline (40 mins) than Scenario 1.",
-    },
-  },
-];
+// Only scenarios actually solved for the open project, written by
+// `hydrateFromBackend()`. The hand-authored ones that shipped here
+// carried full cost/SLA/utilisation figures no solver produced.
+export const SCENARIOS = [];
 
 // ─── SCENARIO COMPARISON INSIGHTS (Deterministic AI Assessments) ─
-export const SCENARIO_COMPARISON_INSIGHTS = [
-  {
-    id: "SCI_1",
-    num: 1,
-    text: "S3 has the lowest implementation risk but marginal cost improvement.",
-    evidence: "Implementation time: 10 mins (lowest in network); cost change: -7.8% (₹13.84L vs ₹12.85L baseline).",
-    scenarioId: "SCN_USER_2",
-  },
-  {
-    id: "SCI_2",
-    num: 2,
-    text: "S1 balances cost and SLA best, but S2 is cheaper.",
-    evidence: "S1 delivers ₹11.84L total cost with 96.7% SLA and Low capacity risk; passes +15% demand surge.",
-    scenarioId: "SCN_REBALANCE",
-  },
-  {
-    id: "SCI_3",
-    num: 3,
-    text: "S2 increases average network utilization significantly.",
-    evidence: "Average utilization reaches 72.4% with High capacity risk remaining on Delhi NCR.",
-    scenarioId: "SCN_USER_1",
-  },
-  {
-    id: "SCI_4",
-    num: 4,
-    text: "All robust check against 15% stress test.",
-    evidence: "S1, S3, and S4 pass +15% demand surge test without infeasibility.",
-    scenarioId: "SCN_REBALANCE",
-  },
-  {
-    id: "SCI_5",
-    num: 5,
-    text: "All meet target of >=95% SLA except S2.",
-    evidence: "S1 (96.7%), S3 (96.7%), S4 (96.7%) exceed SLA ≥95%; S2 (94.3%) breaches target.",
-    scenarioId: "SCN_USER_1",
-  },
-];
+export const SCENARIO_COMPARISON_INSIGHTS = [];
 
 // ─── MULTI-SCENARIO ACTION ITEMS ────────────────────────────
-export const SCENARIO_COMPARISON_ACTIONS = [
-  {
-    id: "SCA_1",
-    title: "Validate cost assumptions for Scenario 2.",
-    why: "Scenario 2 achieves ₹13.15L transport cost but assumes discounted line-haul rates on western corridors.",
-    scenarioId: "SCN_USER_1",
-    evidence: "Baddi→Mumbai route rate ₹18.2/unit vs contract benchmark ₹19.5/unit.",
-    nextStep: "Confirm rate card with SpeedFreight India.",
-  },
-  {
-    id: "SCA_2",
-    title: "Conduct deep dive into S3 implementation timeline.",
-    why: "Scenario 3 estimates 10-minute automated dispatch rollout but requires WMS slotting reconfiguration.",
-    scenarioId: "SCN_USER_2",
-    evidence: "Kolkata DC throughput increases by +800 units/day.",
-    nextStep: "Review warehouse floor capacity in Kolkata.",
-  },
-  {
-    id: "SCA_3",
-    title: "Review stakeholder alignment for Recommended Scenario (S1).",
-    why: "Scenario 1 shifts 12% Baddi volume to Kolkata DC to avoid Delhi NCR bottleneck before December.",
-    scenarioId: "SCN_REBALANCE",
-    evidence: "Reduces total network cost by 7.8% (₹8.4L/mo) with 96.7% SLA.",
-    nextStep: "Proceed to operational execution sign-off.",
-  },
-  {
-    id: "SCA_4",
-    title: "Automate network stress testing.",
-    why: "Ensure real-time telemetry from S/4HANA automatically triggers rebalancing alerts if demand exceeds +12%.",
-    scenarioId: "SCN_REBALANCE",
-    evidence: "Peak demand buffer is 1,200 units/day.",
-    nextStep: "Enable automated webhook alerts in TMS.",
-  },
-  {
-    id: "SCA_5",
-    title: "Set up KPI alerts for selected implementation.",
-    why: "Track daily capacity utilization and on-time delivery across North & East corridors during ramp-up.",
-    scenarioId: "SCN_REBALANCE",
-    evidence: "Delhi NCR utilization threshold: 92%; Target SLA: 95.0%.",
-    nextStep: "Configure threshold monitoring in KPI Dashboard.",
-  },
-];
+export const SCENARIO_COMPARISON_ACTIONS = [];
 
 
 // ─── AI AGENT STATE ─────────────────────────────────────────
+// The orchestrator's own trace for this project. Shipped with a
+// seven-step narrative about the prototype's footprint.
 export const AGENT_STATE = {
-  status: "active",
-  currentObjective: "Reduce network cost by at least 8% while maintaining SLA above 95%",
-  activityTrace: [
-    { step: 1, action: "Analysed the current network", status: "done", detail: "42 facilities, 120 demand zones, 380 lanes" },
-    { step: 2, action: "Identified 2 capacity bottlenecks", status: "done", detail: "Delhi NCR DC at 94% utilisation, projected 108% in December" },
-    { step: 3, action: "Identified 1 high-cost corridor", status: "done", detail: "Baddi → Guwahati corridor at ₹38/unit (2.1σ above average)" },
-    { step: 4, action: "Generated 4 candidate interventions", status: "done", detail: "Flow rebalancing, capacity expansion, DC consolidation, new DC" },
-    { step: 5, action: "Tested 4 scenarios through MILP optimiser", status: "done", detail: "All 4 scenarios evaluated — 3 feasible, 1 fails SLA target" },
-    { step: 6, action: "Rejected DC Consolidation on SLA grounds", status: "done", detail: "SLA drops to 88.4% — below 95% threshold" },
-    { step: 7, action: "Stress-tested leading options under +15% demand", status: "done", detail: "Flow Rebalancing passes all stress tests" },
-    { step: 8, action: "Found the most robust configuration", status: "done", detail: "Flow Rebalancing: −7.8% cost, 96.7% SLA, robust under stress" },
-  ],
-  toolCalls: [
-    { tool: "get_network_summary()", result: "42 facilities, 380 lanes, total demand 24,400 units/day" },
-    { tool: "get_bottlenecks()", result: "DC_DELHI at 94% util, projected breach Dec'26" },
-    { tool: "get_forecast(region='North')", result: "+14% demand growth, breach at 10,800 units in Dec" },
-    { tool: "run_baseline()", result: "Total cost ₹12.84L/day, SLA 91.2%" },
-    { tool: "optimize_current_footprint()", result: "Optimised to ₹11.98L/day, SLA 94.8%" },
-    { tool: "run_scenario('rebalance')", result: "₹11.84L/day, SLA 96.7% — FEASIBLE" },
-    { tool: "run_scenario('expand')", result: "₹12.46L/day, SLA 97.1% — FEASIBLE (high CapEx)" },
-    { tool: "run_scenario('consolidate')", result: "₹11.42L/day, SLA 88.4% — REJECTED (SLA < 95%)" },
-    { tool: "run_scenario('new_dc')", result: "₹12.15L/day, SLA 97.8% — FEASIBLE (high CapEx)" },
-    { tool: "run_sensitivity('demand', +15%)", result: "Rebalance: PASS | Consolidate: FAIL" },
-    { tool: "run_resilience('DC_DELHI')", result: "Rebalance handles facility disruption — reroutes to Kolkata" },
-    { tool: "compare_scenarios()", result: "Rebalance is optimal on cost-adjusted-risk basis" },
-  ],
+  status: 'idle',
+  currentObjective: 'No objective set for this network yet.',
+  activityTrace: [],
+  toolCalls: [],
 };
 
 // ─── RECOMMENDATION ─────────────────────────────────────────
+// Produced by the reasoning layer for the open project. Shipped naming a
+// specific intervention ('Rebalance 12% of Baddi volume...') with a
+// -7.8% cost impact, offered as a recommendation for any network.
 export const RECOMMENDATION = {
-  title: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata DCs",
-  scenarioId: "SCN_REBALANCE",
-  tier: 2, // PROPOSE — human approval required
-  impact: {
-    costChange: -7.8,
-    sla: 96.7,
-    peakUtilChange: -11.9,
-    carbonChange: -4.2,
-  },
-  evidence: {
-    whatIFound: "Delhi NCR DC is operating at 94% utilisation. With projected demand growth of +14% in North India, this facility will exceed capacity (108% projected) by December 2026.",
-    whyItMatters: "Capacity breach at Delhi NCR will force unplanned spillover to costlier corridors, degrade SLA from 91.2% to an estimated 84%, and increase transport costs by ₹1.2L/day.",
-    whatITested: [
-      "Flow Rebalancing — redirect 1,200 units/day to Delhi NCR, 800 to Kolkata",
-      "Capacity Expansion — expand Delhi NCR DC by 3,000 units/day (₹18L CapEx)",
-      "DC Consolidation — close Guwahati, consolidate through Kolkata",
-      "New DC — open Lucknow DC (₹25L CapEx)",
-    ],
-    whatIRejected: [
-      { scenario: "DC Consolidation", reason: "Lowest cost (₹11.42L/day) but SLA drops to 88.4% — below 95% threshold. Also fails under +15% demand surge (Kolkata DC hits 112% utilisation)." },
-      { scenario: "Capacity Expansion", reason: "Good SLA (97.1%) but high CapEx (₹18L) and ROI is sensitive to demand materialising as forecast." },
-      { scenario: "New Lucknow DC", reason: "Best SLA (97.8%) and resilience but requires ₹25L CapEx and 6-month setup time. Consider for Phase 2." },
-    ],
-    whatCouldChange: [
-      "If demand growth exceeds +20%, capacity expansion becomes necessary",
-      "If diesel prices rise >10%, rebalancing savings increase further",
-      "If Kolkata DC throughput proves unreliable, New Lucknow DC should be accelerated",
-    ],
-  },
-  nextSteps: [
-    { step: 1, action: "Confirm Delhi NCR DC can absorb 1,200 additional units/day", owner: "DC Operations" },
-    { step: 2, action: "Validate carrier availability for new Kolkata corridors", owner: "Procurement" },
-    { step: 3, action: "Confirm transition lead time (estimated 3–4 weeks)", owner: "Network Planning" },
-    { step: 4, action: "Notify Baddi plant of revised dispatch schedule", owner: "Production Planning" },
-  ],
-  analystEmail: `Subject: Network Rebalancing Recommendation — Delhi NCR & Kolkata DCs
-
-Dear Network Planning Team,
-
-Following our analysis of the current logistics network, NetGravity has identified a capacity risk at Delhi NCR DC (94% utilisation, projected to exceed capacity by December 2026).
-
-Recommended Action:
-Rebalance 12% of Baddi-routed volume:
-• Redirect 1,200 units/day to Delhi NCR DC
-• Increase Kolkata DC throughput by 800 units/day
-
-Expected Impact:
-• Cost reduction: −7.8% (₹100K/day savings)
-• SLA improvement: 91.2% → 96.7%
-• Peak utilisation: 94% → 82.1%
-• Carbon reduction: −4.2%
-
-This recommendation has been stress-tested against +15% demand surge, lane disruptions, and transport cost sensitivity. It is the most robust option among 4 alternatives evaluated.
-
-Next Steps:
-1. Confirm Delhi NCR DC absorption capacity
-2. Validate carrier availability for Kolkata corridors
-3. Confirm transition timeline (est. 3–4 weeks)
-
-Please review and confirm by [date].
-
-Best regards,
-NetGravity Decision Intelligence`,
+  title: 'No recommendation has been generated for this network yet.',
+  scenarioId: null,
+  tier: null,
+  impact: {},
+  evidence: {},
 };
 
 // ─── GOVERNANCE TIERS ───────────────────────────────────────
@@ -777,472 +205,416 @@ export const SYSTEM_STATUS = {
 
 
 // ─── PERIODS ────────────────────────────────────────────────
-export const PERIODS = [
-  { id: "Q3_2026", label: "Q3 2026", short: "Q3 2026", prevId: "Q2_2026" },
-  { id: "Q2_2026", label: "Q2 2026", short: "Q2 2026", prevId: "Q1_2026" },
-  { id: "Q1_2026", label: "Q1 2026", short: "Q1 2026", prevId: "Q4_2025" },
-  { id: "Q4_2025", label: "Q4 2025", short: "Q4 2025", prevId: "Q3_2025" },
-];
+// The periods THIS network's demand rows are stated for.
+//
+// Four fixed quarters were hardcoded here — "Q3 2026", "Q2 2026", "Q1 2026",
+// "Q4 2025" — and offered in the period selector on Home and in the KPI
+// screens for every network ever uploaded. No uploaded workbook has ever
+// contained them: the demand rows in the client's own data are stated for
+// period 1. Selecting "Q2 2026" therefore filtered on a period that did not
+// exist and showed the same figures as "Q3 2026", because both were labels
+// over one set of numbers.
+//
+// Filled by `setNetworkPeriods()` from `/api/network/structure`, which reports
+// the distinct `period` values the upload actually carried. Empty until a
+// network is bound, and the selector then says so instead of offering a
+// choice that is not real.
+export const PERIODS = [];
+
+/**
+ * The calendar length the optimiser prices one period at, as the engine
+ * reports it — "MONTH" unless configured otherwise.
+ *
+ * Every capacity, throughput and flow figure on screen was labelled
+ * "units/day". They are `*_units_per_period` values from a model whose cost
+ * period is a month, so the label overstated the rate by roughly thirty times
+ * on the client's own numbers.
+ */
+export const PERIOD_META = { costPeriod: null };
+
+/** How to label a per-period quantity, in the engine's own terms. */
+export function perPeriodLabel() {
+  const p = PERIOD_META.costPeriod;
+  if (p === 'DAY') return 'units/day';
+  if (p === 'MONTH') return 'units/month';
+  if (p === 'QUARTER') return 'units/quarter';
+  if (p === 'YEAR') return 'units/year';
+  return 'units/period';
+}
+
+/** Replace the period list with the ones the bound network states. */
+export function setNetworkPeriods(periods, costPeriod) {
+  PERIODS.length = 0;
+  (periods || []).forEach((p, i) => {
+    const id = String(p);
+    PERIODS.push({
+      id,
+      label: `Period ${id}`,
+      short: `P${id}`,
+      // Comparison against a prior period is only offered where the data
+      // actually has one.
+      prevId: i > 0 ? String(periods[i - 1]) : null,
+    });
+  });
+  PERIOD_META.costPeriod = costPeriod || null;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('networkPeriodsChanged', {
+      detail: { periods: PERIODS.map((p) => p.id), costPeriod },
+    }));
+  }
+}
 
 // ─── FACILITY KPIs BY PERIOD ────────────────────────────────
 // Each facility + period combination has its own KPI snapshot.
 // "prev" values are for the comparison period.
-export const FACILITY_KPIS = {
-  DC_DELHI: {
-    Q3_2026: {
-      utilisation: { value: 94.0, capacity: 10000, unit: "units/day", prev: 88.0, status: "critical" },
-      sla: { value: 96.7, target: 95, prev: 94.9, status: "normal" },
-      totalCost: { value: 1184000, prev: 1223000, status: "normal" },
-      inventoryDays: { value: 11.2, prev: 12.1, status: "normal" },
-      prevLabel: "1 Jul – 31 Jul 2026",
-    },
-    Q2_2026: {
-      utilisation: { value: 88.0, capacity: 10000, unit: "units/day", prev: 84.0, status: "warning" },
-      sla: { value: 94.9, target: 95, prev: 95.1, status: "warning" },
-      totalCost: { value: 1223000, prev: 1198000, status: "warning" },
-      inventoryDays: { value: 12.1, prev: 11.8, status: "normal" },
-      prevLabel: "1 Jun – 30 Jun 2026",
-    },
-  },
-  DC_MUMBAI: {
-    Q3_2026: {
-      utilisation: { value: 75.6, capacity: 9000, unit: "units/day", prev: 72.1, status: "normal" },
-      sla: { value: 95.8, target: 95, prev: 94.2, status: "normal" },
-      totalCost: { value: 980000, prev: 1010000, status: "normal" },
-      inventoryDays: { value: 9.8, prev: 10.4, status: "normal" },
-      prevLabel: "1 Jul – 31 Jul 2026",
-    },
-    Q2_2026: {
-      utilisation: { value: 72.1, capacity: 9000, unit: "units/day", prev: 70.5, status: "normal" },
-      sla: { value: 94.2, target: 95, prev: 94.8, status: "warning" },
-      totalCost: { value: 1010000, prev: 995000, status: "normal" },
-      inventoryDays: { value: 10.4, prev: 10.1, status: "normal" },
-      prevLabel: "1 Jun – 30 Jun 2026",
-    },
-  },
-  DC_BENGALURU: {
-    Q3_2026: {
-      utilisation: { value: 74.7, capacity: 7500, unit: "units/day", prev: 71.2, status: "normal" },
-      sla: { value: 96.2, target: 95, prev: 95.5, status: "normal" },
-      totalCost: { value: 840000, prev: 860000, status: "normal" },
-      inventoryDays: { value: 10.5, prev: 11.0, status: "normal" },
-      prevLabel: "1 Jul – 31 Jul 2026",
-    },
-    Q2_2026: {
-      utilisation: { value: 71.2, capacity: 7500, unit: "units/day", prev: 69.8, status: "normal" },
-      sla: { value: 95.5, target: 95, prev: 95.0, status: "normal" },
-      totalCost: { value: 860000, prev: 845000, status: "normal" },
-      inventoryDays: { value: 11.0, prev: 10.8, status: "normal" },
-      prevLabel: "1 Jun – 30 Jun 2026",
-    },
-  },
-  DC_KOLKATA: {
-    Q3_2026: {
-      utilisation: { value: 53.3, capacity: 6000, unit: "units/day", prev: 51.0, status: "normal" },
-      sla: { value: 93.1, target: 95, prev: 92.4, status: "warning" },
-      totalCost: { value: 520000, prev: 530000, status: "normal" },
-      inventoryDays: { value: 14.3, prev: 14.8, status: "warning" },
-      prevLabel: "1 Jul – 31 Jul 2026",
-    },
-    Q2_2026: {
-      utilisation: { value: 51.0, capacity: 6000, unit: "units/day", prev: 49.5, status: "normal" },
-      sla: { value: 92.4, target: 95, prev: 93.0, status: "warning" },
-      totalCost: { value: 530000, prev: 525000, status: "normal" },
-      inventoryDays: { value: 14.8, prev: 14.5, status: "warning" },
-      prevLabel: "1 Jun – 30 Jun 2026",
-    },
-  },
-  DC_GUWAHATI: {
-    Q3_2026: {
-      utilisation: { value: 52.5, capacity: 4000, unit: "units/day", prev: 50.0, status: "normal" },
-      sla: { value: 91.4, target: 95, prev: 90.8, status: "warning" },
-      totalCost: { value: 310000, prev: 320000, status: "normal" },
-      inventoryDays: { value: 16.1, prev: 16.8, status: "warning" },
-      prevLabel: "1 Jul – 31 Jul 2026",
-    },
-    Q2_2026: {
-      utilisation: { value: 50.0, capacity: 4000, unit: "units/day", prev: 48.2, status: "normal" },
-      sla: { value: 90.8, target: 95, prev: 91.2, status: "warning" },
-      totalCost: { value: 320000, prev: 315000, status: "normal" },
-      inventoryDays: { value: 16.8, prev: 16.5, status: "warning" },
-      prevLabel: "1 Jun – 30 Jun 2026",
-    },
-  },
-  PLT_BADDI: {
-    Q3_2026: {
-      utilisation: { value: 93.3, capacity: 12000, unit: "units/day", prev: 88.0, status: "critical" },
-      sla: { value: 97.1, target: 95, prev: 96.2, status: "normal" },
-      totalCost: { value: 1420000, prev: 1380000, status: "warning" },
-      inventoryDays: { value: 8.5, prev: 9.0, status: "normal" },
-      prevLabel: "1 Jul – 31 Jul 2026",
-    },
-    Q2_2026: {
-      utilisation: { value: 88.0, capacity: 12000, unit: "units/day", prev: 85.0, status: "warning" },
-      sla: { value: 96.2, target: 95, prev: 95.8, status: "normal" },
-      totalCost: { value: 1380000, prev: 1350000, status: "normal" },
-      inventoryDays: { value: 9.0, prev: 8.8, status: "normal" },
-      prevLabel: "1 Jun – 30 Jun 2026",
-    },
-  },
-  PLT_PUNE: {
-    Q3_2026: {
-      utilisation: { value: 78.0, capacity: 10000, unit: "units/day", prev: 75.0, status: "normal" },
-      sla: { value: 96.8, target: 95, prev: 96.0, status: "normal" },
-      totalCost: { value: 1100000, prev: 1120000, status: "normal" },
-      inventoryDays: { value: 10.0, prev: 10.5, status: "normal" },
-      prevLabel: "1 Jul – 31 Jul 2026",
-    },
-    Q2_2026: {
-      utilisation: { value: 75.0, capacity: 10000, unit: "units/day", prev: 73.0, status: "normal" },
-      sla: { value: 96.0, target: 95, prev: 95.5, status: "normal" },
-      totalCost: { value: 1120000, prev: 1100000, status: "normal" },
-      inventoryDays: { value: 10.5, prev: 10.2, status: "normal" },
-      prevLabel: "1 Jun – 30 Jun 2026",
-    },
-  },
-  PLT_HYDERABAD: {
-    Q3_2026: {
-      utilisation: { value: 76.3, capacity: 8000, unit: "units/day", prev: 73.0, status: "normal" },
-      sla: { value: 95.9, target: 95, prev: 95.2, status: "normal" },
-      totalCost: { value: 890000, prev: 910000, status: "normal" },
-      inventoryDays: { value: 11.8, prev: 12.3, status: "normal" },
-      prevLabel: "1 Jul – 31 Jul 2026",
-    },
-    Q2_2026: {
-      utilisation: { value: 73.0, capacity: 8000, unit: "units/day", prev: 71.5, status: "normal" },
-      sla: { value: 95.2, target: 95, prev: 95.0, status: "normal" },
-      totalCost: { value: 910000, prev: 895000, status: "normal" },
-      inventoryDays: { value: 12.3, prev: 12.0, status: "normal" },
-      prevLabel: "1 Jun – 30 Jun 2026",
-    },
-  },
-  PLT_KOLKATA: {
-    Q3_2026: {
-      utilisation: { value: 70.0, capacity: 6000, unit: "units/day", prev: 67.0, status: "normal" },
-      sla: { value: 94.5, target: 95, prev: 93.8, status: "warning" },
-      totalCost: { value: 580000, prev: 590000, status: "normal" },
-      inventoryDays: { value: 13.2, prev: 13.8, status: "normal" },
-      prevLabel: "1 Jul – 31 Jul 2026",
-    },
-    Q2_2026: {
-      utilisation: { value: 67.0, capacity: 6000, unit: "units/day", prev: 65.0, status: "normal" },
-      sla: { value: 93.8, target: 95, prev: 94.0, status: "warning" },
-      totalCost: { value: 590000, prev: 580000, status: "normal" },
-      inventoryDays: { value: 13.8, prev: 13.5, status: "normal" },
-      prevLabel: "1 Jun – 30 Jun 2026",
-    },
-  },
+// Per-facility solved metrics, written by `hydrateFromBackend()` from
+// `/api/kpis/facilities`. Shipped with a full performance profile for
+// each of the prototype's DCs.
+export const FACILITY_KPIS = {};
+
+// ─── INSIGHTS ────────────────────────────────────────────────
+// Per-facility insight feed, keyed by facility id, written by
+// `hydrateFromBackend()` from `/api/insights?scope=FACILITY`.
+//
+// Nothing wrote this. It was initialised empty, read by the Home feed and the
+// deep dive, and only ever CLEARED — so on any uploaded network the feed said
+// "No insights have been generated for this network yet" permanently, on a
+// network that had been fully solved and about which the Reasoning Agent had
+// six grounded things to say. The endpoint existed, the service wrapper
+// existed, and no line of code connected them.
+export const HOME_INSIGHTS = {};
+
+// Network-wide insights — the ones that are about the network rather than
+// about one site. Held separately from HOME_INSIGHTS because they are not
+// keyed by a facility, and folding them in under a pretend facility id would
+// make `getInsightsForFacility()` answer with things that are not about that
+// facility.
+export const NETWORK_INSIGHTS = [];
+
+// What the engine recommends doing next about this network: one string chosen
+// by the evidence, with the reasoning that produced it.
+export const NETWORK_RECOMMENDATION = {
+  text: '',
+  keyDrivers: [],
+  limitation: '',
+  suggestedQuestions: [],
+  evidenceCompleteness: '',
+  groundingStatus: '',
+  stateId: '',
+  computedAt: null,
+  // The configured policy thresholds, from the module that owns them. A chart
+  // draws its threshold line at `utilization_over_pct` rather than at a 90
+  // written into the chart code — a second copy of a policy constant is a
+  // second definition, and it drifts.
+  thresholds: {},
+  // Whole-network breakdowns the solve produced (currently `cost_components`,
+  // ranked, zero components dropped). Empty when the solve produced none.
+  series: {},
 };
 
-// ─── HOME INSIGHTS BY FACILITY ──────────────────────────────
-// Each facility has context-specific insights matching the 5 numbered items.
-export const HOME_INSIGHTS = {
-  DC_DELHI: [
-    {
-      id: "INS_CAP_RISK",
-      num: 1,
-      icon: "⚠️", iconBg: "#fef2f2", iconColor: "#dc2626",
-      title: "Capacity risk at Delhi NCR DC",
-      subtitle: "Utilisation is projected to reach 108% in December.",
-      impact: "High Impact", impactColor: "#dc2626",
-      why: "Demand forecast shows 14.2% growth over the next 4 months, exceeding available capacity starting October.",
-      action: "click → overlay", provenance: "FORECAST",
-      detail: {
-        whatIFound: "Delhi NCR DC is operating at 94% utilisation. Demand forecast projects a 14.2% growth in North India over the next 4 months.",
-        whyItMatters: "At current trajectory, the facility will exceed its 10,000 units/day capacity by December 2026 (projected 108%), causing spillover to costlier corridors and SLA degradation.",
-        evidence: [
-          { label: "Current utilisation", value: "94%", provenance: "MODEL FACT" },
-          { label: "Forecast demand growth", value: "+14.2%", provenance: "FORECAST" },
-          { label: "Capacity threshold", value: "100% (10,000 u/d)", provenance: "MODEL FACT" },
-          { label: "Projected Dec utilisation", value: "108%", provenance: "FORECAST" },
-          { label: "Regional GDP signal", value: "+2.1% above trend", provenance: "EXTERNAL SIGNAL" },
-        ],
-        whatITested: ["Flow rebalancing across DCs", "Capacity expansion at Delhi NCR", "DC consolidation (close Guwahati)", "New DC at Lucknow"],
-        recommendation: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata DCs.",
-        nextAction: "Review Scenario",
-      },
-    },
-    {
-      id: "INS_INVESTIGATE_DELHI",
-      num: 2,
-      icon: "🔍", iconBg: "#fef2f2", iconColor: "#dc2626",
-      title: "Investigate Delhi capacity risk",
-      subtitle: "Exceeds 10,000 units/day threshold by Q4.",
-      impact: "High Impact", impactColor: "#dc2626",
-      why: "North India regional surge requires immediate throughput reallocation or hub capacity expansion.",
-      action: "click → overlay", provenance: "MODEL FACT",
-      detail: {
-        whatIFound: "Delhi NCR DC operates at 94% utilisation. Projected volume crosses critical threshold in Q4 2026.",
-        whyItMatters: "Unmitigated capacity bottleneck will trigger ₹2.4L in emergency transport penalties and drop SLA below 95%.",
-        evidence: [
-          { label: "Capacity ceiling", value: "10,000 u/d", provenance: "MODEL FACT" },
-          { label: "Headroom remaining", value: "600 u/d (6.0%)", provenance: "MODEL FACT" },
-          { label: "Spillover corridor cost", value: "+18.4% surcharge", provenance: "MODEL FACT" },
-        ],
-        whatITested: ["Brownfield expansion (+3,000 u/d)", "Cross-dock volume bypass"],
-        recommendation: "Investigate corridor rebalancing scenario to absorb northern overflow.",
-        nextAction: "Review Scenario",
-      },
-    },
-    {
-      id: "INS_EXPLORE_UNDERUTIL",
-      num: 3,
-      icon: "📈", iconBg: "#f0fdf4", iconColor: "#16a34a",
-      title: "Explore underutilised capacity",
-      subtitle: "Kolkata DC has 41% spare capacity available.",
-      impact: "Opportunity", impactColor: "#16a34a",
-      why: "Current throughput is 3,200 units/day vs capacity of 6,000 units/day.",
-      action: "click → overlay", provenance: "MODEL FACT",
-      detail: {
-        whatIFound: "Kolkata DC is operating at only 53.3% utilisation with 2,800 units/day of spare capacity.",
-        whyItMatters: "This spare capacity can absorb volume from overloaded northern facilities without capital expenditure.",
-        evidence: [
-          { label: "Kolkata capacity", value: "6,000 u/d", provenance: "MODEL FACT" },
-          { label: "Current throughput", value: "3,200 u/d", provenance: "MODEL FACT" },
-          { label: "Spare capacity", value: "2,800 u/d (46.7%)", provenance: "MODEL FACT" },
-          { label: "Handling cost", value: "₹3.5/unit (lowest in network)", provenance: "MODEL FACT" },
-        ],
-        whatITested: ["Redirect 800 units/day from Delhi NCR overflow to Kolkata"],
-        recommendation: "Include Kolkata DC in flow rebalancing scenario.",
-        nextAction: "Review Scenario",
-      },
-    },
-    {
-      id: "INS_UNDERUTIL_CAP",
-      num: 4,
-      icon: "⚡", iconBg: "#eff6ff", iconColor: "#2563eb",
-      title: "Underutilised capable capacity",
-      subtitle: "Western and Eastern network headroom can absorb surges.",
-      impact: "Optimization", impactColor: "#2563eb",
-      why: "Network-wide aggregate DC utilisation is 72.4%, leaving 27.6% overall capacity headroom.",
-      action: "", provenance: "MODEL FACT",
-      detail: {
-        whatIFound: "Aggregate network DC utilisation is 72.4%, with spare handling bandwidth concentrated in Kolkata and Mumbai.",
-        whyItMatters: "Enables multi-echelon load leveling across the supply chain network without adding fixed warehouse footprint.",
-        evidence: [
-          { label: "Network DC Capacity", value: "37,500 u/d", provenance: "MODEL FACT" },
-          { label: "Active Throughput", value: "27,150 u/d", provenance: "MODEL FACT" },
-          { label: "System Headroom", value: "10,350 u/d (27.6%)", provenance: "MODEL FACT" },
-        ],
-        whatITested: ["Network-wide multi-echelon MILP optimization"],
-        recommendation: "Activate optimized base case routing.",
-        nextAction: "Review Scenario",
-      },
-    },
-    {
-      id: "INS_KOLKATA_SPARE",
-      num: 5,
-      icon: "🏪", iconBg: "#f0fdf4", iconColor: "#16a34a",
-      title: "Kolkata DC has spare capacity",
-      subtitle: "Operating at 53.3% with ₹3.5/unit handling rate.",
-      impact: "Opportunity", impactColor: "#16a34a",
-      why: "East corridor provides a cost-effective alternative for North-East demand fulfillment.",
-      action: "click → overlay", provenance: "MODEL FACT",
-      detail: {
-        whatIFound: "Kolkata DC handles 3,200 u/d against 6,000 u/d total capacity with highest SLA reliability (97.4%).",
-        whyItMatters: "Provides high SLA buffer and immediate absorption capacity for Baddi plant volume rebalancing.",
-        evidence: [
-          { label: "Kolkata SLA", value: "97.4%", provenance: "MODEL FACT" },
-          { label: "Available Buffer", value: "2,800 u/d", provenance: "MODEL FACT" },
-          { label: "Lead time to East markets", value: "1.1 days", provenance: "MODEL FACT" },
-        ],
-        whatITested: ["Routing Baddi → Kolkata DC → Patna/Ranchi markets"],
-        recommendation: "Reallocate 12% Baddi volume to Kolkata DC.",
-        nextAction: "Review Scenario",
-      },
-    },
-  ],
-  DC_MUMBAI: [
-    {
-      id: "INS_MUMBAI_SLA",
-      icon: "⚠️", iconBg: "#fffbeb", iconColor: "#d97706",
-      title: "SLA approaching target threshold",
-      subtitle: "On-time delivery at 95.8%, close to 95% target.",
-      impact: "Medium Impact", impactColor: "#d97706",
-      why: "SLA has been trending downward over the last 2 months. Current buffer is only 0.8pp above target.",
-      action: "Investigate", provenance: "MODEL FACT",
-      detail: {
-        whatIFound: "Mumbai DC SLA has declined from 96.5% to 95.8% over the last 2 months.",
-        whyItMatters: "If the trend continues, SLA will breach the 95% target within 1–2 months, triggering contractual penalties.",
-        evidence: [
-          { label: "Current SLA", value: "95.8%", provenance: "MODEL FACT" },
-          { label: "Target SLA", value: "≥95%", provenance: "MODEL FACT" },
-          { label: "Buffer", value: "0.8pp", provenance: "MODEL FACT" },
-          { label: "Trend direction", value: "Declining", provenance: "FORECAST" },
-        ],
-        whatITested: ["Increasing carrier allocation", "Adjusting dispatch schedules"],
-        recommendation: "Monitor closely and prepare carrier contingency.",
-        nextAction: "Review forecast",
-      },
-    },
-    {
-      id: "INS_MUMBAI_COST",
-      icon: "💰", iconBg: "#f0fdf4", iconColor: "#16a34a",
-      title: "Cost reduction achieved",
-      subtitle: "Total cost down 3.0% vs previous period.",
-      impact: "Positive", impactColor: "#16a34a",
-      why: "Optimised routing from Pune Plant reduced average transport cost per unit by ₹1.2.",
-      action: "See why", provenance: "MODEL FACT",
-      detail: {
-        whatIFound: "Mumbai DC total cost decreased from ₹10.1L to ₹9.8L through improved Pune routing.",
-        whyItMatters: "Validates the effectiveness of the Pune Plant → Mumbai DC optimisation implemented last month.",
-        evidence: [
-          { label: "Cost reduction", value: "₹30K/period", provenance: "MODEL FACT" },
-          { label: "Transport cost saving", value: "₹1.2/unit", provenance: "MODEL FACT" },
-        ],
-        whatITested: [],
-        recommendation: "Continue current routing configuration.",
-        nextAction: "No action required",
-      },
-    },
-    {
-      id: "INS_SPARE_CAP",
-      icon: "📈", iconBg: "#f0fdf4", iconColor: "#16a34a",
-      title: "Capacity headroom available",
-      subtitle: "Mumbai DC at 75.6% — 2,200 units/day spare.",
-      impact: "Opportunity", impactColor: "#16a34a",
-      why: "Spare capacity could absorb overflow from constrained facilities in the western corridor.",
-      action: "Explore", provenance: "MODEL FACT",
-      detail: {
-        whatIFound: "Mumbai DC has 2,200 units/day of spare capacity.",
-        whyItMatters: "Can serve as a buffer for demand surge or overflow from other facilities.",
-        evidence: [
-          { label: "Capacity", value: "9,000 u/d", provenance: "MODEL FACT" },
-          { label: "Current throughput", value: "6,800 u/d", provenance: "MODEL FACT" },
-          { label: "Spare", value: "2,200 u/d", provenance: "MODEL FACT" },
-        ],
-        whatITested: [],
-        recommendation: "Consider for western corridor rebalancing.",
-        nextAction: "Explore scenario",
-      },
-    },
-    {
-      id: "INS_RECOMMENDATION",
-      icon: "✨", iconBg: "#f5f0fa", iconColor: "#6B2FA0",
-      title: "Recommendation ready",
-      subtitle: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata.",
-      impact: "High Value", impactColor: "#6B2FA0",
-      why: "Reduces total cost by 7.8% while maintaining SLA at 96.7%. Robust under +15% demand stress test.",
-      action: "Review Recommendation", provenance: "AI ASSESSMENT",
-      detail: null,
-    },
-  ],
-  // Fallback: other facilities get a default set
-  _default: [
-    {
-      id: "INS_PERF_STABLE",
-      icon: "✅", iconBg: "#f0fdf4", iconColor: "#16a34a",
-      title: "Performance within normal range",
-      subtitle: "All KPIs within target thresholds for this facility.",
-      impact: "Normal", impactColor: "#16a34a",
-      why: "No anomalies detected in the current period. Utilisation, SLA, cost, and inventory are within expected ranges.",
-      action: "Explore", provenance: "MODEL FACT",
-      detail: {
-        whatIFound: "This facility is operating within expected parameters across all monitored KPIs.",
-        whyItMatters: "No immediate intervention required, but continued monitoring is recommended.",
-        evidence: [
-          { label: "Status", value: "All KPIs within range", provenance: "MODEL FACT" },
-        ],
-        whatITested: [],
-        recommendation: "Continue monitoring. No immediate action required.",
-        nextAction: "No action required",
-      },
-    },
-    {
-      id: "INS_RECOMMENDATION",
-      icon: "✨", iconBg: "#f5f0fa", iconColor: "#6B2FA0",
-      title: "Recommendation ready",
-      subtitle: "Rebalance 12% of Baddi volume to Delhi NCR and Kolkata.",
-      impact: "High Value", impactColor: "#6B2FA0",
-      why: "Reduces total cost by 7.8% while maintaining SLA at 96.7%. Robust under +15% demand stress test.",
-      action: "Review Recommendation", provenance: "AI ASSESSMENT",
-      detail: null,
-    },
-  ],
-};
+/**
+ * Recorded utilisation per period, from the client's own capacity history.
+ *
+ * The one genuine time series an uploaded network carries, and NOT a solver
+ * output: `used` and `available` are two columns the client supplied on the
+ * same row. Kept separate from every solved figure for that reason — a chart
+ * that mixed "what the plan does" with "what the sites did" would be plotting
+ * two different quantities on one axis.
+ *
+ * `points` is `[{period, available, used, utilisationPct, facilities}]`, in
+ * period order, with `utilisationPct: null` wherever the two figures cannot
+ * form a ratio — a gap in the line, never a zero.
+ */
+export const OBSERVED_UTILISATION = { periods: [], points: [], byFacility: {} };
 
 // ─── HOME ACTION ITEMS ───────────────────────────────────────
-export const HOME_ACTION_ITEMS = [
-  {
-    id: "ACT_REBALANCE_BADDI",
-    title: "Rebalance Baddi volume",
-    tag: "High Value",
-    tagColor: "#6B2FA0",
-    scenarioId: "SCENARIO_REBALANCE",
-    why: "I identified a capacity constraint at Delhi NCR and found that reallocating Baddi volume can reduce cost while maintaining SLA.",
-    rootCause: [
-      { label: "Delhi NCR utilisation", value: "94%", provenance: "MODEL FACT" },
-      { label: "Forecast demand growth", value: "14.2%", provenance: "FORECAST" },
-      { label: "December capacity risk", value: "High (108% projected)", provenance: "FORECAST" },
-    ],
-    expectedImpact: {
-      cost: "↓ 7.8%",
-      sla: "96.7%",
-      risk: "Low",
-    },
-    whatITested: [
-      "Rebalancing 12% of Baddi volume to Delhi NCR and Kolkata",
-      "Capacity expansion at Delhi NCR (+3,000 u/d)",
-      "Redistribution to Kolkata DC (absorbs 800 u/d spare capacity)",
-    ],
-    nextAction: "Review Scenario",
-  },
-  {
-    id: "ACT_INVESTIGATE_DELHI",
-    title: "Investigate Delhi capacity risk",
-    tag: "High Impact",
-    tagColor: "#dc2626",
-    scenarioId: "SCENARIO_EXPAND_DELHI",
-    why: "Demand forecast shows North India volume will cross the 10,000 units/day threshold by October 2026.",
-    rootCause: [
-      { label: "Current Throughput", value: "9,400 u/d", provenance: "MODEL FACT" },
-      { label: "Facility Capacity", value: "10,000 u/d", provenance: "MODEL FACT" },
-      { label: "Headroom Remaining", value: "600 u/d (6.0%)", provenance: "MODEL FACT" },
-    ],
-    expectedImpact: {
-      cost: "Avoids ₹2.4L penalty",
-      sla: "≥96.5%",
-      risk: "Eliminated",
-    },
-    whatITested: [
-      "On-site brownfield facility expansion",
-      "Shift-timing adjustments and bottleneck staging",
-    ],
-    nextAction: "Review Scenario",
-  },
-  {
-    id: "ACT_EXPLORE_UNDERUTIL",
-    title: "Explore underutilised capacity",
-    tag: "Opportunity",
-    tagColor: "#16a34a",
-    scenarioId: "SCENARIO_REBALANCE",
-    why: "Kolkata DC has 41% (2,800 units/day) of spare handling capacity available at low unit cost.",
-    rootCause: [
-      { label: "Kolkata DC Capacity", value: "6,000 u/d", provenance: "MODEL FACT" },
-      { label: "Current Throughput", value: "3,200 u/d", provenance: "MODEL FACT" },
-      { label: "Spare Capacity", value: "2,800 u/d (46.7%)", provenance: "MODEL FACT" },
-    ],
-    expectedImpact: {
-      cost: "Lowest handling cost (₹3.5/u)",
-      sla: "97.1%",
-      risk: "Optimal",
-    },
-    whatITested: [
-      "Absorbing eastern overflow directly through Kolkata DC",
-      "Corridor flow rerouting from Baddi manufacturing plant",
-    ],
-    nextAction: "Review Scenario",
-  },
-];
+export const HOME_ACTION_ITEMS = [];
 
-export function getInsightsForFacility(facilityId) {
-  return HOME_INSIGHTS[facilityId] || HOME_INSIGHTS.DC_DELHI || HOME_INSIGHTS._default || [];
+
+/**
+ * Drop demo narrative content that describes a DIFFERENT network.
+ *
+ * The prototype ships with insights, recommendations, an agent trace and a
+ * forecast written about its own demo footprint ("close Guwahati", "Delhi NCR
+ * DC at 108%"). Once a user's own network is loaded, none of that is true of
+ * their data — and a confident narrative about facilities they do not operate
+ * is exactly the kind of fabrication this application must not produce.
+ *
+ * Insights keyed to a facility that still exists are kept; everything else is
+ * cleared, and the screens fall back to their own empty states until the
+ * reasoning layer produces real ones.
+ */
+/**
+ * Empty every structure that describes a network.
+ *
+ * Called when a project has no bound network, and when switching projects.
+ * The arrays now start empty, so this matters on the SECOND project a user
+ * opens: without it, leaving an analysed project for an unanalysed one left
+ * the first one's facilities, corridors and KPIs on screen under the second
+ * one's name.
+ *
+ * Deliberately total — topology, solved metrics, scenarios, signals, forecast
+ * and narrative. A partial reset is how a screen ends up mixing two networks.
+ */
+export function clearNetworkModel() {
+  PLANTS.length = 0;
+  DCS.length = 0;
+  MARKETS.length = 0;
+  FACILITIES.length = 0;
+  LANES.length = 0;
+  SCENARIOS.length = 0;
+  EXTERNAL_SIGNALS.length = 0;
+
+  Object.keys(FACILITY_KPIS).forEach((k) => delete FACILITY_KPIS[k]);
+
+  // Narrative, agent trace, recommendation, forecast and history.
+  clearDemoNarrative([]);
+
+  // The base case reverts to the all-null one until a solve installs another.
+  setAuthoritativeBaseline(null);
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('networkModelCleared'));
+  }
 }
 
+export function clearDemoNarrative(keepFacilityIds = []) {
+  const keep = new Set(keepFacilityIds);
+  Object.keys(HOME_INSIGHTS).forEach((facId) => {
+    if (!keep.has(facId)) delete HOME_INSIGHTS[facId];
+  });
+
+  HOME_ACTION_ITEMS.length = 0;
+  NETWORK_INSIGHTS.length = 0;
+  Object.assign(NETWORK_RECOMMENDATION, {
+    text: '', keyDrivers: [], limitation: '', suggestedQuestions: [],
+    evidenceCompleteness: '', groundingStatus: '', stateId: '', computedAt: null,
+  });
+  SCENARIO_COMPARISON_INSIGHTS.length = 0;
+  SCENARIO_COMPARISON_ACTIONS.length = 0;
+
+  AGENT_STATE.activityTrace = [];
+  AGENT_STATE.currentObjective = 'No objective set for this network yet.';
+  AGENT_STATE.status = 'idle';
+
+  // Reset every narrative field on RECOMMENDATION, not just the obvious ones —
+  // the demo copy names specific facilities in its title, evidence, analyst
+  // email and rejected-options list.
+  Object.keys(RECOMMENDATION).forEach((key) => {
+    const v = RECOMMENDATION[key];
+    if (Array.isArray(v)) RECOMMENDATION[key] = [];
+    else if (typeof v === 'string') RECOMMENDATION[key] = '';
+    else if (v && typeof v === 'object') RECOMMENDATION[key] = {};
+  });
+  RECOMMENDATION.title = 'No recommendation has been generated for this network yet.';
+
+  // Forecast and history come from the forecasting engine per project; the
+  // demo series describes another network's demand.
+  DEMAND_HISTORY.months = [];
+  DEMAND_HISTORY.northIndia = [];
+  FORECAST.months = [];
+  FORECAST.northIndia = [];
+  FORECAST.upper = [];
+  FORECAST.lower = [];
+}
+
+/**
+ * Write an observed history and a produced forecast into the structures the
+ * forecast screen reads.
+ *
+ * The screen was never connected to the forecasting engine. It rendered
+ * `DEMAND_HISTORY`/`FORECAST` — 24 months of prototype demand for "North
+ * India" and a 6-month cone, both literals in this file — regardless of which
+ * network was loaded. Once `clearDemoNarrative()` emptied them the chart threw
+ * `RangeError: Invalid array length`, because it builds padding with
+ * `new Array(months.length - 1)` and that is -1 for an empty series.
+ *
+ * `history` and `forecast` are `{ labels: string[], values: number[] }`;
+ * `upper`/`lower` are the p90/p10 bands, absent when the engine reports none.
+ */
+export function setForecastSeries({ history, forecast, capacityLine = null,
+                                    seriesLabel = '' } = {}) {
+  DEMAND_HISTORY.months = (history && history.labels) || [];
+  DEMAND_HISTORY.northIndia = (history && history.values) || [];
+  // The dashed "capacity threshold" line was the prototype's own Baddi DC
+  // capacity (10,000 u/d), drawn over every network. It is a real threshold
+  // only when the caller supplies one for THIS series; otherwise the chart
+  // omits it rather than drawing another network's limit.
+  DEMAND_HISTORY.baddiCapacity = capacityLine;
+
+  FORECAST.months = (forecast && forecast.labels) || [];
+  FORECAST.northIndia = (forecast && forecast.values) || [];
+  FORECAST.upper = (forecast && forecast.upper) || [];
+  FORECAST.lower = (forecast && forecast.lower) || [];
+  FORECAST.seriesLabel = seriesLabel;
+
+  // Growth rate and the capacity-breach fields describe the demo network and
+  // have no counterpart here unless the engine produced one.
+  FORECAST.growthRate = null;
+  FORECAST.breachMonth = null;
+  FORECAST.breachFacility = null;
+  FORECAST.breachProjectedUtil = null;
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('forecastSeriesLoaded', {
+      detail: { periods: DEMAND_HISTORY.months.length,
+                horizon: FORECAST.months.length },
+    }));
+  }
+}
+
+export function hasForecastSeries() {
+  return DEMAND_HISTORY.months.length > 1 && FORECAST.months.length > 0;
+}
+
+// Both accessors used to fall back to `DC_DELHI` — a prototype facility — so
+// asking for a facility that is not in the loaded network returned another
+// network's insights and KPIs rather than nothing. An absent facility now
+// yields an absent answer, and the screens render their empty states.
+export function getInsightsForFacility(facilityId) {
+  return HOME_INSIGHTS[facilityId] || [];
+}
+
+/** Insights about the network as a whole, in the order the engine ranked them. */
+export function getNetworkInsights() {
+  return NETWORK_INSIGHTS.slice();
+}
+
+/**
+ * The severity → attention-category map.
+ *
+ * The severity comes from the engine (`InsightSeverity`), so a card's colour,
+ * icon and position follow what was actually found. The theme refines it
+ * within a severity: a capacity risk and a service risk are both RISK but a
+ * planner reads them differently.
+ *
+ * This replaces keyword-matching the narrative for the strings "high impact",
+ * "opportunity" and "positive" — which meant an insight's rendering depended
+ * on incidental wording, and any finding phrased another way was shown as a
+ * neutral "Status" however serious it was.
+ */
+const _THEME_CATEGORY = {
+  Capacity: 'Capacity Risk',
+  Service: 'Service Risk',
+  Resilience: 'Service Risk',
+  Utilisation: 'Network Opportunity',
+  Footprint: 'Network Opportunity',
+  'Scenario impact': 'Recommendation',
+};
+
+export function insightCategory(insight) {
+  if (!insight) return 'Status';
+  const byTheme = _THEME_CATEGORY[insight.theme];
+  if (insight.severity === 'RISK') return byTheme || 'Capacity Risk';
+  if (insight.severity === 'OPPORTUNITY') return byTheme || 'Network Opportunity';
+  // INFORMATION: a fact worth stating that asks for no decision. Cost, cost
+  // structure and carbon land here, and a served-in-full service note does too
+  // — which is a genuine "Performance Update", not a risk.
+  if (insight.theme === 'Service') return 'Performance Update';
+  return 'Status';
+}
+
+/**
+ * Turn one `/api/insights` record into a feed record.
+ *
+ * The subtitle is the narrative's FIRST SENTENCE rather than a summary written
+ * here: the full narrative is what the deep dive shows, and re-describing it
+ * in the card would be a second, unverified account of the same finding.
+ */
+export function toInsightRecord(apiInsight) {
+  const narrative = String(apiInsight.narrative || '');
+  const firstSentence = (narrative.match(/^[^.!?]*[.!?]/) || [narrative])[0].trim();
+  return {
+    id: apiInsight.id,
+    title: apiInsight.headline || '',
+    subtitle: firstSentence,
+    narrative,
+    theme: apiInsight.theme || '',
+    severity: apiInsight.severity || 'INFORMATION',
+    category: insightCategory(apiInsight),
+    metricRefs: apiInsight.metric_refs || [],
+    // The figures the finding rests on, each with a label, a formatted value,
+    // the engine that computed it and — since this phase — the raw number.
+    //
+    // This line is the whole reason the deep dive's Evidence table had never
+    // rendered a single row in production. `/api/insights` has always resolved
+    // evidence for thirteen of the fourteen insight themes, and dropping it
+    // here left `record.evidence` undefined, so `evidenceCardHtml` fell to its
+    // "this finding cites no single figure" copy on EVERY insight — a false
+    // statement about findings that cite one.
+    evidence: apiInsight.evidence || [],
+    // The facilities or lanes the finding was computed over, ranked by the
+    // metric its theme is about. This is what a chart plots; `evidence` is what
+    // the table lists.
+    entities: apiInsight.entities || [],
+    rank: apiInsight.rank || 0,
+  };
+}
+
+/**
+ * Write a `/api/insights` response into the stores the screens read.
+ *
+ * `scope` decides where it lands: a NETWORK response replaces the network
+ * insights and the recommendation; a FACILITY response replaces that
+ * facility's entry. Replaces rather than merges, so a re-solve cannot leave a
+ * finding on screen that the new solve no longer supports.
+ */
+export function applyInsightResponse(response) {
+  if (!response || !Array.isArray(response.insights)) return 0;
+  const records = response.insights.map(toInsightRecord);
+
+  if (response.scope === 'FACILITY' && response.entity_id) {
+    HOME_INSIGHTS[response.entity_id] = records;
+  } else if (response.scope === 'NETWORK') {
+    NETWORK_INSIGHTS.length = 0;
+    records.forEach((r) => NETWORK_INSIGHTS.push(r));
+    Object.assign(NETWORK_RECOMMENDATION, {
+      text: response.recommendation || '',
+      keyDrivers: response.key_drivers || [],
+      limitation: response.limitation || '',
+      suggestedQuestions: response.suggested_questions || [],
+      evidenceCompleteness: response.evidence_completeness || '',
+      groundingStatus: (response.grounding && response.grounding.status) || '',
+      stateId: response.state_id || '',
+      computedAt: response.computed_at || null,
+      thresholds: response.thresholds || {},
+      series: response.series || {},
+    });
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('insightsLoaded', {
+      detail: { scope: response.scope, entityId: response.entity_id || null,
+                count: records.length },
+    }));
+  }
+  return records.length;
+}
+
+/**
+ * The one key facility KPIs are stored under.
+ *
+ * They used to be keyed by the literal string `'Q3_2026'` in three separate
+ * files. There is one solved state per network — the MILP aggregates every
+ * demand row into a single period — so a per-period store was always a store
+ * of one entry under a label that came from nowhere.
+ */
+export const SOLVED_STATE_KEY = 'CURRENT';
+
 export function getKpisForFacility(facilityId, periodId) {
-  const facilityKpis = FACILITY_KPIS[facilityId] || FACILITY_KPIS.DC_DELHI;
+  const facilityKpis = FACILITY_KPIS[facilityId];
   if (!facilityKpis) return null;
-  return facilityKpis[periodId] || facilityKpis["Q3_2026"] || facilityKpis[Object.keys(facilityKpis)[0]] || null;
+  // The REQUESTED period first, when the solve modelled it.
+  //
+  // `SOLVED_STATE_KEY` used to win unconditionally, which was right while a
+  // solve produced exactly one state and there was no such thing as a solved
+  // reading for a particular month. It is why the period control changed
+  // nothing: every period resolved to the same horizon-average entry. A period
+  // the solve did not model still falls back to it rather than showing a gap.
+  return (periodId && facilityKpis[periodId])
+    || facilityKpis[SOLVED_STATE_KEY]
+    || facilityKpis[Object.keys(facilityKpis)[0]]
+    || null;
 }
 
 // ─── HELPER FUNCTIONS ───────────────────────────────────────
@@ -1250,18 +622,59 @@ export function getFacilityById(id) {
   return [...PLANTS, ...DCS, ...MARKETS].find(f => f.id === id);
 }
 
+/**
+ * What kind of node this is: 'PLANT' | 'DC' | 'MARKET' | null.
+ *
+ * Read from the arrays the network was loaded into, NOT from the id's spelling.
+ * The screens tested `id.startsWith('DC_')` / `startsWith('PLT_')`, which are
+ * the prototype's own naming convention. A client whose sites are F001…F008 —
+ * the ordinary case — failed every one of those tests, so each of their five
+ * distribution centres was labelled "Manufacturing Plant", took the plant
+ * branch for utilisation, and skipped the DC-only cards entirely.
+ */
+export function facilityRole(id) {
+  if (PLANTS.some(f => f.id === id)) return 'PLANT';
+  if (DCS.some(f => f.id === id)) return 'DC';
+  if (MARKETS.some(f => f.id === id)) return 'MARKET';
+  return null;
+}
+
+export function isDCFacility(id) { return facilityRole(id) === 'DC'; }
+export function isPlantFacility(id) { return facilityRole(id) === 'PLANT'; }
+
 export function getScenarioById(id) {
   return SCENARIOS.find(s => s.id === id);
 }
 
 export function formatCurrency(value, decimals = 0) {
+  // A cost the engine could not produce has no number. Rendering an em dash is
+  // the honest answer; "₹0" would read as a free network, and the previous
+  // version threw on null, taking the whole screen down with it.
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
   if (value >= 100000) return "₹" + (value / 100000).toFixed(1) + "L";
   if (value >= 1000) return "₹" + (value / 1000).toFixed(1) + "K";
-  return "₹" + value.toFixed(decimals);
+  return "₹" + Number(value).toFixed(decimals);
+}
+
+/**
+ * Format a number that may legitimately be absent.
+ *
+ * Returns an em dash for null/undefined/NaN instead of throwing or printing
+ * "NaN". Screens call this wherever a figure comes from the engine, because a
+ * metric the solver could not produce has no number — and a crash or a zero
+ * are both worse answers than saying so.
+ */
+export function fmtNum(value, digits = 1, suffix = '') {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '—';
+  return `${Number(value).toFixed(digits)}${suffix}`;
 }
 
 export function formatNumber(value) {
-  return value.toLocaleString("en-IN");
+  // A quantity the engine did not produce has no number. An em dash is the
+  // honest rendering; the previous version threw on null and took the screen
+  // down with it.
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
+  return Number(value).toLocaleString("en-IN");
 }
 
 // Single owner for the utilization risk bands used everywhere in the app
@@ -1310,50 +723,213 @@ export function getUtilTagClass(pct) {
 // routing) rather than fabricated as if they were a solver result. Once a
 // real deterministic engine is wired in, this function's body — not its
 // call sites — is what gets replaced, and `source` becomes DETERMINISTIC_ENGINE.
+/**
+ * The network's cost/service base case, as computed by the KPI layer.
+ *
+ * Returns an all-null base case until `setAuthoritativeBaseline()` installs a
+ * solved one. It used to return a hand-authored demo case instead —
+ * ₹12.85L total cost, 89.5% fill rate, 78% utilisation, and a 7.8% "savings
+ * opportunity" against an "optimised" counterpart that no solver produced.
+ * Home read it straight onto its KPI strip under "Source: Optimized Base Case
+ * (Actual)", so a user who had uploaded nothing was shown a complete costed
+ * plan for a network that does not exist.
+ *
+ * Every consumer renders a dash for a null field, so an empty base case is a
+ * visible absence rather than a wrong number.
+ */
+const EMPTY_BASELINE = {
+  totalCost: null, transportCost: null, fixedCost: null, variableCost: null,
+  inventoryCost: null, handlingCost: null, unmetPenalty: null, slaPenalty: null,
+  sla: null, fillRate: null, avgUtilization: null, maxUtilization: null,
+  carbonKgCo2e: null, avgDistanceKm: null, capacityHeadroomPct: null,
+  totalDemand: null, servedDemand: null, unservedDemand: null,
+};
+
+/**
+ * What span of time the solved figures cover.
+ *
+ * Every cost and volume figure in the base case is a TOTAL over
+ * `periodsModelled` periods. Displaying one without the other is how a
+ * twelve-month cost gets read as a monthly one — so this travels with the
+ * baseline and is written only by `applyHorizon` from the KPI layer's own
+ * `horizon` block. `costPerPeriod` is the backend's division, not this
+ * module's: a per-period cost computed here would be a second cost engine.
+ */
+export const SOLVE_HORIZON = {
+  periodsModelled: 1,
+  periodLabels: {},
+  firstPeriod: null,
+  lastPeriod: null,
+  costPerPeriod: null,
+};
+
+export function applyHorizon(horizon) {
+  SOLVE_HORIZON.periodsModelled = Number(horizon?.periods_modelled) || 1;
+  SOLVE_HORIZON.periodLabels = horizon?.period_labels || {};
+  SOLVE_HORIZON.firstPeriod = horizon?.first_period ?? null;
+  SOLVE_HORIZON.lastPeriod = horizon?.last_period ?? null;
+  SOLVE_HORIZON.costPerPeriod = (typeof horizon?.cost_per_period === 'number'
+    && Number.isFinite(horizon.cost_per_period)) ? horizon.cost_per_period : null;
+}
+
+/**
+ * "12 periods, 2025-09 to 2026-08" — or "" when the solve covered one period,
+ * where there is nothing to disambiguate and a label would only add noise.
+ */
+export function horizonLabel() {
+  const n = SOLVE_HORIZON.periodsModelled;
+  if (!n || n <= 1) return '';
+  const { firstPeriod, lastPeriod } = SOLVE_HORIZON;
+  return (firstPeriod && lastPeriod)
+    ? `${n} periods, ${firstPeriod} to ${lastPeriod}`
+    : `${n} periods`;
+}
+
 export function getOptimizedBaseCase() {
-  const baseline = {
-    transportCost: 640000,
-    fixedCost: 480000,
-    variableCost: 145000,
-    unmetPenalty: 20000, // 2 units unmet demand @ ₹10,000/unit
-    slaPenalty: 0,
-    sla: 91.2,
-    fillRate: 89.5,
-    avgUtilization: 78.0,
-    maxUtilization: 94.0, // DC Delhi NCR — Stress band
-    inventoryCost: 95000,
-    carbonKgCo2e: 342000,
-    avgDistanceKm: 412,
-  };
-  baseline.totalCost = baseline.transportCost + baseline.fixedCost + baseline.variableCost
-    + baseline.unmetPenalty + baseline.slaPenalty;
-
-  const optimized = {
-    transportCost: 590000,
-    fixedCost: baseline.fixedCost, // footprint held fixed — must equal baseline
-    variableCost: 142000,
-    unmetPenalty: 0, // routing resolves the shortfall that caused baseline's penalty
-    slaPenalty: 0,
-    sla: 96.5,
-    fillRate: 95.8,
-    avgUtilization: 82.0,
-    maxUtilization: 84.0, // DC Delhi NCR relieved from Stress into Healthy band
-    inventoryCost: 92000,
-    carbonKgCo2e: 318000,
-    avgDistanceKm: 378,
-  };
-  optimized.totalCost = optimized.transportCost + optimized.fixedCost + optimized.variableCost
-    + optimized.unmetPenalty + optimized.slaPenalty;
-
-  const savingsAbs = baseline.totalCost - optimized.totalCost;
-  const savingsPct = +((savingsAbs / baseline.totalCost) * 100).toFixed(1);
-
+  if (customOptimizedBaseCase) {
+    return customOptimizedBaseCase;
+  }
   return {
-    source: "DEMO",
-    footprintChange: "None (zero CapEx — same facility set as Actual)",
-    baseline: { ...baseline, capacityHeadroomPct: +(100 - baseline.maxUtilization).toFixed(1) },
-    optimized: { ...optimized, capacityHeadroomPct: +(100 - optimized.maxUtilization).toFixed(1) },
-    savings: { abs: savingsAbs, pct: savingsPct },
+    source: 'NONE',
+    footprintChange: null,
+    baseline: { ...EMPTY_BASELINE },
+    // No optimised counterpart and no savings figure: neither exists until an
+    // optimisation scenario is actually run.
+    optimized: null,
+    savings: null,
+    unavailableReason: 'no network has been analysed for this project yet',
   };
+}
+
+let customOptimizedBaseCase = null;
+
+/**
+ * Install a baseline computed by the authoritative KPI layer.
+ *
+ * `getOptimizedBaseCase()` returns this in preference to the demo figures
+ * below, so every screen that reads the base case shows solved values. Fields
+ * the engine could not report arrive as null and stay null — the screens render
+ * a dash. Nothing here is derived, scaled or filled in.
+ */
+export function setAuthoritativeBaseline(baseCase) {
+  customOptimizedBaseCase = baseCase || null;
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('baselineUpdated', { detail: baseCase }));
+  }
+}
+
+export function hasAuthoritativeBaseline() {
+  return Boolean(customOptimizedBaseCase
+    && customOptimizedBaseCase.source === 'AUTHORITATIVE_KPI_LAYER');
+}
+
+export function loadNetworkData(networkData) {
+  if (!networkData) return;
+
+  if (networkData.plants && networkData.plants.length > 0) {
+    PLANTS.length = 0;
+    PLANTS.push(...networkData.plants);
+  }
+
+  if (networkData.dcs && networkData.dcs.length > 0) {
+    DCS.length = 0;
+    DCS.push(...networkData.dcs);
+  }
+
+  if (networkData.markets && networkData.markets.length > 0) {
+    MARKETS.length = 0;
+    MARKETS.push(...networkData.markets);
+  }
+
+  FACILITIES.length = 0;
+  FACILITIES.push(
+    ...PLANTS.map(p => ({ ...p, type: 'Plant' })),
+    ...DCS.map(d => ({ ...d, type: 'DC' }))
+  );
+
+  if (networkData.lanes && networkData.lanes.length > 0) {
+    LANES.length = 0;
+    LANES.push(...networkData.lanes);
+  }
+
+  // De-overlap newly added nodes for clear map rendering
+  deoverlapNodes([PLANTS, DCS, MARKETS]);
+
+  // Seed a KPI shell per uploaded facility, carrying ONLY what the upload
+  // itself states.
+  //
+  // This block used to manufacture a full performance profile for every
+  // facility the moment a file was parsed: utilisation defaulted to 75%,
+  // throughput to 80% of capacity, cost per unit to ₹4.2 (DC) or ₹3.5 (plant),
+  // SLA to 96.5%, storage cost to ₹45,000, transport cost to ₹320,000, every
+  // lane's volume to 1,500 units at 97.2% on-time, and each metric carried an
+  // invented period-on-period delta ("+4.2%", "+2.1%", "-0.3%", "+1.5%").
+  // None of it came from a solve. It was visible before any optimisation ran,
+  // and it survived intact whenever the solve produced nothing — so an
+  // INFEASIBLE network still showed a plausible, entirely fictional set of
+  // facility KPIs.
+  //
+  // Throughput, utilisation and per-unit cost are solver outputs and stay null
+  // until `hydrateFromBackend()` writes the authoritative values.
+  // The shell carries EVERY key its consumers read, all null.
+  //
+  // Two different shapes were in play: this seed wrote
+  // `throughput/util/costPerUnit/…` while `hydrateFromBackend()` wrote
+  // `utilisation/sla/totalCost/inventoryDays`. renderFacilityDashboard reads
+  // the second set, so whenever hydration did not run — which is exactly the
+  // case when a solve is infeasible — it hit `kpis.totalCost.value` on an
+  // object that had no `totalCost` and threw, taking the whole KPI screen
+  // down. One shape now, so both paths agree.
+  Object.keys(FACILITY_KPIS).forEach(k => delete FACILITY_KPIS[k]);
+  [...PLANTS, ...DCS].forEach(f => {
+    FACILITY_KPIS[f.id] = {
+      [SOLVED_STATE_KEY]: {
+        // Solver outputs — absent until a solve produces them.
+        throughput: { value: null, unit: 'units/period', delta: null },
+        util: { value: null, unit: '%', delta: null },
+        utilisation: { value: null, capacity: f.capacity ?? null,
+                       unit: 'units/period', prev: null, status: 'unknown' },
+        // `target: 95.0` used to sit here, and the Home KPI strip subtracted
+        // the solved fill rate from it and printed the difference as
+        // "vs target: +5.0%". Nothing in any upload states a service target,
+        // so that was a benchmark the product invented and then reported the
+        // client's performance against. Null until something real supplies one.
+        sla: { value: null, unit: '%', target: null, delta: null, prev: null,
+               status: 'unknown' },
+        totalCost: { value: null, prev: null, status: 'unknown' },
+        inventoryDays: { value: null, prev: null, status: 'unknown' },
+        // Stated in the upload.
+        costPerUnit: { value: f.handlingCost ?? null, unit: '₹', delta: null },
+        capacity: { value: f.capacity ?? null, unit: 'units/period' },
+        costBreakdown: null,
+        prevLabel: 'no prior solve',
+        laneFlows: LANES
+          .filter(l => l.from === f.id || l.to === f.id)
+          .map(l => ({
+            lane: `${l.from} → ${l.to}`,
+            // Volume is a solver output; the rate is from the upload.
+            volume: null,
+            cost: null,
+            ratePerUnit: l.cost ?? null,
+            ontimePct: null,
+          })),
+      },
+    };
+  });
+
+  // NOTE (Phase 10.0): this function used to derive a full base case here from
+  // whatever `networkData.kpis` happened to contain — inventing an "optimised"
+  // counterpart as `totalCost * 0.94`, an SLA of 98.2, savings of 6.0%, and
+  // labelling the result `source: "DETERMINISTIC_ENGINE"`. None of it came from
+  // a solver. Topology is loaded here; solved figures arrive through
+  // `setAuthoritativeBaseline()` once the network has actually been optimised.
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('networkDataLoaded', { detail: networkData }));
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.loadNetworkData = loadNetworkData;
 }
 

@@ -1,0 +1,5558 @@
+{
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "selectors_harvested": 434,
+  "checks": [
+    {
+      "check": "stylesheet loaded: style.css",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": "linked and parsed"
+    },
+    {
+      "check": "stylesheet loaded: landing.css",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": "linked and parsed"
+    },
+    {
+      "check": "stylesheet loaded: auth.css",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": "linked and parsed"
+    },
+    {
+      "check": "stylesheet loaded: home-overview.css",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": "linked and parsed"
+    },
+    {
+      "check": "stylesheet loaded: insights.css",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": "linked and parsed"
+    },
+    {
+      "check": "stylesheet loaded: insight-detail.css",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": "linked and parsed"
+    },
+    {
+      "check": "stylesheet loaded: agent-reasoning.css",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": "linked and parsed"
+    },
+    {
+      "check": "stylesheet loaded: chatbot.css",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": "linked and parsed"
+    },
+    {
+      "check": "stylesheet loaded: projects.css",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": "linked and parsed"
+    },
+    {
+      "check": "stylesheet loaded: ingestion.css",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": "linked and parsed"
+    },
+    {
+      "check": "stylesheet cascade order matches the standalone",
+      "group": "stylesheets",
+      "status": "PASS",
+      "detail": {
+        "expected": [
+          "style.css",
+          "landing.css",
+          "auth.css",
+          "home-overview.css",
+          "insights.css",
+          "insight-detail.css",
+          "agent-reasoning.css",
+          "chatbot.css",
+          "projects.css",
+          "ingestion.css"
+        ],
+        "actual": [
+          "style.css",
+          "landing.css",
+          "auth.css",
+          "home-overview.css",
+          "insights.css",
+          "insight-detail.css",
+          "agent-reasoning.css",
+          "chatbot.css",
+          "projects.css",
+          "ingestion.css"
+        ]
+      }
+    },
+    {
+      "check": "computed style: #action-drawer",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #action-drawer",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #action-drawer-close",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #action-drawer-close",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #action-drawer-content",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #action-drawer-content",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #action-drawer-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #action-drawer-overlay",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #action-review-modal-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #action-review-modal-overlay",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #agent-execution-view",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #agent-execution-view",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "522x258 vs 522x258"
+    },
+    {
+      "check": "computed style: #agent-live-status-text",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #agent-live-status-text",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "264x18 vs 264x18"
+    },
+    {
+      "check": "computed style: #agent-modal-task-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #agent-modal-task-title",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #agent-progress-fill",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #agent-progress-fill",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #agent-progress-pct",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #agent-progress-pct",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #agent-progress-text",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #agent-progress-text",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #agent-reasoning-modal-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #agent-reasoning-modal-overlay",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #agent-terminal-box",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #agent-terminal-box",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #agent-terminal-content",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #agent-terminal-content",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #app-sub-topbar",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #app-sub-topbar",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1232x55 vs 1232x55"
+    },
+    {
+      "check": "computed style: #btn-cancel-toolbox",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-cancel-toolbox",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "66x27 vs 66x27"
+    },
+    {
+      "check": "computed style: #btn-close-toolbox",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-close-toolbox",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "34x28 vs 34x28"
+    },
+    {
+      "check": "computed style: #btn-create-scenario-main",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-create-scenario-main",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "210x44 vs 210x44"
+    },
+    {
+      "check": "computed style: #btn-export-kpi",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-export-kpi",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "200x31 vs 200x31"
+    },
+    {
+      "check": "computed style: #btn-open-digital-twin",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-open-digital-twin",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "124x15 vs 124x15"
+    },
+    {
+      "check": "computed style: #btn-run-toolbox-scenario",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-run-toolbox-scenario",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "150x38 vs 150x38"
+    },
+    {
+      "check": "computed style: #btn-topbar-help",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-topbar-help",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "36x36 vs 36x36"
+    },
+    {
+      "check": "computed style: #btn-topbar-notifications",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-topbar-notifications",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "36x36 vs 36x36"
+    },
+    {
+      "check": "computed style: #btn-topbar-profile",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-topbar-profile",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "32x32 vs 32x32"
+    },
+    {
+      "check": "computed style: #btn-topbar-upload",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-topbar-upload",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "128x29 vs 128x29"
+    },
+    {
+      "check": "computed style: #btn-view-all-kpis",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #btn-view-all-kpis",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "95x15 vs 95x15"
+    },
+    {
+      "check": "computed style: #chart-dash-costs",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chart-dash-costs",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "300x150 vs 300x150"
+    },
+    {
+      "check": "computed style: #chart-dash-lanes",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chart-dash-lanes",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "300x150 vs 300x150"
+    },
+    {
+      "check": "computed style: #chart-dash-throughput",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chart-dash-throughput",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "300x150 vs 300x150"
+    },
+    {
+      "check": "computed style: #chart-forecast",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chart-forecast",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "300x150 vs 300x150"
+    },
+    {
+      "check": "computed style: #chatbot-chat-view",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chatbot-chat-view",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #chatbot-faq-section",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chatbot-faq-section",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #chatbot-modal-body",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chatbot-modal-body",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #chatbot-modal-dialog",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chatbot-modal-dialog",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #chatbot-modal-input",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chatbot-modal-input",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #chatbot-modal-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chatbot-modal-overlay",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #chatbot-modal-send",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #chatbot-modal-send",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #create-project-page",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #create-project-page",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1600x1000 vs 1600x1000"
+    },
+    {
+      "check": "computed style: #dash-corridor-summary",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #dash-corridor-summary",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "386x32 vs 386x32"
+    },
+    {
+      "check": "computed style: #dash-lane-count-tag",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #dash-lane-count-tag",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "91x24 vs 91x24"
+    },
+    {
+      "check": "computed style: #dash-metrics-grid",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #dash-metrics-grid",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1232x0 vs 1232x0"
+    },
+    {
+      "check": "computed style: #dash-total-cost-tag",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #dash-total-cost-tag",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "96x24 vs 96x24"
+    },
+    {
+      "check": "computed style: #dash-util-tag",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #dash-util-tag",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "101x24 vs 101x24"
+    },
+    {
+      "check": "computed style: #external-signals",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #external-signals",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "554x0 vs 554x0"
+    },
+    {
+      "check": "computed style: #facility-panel",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #facility-panel",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #facility-panel-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #facility-panel-overlay",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #floating-chatbot-fab",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #floating-chatbot-fab",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #form-panel-reset",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #form-panel-reset",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x183 vs 334x183"
+    },
+    {
+      "check": "computed style: #form-panel-signin",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #form-panel-signin",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x295 vs 334x295"
+    },
+    {
+      "check": "computed style: #form-panel-signup",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #form-panel-signup",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x442 vs 334x442"
+    },
+    {
+      "check": "computed style: #fp-close",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #fp-close",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #fp-content",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #fp-content",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #home-attention-list",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #home-attention-list",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "498x512 vs 498x512"
+    },
+    {
+      "check": "computed style: #home-kpi-grid",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "677.594px",
+          "production": "667.922px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #home-kpi-grid",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "678x64 vs 668x64"
+    },
+    {
+      "check": "computed style: #home-map-twin",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #home-map-twin",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "670x586 vs 670x586"
+    },
+    {
+      "check": "computed style: #home-top-controls",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "348.219px",
+          "production": "418.219px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #home-top-controls",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "348x31 vs 418x31"
+    },
+    {
+      "check": "computed style: #home-top-facility",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "134px",
+          "production": "204px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #home-top-facility",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "134x31 vs 204x31"
+    },
+    {
+      "check": "computed style: #home-top-period",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #home-top-period",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "103x31 vs 103x31"
+    },
+    {
+      "check": "computed style: #home-twin-block",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #home-twin-block",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "712x662 vs 712x662"
+    },
+    {
+      "check": "computed style: #home-twin-callout",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "208.281px",
+          "production": "auto"
+        },
+        "height": {
+          "standalone": "122.578px",
+          "production": "auto"
+        },
+        "display": {
+          "standalone": "block",
+          "production": "none"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #home-twin-callout",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "208x123 vs 0x0"
+    },
+    {
+      "check": "computed style: #home2-refresh-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #home2-refresh-btn",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "19x19 vs 19x19"
+    },
+    {
+      "check": "computed style: #home2-refresh-time",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #home2-refresh-time",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "53x18 vs 53x18"
+    },
+    {
+      "check": "computed style: #ingestion-page",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #ingestion-page",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1600x1000 vs 1600x1000"
+    },
+    {
+      "check": "computed style: #landing-map-stage",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #landing-map-stage",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1012x1000 vs 1012x1000"
+    },
+    {
+      "check": "computed style: #landing-page",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #landing-page",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1600x1000 vs 1600x1000"
+    },
+    {
+      "check": "computed style: #loading-modal-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #loading-modal-overlay",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #logged-in-user-name",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #logged-in-user-name",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "116x25 vs 116x25"
+    },
+    {
+      "check": "computed style: #map-toggle-twin",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #map-toggle-twin",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "190x35 vs 190x35"
+    },
+    {
+      "check": "computed style: #map-twin",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #map-twin",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1230x560 vs 1230x560"
+    },
+    {
+      "check": "computed style: #map2d-flow-count",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #map2d-flow-count",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "96x19 vs 96x19"
+    },
+    {
+      "check": "computed style: #map2d-risk-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #map2d-risk-label",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "70x19 vs 70x19"
+    },
+    {
+      "check": "computed style: #map2d-stats",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #map2d-stats",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "363x54 vs 363x54"
+    },
+    {
+      "check": "computed style: #minimal-flow-layer",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #minimal-flow-layer",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "416x523 vs 416x523"
+    },
+    {
+      "check": "computed style: #minimal-hubs-layer",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #minimal-hubs-layer",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "458x565 vs 458x565"
+    },
+    {
+      "check": "computed style: #modal-create-toolbox",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #modal-create-toolbox",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1600x1000 vs 1600x1000"
+    },
+    {
+      "check": "computed style: #multi-scenario-table-wrap",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "341.938px",
+          "production": "53.5938px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #multi-scenario-table-wrap",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "750x342 vs 750x54"
+    },
+    {
+      "check": "computed style: #nav-item-forecast",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #nav-item-forecast",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "35x42 vs 35x42"
+    },
+    {
+      "check": "computed style: #nav-item-home",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #nav-item-home",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "35x42 vs 35x42"
+    },
+    {
+      "check": "computed style: #nav-item-kpis",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #nav-item-kpis",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "35x42 vs 35x42"
+    },
+    {
+      "check": "computed style: #nav-item-scenarios",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #nav-item-scenarios",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "35x42 vs 35x42"
+    },
+    {
+      "check": "computed style: #nav-item-settings",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #nav-item-settings",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "59x42 vs 59x42"
+    },
+    {
+      "check": "computed style: #nav-item-twin",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #nav-item-twin",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "35x42 vs 35x42"
+    },
+    {
+      "check": "computed style: #panel-conf-email-target",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #panel-conf-email-target",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "155x15 vs 155x15"
+    },
+    {
+      "check": "computed style: #panel-reset",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #panel-reset",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x425 vs 334x425"
+    },
+    {
+      "check": "computed style: #panel-reset-confirmation",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #panel-reset-confirmation",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x226 vs 334x226"
+    },
+    {
+      "check": "computed style: #panel-reset-email",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #panel-reset-email",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x44 vs 334x44"
+    },
+    {
+      "check": "computed style: #panel-signin",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #panel-signin",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x425 vs 334x425"
+    },
+    {
+      "check": "computed style: #panel-signup",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #panel-signup",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x425 vs 334x425"
+    },
+    {
+      "check": "computed style: #profile-dropdown-menu",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #profile-dropdown-menu",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #profile-menu-profile",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #profile-menu-profile",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #profile-menu-signout",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #profile-menu-signout",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #project-select-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #project-select-btn",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "310x27 vs 310x27"
+    },
+    {
+      "check": "computed style: #scenario-drawer",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scenario-drawer",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #scenario-drawer-close",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scenario-drawer-close",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #scenario-drawer-content",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scenario-drawer-content",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #scenario-drawer-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scenario-drawer-overlay",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #scenario-leaflet-map",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scenario-leaflet-map",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1188x358 vs 1188x358"
+    },
+    {
+      "check": "computed style: #scenario-map-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scenario-map-wrap",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1190x360 vs 1190x360"
+    },
+    {
+      "check": "computed style: #scn-add-scenario-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scn-add-scenario-btn",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "194x31 vs 194x31"
+    },
+    {
+      "check": "computed style: #scn-add-scenario-menu",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scn-add-scenario-menu",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #scn-add-scenario-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scn-add-scenario-wrap",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "194x31 vs 194x31"
+    },
+    {
+      "check": "computed style: #scn-map-toggle-group",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "266.656px",
+          "production": "8px"
+        },
+        "height": {
+          "standalone": "35px",
+          "production": "8px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #scn-map-toggle-group",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "267x35 vs 8x8"
+    },
+    {
+      "check": "computed style: #scn-multi-customize-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scn-multi-customize-btn",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "165x32 vs 165x32"
+    },
+    {
+      "check": "computed style: #scn-multi-customize-menu",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scn-multi-customize-menu",
+      "group": "dimensions",
+      "status": "NOT_MEASURABLE",
+      "detail": "0x0 vs 0x0"
+    },
+    {
+      "check": "computed style: #scn-multi-customize-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #scn-multi-customize-wrap",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "165x32 vs 165x32"
+    },
+    {
+      "check": "computed style: #scn-multi-take-card",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "429.406px",
+          "production": "113.188px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #scn-multi-take-card",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "420x429 vs 420x113"
+    },
+    {
+      "check": "computed style: #scn-selected-chips",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "244.75px",
+          "production": "0px"
+        },
+        "height": {
+          "standalone": "34px",
+          "production": "0px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #scn-selected-chips",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "245x34 vs 0x0"
+    },
+    {
+      "check": "computed style: #sel-facility",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "219px",
+          "production": "204px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #sel-facility",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "219x31 vs 204x31"
+    },
+    {
+      "check": "computed style: #sel-period",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #sel-period",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "103x31 vs 103x31"
+    },
+    {
+      "check": "computed style: #select-project-page",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #select-project-page",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1600x1000 vs 1600x1000"
+    },
+    {
+      "check": "computed style: #sidebar",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #sidebar",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "76x1000 vs 76x1000"
+    },
+    {
+      "check": "computed style: #sidebar-brand-lockup",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #sidebar-brand-lockup",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "75x62 vs 75x62"
+    },
+    {
+      "check": "computed style: #sidebar-toggle-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #sidebar-toggle-btn",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "34x34 vs 34x34"
+    },
+    {
+      "check": "computed style: #signin-email",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #signin-email",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x44 vs 334x44"
+    },
+    {
+      "check": "computed style: #signin-password",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #signin-password",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x44 vs 334x44"
+    },
+    {
+      "check": "computed style: #signup-email",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #signup-email",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x44 vs 334x44"
+    },
+    {
+      "check": "computed style: #signup-name",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #signup-name",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x44 vs 334x44"
+    },
+    {
+      "check": "computed style: #signup-password",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #signup-password",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "334x44 vs 334x44"
+    },
+    {
+      "check": "computed style: #solver-phase-steps",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #solver-phase-steps",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "522x176 vs 522x176"
+    },
+    {
+      "check": "computed style: #step-phase-1",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #step-phase-1",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "492x18 vs 492x18"
+    },
+    {
+      "check": "computed style: #step-phase-2",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #step-phase-2",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "492x18 vs 492x18"
+    },
+    {
+      "check": "computed style: #step-phase-3",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #step-phase-3",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "492x18 vs 492x18"
+    },
+    {
+      "check": "computed style: #step-phase-4",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #step-phase-4",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "492x18 vs 492x18"
+    },
+    {
+      "check": "computed style: #step-phase-5",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #step-phase-5",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "492x18 vs 492x18"
+    },
+    {
+      "check": "computed style: #step-phase-6",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #step-phase-6",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "492x18 vs 492x18"
+    },
+    {
+      "check": "computed style: #sub-topbar-main-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #sub-topbar-main-title",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "177x34 vs 177x34"
+    },
+    {
+      "check": "computed style: #sub-topbar-sub-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #sub-topbar-sub-title",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "219x20 vs 219x20"
+    },
+    {
+      "check": "computed style: #sub-topbar-title-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #sub-topbar-title-wrap",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "405x34 vs 405x34"
+    },
+    {
+      "check": "computed style: #tab-facility-dashboard",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #tab-facility-dashboard",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1280x1067 vs 1280x1067"
+    },
+    {
+      "check": "computed style: #tab-forecast",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #tab-forecast",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1280x908 vs 1280x908"
+    },
+    {
+      "check": "computed style: #tab-home",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #tab-home",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1280x844 vs 1280x844"
+    },
+    {
+      "check": "computed style: #tab-insight-detail",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #tab-insight-detail",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1232x0 vs 1232x0"
+    },
+    {
+      "check": "computed style: #tab-scenarios",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "1052.41px",
+          "production": "896px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #tab-scenarios",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "1280x1052 vs 1280x896"
+    },
+    {
+      "check": "computed style: #tab-twin",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "1838.56px",
+          "production": "1400.59px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #tab-twin",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "1280x1839 vs 1280x1401"
+    },
+    {
+      "check": "computed style: #table-dash-lanes",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #table-dash-lanes",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1182x40 vs 1182x40"
+    },
+    {
+      "check": "computed style: #table-dcs",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "352.562px",
+          "production": "39.5938px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #table-dcs",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "345x353 vs 345x40"
+    },
+    {
+      "check": "computed style: #table-markets",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "477.562px",
+          "production": "39.5938px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #table-markets",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "345x478 vs 345x40"
+    },
+    {
+      "check": "computed style: #table-plants",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "351.469px",
+          "production": "344.656px"
+        },
+        "height": {
+          "standalone": "271.172px",
+          "production": "39.5938px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #table-plants",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "351x271 vs 345x40"
+    },
+    {
+      "check": "computed style: #toolbox-active-type-badge",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #toolbox-active-type-badge",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "93x19 vs 93x19"
+    },
+    {
+      "check": "computed style: #toolbox-active-type-desc",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #toolbox-active-type-desc",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "484x18 vs 484x18"
+    },
+    {
+      "check": "computed style: #toolbox-constraint-type",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #toolbox-constraint-type",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "238x36 vs 238x36"
+    },
+    {
+      "check": "computed style: #toolbox-dynamic-fields",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #toolbox-dynamic-fields",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "484x0 vs 484x0"
+    },
+    {
+      "check": "computed style: #toolbox-form-body",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #toolbox-form-body",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "522x584 vs 522x584"
+    },
+    {
+      "check": "computed style: #toolbox-objective",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #toolbox-objective",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "484x36 vs 484x36"
+    },
+    {
+      "check": "computed style: #toolbox-scenario-name",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #toolbox-scenario-name",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "522x34 vs 522x34"
+    },
+    {
+      "check": "computed style: #toolbox-solver-backend",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #toolbox-solver-backend",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "238x36 vs 238x36"
+    },
+    {
+      "check": "computed style: #topbar-controls",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "433.219px",
+          "production": "418.219px"
+        },
+        "margin": {
+          "standalone": "0px 0px 0px 322.281px",
+          "production": "0px 0px 0px 337.281px"
+        }
+      }
+    },
+    {
+      "check": "dimensions: #topbar-controls",
+      "group": "dimensions",
+      "status": "FAIL",
+      "detail": "433x31 vs 418x31"
+    },
+    {
+      "check": "computed style: #topbar-current-project-name",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #topbar-current-project-name",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "144x15 vs 144x15"
+    },
+    {
+      "check": "computed style: #twin-2d-panel",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #twin-2d-panel",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1232x562 vs 1232x562"
+    },
+    {
+      "check": "computed style: #twin-3d-panel",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #twin-3d-panel",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1232x562 vs 1232x562"
+    },
+    {
+      "check": "computed style: #twin-view-toggle",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #twin-view-toggle",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "158x35 vs 158x35"
+    },
+    {
+      "check": "computed style: #twin3d-canvas",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #twin3d-canvas",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1230x560 vs 1230x560"
+    },
+    {
+      "check": "computed style: #twin3d-flow-count",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #twin3d-flow-count",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "96x19 vs 96x19"
+    },
+    {
+      "check": "computed style: #twin3d-risk-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #twin3d-risk-label",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "70x19 vs 70x19"
+    },
+    {
+      "check": "computed style: #twin3d-stats",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #twin3d-stats",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "363x54 vs 363x54"
+    },
+    {
+      "check": "computed style: #upload-data-page",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "dimensions: #upload-data-page",
+      "group": "dimensions",
+      "status": "PASS",
+      "detail": "1600x1000 vs 1600x1000"
+    },
+    {
+      "check": "computed style: .action-drawer",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .action-drawer",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .action-drawer-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .action-drawer-overlay",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .active",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .active",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 8 vs production 7"
+    },
+    {
+      "check": "computed style: .agent-btn-complete",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-btn-complete",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-execution-view",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-execution-view",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-header-brand",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-header-brand",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-header-icon-badge",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-header-icon-badge",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-header-subtitle",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-header-subtitle",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-header-text",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-header-text",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-header-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-header-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-live-tag",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-live-tag",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-modal-body",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-modal-body",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-modal-close",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-modal-close",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-modal-dialog",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-modal-dialog",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-modal-footer",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-modal-footer",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-modal-header",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-modal-header",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-modal-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-modal-overlay",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-progress-fill",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-progress-fill",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-progress-label-row",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-progress-label-row",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-progress-track",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-progress-track",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-progress-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-progress-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-pulse-header",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-pulse-header",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-pulse-icon",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-pulse-icon",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-stage-card",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-stage-card",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .agent-stage-content",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-stage-content",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .agent-stage-desc",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-stage-desc",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .agent-stage-icon-box",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-stage-icon-box",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .agent-stage-name",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-stage-name",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .agent-stage-status-badge",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-stage-status-badge",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .agent-stage-top-meta",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-stage-top-meta",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .agent-stages-list",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-stages-list",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-terminal-box",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-terminal-box",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .agent-terminal-line",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .agent-terminal-line",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .app-body",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "5731.89px",
+          "production": "5137.52px"
+        }
+      }
+    },
+    {
+      "check": "element count: .app-body",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .app-global-topbar",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .app-global-topbar",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .app-shell",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "5731.89px",
+          "production": "5137.52px"
+        }
+      }
+    },
+    {
+      "check": "element count: .app-shell",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .app-sub-topbar",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .app-sub-topbar",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .auth-checkbox-row",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-checkbox-row",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .auth-conf-desc",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-conf-desc",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .auth-conf-email",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-conf-email",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .auth-conf-icon",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-conf-icon",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .auth-conf-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-conf-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .auth-confirmation-box",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-confirmation-box",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .auth-field-group",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-field-group",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .auth-forgot-link",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-forgot-link",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .auth-input",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-input",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .auth-input-icon",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-input-icon",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .auth-input-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-input-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .auth-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-label",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .auth-panel-footer",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-panel-footer",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .auth-panel-header",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-panel-header",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .auth-panel-subtitle",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-panel-subtitle",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .auth-panel-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-panel-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .auth-password-toggle",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-password-toggle",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .auth-req-item",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-req-item",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .auth-requirements-box",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-requirements-box",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .auth-requirements-header",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-requirements-header",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .auth-requirements-list",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .auth-requirements-list",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .badge-completed",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .badge-completed",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .badge-pending",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .badge-pending",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .badge-running",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .badge-running",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .btn",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 4 vs production 8"
+    },
+    {
+      "check": "computed style: .btn-ghost",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .btn-ghost",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 1 vs production 3"
+    },
+    {
+      "check": "computed style: .btn-landing-primary",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .btn-landing-primary",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .btn-landing-secondary",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .btn-landing-secondary",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .btn-primary",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .btn-primary",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .btn-secondary",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .btn-secondary",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 2 vs production 4"
+    },
+    {
+      "check": "computed style: .btn-sm",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .btn-sm",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 2 vs production 4"
+    },
+    {
+      "check": "computed style: .btn-topbar-upload",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .btn-topbar-upload",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .card",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .card",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 12 vs production 12"
+    },
+    {
+      "check": "computed style: .card-header",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .card-header",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .card-subtitle",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .card-subtitle",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .card-table-scroll",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "271.172px",
+          "production": "39.5938px"
+        }
+      }
+    },
+    {
+      "check": "element count: .card-table-scroll",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .card-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .card-title",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 11 vs production 13"
+    },
+    {
+      "check": "computed style: .chart-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chart-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .chatbot-chat-view",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-chat-view",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-fab-icon-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-fab-icon-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-fab-sparkle",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-fab-sparkle",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-faq-card",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-faq-card",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .chatbot-faq-card-left",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-faq-card-left",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .chatbot-faq-chevron",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-faq-chevron",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .chatbot-faq-icon",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-faq-icon",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .chatbot-faq-list",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-faq-list",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-faq-text",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-faq-text",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .chatbot-footer-disclaimer",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-footer-disclaimer",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-header-brand",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-header-brand",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-header-logo-icon",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-header-logo-icon",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-header-subtitle",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-header-subtitle",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-header-text",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-header-text",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-header-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-header-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-input-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-input-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-modal-body",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-modal-body",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-modal-close",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-modal-close",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-modal-dialog",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-modal-dialog",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-modal-header",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-modal-header",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-modal-input",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-modal-input",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-modal-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-modal-overlay",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-modal-send-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-modal-send-btn",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-pill-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-pill-btn",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .chatbot-pills-row",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-pills-row",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-section-heading",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-section-heading",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-welcome-banner",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-welcome-banner",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-welcome-bg-art",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-welcome-bg-art",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-welcome-content",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-welcome-content",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-welcome-greeting",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-welcome-greeting",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-welcome-sparkle-badge",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-welcome-sparkle-badge",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .chatbot-welcome-text",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .chatbot-welcome-text",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .collapsed",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .collapsed",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .completed",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .completed",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .control-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .control-label",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .danger",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .danger",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .facility-panel",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .facility-panel",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .facility-panel-close",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .facility-panel-close",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .facility-panel-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .facility-panel-overlay",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .flex",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .flex",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 8 vs production 8"
+    },
+    {
+      "check": "computed style: .floating-chatbot-fab",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .floating-chatbot-fab",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .form-group",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .form-group",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .form-input",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .form-input",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .form-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .form-label",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .form-select",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .form-select",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .fp-stat",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .fp-stat",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .fp-stat-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .fp-stat-label",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .fp-stat-value",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "177.625px",
+          "production": "13px"
+        }
+      }
+    },
+    {
+      "check": "element count: .fp-stat-value",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .grid-2",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .grid-2",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .grid-2-1",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .grid-2-1",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .grid-3",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .grid-3",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .highlight-purple",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .highlight-purple",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home-section-link",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home-section-link",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .home-twin-callout",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "208.281px",
+          "production": "auto"
+        },
+        "height": {
+          "standalone": "122.578px",
+          "production": "auto"
+        },
+        "display": {
+          "standalone": "block",
+          "production": "none"
+        }
+      }
+    },
+    {
+      "check": "element count: .home-twin-callout",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home-twin-map-container",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home-twin-map-container",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home-twin-map-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home-twin-map-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-attn-card",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-attn-card",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-attn-header",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-attn-header",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-attn-highlight",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-attn-highlight",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-attn-scroll",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-attn-scroll",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-attn-status-row",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-attn-status-row",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-attn-sub",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-attn-sub",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-attn-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-attn-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-container",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-container",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-kpi-strip",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-kpi-strip",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-kpi-strip-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-kpi-strip-label",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-kpi-strip-row",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "677.594px",
+          "production": "667.922px"
+        }
+      }
+    },
+    {
+      "check": "element count: .home2-kpi-strip-row",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-kpi-strip-viewall",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-kpi-strip-viewall",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-left-col",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-left-col",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-refresh-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-refresh-btn",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-refresh-text",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-refresh-text",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-right-col",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-right-col",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-status-dot",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-status-dot",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-status-pill",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-status-pill",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-twin-card",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-twin-card",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-twin-controls",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-twin-controls",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-twin-header",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-twin-header",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .home2-twin-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .home2-twin-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .ing-loading-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .ing-loading-overlay",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .insd-modal-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .insd-modal-overlay",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .items-center",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .items-center",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 8 vs production 8"
+    },
+    {
+      "check": "computed style: .justify-between",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .justify-between",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 8 vs production 8"
+    },
+    {
+      "check": "computed style: .landing-auth-panel",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-auth-panel",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .landing-brand",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-brand",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .landing-brand-sub",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-brand-sub",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .landing-brand-text",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-brand-text",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .landing-brand-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-brand-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .landing-headline",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-headline",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .landing-hero-left",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-hero-left",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .landing-hero-right",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-hero-right",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .landing-logo-svg",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-logo-svg",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .landing-map-art",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-map-art",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .landing-map-container",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-map-container",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .landing-map-overlay-svg",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .landing-map-overlay-svg",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .main-content",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "5731.89px",
+          "production": "5137.52px"
+        }
+      }
+    },
+    {
+      "check": "element count: .main-content",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .map-container",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .map-container",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .mb-lg",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .mb-lg",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 5 vs production 5"
+    },
+    {
+      "check": "computed style: .mb-md",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .mb-md",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .meta-block",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .meta-block",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .meta-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .meta-label",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .meta-value",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .meta-value",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .minimal-hub-pulse",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .minimal-hub-pulse",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .minimal-route-beam",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .minimal-route-beam",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .modal-box",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .modal-box",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 1 vs production 3"
+    },
+    {
+      "check": "computed style: .modal-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .modal-overlay",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 1 vs production 3"
+    },
+    {
+      "check": "computed style: .mt-lg",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "567.562px",
+          "production": "129.594px"
+        }
+      }
+    },
+    {
+      "check": "element count: .mt-lg",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .nav-item",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .nav-item",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .nav-svg",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .nav-svg",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .ng-table",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .ng-table",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .ng-table-compact",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "351.469px",
+          "production": "344.656px"
+        },
+        "height": {
+          "standalone": "271.172px",
+          "production": "39.5938px"
+        }
+      }
+    },
+    {
+      "check": "element count: .ng-table-compact",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .notif-badge-dot",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .notif-badge-dot",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .num",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .num",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 37 vs production 9"
+    },
+    {
+      "check": "computed style: .pill-icon",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .pill-icon",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .prefix-info",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .prefix-info",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .profile-dropdown-item",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .profile-dropdown-item",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .profile-dropdown-menu",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .profile-dropdown-menu",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .profile-dropdown-sep",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .profile-dropdown-sep",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .proj-page",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .proj-page",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .project-select-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .project-select-btn",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scenario-drawer",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scenario-drawer",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scenario-drawer-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scenario-drawer-overlay",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scenario-toolbox-modal",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scenario-toolbox-modal",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-add-scenario-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-add-scenario-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-create-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-create-btn",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-customize-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-customize-btn",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .scn-customize-menu",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-customize-menu",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-customize-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-customize-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-header-subtitle",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-header-subtitle",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-map-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-map-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-multi-table-wrap",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "341.938px",
+          "production": "53.5938px"
+        }
+      }
+    },
+    {
+      "check": "element count: .scn-multi-table-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-page-header",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-page-header",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-scenario-dropdown-menu",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-scenario-dropdown-menu",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-selected-chips",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "244.75px",
+          "production": "0px"
+        },
+        "height": {
+          "standalone": "34px",
+          "production": "0px"
+        }
+      }
+    },
+    {
+      "check": "element count: .scn-selected-chips",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-selector-bar",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "34px",
+          "production": "31px"
+        }
+      }
+    },
+    {
+      "check": "element count: .scn-selector-bar",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-selector-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-selector-label",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-single-2col",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "429.406px",
+          "production": "133.594px"
+        }
+      }
+    },
+    {
+      "check": "element count: .scn-single-2col",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-single-left",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "421.938px",
+          "production": "133.594px"
+        }
+      }
+    },
+    {
+      "check": "element count: .scn-single-left",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-single-right",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "429.406px",
+          "production": "113.188px"
+        }
+      }
+    },
+    {
+      "check": "element count: .scn-single-right",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-table-card",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "421.938px",
+          "production": "133.594px"
+        }
+      }
+    },
+    {
+      "check": "element count: .scn-table-card",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-table-header-row",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-table-header-row",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .scn-table-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-table-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .scn-take-card",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "429.406px",
+          "production": "113.188px"
+        }
+      }
+    },
+    {
+      "check": "element count: .scn-take-card",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-type-card",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-type-card",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .scn-type-grid",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-type-grid",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .scn-type-icon",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-type-icon",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .scn-type-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .scn-type-label",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .scn-visual-context-card",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "height": {
+          "standalone": "439px",
+          "production": "428px"
+        }
+      }
+    },
+    {
+      "check": "element count: .scn-visual-context-card",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sidebar",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sidebar",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sidebar-brand-name",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sidebar-brand-name",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sidebar-brand-netgravity",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sidebar-brand-netgravity",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sidebar-brand-sub",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sidebar-brand-sub",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sidebar-brand-text",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sidebar-brand-text",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sidebar-logo-mark",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sidebar-logo-mark",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sidebar-meta",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sidebar-meta",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sidebar-nav",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sidebar-nav",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sidebar-toggle-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sidebar-toggle-btn",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sidebar-toggle-row",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sidebar-toggle-row",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .signal-badge",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .signal-badge",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .signin-actions-row",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .signin-actions-row",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sub-topbar-main-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sub-topbar-main-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sub-topbar-sub-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sub-topbar-sub-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .sub-topbar-title-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .sub-topbar-title-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .tab-panel",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .tab-panel",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .table-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .table-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .tag",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .tag",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 25 vs production 6"
+    },
+    {
+      "check": "computed style: .tag-danger",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .tag-danger",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 5 vs production 1"
+    },
+    {
+      "check": "computed style: .tag-muted",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .tag-muted",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .tag-primary",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .tag-primary",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .tall",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .tall",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .telemetry-spinner",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .telemetry-spinner",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .text-muted",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "371.734px",
+          "production": "750px"
+        },
+        "height": {
+          "standalone": "17.5938px",
+          "production": "53.5938px"
+        },
+        "padding": {
+          "standalone": "0px",
+          "production": "18px"
+        }
+      }
+    },
+    {
+      "check": "element count: .text-muted",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 6 vs production 9"
+    },
+    {
+      "check": "computed style: .text-xs",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "371.734px",
+          "production": "750px"
+        },
+        "height": {
+          "standalone": "17.5938px",
+          "production": "53.5938px"
+        },
+        "padding": {
+          "standalone": "0px",
+          "production": "18px"
+        }
+      }
+    },
+    {
+      "check": "element count: .text-xs",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 9 vs production 12"
+    },
+    {
+      "check": "computed style: .timestamp",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .timestamp",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .toggle-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .toggle-btn",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 7 vs production 4"
+    },
+    {
+      "check": "computed style: .toggle-group",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .toggle-group",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .toolbox-header",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .toolbox-header",
+      "group": "counts",
+      "status": "FAIL",
+      "detail": "standalone 1 vs production 3"
+    },
+    {
+      "check": "computed style: .toolbox-step",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .toolbox-step",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .toolbox-step-content",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .toolbox-step-content",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .toolbox-step-num",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .toolbox-step-num",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .toolbox-step-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .toolbox-step-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 3 vs production 3"
+    },
+    {
+      "check": "computed style: .topbar-control-group",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "183.688px",
+          "production": "253.688px"
+        }
+      }
+    },
+    {
+      "check": "element count: .topbar-control-group",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 4 vs production 4"
+    },
+    {
+      "check": "computed style: .topbar-controls",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "348.219px",
+          "production": "418.219px"
+        }
+      }
+    },
+    {
+      "check": "element count: .topbar-controls",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .topbar-facility-select",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "134px",
+          "production": "204px"
+        }
+      }
+    },
+    {
+      "check": "element count: .topbar-facility-select",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .topbar-icon-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .topbar-icon-btn",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .topbar-left-area",
+      "group": "style",
+      "status": "FAIL",
+      "detail": {
+        "width": {
+          "standalone": "669.75px",
+          "production": "739.75px"
+        }
+      }
+    },
+    {
+      "check": "element count: .topbar-left-area",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .topbar-period-select",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .topbar-period-select",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .topbar-profile-btn",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .topbar-profile-btn",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .topbar-profile-wrap",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .topbar-profile-wrap",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .topbar-right-area",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .topbar-right-area",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .twin3d-card",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-card",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .twin3d-container",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-container",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .twin3d-hint",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-hint",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .twin3d-legend",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-legend",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .twin3d-legend-divider",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-legend-divider",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .twin3d-legend-dot",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-legend-dot",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .twin3d-legend-row",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-legend-row",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .twin3d-legend-title",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-legend-title",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "computed style: .twin3d-stat",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-stat",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .twin3d-stat-label",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-stat-label",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .twin3d-stat-value",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-stat-value",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 6 vs production 6"
+    },
+    {
+      "check": "computed style: .twin3d-stats-overlay",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .twin3d-stats-overlay",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 2 vs production 2"
+    },
+    {
+      "check": "computed style: .user-avatar-ak",
+      "group": "style",
+      "status": "PASS",
+      "detail": "identical"
+    },
+    {
+      "check": "element count: .user-avatar-ak",
+      "group": "counts",
+      "status": "PASS",
+      "detail": "standalone 1 vs production 1"
+    },
+    {
+      "check": "no blocking JavaScript error in production",
+      "group": "runtime",
+      "status": "PASS",
+      "detail": "none"
+    }
+  ],
+  "summary": {
+    "PASS": 775,
+    "NOT_MEASURABLE": 34,
+    "FAIL": 69
+  }
+}

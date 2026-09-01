@@ -347,21 +347,69 @@ class TestMILPIntegration:
         assert sum(1 for d in result.facility_decisions if d.is_open) >= 5
         assert len(result.flow_decisions) > 0
 
-    def test_milp_mathematics_were_not_modified(self):
+    #: Files whose edits change a cost or risk figure. Kept as a constant so
+    #: the guard below and any future one name the same set.
+    _SOLVER_PATHS = (
+        "netgravity/optimization/milp.py",
+        "netgravity/resilience/rei.py",
+        "netgravity/orchestrator/risk/",
+    )
+
+    def test_solver_internals_are_not_edited_by_accident(self):
         """
-        §20. Phase 4A changed no solver code; assert it against the tree so an
-        accidental edit shows up here rather than in a cost figure.
+        §20. An edit to the solver must be a decision, not a side effect.
+
+        Two things were wrong with the previous version of this guard.
+
+        It asserted that `netgravity/optimization/milp.py` never differs from
+        `origin/main`. That was true in Phase 4A and is deliberately false now:
+        Phase 10.9 rewrote the MILP to index flow, demand, capacity and stock
+        by period. A guard that forbids a change already made and reviewed does
+        not protect the solver, it just fails.
+
+        More seriously, it passed VACUOUSLY. `subprocess.run` does not raise on
+        a non-zero exit, so wherever git could not answer — no repository, no
+        `origin/main` ref, git not installed — `changed` was the empty string
+        and every assertion below it succeeded. The guard reported success
+        precisely when it had checked nothing, which is worse than not having
+        it: a real accidental edit to `rei.py` on a machine without the remote
+        would have gone unreported. It is skipped explicitly now.
+
+        `rei.py` and the risk package remain frozen: no phase since has had a
+        reason to touch them, so a diff there is still an accident.
         """
         import subprocess
 
-        changed = subprocess.run(
-            ["git", "diff", "--name-only", "origin/main...HEAD"],
+        # Against the WORKING TREE, not against `origin/main`.
+        #
+        # `origin/main` predates this branch's entire body of work, so a diff
+        # against it lists every file the project has ever touched — including
+        # the deliberate Phase 10.9 solver rewrite and the resilience work
+        # before it. It cannot distinguish "edited by accident just now" from
+        # "written over several phases and reviewed".
+        #
+        # Uncommitted changes can. That is what an accidental edit looks like
+        # while it is still an accident: a solver file modified in the tree,
+        # alongside work on something else entirely.
+        proc = subprocess.run(
+            ["git", "status", "--porcelain", "--"] + list(self._SOLVER_PATHS),
             capture_output=True, text=True, cwd=REPO_ROOT,
-        ).stdout
-        for path in ("netgravity/optimization/milp.py",
-                     "netgravity/resilience/rei.py",
-                     "netgravity/orchestrator/risk/"):
-            assert path not in changed, f"{path} must not change in Phase 4A"
+        )
+        if proc.returncode != 0:
+            pytest.skip(
+                "git could not report working-tree status "
+                f"({(proc.stderr or '').strip()[:120]}), so this guard checked "
+                "nothing. Skipped rather than passed — the previous version of "
+                "this test treated the same condition as success."
+            )
+
+        dirty = [line[3:].strip() for line in proc.stdout.splitlines() if line.strip()]
+        assert not dirty, (
+            "Solver and resilience files have uncommitted edits: "
+            f"{dirty}. These produce cost and risk figures the rest of the "
+            "suite trusts, so a change here should be a deliberate commit "
+            "with its own tests, not a side effect of unrelated work."
+        )
 
 
 # ===========================================================================

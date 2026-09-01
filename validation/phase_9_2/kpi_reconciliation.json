@@ -1,0 +1,68 @@
+[
+  {
+    "kpi": "Total Network Cost",
+    "screen": "S1/S5",
+    "ui_value": "None",
+    "api_value": null,
+    "authoritative_source": "KPIRegistry.business_network_cost",
+    "unit": "INR",
+    "status": "INSUFFICIENT_EVIDENCE",
+    "match": null,
+    "evidence": "Formula: , Status: INSUFFICIENT_EVIDENCE"
+  },
+  {
+    "kpi": "On-Time SLA",
+    "screen": "S1/S5",
+    "ui_value": "None",
+    "api_value": null,
+    "authoritative_source": "KPIRegistry.pct_demand_in_sla",
+    "unit": "%",
+    "status": "INSUFFICIENT_EVIDENCE",
+    "match": null,
+    "evidence": "Formula: , Status: INSUFFICIENT_EVIDENCE"
+  },
+  {
+    "kpi": "Peak DC Utilisation",
+    "screen": "S1/S3",
+    "ui_value": "None",
+    "api_value": null,
+    "authoritative_source": "KPIRegistry.max_utilization_pct",
+    "unit": "%",
+    "status": "INSUFFICIENT_EVIDENCE",
+    "match": null,
+    "evidence": "Formula: , Status: INSUFFICIENT_EVIDENCE"
+  },
+  {
+    "kpi": "Scope 3 Carbon",
+    "screen": "S1/S5",
+    "ui_value": "None",
+    "api_value": null,
+    "authoritative_source": "KPIRegistry.total_carbon_kg",
+    "unit": "kg CO2",
+    "status": "INSUFFICIENT_EVIDENCE",
+    "match": null,
+    "evidence": "Formula: , Status: INSUFFICIENT_EVIDENCE"
+  },
+  {
+    "kpi": "Average Utilisation",
+    "screen": "S1/S5",
+    "ui_value": "None",
+    "api_value": null,
+    "authoritative_source": "KPIRegistry.avg_utilization_pct",
+    "unit": "%",
+    "status": "INSUFFICIENT_EVIDENCE",
+    "match": null,
+    "evidence": "Formula: , Status: INSUFFICIENT_EVIDENCE"
+  },
+  {
+    "kpi": "Demand Fill Rate",
+    "screen": "S1/S3",
+    "ui_value": "None",
+    "api_value": null,
+    "authoritative_source": "KPIRegistry.demand_fill_rate",
+    "unit": "fraction",
+    "status": "INSUFFICIENT_EVIDENCE",
+    "match": null,
+    "evidence": "Formula: , Status: INSUFFICIENT_EVIDENCE"
+  }
+]

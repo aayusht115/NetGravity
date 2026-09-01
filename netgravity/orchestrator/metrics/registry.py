@@ -45,26 +45,29 @@ _NO_NETWORK_STATE = (
     "in this execution"
 )
 
-#: Verified data gap: `NetworkKPIs` (netgravity/metrics/kpis.py) computes these,
-#: but the bridge from the engine's `OptimizationResult` to the orchestrator's
-#: `NetworkStateResult` (netgravity/metrics/contracts.py:194-215) does not copy
-#: them across, so nothing downstream of `ExecutionContext` can see them.
-#: Reported honestly as INSUFFICIENT_EVIDENCE rather than silently omitted or
-#: fabricated. See `docs/authoritative_kpi_architecture.md` §7 and
-#: `validation/kpi_authoritative_layer/data_gap_inventory.json`.
-_DROPPED_AT_CONTRACT_BRIDGE = {
-    "weighted_avg_distance_km": "km",
-    "inbound_avg_distance_km": "km",
-    "outbound_avg_distance_km": "km",
-    "carbon_per_unit": "kg/unit",
-    "min_utilization_pct": "%",
+#: Distance and intensity metrics computed by `NetworkKPIs`
+#: (netgravity/metrics/kpis.py).
+#:
+#: Phase 9.1 recorded these as GAP-01: `compute_kpis()` produced them, but the
+#: bridge to `NetworkStateResult` (netgravity/metrics/contracts.py) never copied
+#: them, so nothing downstream of `ExecutionContext` could see them, and they
+#: were reported as INSUFFICIENT_EVIDENCE rather than fabricated as zero.
+#:
+#: Phase 10.0 closed that gap: the five fields are now carried across the bridge
+#: as `Optional[float]`. They are read here directly, and a None — meaning this
+#: solve genuinely did not report the figure — still yields
+#: INSUFFICIENT_EVIDENCE rather than a zero.
+_DISTANCE_AND_INTENSITY_METRICS = {
+    "weighted_avg_distance_km": ("km", "WEIGHTED_AVG_DISTANCE"),
+    "inbound_avg_distance_km": ("km", "INBOUND_AVG_DISTANCE"),
+    "outbound_avg_distance_km": ("km", "OUTBOUND_AVG_DISTANCE"),
+    "carbon_per_unit": ("kg/unit", "CARBON_PER_UNIT"),
+    "min_utilization_pct": ("%", "UTILIZATION"),
 }
 
-_BRIDGE_GAP_REASON = (
-    "NetworkKPIs.{field} is computed by netgravity/metrics/kpis.py::compute_kpis "
-    "but is not carried across the OptimizationResult -> NetworkStateResult "
-    "bridge (netgravity/metrics/contracts.py); ExecutionContext therefore never "
-    "receives it. Not fabricated as zero. See data_gap_inventory.json."
+_MISSING_FIELD_REASON = (
+    "NetworkKPIs.{field} was not reported by this solve, so no value reached "
+    "NetworkStateResult. Not fabricated as zero."
 )
 
 
@@ -82,6 +85,37 @@ def _single_network_state(context: "ExecutionContext") -> Optional[Any]:
     if len(states) == 1:
         return next(iter(states.values()))
     return states.get("optimization.solve")
+
+
+#: Error codes the solver uses when it has PROVED that no feasible solution
+#: exists, as distinct from failing to look.
+_INFEASIBLE_CODES = ("SOLVER_INFEASIBLE", "INFEASIBLE", "SOLVER_UNBOUNDED")
+
+
+def _infeasibility_reason(context: "ExecutionContext") -> Optional[str]:
+    """
+    The solver's reason, when this execution proved the network infeasible.
+
+    Returns None when infeasibility was not established — in which case the
+    absence of a network state genuinely is missing evidence rather than a
+    result.
+    """
+    evidence = getattr(context, "unavailable_evidence", {}) or {}
+    for capability in ("optimization.solve", "network.state"):
+        record = evidence.get(capability)
+        if record is None:
+            continue
+        reason = getattr(record, "reason", "") or ""
+        status = getattr(getattr(record, "status", None), "value", "") or ""
+        haystack = f"{reason} {status}".upper()
+        if any(code in haystack for code in _INFEASIBLE_CODES):
+            return reason or "the solver proved this network infeasible"
+
+    for escalation in getattr(context, "escalations", []) or []:
+        reason = getattr(escalation, "reason", "") or ""
+        if "INFEASIB" in reason.upper():
+            return reason
+    return None
 
 
 class KPIRegistry:
@@ -150,7 +184,27 @@ class KPIRegistry:
         state = context.network_states.get(key) if key else _single_network_state(context)
         eid = context.execution_id
 
+        # A solve that PROVED infeasibility is evidence, not an absence of it.
+        # When the solver halts on SOLVER_INFEASIBLE no network state is
+        # published, and reporting that as INSUFFICIENT_EVIDENCE ("we could not
+        # find out") loses the one thing that was actually established ("no
+        # solution exists"). The two are different answers and lead to
+        # different actions, so the proved case is reported as INFEASIBLE with
+        # the solver's own reason attached.
+        proved_infeasible = _infeasibility_reason(context)
+
         def missing(metric_id: str, unit: str = "", scope: MetricScope = MetricScope.NETWORK) -> KPIResult:
+            if proved_infeasible:
+                return KPIResult(
+                    metric_id=metric_id, value=None, unit=unit,
+                    scope=scope, formula_id="SOLVER_INFEASIBLE",
+                    source_capability="optimization.solve",
+                    authoritative_owner="netgravity.optimization.milp",
+                    snapshot_id=context.baseline_snapshot_id,
+                    scenario_id=context.scenario_id,
+                    execution_id=eid, status=KPIStatus.INFEASIBLE,
+                    metadata={"reason": proved_infeasible},
+                )
             return KPIResult.insufficient_evidence(
                 metric_id, reason=_NO_NETWORK_STATE, scope=scope, unit=unit,
                 source_capability="optimization.solve", execution_id=eid,
@@ -159,6 +213,8 @@ class KPIRegistry:
         if state is None:
             ids = [
                 "business_network_cost", "solver_objective", "shortage_penalty_cost",
+                "facility_cost", "transport_cost", "handling_cost",
+                "inventory_cost", "carbon_cost", "opening_cost", "closure_cost",
                 "total_demand", "served_demand", "unserved_demand", "demand_fill_rate",
                 "n_facilities_open", "n_facilities_closed",
                 "avg_utilization_pct", "max_utilization_pct",
@@ -167,6 +223,44 @@ class KPIRegistry:
             return {mid: missing(mid) for mid in ids}
 
         infeasible = not state.is_feasible or state.solver_status.value == "INFEASIBLE"
+
+        # When the strict model proved infeasible, the engine may have returned
+        # a plan that serves as much as the network physically can and reports
+        # the rest as unserved demand. Every KPI from such a run must say so:
+        # 24.1% average utilisation on a network that is 23.6% short of its own
+        # demand means something very different from the same figure on a fully
+        # served one.
+        relaxation = dict(getattr(state, "solve_relaxation", None) or {})
+        relaxed_note: Dict[str, Any] = {}
+        if relaxation.get("solve_relaxation"):
+            relaxed_note = {
+                "solve_relaxation": relaxation.get("solve_relaxation"),
+                "strict_solve_status": relaxation.get("strict_solve_status"),
+                "relaxation_reason": relaxation.get("relaxation_reason"),
+                "unserved_demand": relaxation.get("unserved_demand"),
+            }
+
+        #: The shortage penalty is a solver device for deciding WHICH demand to
+        #: strand when not all of it can be served. It is not a price anyone
+        #: pays, and `business_network_cost` excludes it — but it is emitted in
+        #: INR and would read as ₹8.7bn of cost on a dashboard, so it carries
+        #: the warning with it.
+        notional = {
+            "shortage_penalty_cost": (
+                "Notional. The per-unit shortage penalty is a solver device for "
+                "ranking which demand to strand, not a cost the business incurs. "
+                "It is excluded from business_network_cost, which is the figure "
+                "to read as money."
+            ),
+        }
+        if relaxed_note:
+            # The objective the solver minimised, which on a relaxed run is
+            # dominated by the same notional penalty. It is the right number for
+            # auditing the solve and the wrong one for reading as spend.
+            notional["solver_objective"] = (
+                "Includes the notional shortage penalty, so on this run it is "
+                "not a monetary total. business_network_cost is the spend."
+            )
 
         def wrap(metric_id: str, value: Any, unit: str, formula_id: str) -> KPIResult:
             if infeasible:
@@ -178,6 +272,9 @@ class KPIRegistry:
                     execution_id=eid, status=KPIStatus.INFEASIBLE,
                     metadata={"reason": f"solver_status={state.solver_status.value}"},
                 )
+            meta: Dict[str, Any] = dict(relaxed_note)
+            if metric_id in notional:
+                meta["notional"] = notional[metric_id]
             return KPIResult(
                 metric_id=metric_id, value=value, unit=unit, formula_id=formula_id,
                 source_capability="optimization.solve",
@@ -185,6 +282,7 @@ class KPIRegistry:
                 snapshot_id=context.baseline_snapshot_id, scenario_id=context.scenario_id,
                 execution_id=eid, status=KPIStatus.VALID,
                 input_evidence={"solver_status": state.solver_status.value},
+                metadata=meta,
             )
 
         costs, demand = state.costs, state.demand
@@ -195,6 +293,26 @@ class KPIRegistry:
                                      "INR", "MILP_OBJECTIVE"),
             "shortage_penalty_cost": wrap("shortage_penalty_cost", costs.shortage_penalty_cost,
                                          "INR", "SHORTAGE_PENALTY"),
+            # The components that ADD UP to business_network_cost. They were
+            # computed on every solve and carried on `CostBreakdown`, but the
+            # registry exposed only the total — so the dashboard's cost
+            # breakdown (fixed / transport / handling / inventory) had nothing
+            # to read and rendered blank beneath a populated total. Each is the
+            # business-cost layer's own figure, wrapped, not recomputed.
+            "facility_cost": wrap("facility_cost", costs.facility_cost,
+                                  "INR", "FACILITY_FIXED_COST"),
+            "transport_cost": wrap("transport_cost", costs.transport_cost,
+                                   "INR", "TRANSPORT_COST"),
+            "handling_cost": wrap("handling_cost", costs.handling_cost,
+                                  "INR", "HANDLING_COST"),
+            "inventory_cost": wrap("inventory_cost", costs.inventory_cost,
+                                   "INR", "INVENTORY_COST"),
+            "carbon_cost": wrap("carbon_cost", costs.carbon_cost,
+                                "INR", "CARBON_COST"),
+            "opening_cost": wrap("opening_cost", costs.opening_cost,
+                                 "INR", "FACILITY_OPENING_COST"),
+            "closure_cost": wrap("closure_cost", costs.closure_cost,
+                                 "INR", "FACILITY_CLOSURE_COST"),
             "total_demand": wrap("total_demand", demand.total_demand, "units", "DEMAND_TOTAL"),
             "served_demand": wrap("served_demand", demand.served_demand, "units", "DEMAND_SERVED"),
             "unserved_demand": wrap("unserved_demand", demand.unserved_demand, "units", "DEMAND_UNSERVED"),
@@ -210,6 +328,19 @@ class KPIRegistry:
                                       "%", "UTILIZATION_MAX"),
             "total_carbon_kg": wrap("total_carbon_kg", state.total_carbon_kg,
                                    "kg", "CARBON_TOTAL"),
+            # What the figures above COVER. Every cost and volume metric in this
+            # block is a total across `periods_modelled` periods, and a twelve-
+            # period total read as one period's cost is wrong by a factor of
+            # twelve with nothing in the number to reveal it. The period count is
+            # therefore an authoritative metric in its own right, and
+            # `cost_per_period` is published so no consumer has to divide —
+            # a divided KPI computed in a UI is a second, unowned cost engine.
+            "periods_modelled": wrap("periods_modelled",
+                                     getattr(state, "periods_modelled", 1),
+                                     "count", "PLANNING_PERIODS"),
+            "cost_per_period": wrap("cost_per_period",
+                                    getattr(state, "cost_per_period", 0.0),
+                                    "INR", "BUSINESS_COST_PER_PERIOD"),
         }
         if state.service is not None:
             results["pct_demand_in_sla"] = wrap(
@@ -222,13 +353,30 @@ class KPIRegistry:
                 source_capability="optimization.solve", execution_id=eid,
             )
 
-        # Verified data gap: computed by the engine, dropped at the contract
-        # bridge. Reported honestly rather than silently absent.
-        for field, unit in _DROPPED_AT_CONTRACT_BRIDGE.items():
-            results[field] = KPIResult.insufficient_evidence(
-                field, reason=_BRIDGE_GAP_REASON.format(field=field), unit=unit,
-                source_capability="optimization.solve", execution_id=eid,
-            )
+        # Distance/intensity metrics, read verbatim from the state now that the
+        # Phase 10.0 bridge carries them. A None is still INSUFFICIENT_EVIDENCE.
+        for field, (unit, formula_id) in _DISTANCE_AND_INTENSITY_METRICS.items():
+            value = getattr(state, field, None)
+            if value is None:
+                results[field] = KPIResult.insufficient_evidence(
+                    field, reason=_MISSING_FIELD_REASON.format(field=field), unit=unit,
+                    source_capability="optimization.solve", execution_id=eid,
+                )
+            else:
+                results[field] = KPIResult(
+                    metric_id=field, value=float(value), unit=unit,
+                    scope=MetricScope.NETWORK, formula_id=formula_id,
+                    source_capability="optimization.solve",
+                    authoritative_owner="netgravity.metrics.kpis",
+                    snapshot_id=context.baseline_snapshot_id, execution_id=eid,
+                    # These five are built here rather than through `wrap()`
+                    # because they come from `NetworkKPIs` rather than the cost
+                    # and demand summaries. They describe the same solve, so
+                    # they carry the same relaxation note: an average distance
+                    # measured over a plan that strands 23% of demand is not an
+                    # average distance over the plan the client asked for.
+                    metadata=dict(relaxed_note),
+                )
         return results
 
     def facility_kpis(
@@ -249,10 +397,42 @@ class KPIRegistry:
                     authoritative_owner="netgravity.optimization.milp",
                     snapshot_id=context.baseline_snapshot_id, execution_id=eid,
                 ),
+                # Utilisation in the single busiest period. Over a horizon,
+                # `utilization_pct` is an average, and an average is what hides
+                # the month a site runs out of room — the specific thing a
+                # multi-period model exists to find. Equal to the average on a
+                # single-period solve, so this is never a second, disagreeing
+                # answer to the same question.
+                "peak_utilization_pct": KPIResult(
+                    metric_id="peak_utilization_pct",
+                    value=getattr(fac, "peak_utilization_pct", 0.0) or fac.utilization_pct,
+                    unit="%",
+                    scope=MetricScope.FACILITY, entity_id=fac.facility_id,
+                    formula_id="UTILIZATION_PEAK", source_capability="optimization.solve",
+                    authoritative_owner="netgravity.optimization.milp",
+                    snapshot_id=context.baseline_snapshot_id, execution_id=eid,
+                ),
                 "throughput_units": KPIResult(
                     metric_id="throughput_units", value=fac.throughput_units, unit="units",
                     scope=MetricScope.FACILITY, entity_id=fac.facility_id,
                     formula_id="THROUGHPUT", source_capability="optimization.solve",
+                    authoritative_owner="netgravity.optimization.milp",
+                    snapshot_id=context.baseline_snapshot_id, execution_id=eid,
+                ),
+                # The same throughput on a per-period basis. `throughput_units`
+                # is a horizon total; the capacity an upload states is per
+                # period, and pairing the two would compare a year of volume
+                # with a month of room. Published rather than left to a caller
+                # to divide, so the ratio a screen shows is the same ratio
+                # `utilization_pct` reports.
+                "throughput_units_per_period": KPIResult(
+                    metric_id="throughput_units_per_period",
+                    value=getattr(fac, "throughput_units_per_period", 0.0)
+                          or fac.throughput_units,
+                    unit="units/period",
+                    scope=MetricScope.FACILITY, entity_id=fac.facility_id,
+                    formula_id="THROUGHPUT_PER_PERIOD",
+                    source_capability="optimization.solve",
                     authoritative_owner="netgravity.optimization.milp",
                     snapshot_id=context.baseline_snapshot_id, execution_id=eid,
                 ),
@@ -263,8 +443,51 @@ class KPIRegistry:
                     authoritative_owner="netgravity.optimization.milp",
                     snapshot_id=context.baseline_snapshot_id, execution_id=eid,
                 ),
+                # Carried on `FacilitySummary` all along and never exposed, so
+                # a caller could read a utilisation percentage but not the
+                # capacity it was a percentage OF.
+                "capacity_units": KPIResult(
+                    metric_id="capacity_units", value=fac.capacity_units, unit="units",
+                    scope=MetricScope.FACILITY, entity_id=fac.facility_id,
+                    formula_id="CAPACITY", source_capability="optimization.solve",
+                    authoritative_owner="netgravity.optimization.milp",
+                    snapshot_id=context.baseline_snapshot_id, execution_id=eid,
+                ),
             }
         return out
+
+    def flow_kpis(
+        self, context: "ExecutionContext", *, key: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Per-lane solved volume and cost, wrapped from `FlowSummary`.
+
+        The MILP decides how much moves down every lane and what that costs,
+        and `NetworkStateResult.flows` has carried both since the contract was
+        written — but nothing exposed them, so every corridor on the map and
+        every row of a facility's lane table showed a null volume beneath a
+        rate the upload had supplied. Wrapped, not recomputed: each figure is
+        the solver's own, keyed by the lane it belongs to.
+        """
+        state = context.network_states.get(key) if key else _single_network_state(context)
+        if state is None:
+            return []
+        return [
+            {
+                "origin_id": flow.origin_id,
+                "destination_id": flow.destination_id,
+                "flow_units": flow.flow_units,
+                # The same volume per period, for pairing with a lane capacity
+                # or a rate, both of which are per period. Equal to `flow_units`
+                # on a single-period solve.
+                "flow_units_per_period": getattr(
+                    flow, "flow_units_per_period", 0.0) or flow.flow_units,
+                "transport_cost": flow.transport_cost,
+                "distance_km": flow.distance_km,
+                "carbon_kg": flow.carbon_kg,
+            }
+            for flow in state.flows
+        ]
 
     # ------------------------------------------------------------------
     # Resilience (REI) KPIs
@@ -329,8 +552,25 @@ class KPIRegistry:
                     formula_id="REI_NORMALIZATION", source_capability="resilience.assess",
                     authoritative_owner="netgravity.resilience.rei",
                     snapshot_id=reg.network_snapshot_id, execution_id=eid,
-                    input_evidence={"performance_impact": row.performance_impact,
-                                   "max_performance_impact": reg.max_performance_impact},
+                    input_evidence={
+                        "performance_impact": row.performance_impact,
+                        "max_performance_impact": reg.max_performance_impact,
+                        # The engine's own explanation, carried to whoever
+                        # reports the number.
+                        #
+                        # A NEGATIVE performance impact — losing a facility
+                        # makes the network cheaper — is a real result on a
+                        # network whose baseline footprint is not optimal, and
+                        # `rei.py` writes a full diagnostic saying so. That
+                        # diagnostic stopped at the log: every consumer of this
+                        # KPI got a figure that reads as nonsense with nothing
+                        # attached to explain it.
+                        "diagnostics": list(row.diagnostics or []),
+                        "is_negative_impact": (row.performance_impact is not None
+                                               and row.performance_impact < 0),
+                        "unserved_demand_rate": getattr(
+                            row, "unserved_demand_rate", None),
+                    },
                 ) if row.rei is not None else
                 KPIResult.not_computable(
                     "rei", reason=(row.failure_reason or f"calculation_status={row.calculation_status.value}"),
@@ -498,10 +738,11 @@ class KPIRegistry:
         """
         Carbon, grouped for a sustainability-facing consumer.
 
-        Not a new computation: re-exposes `total_carbon_kg` already computed by
-        `network_kpis`, under the grouping the phase brief asks for.
-        `carbon_per_unit` is listed in `network_kpis` as a documented data gap
-        (see `_DROPPED_AT_CONTRACT_BRIDGE`) and is reported the same way here.
+        Not a new computation: re-exposes `total_carbon_kg` and
+        `carbon_per_unit` already produced by `network_kpis`, under the grouping
+        the phase brief asks for. Both carry whatever status `network_kpis`
+        assigned them, including INSUFFICIENT_EVIDENCE when a solve did not
+        report the figure.
         """
         network = self.network_kpis(context)
         keys = ("total_carbon_kg", "carbon_per_unit")

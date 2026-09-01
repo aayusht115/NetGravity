@@ -78,6 +78,14 @@ class ClaimKind(str, Enum):
     UNKNOWN    = "UNKNOWN"
 
 
+#: Fact sources a narrative may QUOTE but which are not measurements of the
+#: network, so a mistaken claim is never adjudicated against them. A configured
+#: threshold is the case: "no site reaches the 90% threshold" must ground, while
+#: an invented "cost rose 12%" must come back UNSUPPORTED rather than reported
+#: as contradicting a utilisation threshold it has nothing to do with.
+_CITABLE_ONLY_SOURCES = frozenset({"configured_threshold"})
+
+
 @dataclass(frozen=True)
 class AuthoritativeFact:
     """One deterministic value the narrative is allowed to cite."""
@@ -183,6 +191,16 @@ _FACT_SPEC: Dict[str, Tuple[ClaimKind, str]] = {
     "opening_cost":              (ClaimKind.CURRENCY, "optimization_result"),
     "carbon_cost":               (ClaimKind.CURRENCY, "optimization_result"),
     "shortage_penalty_cost":     (ClaimKind.CURRENCY, "optimization_result"),
+    # `business_network_cost` divided by the periods the solve modelled, from
+    # the solve itself. Citable because a narrative reporting a horizon cost
+    # has to be able to say what one period of it is — otherwise the only way
+    # to state the figure a planner budgets against is to compute it in prose,
+    # which is precisely the unsourced number this validator exists to catch.
+    "cost_per_period":           (ClaimKind.CURRENCY, "optimization_result"),
+    # How many planning periods the figures above cover. A bare count, so
+    # `_is_policeable` ignores it as a claim; declared here so that when it does
+    # appear beside a cost it is a sourced number rather than an unexplained one.
+    "periods_modelled":          (ClaimKind.COUNT, "optimization_result"),
     # KPI engine
     "total_demand":              (ClaimKind.UNITS, "kpi_engine"),
     "served_demand":             (ClaimKind.UNITS, "kpi_engine"),
@@ -208,6 +226,21 @@ _FACT_SPEC: Dict[str, Tuple[ClaimKind, str]] = {
     "likelihood":                (ClaimKind.RATIO, "risk_engine"),
     "event_probability":         (ClaimKind.RATIO, "risk_engine"),
     "confidence":                (ClaimKind.RATIO, "risk_engine"),
+    # Configured thresholds — see `_CITABLE_ONLY_SOURCES`.
+    #
+    # Facts about the CONFIGURATION rather than about the network, and citable
+    # for the same reason any other fact is: a narrative that says "no site
+    # reaches the 90% threshold" is explaining where the line is drawn, and the
+    # line is a real, sourced number from `config/defaults.py`.
+    #
+    # Without them here, the 90 in that sentence had no same-kind fact to match
+    # and was adjudicated CONTRADICTED against `pct_demand_in_sla = 100` — a
+    # percentage measured on something else entirely. The claim was then
+    # stripped out mid-sentence and the whole briefing marked
+    # GROUNDING_FAILED. The validator was right to police the number; it just
+    # had no way to know the number was a threshold, because nothing told it.
+    "utilization_over_pct":      (ClaimKind.PERCENTAGE, "configured_threshold"),
+    "utilization_under_pct":     (ClaimKind.PERCENTAGE, "configured_threshold"),
     # Counts
     "n_open_facilities":         (ClaimKind.COUNT, "optimization_result"),
     "n_facilities_open":         (ClaimKind.COUNT, "optimization_result"),
@@ -533,6 +566,20 @@ def ground_claims(
         if claim.kind == ClaimKind.UNKNOWN:
             same_kind = candidates
 
+        # A configured threshold may be CITED but is never the value a wrong
+        # claim is measured against.
+        #
+        # It is a percentage, so without this a fabricated "cost increases by
+        # 12%" was reported as CONTRADICTED by `utilization_under_pct = 30` —
+        # a threshold about something else entirely. That verdict tells a reader
+        # nothing, and it destroys the distinction this function is careful
+        # about: CONTRADICTED means the model misreported a real MEASUREMENT,
+        # UNSUPPORTED means it invented a figure from nothing. A claim with no
+        # measurement to compare against is the second kind, whatever policy
+        # constants happen to share its unit.
+        same_kind = [f for f in same_kind
+                     if f.source not in _CITABLE_ONLY_SOURCES]
+
         if not same_kind:
             claim.verdict = ClaimVerdict.UNSUPPORTED
             claim.detail = (
@@ -578,6 +625,28 @@ def _equivalent_values(claim: NumericClaim, fact: AuthoritativeFact) -> List[flo
         values.append(fact.value * 100.0)
     if fact.kind == ClaimKind.PERCENTAGE and claim.kind == ClaimKind.RATIO:
         values.append(fact.value / 100.0)
+
+    # The MAGNITUDE of a signed fact.
+    #
+    # Prose states a direction in words and a quantity in digits — "the scenario
+    # DECREASES business cost by 8,506,746.48" — while the fact holds
+    # −8,506,746.48. Without this, +8,506,746.48 did not match −8,506,746.48,
+    # the nearest same-kind currency fact was picked instead, and the claim was
+    # reported as CONTRADICTED. That happened on EVERY cost-reducing scenario:
+    # the whole briefing was marked GROUNDING_FAILED, its confidence dropped to
+    # LOW, and the figure was stripped out of the sentence — for the outcome a
+    # planner is looking for.
+    #
+    # This does not weaken the check. The validator polices magnitudes, not
+    # adjectives: it has never verified the word "increases" against the sign,
+    # and accepting the magnitude of the very fact being cited is narrower than
+    # what it already does for a ratio written as a percentage.
+    if fact.value < 0:
+        values.append(abs(fact.value))
+        if fact.kind == ClaimKind.RATIO and claim.kind == ClaimKind.PERCENTAGE:
+            values.append(abs(fact.value) * 100.0)
+        if fact.kind == ClaimKind.PERCENTAGE and claim.kind == ClaimKind.RATIO:
+            values.append(abs(fact.value) / 100.0)
     return values
 
 

@@ -411,7 +411,7 @@ Nine defect classes were found by measurement. The three that mattered: explicit
 **Scope deliberately excluded**
 - Lane, supplier and demand-surge REI (REI requires one uniform disruption assumption across compared entities).
 - Automatic mitigation and scenario generation.
-- Time-to-Recovery modelling — the MILP is single-period, and a multi-period TTR cannot be produced without fabricating a temporal calculation. `time_to_recovery_days` rejects any value rather than pretending.
+- Time-to-Recovery modelling. The MILP is multi-period as of Phase 10.9 — flow, demand, capacity and stock are indexed by period — but a TTR experiment also needs a disruption that BEGINS and ENDS within the horizon, and `DisruptionConfig` still expresses only "unavailable for the modelled period". `time_to_recovery_days` therefore still rejects any value rather than pretending. The formulation is no longer the obstacle; the disruption schema is.
 - **Forecasting.** There is no demand model and no projection engine. Forecast requests are recognised and declined, because any number produced would be invented rather than computed. Registering a real forecasting capability later needs no change to the conversational layer.
 
 ---
