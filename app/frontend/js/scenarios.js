@@ -10,7 +10,7 @@
  */
 
 import { SCENARIOS, DCS, PLANTS, MARKETS, formatNumber, formatCurrency,
-         SOLVE_HORIZON } from './data.js';
+         SOLVE_HORIZON, currencyLabel, withCurrency } from './data.js';
 import { initMap, renderScenarioDigitalTwin, invalidateMapSize } from './map.js';
 import { scenarioService } from './integration/services/scenario-service.js';
 import {
@@ -82,8 +82,8 @@ function syncSelection() {
 const ALL_METRIC_DEFS = {
   totalCost: {
     key: 'totalCost',
-    label: 'Total Cost (₹)',
-    fmt: (v) => `₹${(v / 100000).toFixed(2)}L`,
+    label: 'Total Cost ({ccy})',
+    fmt: (v) => formatCurrency(v),
     provenance: 'MODEL FACT',
     category: 'financial',
   },
@@ -125,7 +125,7 @@ const ALL_METRIC_DEFS = {
   transportCost: {
     key: 'transportCost',
     label: 'Transport Costs',
-    fmt: (v) => `₹${(v / 100000).toFixed(2)}L`,
+    fmt: (v) => formatCurrency(v),
     provenance: 'MODEL FACT',
     category: 'financial',
   },
@@ -153,14 +153,14 @@ const ALL_METRIC_DEFS = {
   fixedCost: {
     key: 'fixedCost',
     label: 'Fixed Facility Cost',
-    fmt: (v) => `₹${(v / 100000).toFixed(2)}L`,
+    fmt: (v) => formatCurrency(v),
     provenance: 'MODEL FACT',
     category: 'financial',
   },
   inventoryCost: {
     key: 'inventoryCost',
     label: 'Inventory Holding Cost',
-    fmt: (v) => `₹${(v / 100000).toFixed(2)}L`,
+    fmt: (v) => formatCurrency(v),
     provenance: 'MODEL FACT',
     category: 'financial',
   },
@@ -183,9 +183,21 @@ const ALL_METRIC_DEFS = {
 // on by default without crowding. "View detailed comparison" / the
 // customize-metrics picker exposes every row in DETAIL_EXTRA_ROWS.
 const DEEPDIVE_ROWS = [
-  { key: 'totalCost', label: 'Total Network Cost', sub: '(₹ per period)', icon: '💰', unit: 'currency', kind: 'lowerBetter' },
-  { key: 'costChange', label: 'Savings %', sub: '(vs baseline)', icon: '💹', unit: 'percent', kind: 'lowerBetter',
-    fmt: (v) => (v === 0 ? '—' : `${v < 0 ? '↓' : '↑'} ${Math.abs(v).toFixed(1)}%`) },
+  { key: 'totalCost', label: 'Total Network Cost', sub: '({ccy} per period)', icon: '💰', unit: 'currency', kind: 'lowerBetter' },
+  // "Cost change", not "Savings".
+  //
+  // The value is `costChange`: negative when the scenario costs less. Labelled
+  // "Savings %" it read exactly backwards — a +10% demand scenario that pushed
+  // cost UP 3.6% was shown as "Savings ↑ 3.6%", and a capacity scenario that
+  // cut cost 16.9% as "Savings ↓ 16.9%". An executive ranking options by that
+  // column picks the one that costs more.
+  //
+  // Renamed rather than negated: this is the number the engine computes, and
+  // naming it correctly removes the sign question entirely instead of adding a
+  // derived field that can drift. The arrow and colour already follow
+  // `lowerBetter`, which was right all along — only the word was wrong.
+  { key: 'costChange', label: 'Cost change %', sub: '(vs baseline — down is cheaper)', icon: '💹', unit: 'percent', kind: 'lowerBetter',
+    fmt: (v) => (v === 0 ? 'No change' : `${v < 0 ? '↓' : '↑'} ${Math.abs(v).toFixed(1)}%`) },
   // Fill rate rather than SLA as a default row: it is the figure that moves on
   // every scenario this engine solves, and the one an infeasible network is
   // conditioned on. SLA is a row away in the picker.
@@ -221,10 +233,10 @@ const DETAIL_EXTRA_ROWS = [
   // dash on every row. The payload carried all of them the whole time — the
   // mapper read six KPIs out of a response that carries twenty, so there was
   // no field on the record for the table to find.
-  { key: 'transportCost', label: 'Transport Cost', sub: '(₹ per period)', icon: '🚛', unit: 'currency', kind: 'lowerBetter' },
-  { key: 'fixedCost', label: 'Fixed Facility Cost', sub: '(₹ per period)', icon: '🏭', unit: 'currency', kind: 'lowerBetter' },
-  { key: 'handlingCost', label: 'Handling Cost', sub: '(₹ per period)', icon: '📥', unit: 'currency', kind: 'lowerBetter' },
-  { key: 'inventoryCost', label: 'Inventory Cost', sub: '(₹ per period)', icon: '📦', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'transportCost', label: 'Transport Cost', sub: '({ccy} per period)', icon: '🚛', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'fixedCost', label: 'Fixed Facility Cost', sub: '({ccy} per period)', icon: '🏭', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'handlingCost', label: 'Handling Cost', sub: '({ccy} per period)', icon: '📥', unit: 'currency', kind: 'lowerBetter' },
+  { key: 'inventoryCost', label: 'Inventory Cost', sub: '({ccy} per period)', icon: '📦', unit: 'currency', kind: 'lowerBetter' },
   { key: 'unservedDemand', label: 'Unserved Demand', sub: '(units the plan strands)', icon: '🚫', unit: 'number', kind: 'lowerBetter' },
   { key: 'facilitiesOpen', label: 'Facilities Open', sub: '(sites the plan uses)', icon: '🏢', unit: 'number', kind: 'lowerBetter' },
   { key: 'carbonKg', label: 'Scope 3 Carbon', sub: '(kg CO2 per period)', icon: '🌱', unit: 'number', kind: 'lowerBetter' },
@@ -519,12 +531,17 @@ function renderScenarioMapToggle() {
  * for a single-period solve, where it is exactly right.
  */
 function rowSubLabel(row) {
+  // `{ccy}` is resolved here rather than in the row table, because that table
+  // is a module constant evaluated before hydration has read the network's
+  // currency. Substituting at render time is what lets one definition serve a
+  // rupee network and a dollar one.
+  const sub = withCurrency(row.sub);
   const n = SOLVE_HORIZON.periodsModelled;
-  if (!n || n <= 1 || !/per period/.test(row.sub || '')) return row.sub;
+  if (!n || n <= 1 || !/per period/.test(sub || '')) return sub;
   const span = (SOLVE_HORIZON.firstPeriod && SOLVE_HORIZON.lastPeriod)
     ? `${SOLVE_HORIZON.firstPeriod}–${SOLVE_HORIZON.lastPeriod}`
     : `${n} periods`;
-  return row.sub.replace('per period', `total, ${span}`);
+  return sub.replace('per period', `total, ${span}`);
 }
 
 function scenarioRowMetricCellHtml(row) {
@@ -664,8 +681,23 @@ function renderMultiScenarioTable() {
 
   const rows = ALL_TABLE_ROWS.filter((r) => multiVisibleKeys.includes(r.key));
 
+  // Every column carries its OWN review action.
+  //
+  // The only route to a scenario's detail was the "Review proposed changes"
+  // button on the recommendation card, which opens the RECOMMENDED scenario —
+  // correctly, since that card is about that scenario. But with two scenarios
+  // compared side by side and the second one selected, that was the only
+  // review button on the screen, so it read as "review the selected one" and
+  // opened the other. A user can approve the wrong intervention that way.
+  //
+  // One button per column, under the name of the scenario it opens, removes
+  // the ambiguity rather than trying to guess which one "selected" means.
   const theadCols = selected
-    .map((s, i) => `<th class="${i === 0 ? 'scn-th-rec2' : ''}" style="text-align:center">${scenarioDisplayName(s)}${i === 0 ? ' <span class="scn-sparkle-inline">✦</span>' : ''}</th>`)
+    .map((s, i) => `<th class="${i === 0 ? 'scn-th-rec2' : ''}" style="text-align:center">
+        <div>${scenarioDisplayName(s)}${i === 0 ? ' <span class="scn-sparkle-inline">✦</span>' : ''}</div>
+        <button type="button" class="scn-col-review" data-review-scenario="${s.id}"
+                title="Open the detailed audit for ${scenarioDisplayName(s)}">Review →</button>
+      </th>`)
     .join('');
 
   const rowsHtml = rows
@@ -723,6 +755,14 @@ function renderMultiScenarioTable() {
     tr.style.cursor = 'pointer';
     tr.title = 'View risk evidence';
     tr.addEventListener('click', () => openMetricDrilldown('capacityRisk', tr.dataset.scenarioId));
+  });
+
+  // Each column's own review action opens that column's scenario, by id.
+  container.querySelectorAll('[data-review-scenario]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openScenarioDrawer(btn.dataset.reviewScenario);
+    });
   });
 }
 
@@ -1570,11 +1610,11 @@ function renderToolboxDynamicFields(type) {
         </div>
         <div class="grid-2" style="gap:var(--space-sm)">
           <div class="form-group">
-            <label class="form-label">Fixed cost (₹ per year)</label>
+            <label class="form-label">Fixed cost (${currencyLabel()} per year)</label>
             <input type="number" class="form-input" id="toolbox-site-fixed" value="${fixed != null ? Math.round(fixed) : ''}" placeholder="Per year" min="0" step="100000">
           </div>
           <div class="form-group">
-            <label class="form-label">Handling cost (₹ per unit)</label>
+            <label class="form-label">Handling cost (${currencyLabel()} per unit)</label>
             <input type="number" class="form-input" id="toolbox-site-handling" value="${handling != null ? Number(handling).toFixed(2) : ''}" placeholder="Per unit" min="0" step="0.5">
           </div>
         </div>

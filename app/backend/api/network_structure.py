@@ -145,6 +145,17 @@ def create_network_structure_blueprint(orchestrator: Optional[Any] = None,
             # thirty-fold misstatement of the client's own number.
             "periods": sorted(periods, key=lambda p: (isinstance(p, str), p)),
             "costPeriod": getattr(OptimizationConfig().cost_period, "value", "MONTH"),
+            # The money unit every cost on this network is stated in, and where
+            # the network is. Both are read from the upload and carried on
+            # `CanonicalNetwork`; the browser needs them to format an amount and
+            # to fit a map, and without them it fell back to a hardcoded rupee
+            # symbol and an India basemap for every network in the world.
+            #
+            # None/{} rather than a substitute: an upload that names no currency
+            # gets bare amounts, which is honest, and one with no coordinates
+            # gets no map fit rather than a wrong one.
+            "currency": getattr(network, "currency", None),
+            "geography": getattr(network, "geography", None) or {},
             # The periods the CLIENT'S OWN RECORDS cover, which is a different
             # and much longer list than the one above.
             #

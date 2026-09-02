@@ -227,6 +227,11 @@ def _kpis(state: Any) -> TwinKPIs:
         cost_per_period=getattr(state, "cost_per_period", None),
         total_carbon_kg=state.total_carbon_kg,
         pct_demand_in_sla=(state.service.pct_demand_in_sla if state.service else None),
+        # The unit the money above is in, and how service was enforced — so
+        # prose written from this state states both instead of assuming them.
+        currency=getattr(state, "currency", None),
+        service_methodology=(state.service.methodology if state.service else None),
+        demand_within_sla=(state.service.demand_within_sla if state.service else None),
     )
 
 

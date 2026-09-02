@@ -32,20 +32,49 @@ import { clearNetworkModel } from './data.js';
    not exist. */
 export const PROJECTS = [];
 
+// Region / Scope options.
+//
+// Every entry was an Indian sub-region, so a user uploading a US, European or
+// global network had literally no correct choice — they left the field blank,
+// and the backend defaulted the project to India. Currency, maps, page
+// subtitles and settings all followed that default.
+//
+// The list is now global, and the field is optional rather than silently
+// defaulted: leaving it blank means the region is inferred from the
+// coordinates in the uploaded data (see `ProjectRegistry.bind_network`), which
+// is better evidence than a dropdown anyway.
 const REGIONS = [
+  'Global',
   'India', 'North India', 'South India', 'East India', 'West India',
-  'Central & South India', 'Pan India', 'South Asia',
+  'Pan India', 'South Asia',
+  'United States', 'Canada', 'North America', 'Latin America',
+  'United Kingdom', 'Europe', 'Middle East', 'Africa',
+  'China', 'Japan', 'Southeast Asia', 'Asia Pacific', 'Oceania',
 ];
 
-const CLIENTS = [
-  'Reliance Retail',
-  'Tata Steel',
-  'Flipkart',
-  'Amazon India',
-  'Hindustan Unilever',
-  'ITC Limited',
-  'Asian Paints',
-];
+// No suggestion list.
+//
+// This held seven named Indian companies, offered as this deployment's clients
+// on every install. None of them is a client of anything; they were placeholder
+// content presented as configuration, and the field is free text anyway. An
+// empty datalist is the honest state until a deployment supplies real ones.
+const CLIENTS = [];
+
+/**
+ * How to show a project's region.
+ *
+ * Three states, and they are different facts: the user stated it, we inferred
+ * it from the coordinates in their upload, or nobody knows yet. Rendering all
+ * three as a bare label — and defaulting the third to "India" — is what let a
+ * US dataset be listed, and priced, and mapped, as an India network.
+ */
+function regionLabel(p) {
+  if (!p.region) return '<span style="color:var(--proj-text-3,#9ca3af)">Not set</span>';
+  const text = escapeHtml(p.region);
+  return p.regionSource === 'inferred'
+    ? `${text} <span style="color:var(--proj-text-3,#9ca3af);font-size:.85em" title="Inferred from the coordinates in the uploaded data">(from data)</span>`
+    : text;
+}
 
 /* ─── View state ─────────────────────────────────────────────── */
 const ui = {
@@ -161,9 +190,9 @@ export function renderCreateProject() {
             </div>
             <span class="proj-row-icon">${ICONS.globe}</span>
             <div>
-              <label class="proj-field-label" for="proj-region">Region / Scope</label>
+              <label class="proj-field-label" for="proj-region">Region / Scope <span class="proj-field-optional">(optional)</span></label>
               <select class="proj-select placeholder" id="proj-region">
-                <option value="">Select region or scope</option>
+                <option value="">Infer from my uploaded data</option>
                 ${regionOpts}
               </select>
             </div>
@@ -173,8 +202,8 @@ export function renderCreateProject() {
         <div class="proj-form-row">
           <span class="proj-row-icon">${ICONS.client}</span>
           <div>
-            <label class="proj-field-label" for="proj-client">Client</label>
-            <input class="proj-input" id="proj-client" type="text" list="proj-client-list" placeholder="Select or type a client name" autocomplete="off" />
+            <label class="proj-field-label" for="proj-client">Client <span class="proj-field-optional">(optional)</span></label>
+            <input class="proj-input" id="proj-client" type="text" list="proj-client-list" placeholder="Who is this network for?" autocomplete="off" />
             <datalist id="proj-client-list">${clientOpts}</datalist>
           </div>
         </div>
@@ -212,7 +241,10 @@ function bindCreateProject() {
 
     const payload = {
       name,
-      region: document.getElementById('proj-region')?.value || 'India',
+      // Blank stays blank. It used to default to India here AND on the
+      // server, so an unanswered question became a stated fact about the
+      // client's business.
+      region: document.getElementById('proj-region')?.value || '',
       client: (document.getElementById('proj-client')?.value || '').trim(),
     };
 
@@ -276,7 +308,6 @@ function recentCard(p) {
           <div class="proj-recent-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
           <div class="proj-recent-when">Last opened &nbsp;·&nbsp; ${escapeHtml(p.updated)}</div>
         </div>
-        <button class="proj-kebab" type="button" title="More options" data-noopen="1">${ICONS.kebab}</button>
       </div>
       <button class="proj-open-btn" type="button" data-open="${p.id}">
         <span>Open project</span>${ICONS.arrowRight}
@@ -296,7 +327,7 @@ function listBody(rows) {
           <span class="proj-folder-tile">${ICONS.folder}</span>
           <div class="proj-recent-meta">
             <div class="proj-recent-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
-            <div class="proj-recent-when">${escapeHtml(p.region)}</div>
+            <div class="proj-recent-when">${regionLabel(p)}</div>
           </div>
         </div>
         <div class="proj-grid-foot"><span>${escapeHtml(p.updated)}</span>${statusChip(p.status)}</div>
@@ -315,11 +346,15 @@ function listBody(rows) {
           ${rows.map(p => `
             <tr data-open="${p.id}">
               <td><span class="proj-row-name">${ICONS.folder}${escapeHtml(p.name)}</span></td>
-              <td>${escapeHtml(p.region)}</td>
+              <td>${regionLabel(p)}</td>
               <td>${escapeHtml(p.updated)}</td>
               <td><span class="proj-chip proj-chip-owner">${escapeHtml(p.owner)}</span></td>
               <td>${statusChip(p.status)}</td>
-              <td><button class="proj-kebab" type="button" title="More options" data-noopen="1">${ICONS.kebab}</button></td>
+              <!-- A "More options" kebab sat here with no handler and no
+                   menu: clicking it did nothing, on every row, forever.
+                   Removed rather than left as a promise the product does
+                   not keep. Restore it with the menu, not before. -->
+              <td></td>
             </tr>`).join('')}
         </tbody>
       </table>
@@ -390,7 +425,26 @@ function bindSelectProject() {
   document.getElementById('proj-select-back')?.addEventListener('click', backFromSelectProject);
 
   const search = document.getElementById('proj-search');
-  search?.addEventListener('input', () => { ui.search = search.value; refreshList(); });
+  // `input` alone is not enough on `<input type="search">`.
+  //
+  // The native clear (×) fires `search` in WebKit and, depending on the path,
+  // may not fire `input` at all — so the box emptied on screen while
+  // `ui.search` kept the old term and the list stayed filtered. A user saw an
+  // empty search box next to a list missing most of their projects, which
+  // reads as projects having disappeared.
+  //
+  // Escape clears too, because a filter you cannot see is a filter you cannot
+  // undo.
+  const applySearch = () => {
+    if (ui.search === search.value) return;
+    ui.search = search.value;
+    refreshList();
+  };
+  ['input', 'search', 'change'].forEach((evt) =>
+    search?.addEventListener(evt, applySearch));
+  search?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { search.value = ''; applySearch(); }
+  });
 
   const sort = document.getElementById('proj-sort');
   sort?.addEventListener('change', () => { ui.sort = sort.value; refreshList(); });

@@ -6,7 +6,9 @@
 
 /* global Chart */
 
-import { DEMAND_HISTORY, FORECAST, SCENARIOS, perPeriodLabel } from './data.js';
+import { DEMAND_HISTORY, FORECAST, SCENARIOS, perPeriodLabel,
+         formatCurrency, formatCurrencyExact, formatNumber,
+         currencyLabel } from './data.js';
 
 const chartInstances = {};
 
@@ -198,7 +200,7 @@ export function renderScenarioCostImpactChart(canvasId, scenarioList) {
       labels: labels,
       datasets: [
         {
-          label: 'Total Cost (₹ in Lakhs)',
+          label: `Total Cost (${currencyLabel()})`,
           data: dataLakhs,
           backgroundColor: backgroundColors,
           borderRadius: 6,
@@ -213,7 +215,7 @@ export function renderScenarioCostImpactChart(canvasId, scenarioList) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx) => ` Total Cost: ₹${ctx.raw}L (${list[ctx.dataIndex].costChange ? list[ctx.dataIndex].costChange + '%' : 'Baseline'})`,
+            label: (ctx) => ` Total Cost: ${formatCurrency(list[ctx.dataIndex].totalCost)} (${list[ctx.dataIndex].costChange ? list[ctx.dataIndex].costChange + '%' : 'Baseline'})`,
           },
         },
       },
@@ -526,7 +528,7 @@ export function renderFacilityThroughputChart(canvasId, facility) {
         legend: { position: 'top', labels: { usePointStyle: true, font: { family: 'Inter', size: 11 } } },
         tooltip: {
           callbacks: {
-            label: (ctx) => ctx.raw ? `${ctx.dataset.label}: ${ctx.raw.toLocaleString('en-IN')} u/d` : '',
+            label: (ctx) => ctx.raw ? `${ctx.dataset.label}: ${formatNumber(ctx.raw)} ${perPeriodLabel()}` : '',
           },
         },
       },
@@ -583,7 +585,7 @@ export function renderFacilityCostBreakdownChart(canvasId, facility) {
         },
         tooltip: {
           callbacks: {
-            label: (ctx) => ` ${ctx.label}: ₹${(ctx.raw / 100000).toFixed(2)}L (${((ctx.raw / (transportCost + handlingCost + fixedCost + holdingCost + surchargeCost)) * 100).toFixed(1)}%)`,
+            label: (ctx) => ` ${ctx.label}: ${formatCurrency(ctx.raw)} (${((ctx.raw / (transportCost + handlingCost + fixedCost + holdingCost + surchargeCost)) * 100).toFixed(1)}%)`,
           },
         },
       },
@@ -624,7 +626,7 @@ export function renderFacilityLaneFlowsChart(canvasId, connectedLanes, facilityI
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (ctx) => `Flow: ${ctx.raw.toLocaleString('en-IN')} ${perPeriodLabel()} · Cost: ₹${costs[ctx.dataIndex]}/unit`,
+            label: (ctx) => `Flow: ${formatNumber(ctx.raw)} ${perPeriodLabel()} · Cost: ${formatCurrencyExact(costs[ctx.dataIndex])}/unit`,
           },
         },
       },

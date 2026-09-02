@@ -10,7 +10,8 @@
  */
 
 /* global THREE */
-import { PLANTS, DCS, MARKETS, LANES, formatNumber, getUtilColor, getUtilLabel } from './data.js';
+import { PLANTS, DCS, MARKETS, LANES, formatNumber, getUtilColor, getUtilLabel,
+         perPeriodLabel } from './data.js';
 import { INDIA_BASEMAP_DATA_URI } from './basemap-data.js';
 
 // ─── Basemap Calibration ─────────────────────────────────────
@@ -36,14 +37,85 @@ const captureTopLeftPx = {
   x: captureCenterPx.x - CAPTURE_SIZE.w / 2,
   y: captureCenterPx.y - CAPTURE_SIZE.h / 2,
 };
-const cropTopLeftPx = mercatorWorldXY(CROP_BOUNDS.latMax, CROP_BOUNDS.lngMin, MERCATOR_ZOOM);
-const cropBottomRightPx = mercatorWorldXY(CROP_BOUNDS.latMin, CROP_BOUNDS.lngMax, MERCATOR_ZOOM);
-const IMG_W = cropBottomRightPx.x - cropTopLeftPx.x;
-const IMG_H = cropBottomRightPx.y - cropTopLeftPx.y;
 
-// 3D ground-plane size (world units) — matches the basemap's aspect ratio
-const MAP_WIDTH = 84;
-const MAP_HEIGHT = MAP_WIDTH * (IMG_H / IMG_W);
+// ─── Projection window ───────────────────────────────────────
+//
+// The lat/lng box the ground plane represents.
+//
+// This was fixed to `CROP_BOUNDS` — the India crop the bundled basemap image
+// was taken from — so `geoTo3D` produced u/v far outside [0,1] for any network
+// elsewhere in the world. A US network's twelve facilities were projected way
+// off the ground plane and out of frame: the scene rendered the India basemap
+// with nothing on it, while the counters beside it correctly reported 24 nodes
+// and 51 corridors.
+//
+// The window now defaults to the India crop (so an Indian network keeps the
+// photographic basemap, pixel-aligned exactly as before) and is replaced by the
+// network's own Mercator extent when the network lies elsewhere. Then the
+// basemap texture is dropped, because a photograph of India under a US network
+// is worse than no photograph — and a graticule takes its place.
+let PROJECTION = null;
+
+function makeProjection(bounds, { textured }) {
+  const topLeft = mercatorWorldXY(bounds.latMax, bounds.lngMin, MERCATOR_ZOOM);
+  const bottomRight = mercatorWorldXY(bounds.latMin, bounds.lngMax, MERCATOR_ZOOM);
+  const imgW = bottomRight.x - topLeft.x;
+  const imgH = bottomRight.y - topLeft.y;
+  const width = 84;
+  return {
+    bounds, textured, topLeft, imgW, imgH,
+    width,
+    // Aspect follows the window, so a wide network is not squashed into a
+    // portrait plane, and a tall one is not stretched across a landscape one.
+    height: width * (imgH / imgW),
+  };
+}
+
+const INDIA_PROJECTION = makeProjection(CROP_BOUNDS, { textured: true });
+PROJECTION = INDIA_PROJECTION;
+
+/** Does every node sit inside the bundled basemap's crop? */
+function insideIndiaCrop(nodes) {
+  const pts = nodes.filter((n) => Number.isFinite(n.lat) && Number.isFinite(n.lng));
+  if (!pts.length) return true;
+  const inside = pts.filter((n) =>
+    n.lat >= CROP_BOUNDS.latMin && n.lat <= CROP_BOUNDS.latMax
+    && n.lng >= CROP_BOUNDS.lngMin && n.lng <= CROP_BOUNDS.lngMax);
+  return inside.length / pts.length >= 0.6;
+}
+
+/**
+ * Choose the ground plane for the network currently loaded.
+ *
+ * Returns true when the projection changed, so the caller knows the scene has
+ * to be rebuilt rather than merely re-populated.
+ */
+function updateProjection() {
+  const nodes = [...PLANTS, ...DCS, ...MARKETS];
+  const previouslyTextured = PROJECTION.textured;
+
+  if (insideIndiaCrop(nodes)) {
+    PROJECTION = INDIA_PROJECTION;
+    return previouslyTextured !== true;
+  }
+
+  const pts = nodes.filter((n) => Number.isFinite(n.lat) && Number.isFinite(n.lng));
+  if (!pts.length) return false;
+
+  const lats = pts.map((n) => n.lat);
+  const lngs = pts.map((n) => n.lng);
+  // A tenth of the span as margin, and a floor so a single-city network does
+  // not project onto a degenerate zero-width plane.
+  const padLat = Math.max((Math.max(...lats) - Math.min(...lats)) * 0.15, 1.5);
+  const padLng = Math.max((Math.max(...lngs) - Math.min(...lngs)) * 0.15, 1.5);
+  PROJECTION = makeProjection({
+    latMin: Math.max(-84, Math.min(...lats) - padLat),
+    latMax: Math.min(84, Math.max(...lats) + padLat),
+    lngMin: Math.max(-179, Math.min(...lngs) - padLng),
+    lngMax: Math.min(179, Math.max(...lngs) + padLng),
+  }, { textured: false });
+  return previouslyTextured !== false;
+}
 
 // ─── Light-theme color palette ───────────────────────────────
 const THEME_COLORS = {
@@ -80,11 +152,11 @@ let hudTooltipEl = null;
 // ─── Coordinate Conversion (lat/lng → point on the flat map) ─
 export function geoTo3D(lat, lng, height = 0) {
   const worldPx = mercatorWorldXY(lat, lng, MERCATOR_ZOOM);
-  const u = (worldPx.x - captureTopLeftPx.x - (cropTopLeftPx.x - captureTopLeftPx.x)) / IMG_W;
-  const v = (worldPx.y - captureTopLeftPx.y - (cropTopLeftPx.y - captureTopLeftPx.y)) / IMG_H;
+  const u = (worldPx.x - PROJECTION.topLeft.x) / PROJECTION.imgW;
+  const v = (worldPx.y - PROJECTION.topLeft.y) / PROJECTION.imgH;
 
-  const x = (u - 0.5) * MAP_WIDTH;
-  const z = (v - 0.5) * MAP_HEIGHT;
+  const x = (u - 0.5) * PROJECTION.width;
+  const z = (v - 0.5) * PROJECTION.height;
 
   return new THREE.Vector3(x, height, z);
 }
@@ -123,6 +195,7 @@ export function initTwin3D(containerId) {
 
   setupScene();
   setupLighting();
+  updateProjection();
   setupMapBase();
   setupNetworkNodes();
   setupFlowArcs('actual');
@@ -164,13 +237,23 @@ export function rebuildTwin3D() {
     });
   };
 
-  [nodeGroup, flowGroup, pulseGroup].forEach((group) => {
+  // Re-choose the ground plane BEFORE anything is positioned: `geoTo3D` reads
+  // the projection, so nodes placed against the old window would sit off the
+  // new plane. `updateProjection` reports whether the window moved, and the
+  // terrain is only rebuilt when it did — the plane, its texture and its
+  // graticule are the expensive part of this scene.
+  const projectionMoved = updateProjection();
+
+  const groups = [nodeGroup, flowGroup, pulseGroup];
+  if (projectionMoved && terrainGroup) groups.push(terrainGroup);
+  groups.forEach((group) => {
     if (!group) return;
     [...group.children].forEach((child) => {
       dispose(child);
       group.remove(child);
     });
   });
+  if (projectionMoved) setupMapBase();
 
   nodeMeshes = [];
   flowArcs = [];
@@ -284,8 +367,9 @@ function setupLighting() {
 
 // ─── Map Base (real basemap image, extracted from the 2D map) ─────
 function setupMapBase() {
-  const baseGeo = new THREE.PlaneGeometry(MAP_WIDTH, MAP_HEIGHT);
-  
+  const { width, height, textured } = PROJECTION;
+  const baseGeo = new THREE.PlaneGeometry(width, height);
+
   // Create resilient base material with immediate light-gray fallback
   const baseMat = new THREE.MeshBasicMaterial({
     color: 0xf1f5f9,
@@ -304,25 +388,31 @@ function setupMapBase() {
   borderLines.position.y = 0.02;
   terrainGroup.add(borderLines);
 
-  // Load basemap texture asynchronously and attach once ready
-  const basemapUri = (typeof INDIA_BASEMAP_DATA_URI !== 'undefined') ? INDIA_BASEMAP_DATA_URI :
-                     (typeof window !== 'undefined' && window.INDIA_BASEMAP_DATA_URI) ? window.INDIA_BASEMAP_DATA_URI : null;
-
-  if (basemapUri) {
-    const loader = new THREE.TextureLoader();
-    loader.load(basemapUri, (texture) => {
-      texture.anisotropy = 16;
-      texture.generateMipmaps = true;
-      baseMat.color.setHex(0xffffff);
-      baseMat.map = texture;
-      baseMat.needsUpdate = true;
-    }, undefined, (err) => {
-      console.warn('[NetGravity 3D] Using fallback terrain styling:', err);
-    });
+  // The bundled basemap photograph is of India. It is applied only when the
+  // projection window IS the India crop it was captured from — otherwise the
+  // ground plane shows a coordinate graticule, because a photograph of the
+  // wrong continent under a client's facilities is worse than no photograph.
+  if (textured) {
+    const basemapUri = (typeof INDIA_BASEMAP_DATA_URI !== 'undefined') ? INDIA_BASEMAP_DATA_URI :
+                       (typeof window !== 'undefined' && window.INDIA_BASEMAP_DATA_URI) ? window.INDIA_BASEMAP_DATA_URI : null;
+    if (basemapUri) {
+      const loader = new THREE.TextureLoader();
+      loader.load(basemapUri, (texture) => {
+        texture.anisotropy = 16;
+        texture.generateMipmaps = true;
+        baseMat.color.setHex(0xffffff);
+        baseMat.map = texture;
+        baseMat.needsUpdate = true;
+      }, undefined, (err) => {
+        console.warn('[NetGravity 3D] Using fallback terrain styling:', err);
+      });
+    }
+  } else {
+    addGroundGraticule();
   }
 
   // Soft ground shadow plane underneath, so the map reads as slightly raised
-  const shadowGeo = new THREE.PlaneGeometry(MAP_WIDTH * 1.06, MAP_HEIGHT * 1.06);
+  const shadowGeo = new THREE.PlaneGeometry(width * 1.06, height * 1.06);
   const shadowMat = new THREE.MeshBasicMaterial({
     color: 0xcbd5e1,
     transparent: true,
@@ -332,6 +422,35 @@ function setupMapBase() {
   shadowMesh.rotation.x = -Math.PI / 2;
   shadowMesh.position.y = -0.35;
   terrainGroup.add(shadowMesh);
+}
+
+/**
+ * A latitude/longitude grid on the ground plane.
+ *
+ * Drawn when the projection window is not the India crop, so a network
+ * anywhere in the world still has a spatial frame of reference: the lines are
+ * real meridians and parallels at the same Mercator projection the nodes use,
+ * so a corridor crossing three of them has crossed thirty degrees.
+ */
+function addGroundGraticule() {
+  const { bounds } = PROJECTION;
+  const span = Math.max(bounds.latMax - bounds.latMin, bounds.lngMax - bounds.lngMin);
+  const step = span > 60 ? 20 : span > 25 ? 10 : span > 10 ? 5 : 2;
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xcbd5e1, transparent: true, opacity: 0.85,
+  });
+  const at = (lat, lng) => geoTo3D(lat, lng, 0.01);
+  const add = (a, b) => {
+    const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
+    terrainGroup.add(new THREE.Line(geo, mat));
+  };
+  const first = (v) => Math.ceil(v / step) * step;
+  for (let lat = first(bounds.latMin); lat <= bounds.latMax; lat += step) {
+    add(at(lat, bounds.lngMin), at(lat, bounds.lngMax));
+  }
+  for (let lng = first(bounds.lngMin); lng <= bounds.lngMax; lng += step) {
+    add(at(bounds.latMin, lng), at(bounds.latMax, lng));
+  }
 }
 
 // ─── Network Nodes ──────────────────────────────────────────
@@ -952,8 +1071,8 @@ function renderHUDTooltip(data, type, x, y) {
   if (type === 'plant') {
     typeBadge = '<span class="hud-badge plant">Manufacturing Plant</span>';
     metricLine = `
-      <div class="hud-row"><span>Daily Throughput:</span><strong>${formatNumber(data.throughput)} u/d</strong></div>
-      <div class="hud-row"><span>Total Capacity:</span><strong>${formatNumber(data.capacity)} u/d</strong></div>
+      <div class="hud-row"><span>Throughput:</span><strong>${formatNumber(data.throughput)} ${perPeriodLabel()}</strong></div>
+      <div class="hud-row"><span>Total Capacity:</span><strong>${formatNumber(data.capacity)} ${perPeriodLabel()}</strong></div>
     `;
   } else if (type === 'dc') {
     const hasUtil = typeof data.utilPct === 'number' && Number.isFinite(data.utilPct);
@@ -961,12 +1080,12 @@ function renderHUDTooltip(data, type, x, y) {
     typeBadge = `<span class="hud-badge dc">Distribution Centre</span>`;
     metricLine = `
       <div class="hud-row"><span>Utilisation:</span><strong style="color:${utilColor}">${hasUtil ? data.utilPct + '%' : '—'}</strong></div>
-      <div class="hud-row"><span>Capacity / Flow:</span><strong>${formatNumber(data.throughput)} / ${formatNumber(data.capacity)} u/d</strong></div>
+      <div class="hud-row"><span>Capacity / Flow:</span><strong>${formatNumber(data.throughput)} / ${formatNumber(data.capacity)} ${perPeriodLabel()}</strong></div>
     `;
   } else {
     typeBadge = '<span class="hud-badge market">Demand Market</span>';
     metricLine = `
-      <div class="hud-row"><span>Daily Demand:</span><strong>${formatNumber(data.demand)} u/d</strong></div>
+      <div class="hud-row"><span>Demand:</span><strong>${formatNumber(data.demand)} ${perPeriodLabel()}</strong></div>
       <div class="hud-row"><span>SLA Target:</span><strong>${data.slaDays} Days (${data.priority})</strong></div>
     `;
   }

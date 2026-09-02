@@ -31,7 +31,7 @@ from __future__ import annotations
 import hashlib
 import json
 from enum import Enum
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -881,6 +881,28 @@ class CanonicalNetwork(BaseModel):
     #: answer for a single-period upload — not a fabricated "Period 1".
     period_labels: Dict[str, str] = Field(default_factory=dict)
 
+    #: The money unit every cost in this network is stated in — an ISO 4217
+    #: code such as "USD" or "INR", taken from the upload.
+    #:
+    #: The optimiser is unit-agnostic: it minimises a sum of numbers and never
+    #: needed to know. Everything that *reports* those numbers does. Before this
+    #: field existed the answer was hardcoded to INR in three separate places —
+    #: the metric registry's `unit=`, the evidence formatter's `₹`, and the
+    #: browser's `formatCurrency` — so a network priced in dollars reported a
+    #: ₹23,226,260 baseline on every screen and in every export.
+    #:
+    #: None when the upload states no currency anywhere. That is a real
+    #: possibility and it must stay distinguishable from "rupees": a caller
+    #: renders a bare amount rather than stamping it with a unit the data does
+    #: not support.
+    currency: Optional[str] = None
+
+    #: Where this network is, from the coordinates it carries — a region label
+    #: plus the bounding box a map should fit to. Empty when the upload has no
+    #: usable coordinates. Read, never assumed: every project used to be
+    #: created as "India" whatever its data said.
+    geography: Dict[str, Any] = Field(default_factory=dict)
+
     @model_validator(mode="after")
     def validate_network_consistency(self) -> "CanonicalNetwork":
         facility_ids: Set[str] = {f.id for f in self.facilities}
@@ -946,6 +968,11 @@ class CanonicalNetwork(BaseModel):
                 "products":   [p.model_dump() for p in self.products],
                 "demands":    [d.model_dump() for d in self.demands],
                 "lanes":      [ln.model_dump() for ln in self.lanes],
+                # Part of the input data, not presentation: the same numbers
+                # denominated in a different currency are different facts, and
+                # a cached analysis keyed only on the numbers would be served
+                # back under the wrong unit.
+                "currency":   self.currency,
             },
             sort_keys=True,
             default=str,

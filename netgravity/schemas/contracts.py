@@ -252,6 +252,19 @@ class NetworkStateResult(BaseModel):
     periods_modelled: int = 1
     period_labels:    Dict[str, str] = Field(default_factory=dict)
 
+    #: The money unit every cost figure in this result is stated in — the same
+    #: class of fact as `periods_modelled`, and needed for the same reason.
+    #:
+    #: The solver is unit-agnostic; every layer that *reports* its output is
+    #: not. This travels with the figures so no consumer has to assume, which
+    #: is what the KPI registry, the evidence formatter and the browser each
+    #: did independently — all three assuming INR, all three wrong for a
+    #: network priced in dollars.
+    #:
+    #: None when the upload stated no currency. A caller renders a bare amount
+    #: rather than stamping it with a unit the data does not support.
+    currency: Optional[str] = None
+
     #: `business_network_cost` divided by `periods_modelled`.
     #:
     #: An AVERAGE period, not a typical one: fixed and handling costs recur

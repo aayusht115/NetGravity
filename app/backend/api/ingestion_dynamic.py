@@ -31,7 +31,6 @@ something the solver is permitted to see.
 from __future__ import annotations
 
 import logging
-import threading
 from typing import Any, Dict, List
 
 import pandas as pd
@@ -44,6 +43,7 @@ from app.backend.services.demand_history_store import (
     demand_history_store,
     uploaded_signal_store,
 )
+from app.backend.services.dataset_store import dataset_store
 from app.backend.services.errors import ApplicationError, ValidationError
 from app.backend.services.network_assembler import assemble_network_from_structure
 from app.backend.services.project_registry import project_registry
@@ -67,9 +67,13 @@ _ALLOWED_EXTENSIONS = {".csv", ".tsv", ".xlsx", ".xls", ".xlsm"}
 _MAX_FILE_BYTES = 25 * 1024 * 1024      # 25 MB per file
 _MAX_FILES_PER_REQUEST = 10
 
-#: Previews are per-project, never one process-global dict.
-_previews: Dict[str, Dict[str, Any]] = {}
-_lock = threading.RLock()
+# Upload records live in `dataset_store`, which is per-project AND durable.
+#
+# They were a module-level dict here. That made `commit` unable to find the
+# structure `upload-and-parse` had produced whenever the two calls landed on
+# different worker processes — so the application could not be deployed with
+# more than one worker — and it made the audit trail vanish on restart, which
+# is how a solved project came to report "Uploaded Files (0)".
 
 
 def _validate_upload(file_storage) -> str:
@@ -286,6 +290,14 @@ def upload_and_parse():
         # every row silently displaying "Customer ID".
         "schemaFields": list(CANONICAL_FIELDS),
         "dataQuality": quality,
+        # Cross-sheet foreign keys that point at nothing, and what the upload
+        # says about its own money unit and geography. Surfaced at REVIEW time:
+        # an orphan reference is a row silently dropped by a join, and a user
+        # can only fix it in their own file before confirming.
+        "integrity": structure.get("integrity") or [],
+        "currency": structure.get("currency"),
+        "currencyBasis": structure.get("currencyBasis") or "",
+        "geography": structure.get("geography") or {},
         "structure": structure,
         "notice": (
             "This is a parsing preview for mapping review. No optimisation has "
@@ -294,8 +306,7 @@ def upload_and_parse():
         ),
     }
 
-    with _lock:
-        _previews[project_id] = preview
+    dataset_store.put_preview(project_id, preview)
 
     logger.info(
         "ingestion.preview project_id=%s files=%d rows=%d detected=%d errors=%d",
@@ -325,8 +336,7 @@ def commit_preview():
 
     project = project_registry.get(project_id, user_id=g.current_user.user_id)
 
-    with _lock:
-        preview = _previews.get(project_id)
+    preview = dataset_store.preview(project_id)
     if preview is None:
         raise ValidationError(
             "There is no parsed upload for this project to commit. Upload files first.",
@@ -374,6 +384,26 @@ def commit_preview():
         label=f"{project.name} — uploaded",
     )
 
+    # The audit record: what was uploaded, how it was read, what was assumed,
+    # and which snapshot it produced. Written here rather than derived later,
+    # because the mapping decisions a user CONFIRMED are what an audit has to
+    # be able to read back — not a re-derivation from the same file.
+    dataset_store.record_commit(
+        project_id,
+        snapshot_id=snapshot_id,
+        network_summary={
+            "facilities": len(network.facilities),
+            "demands": len(network.demands),
+            "lanes": len(network.lanes),
+            "products": len(network.products),
+            "demand_history_series": len(series),
+            "data_version": network.data_version,
+            "currency": getattr(network, "currency", None),
+        },
+        assumptions=assumptions + list(structure.get("notes") or []) + history_notes,
+        issues=issues,
+    )
+
     logger.info(
         "ingestion.committed project_id=%s snapshot_id=%s facilities=%d history_series=%d",
         project_id, snapshot_id, len(network.facilities), len(series),
@@ -409,8 +439,7 @@ def get_active_preview():
         raise ValidationError("A project_id is required.")
     project_registry.get(project_id, user_id=g.current_user.user_id)
 
-    with _lock:
-        preview = _previews.get(project_id)
+    preview = dataset_store.preview(project_id)
 
     if preview is None:
         return jsonify({
@@ -419,6 +448,46 @@ def get_active_preview():
             "message": "No file has been uploaded for this project yet.",
         }), 200
     return jsonify(preview), 200
+
+
+@ingestion_dynamic_bp.route("/dataset", methods=["GET"])
+@require_auth
+def get_project_dataset():
+    """
+    The read-only audit view of this project's data.
+
+    What was uploaded, how each column was mapped, what the quality and
+    referential-integrity checks found, which assumptions the assembly had to
+    make, when it was committed and to which snapshot — plus any upload that is
+    parsed but not yet committed.
+
+    This is the screen a reviewer needs to answer "what produced this number?".
+    Before it existed, a solved project reopened its uploader to
+    "Uploaded Files (0)" and there was no way to reach any of it.
+    """
+    project_id = str(request.args.get("project_id") or "").strip()
+    if not project_id:
+        raise ValidationError("A project_id is required.")
+    project = project_registry.get(project_id, user_id=g.current_user.user_id)
+
+    record = dataset_store.record(project_id)
+    record["project_name"] = project.name
+    record["snapshot_id"] = project.snapshot_id
+    committed = record.get("committed")
+    record["status"] = (
+        "COMMITTED" if committed else
+        "PREVIEW" if record.get("preview") else "NO_DATA"
+    )
+    # A project bound to a snapshot with no dataset record predates this store
+    # (or was seeded). Say so, rather than implying nothing was ever uploaded.
+    if project.snapshot_id and not committed:
+        record["notice"] = (
+            "This project is bound to a network, but no upload record was kept "
+            "for it — it was created before upload records were retained, or "
+            "seeded directly. Re-upload the source file to restore the audit "
+            "trail."
+        )
+    return jsonify(record), 200
 
 
 @ingestion_dynamic_bp.errorhandler(ApplicationError)

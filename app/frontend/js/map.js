@@ -18,12 +18,17 @@ import {
   getUtilColor,
   formatNumber,
   perPeriodLabel,
+  formatCurrencyExact,
+  NETWORK_GEOGRAPHY,
 } from './data.js';
 import { INDIA_BASEMAP_DATA_URI } from './basemap-data.js';
 import { CONFIG } from './integration/config.js';
 
 // ─── State ──────────────────────────────────────────────────
 const maps = {}; // containerId → L.Map
+//: containerId → the base layer(s) and notice currently mounted, so the
+//: basemap can be re-chosen when a network loads after the map was built.
+const baseLayers = {};
 const layerGroups = {}; // containerId → { nodes, flows }
 let currentState = 'actual';
 
@@ -60,22 +65,96 @@ const BASEMAP_BOUNDS = [[4.0, 65.0], [39.0, 100.0]];  // [[latMin,lngMin],[latMa
 //: informative. Live tiles (see CONFIG.MAP_TILE_URL) lift the cap.
 const BASEMAP_MAX_ZOOM = 8;
 
+/**
+ * Does the loaded network actually sit on the embedded basemap?
+ *
+ * The India raster covers 4–39N, 65–100E. A US network fits none of it, so
+ * `fitToNetwork` correctly panned to North America and the map became an empty
+ * grey field — the nodes and corridors were drawn, on nothing, while the
+ * counters beside the canvas correctly reported 24 nodes and 51 corridors.
+ *
+ * Rather than showing a basemap of the wrong continent or a blank one, the map
+ * checks whether the network is inside the raster's extent and says what it is
+ * doing when it is not.
+ */
+function networkFitsBasemap() {
+  const pts = [...PLANTS, ...DCS, ...MARKETS]
+    .filter((n) => Number.isFinite(n.lat) && Number.isFinite(n.lng));
+  if (!pts.length) return true;   // nothing to contradict the default view
+  const [[latMin, lngMin], [latMax, lngMax]] = BASEMAP_BOUNDS;
+  const inside = pts.filter((n) => n.lat >= latMin && n.lat <= latMax
+                                && n.lng >= lngMin && n.lng <= lngMax);
+  // A network mostly inside still gets the raster; one clearly elsewhere does
+  // not get a basemap of a country it has no sites in.
+  return inside.length / pts.length >= 0.6;
+}
+
+/**
+ * A neutral graticule for a network the embedded raster does not cover.
+ *
+ * Meridians and parallels every 10 degrees, labelled. It is not a map of the
+ * land, and it does not pretend to be: it gives the eye a coordinate frame so
+ * relative position and corridor length stay readable. Configure
+ * `MAP_TILE_URL` for a real basemap anywhere in the world.
+ */
+function addGraticule(map) {
+  const layer = L.layerGroup().addTo(map);
+  const style = { color: '#cbd5e1', weight: 1, opacity: 0.7, interactive: false };
+  for (let lat = -80; lat <= 80; lat += 10) {
+    L.polyline([[lat, -180], [lat, 180]], style).addTo(layer);
+  }
+  for (let lng = -180; lng <= 180; lng += 10) {
+    L.polyline([[-85, lng], [85, lng]], style).addTo(layer);
+  }
+  L.polyline([[0, -180], [0, 180]],
+             { ...style, color: '#94a3b8', weight: 1.5 }).addTo(layer);
+  return layer;
+}
+
 function addBaseLayer(map) {
   if (CONFIG.MAP_TILE_URL) {
-    L.tileLayer(CONFIG.MAP_TILE_URL, {
+    const tiles = L.tileLayer(CONFIG.MAP_TILE_URL, {
       maxZoom: 18,
       attribution: CONFIG.MAP_TILE_ATTRIBUTION || '',
     }).addTo(map);
-    return 'tiles';
+    return { kind: 'tiles', layers: [tiles], control: null };
   }
-  L.imageOverlay(INDIA_BASEMAP_DATA_URI, BASEMAP_BOUNDS, {
+  if (!networkFitsBasemap()) {
+    map.getContainer().style.background = '#f8fafc';
+    return {
+      kind: 'graticule',
+      layers: [addGraticule(map)],
+      control: addBasemapNotice(map),
+    };
+  }
+  const overlay = L.imageOverlay(INDIA_BASEMAP_DATA_URI, BASEMAP_BOUNDS, {
     opacity: 1,
     interactive: false,
     // Behind every node and corridor.
     zIndex: 1,
   }).addTo(map);
   map.setMaxZoom(BASEMAP_MAX_ZOOM);
-  return 'embedded';
+  return { kind: 'embedded', layers: [overlay], control: null };
+}
+
+/** Say why there is no land under the network, rather than showing grey. */
+function addBasemapNotice(map) {
+  const notice = L.control({ position: 'topright' });
+  notice.onAdd = () => {
+    const div = L.DomUtil.create('div', 'map-basemap-notice');
+    div.style.cssText = 'background:rgba(255,255,255,.94);border:1px solid #e2e8f0;'
+      + 'border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.5;'
+      + 'max-width:230px;color:#475569;box-shadow:0 2px 8px rgba(15,23,42,.08)';
+    const region = NETWORK_GEOGRAPHY.region ? ` (${NETWORK_GEOGRAPHY.region})` : '';
+    div.innerHTML = `<strong>No basemap for this region${region}</strong><br>`
+      + 'The bundled basemap covers India only. Nodes and corridors are plotted '
+      + 'at their true coordinates on a 10&deg; graticule. Configure '
+      + '<code>MAP_TILE_URL</code> for worldwide tiles.';
+    L.DomEvent.disableClickPropagation(div);
+    return div;
+  };
+  notice.addTo(map);
+  return notice;
 }
 
 // ─── Styles & Color Tokens ──────────────────────────────────
@@ -119,7 +198,7 @@ export function initMap(containerId, options = {}) {
     scrollWheelZoom: scrollWheelZoom,
   });
 
-  addBaseLayer(map);
+  baseLayers[containerId] = addBaseLayer(map);
 
   maps[containerId] = map;
   layerGroups[containerId] = {
@@ -157,10 +236,40 @@ export function initMap(containerId, options = {}) {
 export function refreshAllMaps() {
   Object.keys(maps).forEach((id) => {
     if (id === 'scenario-leaflet-map') return;
+    // Re-choose the basemap: a map built before hydration was framed on the
+    // bundled India raster, and the network that has since loaded may be
+    // somewhere else entirely. Without this the first view of a US network is
+    // its nodes drawn over the Deccan.
+    rebuildBaseLayer(id);
     renderNetwork(id, currentState);
     fitToNetwork(id);
     try { maps[id].invalidateSize(); } catch (e) { /* not yet visible */ }
   });
+}
+
+/**
+ * Swap the basemap for the one the loaded network needs.
+ *
+ * Cheap and idempotent: when the chosen kind has not changed, nothing is
+ * touched. Only called on a network refresh, never per frame.
+ */
+function rebuildBaseLayer(containerId) {
+  const map = maps[containerId];
+  if (!map) return;
+  const wantsRaster = Boolean(CONFIG.MAP_TILE_URL) || networkFitsBasemap();
+  const current = baseLayers[containerId];
+  const currentIsRaster = current && current.kind !== 'graticule';
+  if (current && wantsRaster === currentIsRaster) return;
+
+  (current?.layers || []).forEach((layer) => {
+    try { map.removeLayer(layer); } catch (e) { /* already gone */ }
+  });
+  if (current?.control) {
+    try { map.removeControl(current.control); } catch (e) { /* already gone */ }
+  }
+  map.getContainer().style.background = '';
+  map.setMaxZoom(18);
+  baseLayers[containerId] = addBaseLayer(map);
 }
 
 /**
@@ -282,7 +391,7 @@ export function renderScenarioDigitalTwin(containerId, scenarioId, mode = 'scena
       <div style="font-size:12px;line-height:1.4">
         <strong>${nameOf(flow.from)} → ${nameOf(flow.to)}</strong><br>
         Flow: <strong>${formatNumber(flow.flow)}</strong> ${perPeriodLabel()}<br>
-        Cost: ₹${flow.cost}/unit · ${flow.distance} km
+        Cost: ${formatCurrencyExact(flow.cost)}/unit · ${flow.distance == null ? '—' : flow.distance + ' km'}
         ${deltaText}
       </div>
     `,
@@ -465,7 +574,7 @@ function renderNetwork(containerId, state) {
       <div style="font-size:12px">
         <strong>${getFacilityName(flow.from)} → ${getFacilityName(flow.to)}</strong><br>
         Flow: ${formatNumber(flow.flow)} ${perPeriodLabel()}<br>
-        Cost: ₹${flow.cost}/unit · ${flow.distance} km
+        Cost: ${formatCurrencyExact(flow.cost)}/unit · ${flow.distance == null ? '—' : flow.distance + ' km'}
       </div>
     `,
       { sticky: true }
@@ -589,15 +698,15 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
   if (isClosed) tooltipContent += ' <span style="color:#dc2626;font-weight:700">(closed in this scenario)</span>';
   tooltipContent += '<br>';
   if (type === 'plant') {
-    tooltipContent += `Capacity: ${formatNumber(node.capacity)} u/d<br>Throughput: ${formatNumber(throughput)} u/d`;
+    tooltipContent += `Capacity: ${formatNumber(node.capacity)} ${perPeriodLabel()}<br>Throughput: ${formatNumber(throughput)} ${perPeriodLabel()}`;
   } else if (type === 'dc') {
     tooltipContent += `Utilisation: <strong style="color:${getUtilColor(utilPct)}">${utilPct === null || utilPct === undefined ? '—' : `${utilPct}%`}</strong><br>`;
-    tooltipContent += `Capacity: ${formatNumber(node.capacity)} u/d<br>Throughput: ${formatNumber(throughput)} u/d`;
+    tooltipContent += `Capacity: ${formatNumber(node.capacity)} ${perPeriodLabel()}<br>Throughput: ${formatNumber(throughput)} ${perPeriodLabel()}`;
     if (note) {
       tooltipContent += `<div style="margin-top:3px;font-size:11px;color:var(--primary);font-weight:600">• ${note}</div>`;
     }
   } else {
-    tooltipContent += `Demand: ${formatNumber(node.demand)} u/d<br>SLA: ${node.slaDays}d · ${node.priority}`;
+    tooltipContent += `Demand: ${formatNumber(node.demand)} ${perPeriodLabel()}<br>SLA: ${node.slaDays}d · ${node.priority}`;
   }
   tooltipContent += `</div>`;
   marker.bindTooltip(tooltipContent, { sticky: true });

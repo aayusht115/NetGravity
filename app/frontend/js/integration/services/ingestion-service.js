@@ -42,6 +42,20 @@ export const ingestionService = {
     });
   },
 
+  /**
+   * The audit record of the dataset this project is analysing.
+   *
+   * The file, the mapping decisions as confirmed, the measured quality, the
+   * cross-sheet integrity findings, the assembly's assumptions, and the
+   * snapshot it produced. This is what answers "what produced this number?" —
+   * a question the product previously had no surface for at all.
+   */
+  async getDataset(projectId = null) {
+    return apiClient.get('/api/ingestions/preview/dataset', {
+      project_id: projectId || getActiveProjectId(),
+    });
+  },
+
   async uploadFiles(files, categories = {}) {
     const formData = new FormData();
     files.forEach(f => formData.append('files', f));

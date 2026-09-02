@@ -292,6 +292,20 @@ class TwinKPIs(BaseModel):
     periods_modelled: Optional[int] = None
     cost_per_period: Optional[float] = None
 
+    #: The money unit these figures are stated in, and how service was enforced.
+    #:
+    #: Both are needed by anything writing prose about the numbers above, for
+    #: the same reason `periods_modelled` is. Without the currency a narrative
+    #: stamps every amount with a hardcoded symbol; without the methodology it
+    #: cannot say what the non-SLA share of demand IS. The insight layer
+    #: asserted "the remainder is served, but not inside the lead time" — under
+    #: TRANSIT_TIME_SLA_FEASIBILITY that outcome cannot occur, because
+    #: SLA-infeasible lanes are removed before the solve and the remainder is
+    #: simply unserved.
+    currency: Optional[str] = None
+    service_methodology: Optional[str] = None
+    demand_within_sla: Optional[float] = None
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 

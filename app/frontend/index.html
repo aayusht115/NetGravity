@@ -307,13 +307,17 @@
         </div>
 
         <div class="sidebar-meta" style="margin-top:auto">
+          <!-- Written by renderSidebarMeta() from the project actually open.
+               These were the literals "India Network" and "v7.0", shown in the
+               sidebar of every project regardless of its data — which is how a
+               US network came to be labelled an India one on every screen. -->
           <div class="meta-block">
             <div class="meta-label">Network</div>
-            <div class="meta-value">India Network</div>
+            <div class="meta-value" id="sidebar-network-name">&mdash;</div>
           </div>
           <div class="meta-block">
-            <div class="meta-label">Model Version</div>
-            <div class="meta-value">v7.0</div>
+            <div class="meta-label">Region</div>
+            <div class="meta-value" id="sidebar-network-region">&mdash;</div>
           </div>
         </div>
 
@@ -535,7 +539,25 @@
         <!-- ─────────────────── TAB: FACILITY DASHBOARD / ANALYTICS ─────────────────── -->
         <section class="tab-panel" id="tab-facility-dashboard">
           <!-- Facility Dashboard Controls Toolbar (Export Action & Facility Context) -->
-          <div class="facility-toolbar" style="display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-bottom:14px;margin-top:2px;">
+          <!--
+            The screen states WHICH facility it is showing.
+
+            It never did. Every card, chart and corridor row on this panel is
+            scoped to one site, and the only thing naming that site was the
+            dropdown in the top bar — so when the selection changed and the
+            panel did not re-render (it was wired to Home's renderer only),
+            there was nothing on screen to contradict the dropdown. A reader saw
+            Bangalore selected above Delhi's numbers with no visible
+            disagreement. `renderFacilityDashboard()` had always written to
+            `#dash-facility-name`; the element did not exist in this markup, so
+            the write went nowhere.
+          -->
+          <div class="facility-toolbar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;margin-top:2px;">
+            <div style="display:flex;align-items:baseline;gap:10px;min-width:0">
+              <span id="dash-facility-dot" style="width:9px;height:9px;border-radius:50%;background:var(--text-3);flex-shrink:0"></span>
+              <span id="dash-facility-name" style="font-size:16px;font-weight:700;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">&mdash;</span>
+              <span id="dash-facility-type" class="text-xs" style="color:var(--text-2);white-space:nowrap"></span>
+            </div>
             <button class="btn btn-secondary btn-export-kpi" id="btn-export-kpi" data-action="exportFacilityReport" title="Export Facility KPIs & Insights to CSV" style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;font-size:12.5px;font-weight:600;border-radius:8px;background:#ffffff;border:1px solid #e5e7eb;color:#374151;cursor:pointer;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
@@ -557,7 +579,7 @@
                   <div class="card-title">Throughput vs Capacity Horizon</div>
                   <div class="card-subtitle">12-Month History + 3-Month Projection · Capacity Ceiling</div>
                 </div>
-                <span class="tag tag-danger" id="dash-util-tag">94% Utilisation</span>
+                <span class="tag tag-muted" id="dash-util-tag">&mdash;</span>
               </div>
               <div class="chart-wrap" style="height:280px">
                 <canvas id="chart-dash-throughput"></canvas>
@@ -607,7 +629,7 @@
                   <tr>
                     <th>Corridor Arc</th>
                     <th>Direction</th>
-                    <th class="num">Daily Flow</th>
+                    <th class="num" id="th-corridor-flow">Flow</th>
                     <th class="num">Distance</th>
                     <th class="num">Cost / Unit</th>
                     <th class="num">Transit Time</th>
@@ -759,7 +781,16 @@
                 <div class="card-subtitle" id="fc-chart-subtitle">Observed history + forecast · Confidence band
                 </div>
               </div>
-              <span class="tag tag-muted" id="fc-chart-tag">—</span>
+              <div style="display:flex;align-items:center;gap:10px">
+                <!-- The engine forecasts every market-product pair; the screen
+                     plotted one and offered no way to reach the rest, while
+                     reporting "59 series forecast" beside it. -->
+                <label class="text-xs" for="fc-series-select" style="color:var(--text-2)">Series</label>
+                <select class="form-select" id="fc-series-select" style="min-width:240px;font-size:12.5px">
+                  <option value="">Loading&hellip;</option>
+                </select>
+                <span class="tag tag-muted" id="fc-chart-tag">&mdash;</span>
+              </div>
             </div>
             <div class="chart-wrap tall">
               <canvas id="chart-forecast"></canvas>
@@ -946,35 +977,47 @@
                 <div class="toolbox-step">
                   <div class="toolbox-step-num">3</div>
                   <div class="toolbox-step-content">
-                    <div class="toolbox-step-title">Objective & Constraints</div>
+                    <div class="toolbox-step-title">Objective &amp; Constraints</div>
 
-                    <div class="form-group mb-sm">
-                      <label class="form-label">Optimise for</label>
-                      <select class="form-select" id="toolbox-objective">
-                        <option value="COST" selected>Total Cost</option>
-                        <option value="SLA">SLA</option>
-                        <option value="TRANSPORT">Transport Cost</option>
-                        <option value="CARBON">Carbon Emissions</option>
-                        <option value="CAPACITY">Capacity Risk</option>
-                        <option value="HEADROOM">Capacity Headroom</option>
-                      </select>
-                    </div>
+                    <!--
+                      These were three dropdowns - "Optimise for", "Subject to
+                      Constraint" and "Solver Backend" - offering eleven choices
+                      between them. Nothing read any of them: no line of
+                      JavaScript referenced their ids, and
+                      /api/scenarios/simulate accepts no objective, constraint
+                      or solver field at all.
 
-                    <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
-                      <div class="form-group">
-                        <label class="form-label">Subject to Constraint</label>
-                        <select class="form-select" id="toolbox-constraint-type">
-                          <option value="SLA_95" selected>SLA ≥ 95%</option>
-                          <option value="UTIL_90">Capacity Utilisation ≤ 90%</option>
-                          <option value="BUDGET_20L">CapEx Budget ≤ ₹20L</option>
-                        </select>
+                      So a user selected "Capacity Utilisation <= 90%", ran the
+                      scenario, got a result that breached 90%, and had no way
+                      to know the constraint had never been posed. Approving a
+                      plan believing it satisfies a constraint you selected is
+                      the exact failure a what-if screen exists to prevent.
+
+                      Replaced by a statement of what the solve ACTUALLY does.
+                      Offering the choice again means implementing it in the
+                      engine first, not re-adding the control.
+                    -->
+                    <div class="text-sm" style="background:var(--surface-2,#f8fafc);border:1px solid var(--border-light);border-radius:8px;padding:12px 14px;line-height:1.7">
+                      <div style="font-weight:700;color:var(--text-1);margin-bottom:6px">
+                        How this scenario is solved
                       </div>
-                      <div class="form-group">
-                        <label class="form-label">Solver Backend</label>
-                        <select class="form-select" id="toolbox-solver-backend">
-                          <option value="HIGHS">PuLP / HiGHS Branch-and-Cut (Exact)</option>
-                          <option value="CBC">COIN-OR CBC Dual Simplex</option>
-                        </select>
+                      <div style="color:var(--text-2)">
+                        <strong>Objective:</strong> minimise total network cost -
+                        transport, handling, fixed facility, inventory and carbon.
+                      </div>
+                      <div style="color:var(--text-2)">
+                        <strong>Subject to:</strong> each market's stated service
+                        level (a lane slower than the promise is removed before
+                        the solve), every facility's stated capacity, and lane
+                        capacities where the upload states them.
+                      </div>
+                      <div style="color:var(--text-2)">
+                        <strong>Solver:</strong> PuLP / HiGHS branch-and-cut.
+                      </div>
+                      <div class="text-xs" style="color:var(--text-3);margin-top:8px">
+                        Selectable objectives and a utilisation cap are not
+                        implemented by this engine. Capacity risk in the result
+                        is reported, not constrained.
                       </div>
                     </div>
                   </div>

@@ -35,13 +35,68 @@ _UNIT_FIELDS = {
 }
 
 
-def _display(value: Any, key: str) -> tuple[str, str]:
+#: Symbols for the currencies a client is likely to price a network in. A code
+#: that is not here is rendered as the code itself ("SEK 1,200.00"), which is
+#: unambiguous — unlike stamping every amount with a rupee sign, which is what
+#: this module used to do to networks priced in dollars.
+_CURRENCY_SYMBOLS: Dict[str, str] = {
+    "INR": "₹", "USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥",
+    "CNY": "¥", "AUD": "A$", "CAD": "C$", "SGD": "S$", "NZD": "NZ$",
+    "HKD": "HK$", "BRL": "R$", "ZAR": "R", "KRW": "₩", "RUB": "₽",
+    "TRY": "₺", "ILS": "₪", "THB": "฿", "PHP": "₱", "VND": "₫",
+}
+
+
+def format_money(value: float, currency: Optional[str]) -> str:
+    """
+    One amount, in the currency the network states.
+
+    With no currency the amount is rendered bare. That is the honest reading of
+    an upload that never named a unit, and it must stay distinguishable from a
+    figure we know to be rupees.
+    """
+    if not currency:
+        return f"{value:,.2f}"
+    code = str(currency).strip().upper()
+    symbol = _CURRENCY_SYMBOLS.get(code)
+    return f"{symbol}{value:,.2f}" if symbol else f"{code} {value:,.2f}"
+
+
+def _find_currency(node: Any, depth: int = 0) -> Optional[str]:
+    """
+    The currency this payload's money is denominated in.
+
+    Read from the payload rather than passed in, because the payload is built
+    from `NetworkStateResult`, which now carries the currency alongside the
+    costs it describes — so the unit and the number cannot drift apart.
+    """
+    if depth > 6:
+        return None
+    if isinstance(node, dict):
+        value = node.get("currency")
+        if isinstance(value, str) and value.strip():
+            return value.strip().upper()
+        for child in node.values():
+            if isinstance(child, (dict, list)):
+                found = _find_currency(child, depth + 1)
+                if found:
+                    return found
+    elif isinstance(node, list):
+        for item in node[:50]:
+            if isinstance(item, (dict, list)):
+                found = _find_currency(item, depth + 1)
+                if found:
+                    return found
+    return None
+
+
+def _display(value: Any, key: str, currency: Optional[str] = None) -> tuple[str, str]:
     if value is None:
         return "Not available", ""
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return str(value), ""
     if key in _CURRENCY_FIELDS or key.endswith("_cost"):
-        return f"₹{value:,.2f}", "INR"
+        return format_money(float(value), currency), (currency or "currency")
     if key in _PERCENT_FIELDS or key.endswith("_pct"):
         return f"{value:,.2f}%", "percent"
     if key in _RATIO_FIELDS:
@@ -141,9 +196,10 @@ def build_evidence_pack(
 ) -> ReasoningEvidencePack:
     """Index a deterministic payload without deriving or changing its values."""
     metrics: Dict[str, EvidenceMetric] = {}
+    currency = _find_currency(payload)
     for path, key, value, row_entity in _iter_values(payload):
         ref = _ref(path)
-        display, unit = _display(value, key)
+        display, unit = _display(value, key, currency)
         metric_scope = scope if entity_id else ReasoningScope.NETWORK
         metrics[ref] = EvidenceMetric(
             ref=ref,

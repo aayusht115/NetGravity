@@ -72,14 +72,24 @@ logger = logging.getLogger(__name__)
 #: second state, which is the scenario comparison endpoint's job.
 _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
 
-#: Shape of this endpoint's response. Part of the cache key — see the note at
-#: the `variant` assignment. Bump on any field added to or removed from the
-#: body, including inside `insights[]` and `evidence[]`.
+#: Version of this endpoint's CONTENT — its shape and its wording alike. Part
+#: of the cache key; see the note at the `variant` assignment.
+#:
+#: Bump on any field added to or removed from the body, AND on any change to
+#: the prose the Reasoning Agent generates into it. The second half is not a
+#: nicety: cached entries are keyed on the network's `data_version`, which does
+#: not move when the code that writes the narrative changes. So a deploy that
+#: corrects a materially-false sentence goes on serving the false one to every
+#: project whose network has not been re-uploaded since — which is precisely
+#: what happened to the SLA insight below.
 #:
 #:   1  the original briefing payload
 #:   2  evidence gained `value` and `role`; insights gained `entities`;
 #:      the body gained `thresholds` and `series`; ids gained a headline digest
-_PAYLOAD_VERSION = 2
+#:   3  the SLA insight no longer describes unserved demand as "served late",
+#:      and a cost COMPONENT names the horizon it covers rather than being
+#:      labelled "per period" on a multi-period solve
+_PAYLOAD_VERSION = 3
 
 
 #: Theme -> the per-facility field that theme is ABOUT. A chart for a finding
@@ -379,9 +389,30 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 "explain. The KPI endpoints report why.",
                 context={"project_id": project_id, "snapshot_id": snapshot_id},
             )
-        optimized = [r for r in refs
-                     if str(getattr(r, "state_type", "")).upper().endswith("OPTIMIZED")]
-        chosen = (optimized or refs)[-1]
+        # Prefer an OPTIMIZED state that HAS CONTENT.
+        #
+        # A run that produces no network state still publishes a twin state, and
+        # publishes it as OPTIMIZED with zero facilities and zero flows — that
+        # is deliberate (see `build_unavailable_state`): a viewer must see an
+        # explicitly empty state rather than the previous, stale one.
+        #
+        # But this preference read only the label. Once any run had failed for a
+        # snapshot, the empty OPTIMIZED state outranked the populated BASELINE
+        # one for every subsequent request, and every facility-scoped briefing
+        # answered 404 "Facility 'F005' is not present in state ..." for a
+        # network whose twelve facilities were on screen beside it. The whole
+        # per-facility insight surface was unreachable, on a solved network,
+        # because of a state that describes a run that produced nothing.
+        #
+        # So: rank by whether the state can answer the question at all, and only
+        # then by type. A populated baseline beats an empty optimized every time.
+        def rank(ref):
+            populated = 1 if getattr(ref, "n_facilities", 0) else 0
+            optimized = 1 if str(getattr(ref, "state_type", "")).upper().endswith(
+                "OPTIMIZED") else 0
+            return (populated, optimized)
+
+        chosen = sorted(refs, key=rank)[-1]
         return snapshot_id, orchestrator.twin.materialize(chosen.state_id)
 
     def _briefing_for(state: Any, scope: ReasoningScope,
@@ -504,7 +535,11 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
         # demonstrably returned both. A stale cache that outlives a deploy is
         # indistinguishable, from the client's side, from a broken serialiser.
         #
-        # Bump this whenever a field is added to or removed from the response.
+        # The same argument applies to the WORDING, and that case is worse: the
+        # body carries generated prose stating what the figures mean, and a
+        # correction to a materially-false sentence changes no `data_version`
+        # at all. Bump `_PAYLOAD_VERSION` whenever a field or a narrative
+        # changes.
         variant = f"insights:v{_PAYLOAD_VERSION}:{scope_arg}:{entity_id or ''}"
 
         def compute() -> Dict[str, Any]:

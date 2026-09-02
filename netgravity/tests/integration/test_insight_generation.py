@@ -374,3 +374,130 @@ class TestTheRecommendationFollowsFromTheEvidence:
             text = agent._recommendation(**case)
             match = forbidden.search(text)
             assert match is None, f"{match.group(0)!r} in {text!r}"
+
+
+# ===========================================================================
+# The service insight must not describe unserved demand as delivered late.
+
+class TestTheSlaInsightDescribesWhatTheEngineActuallyDid:
+    """
+    `pct_demand_in_sla` is the share of TOTAL demand served inside its stated
+    lead time. What the REST of it is depends entirely on how service was
+    enforced, and the insight asserted one answer unconditionally: "The
+    remainder is served, but not inside the lead time the data commits to."
+
+    Under TRANSIT_TIME_SLA_FEASIBILITY — the only methodology this engine
+    implements — an SLA-infeasible lane is deleted from the arc set before the
+    solve. Nothing CAN be served late. The remainder is demand that was not
+    served at all, which needs capacity or reachability, not expediting. The
+    engine's own `unserved_demand` said so in the insight directly above it,
+    so the product contradicted itself on a screen presented as evidence.
+    """
+
+    @staticmethod
+    def _service(state):
+        return ReasoningAgent._service_insights(state, no_refs)
+
+    def test_the_transit_time_engine_says_the_remainder_is_unserved(self):
+        out = self._service({
+            "pct_demand_in_sla": 64.19,
+            "unserved_demand": 46482.0,
+            "total_demand": 129803.0,
+            "service_methodology": "TRANSIT_TIME_SLA_FEASIBILITY",
+        })
+        sla = [i for i in out if "64.19" in i.narrative]
+        assert sla, "the SLA figure must still be reported"
+        text = sla[0].narrative.lower()
+        assert "not served at all" in text
+        assert "46,482" in sla[0].narrative, (
+            "the authoritative unserved figure is what makes the claim checkable"
+        )
+
+    def test_it_never_claims_demand_was_delivered_late(self):
+        out = self._service({
+            "pct_demand_in_sla": 64.19,
+            "unserved_demand": 46482.0,
+            "service_methodology": "TRANSIT_TIME_SLA_FEASIBILITY",
+        })
+        for insight in out:
+            assert "served, but not inside" not in insight.narrative
+            assert "delivered late" not in insight.narrative.lower() or \
+                   "rather than delivered" in insight.narrative.lower()
+
+    def test_an_unrecorded_methodology_refuses_to_say_which(self):
+        """Absence of the methodology is not licence to guess what the gap is."""
+        out = self._service({
+            "pct_demand_in_sla": 64.19,
+            "unserved_demand": 46482.0,
+            "service_methodology": None,
+        })
+        sla = [i for i in out if "64.19" in i.narrative]
+        assert sla
+        text = sla[0].narrative
+        assert "not recorded" in text
+        assert "cannot say" in text
+
+    def test_no_derived_percentage_is_invented(self):
+        """
+        "the other 31.52%" is a number no authoritative result holds, and the
+        numeric grounding check strips exactly that — mid-sentence, leaving
+        "The remaining [UNGROUNDED CLAIM REMOVED …] is outside it."
+        """
+        out = self._service({
+            "pct_demand_in_sla": 64.19,
+            "unserved_demand": 46482.0,
+            "service_methodology": "TRANSIT_TIME_SLA_FEASIBILITY",
+        })
+        for insight in out:
+            assert "35.81" not in insight.narrative
+            assert "31.52" not in insight.narrative
+
+    def test_a_fully_served_network_produces_no_sla_finding(self):
+        out = self._service({
+            "pct_demand_in_sla": 100.0,
+            "unserved_demand": 0.0,
+            "demand_fill_rate": 1.0,
+            "service_methodology": "TRANSIT_TIME_SLA_FEASIBILITY",
+        })
+        assert not any("service level" in i.narrative for i in out)
+
+
+class TestACostComponentNamesTheSpanItCovers:
+    """
+    A component of a horizon total is a horizon total. This said "per period"
+    unconditionally — beside a network total in the same list that correctly
+    named its twelve-period span.
+    """
+
+    @staticmethod
+    def _cost(state):
+        return ReasoningAgent._cost_structure_insights(state, no_refs)
+
+    def test_a_multi_period_solve_names_the_horizon(self):
+        out = self._cost({
+            "cost_components": {"facility_cost": 275640000.0,
+                                "transport_cost": 2983319.0},
+            "periods_modelled": 12,
+        })
+        assert out
+        assert "across the 12 periods modelled" in out[0].narrative
+        assert "per period" not in out[0].narrative
+
+    def test_a_single_period_solve_still_says_per_period(self):
+        out = self._cost({
+            "cost_components": {"facility_cost": 10.0, "transport_cost": 5.0},
+            "periods_modelled": 1,
+        })
+        assert out
+        assert "per period" in out[0].narrative
+
+    def test_the_component_does_not_borrow_the_networks_per_period_figure(self):
+        """`cost_per_period` divides the TOTAL; quoting it on one line would
+        attach the whole network's monthly cost to that line."""
+        out = self._cost({
+            "cost_components": {"facility_cost": 275640000.0,
+                                "transport_cost": 2983319.0},
+            "periods_modelled": 12,
+            "cost_per_period": 24475728.06,
+        })
+        assert "24,475,728" not in out[0].narrative

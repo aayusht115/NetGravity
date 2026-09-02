@@ -237,6 +237,23 @@ def _bind_upload_stores() -> None:
         lambda: persistence.load_network_data("capacity_history"),
     )
 
+    # What was uploaded to each project, how it was mapped, and what was
+    # committed from it. Keyed by project rather than network, because a
+    # preview exists before any network does.
+    #
+    # This was a module-level dict in `api/ingestion_dynamic.py`, which made
+    # `commit` fail on any deployment running more than one worker — parse
+    # lands on one process, commit on another — and left every solved project
+    # reporting "Uploaded Files (0)" with no way to audit the data behind its
+    # own numbers.
+    from app.backend.services.dataset_store import dataset_store
+
+    dataset_store.bind_persistence(
+        lambda pid, doc: persistence.guarded(persistence.save_network_data)(
+            "dataset", pid, doc),
+        lambda: persistence.load_network_data("dataset"),
+    )
+
 
 # ---------------------------------------------------------------------------
 def install(orchestrator: Any) -> dict:
@@ -294,6 +311,8 @@ def install(orchestrator: Any) -> dict:
     report["demand_history"] = demand_history_store.load()
     report["signals"] = uploaded_signal_store.load()
     report["capacity_history"] = capacity_history_store.load()
+    from app.backend.services.dataset_store import dataset_store
+    report["datasets"] = dataset_store.load()
 
     # The analysis computed FROM those networks. Without this a restart kept
     # every project and every upload and threw away every KPI derived from

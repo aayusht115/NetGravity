@@ -638,16 +638,58 @@ class ReasoningAgent:
             ))
 
         if isinstance(sla_pct, (int, float)) and sla_pct < 100.0:
+            # What the OTHER (100 - sla_pct)% is depends entirely on how service
+            # was enforced, and this insight used to assert one answer for every
+            # engine: "the remainder is served, but not inside the lead time".
+            #
+            # Under TRANSIT_TIME_SLA_FEASIBILITY — the only methodology this
+            # build implements — an SLA-infeasible lane is deleted from the arc
+            # set before the solve. Nothing CAN be served late. The remainder is
+            # demand that was not served at all, which is a different finding
+            # requiring a different intervention: capacity or reachability, not
+            # expediting. The engine's own `unserved_demand` said so on the very
+            # same screen, so the product contradicted itself.
+            # Every figure quoted below is one the evidence pack holds. The
+            # obvious phrasing — "the other 31.52% is unserved" — computes a
+            # percentage that appears in no authoritative result, and the
+            # numeric grounding check rightly strips it. `unserved_demand` is
+            # the authoritative statement of the same fact, so it is what the
+            # sentence cites.
+            methodology = str(state.get("service_methodology") or "")
+            unserved = state.get("unserved_demand")
+            unserved_clause = (
+                f" The engine reports {unserved:,.0f} units of demand unserved."
+                if isinstance(unserved, (int, float)) and unserved > 0 else ""
+            )
+            if methodology == "TRANSIT_TIME_SLA_FEASIBILITY":
+                headline = "I see demand this network cannot reach in time"
+                narrative = (
+                    f"I see {sla_pct:.2f}% of demand served within its stated "
+                    f"service level. The rest is not served late — it is not "
+                    f"served at all: this plan moves volume only on lanes that "
+                    f"already meet the destination's lead time, so demand it "
+                    f"cannot reach in time is left unserved rather than "
+                    f"delivered outside SLA." + unserved_clause
+                )
+            else:
+                # An engine whose methodology this result does not record.
+                # State the figure and stop, rather than inventing what the
+                # rest of the demand did.
+                headline = "I see demand outside its stated service level"
+                narrative = (
+                    f"I see {sla_pct:.2f}% of demand served within its stated "
+                    f"service level. How this run enforced service is not "
+                    f"recorded on the result, so I cannot say whether the rest "
+                    f"was delivered late or not delivered at all."
+                    + unserved_clause
+                )
             out.append(KPIInsight(
                 theme="Service",
-                headline="I see demand served outside its stated lead time",
+                headline=headline,
                 severity=InsightSeverity.RISK,
-                narrative=(
-                    f"I see {sla_pct:.2f}% of demand served within its stated "
-                    f"service level. The remainder is served, but not inside the "
-                    f"lead time the data commits to."
-                ),
+                narrative=narrative,
                 metric_refs=refs_for("pct_demand_in_sla"),
+                comparison_refs=refs_for("unserved_demand"),
             ))
         return out
 
@@ -769,11 +811,23 @@ class ReasoningAgent:
             return []
         largest = max(priced, key=lambda k: priced[k])
         label = largest.replace("_", " ")
+        # A cost COMPONENT covers the same span as the total it belongs to. This
+        # said "per period" unconditionally, so on a twelve-month horizon it
+        # reported a twelve-period total as one period's spend — beside a total
+        # in the same list that correctly named its span. The component and the
+        # total now describe the same horizon, because they are the same solve.
+        #
+        # Only the span is reused, not the per-period figure: `cost_per_period`
+        # divides the TOTAL, and quoting it here would attach the whole
+        # network's monthly cost to one of its lines.
+        periods = state.get("periods_modelled")
+        span = (" per period" if not isinstance(periods, int) or periods <= 1
+                else f" across the {periods} periods modelled")
         return [KPIInsight(
             theme="Cost structure",
             headline=f"I see {label} as the largest cost line",
             narrative=(
-                f"I see {label} at {priced[largest]:,.2f} per period, the largest "
+                f"I see {label} at {priced[largest]:,.2f}{span}, the largest "
                 f"single component of this network's cost. Any material saving has "
                 f"to come from a line of this size."
             ),

@@ -131,9 +131,10 @@ export function resetChatbotView() {
 }
 
 import { chatService } from './integration/services/chat-service.js';
+import { getActiveProjectId, onProjectChange } from './integration/project-context.js';
 
 /**
- * The server-side conversation this tab is continuing.
+ * The server-side conversation this tab is continuing, PER PROJECT.
  *
  * Kept in sessionStorage, not just in a module variable. The orchestrator has
  * stored every turn since Phase 3 and exposes them at
@@ -142,20 +143,34 @@ import { chatService } from './integration/services/chat-service.js';
  * a follow-up like "Why?" had no previous turn to refer to and was answered as
  * if it were a fresh question.
  *
+ * The key is scoped by project id. It was a single global key, so switching
+ * projects carried the previous project's thread into the new one: asking
+ * about the sample network and then opening a client project showed that
+ * client an answer naming PLANT_SOUTH and DC_WEST — facilities from a network
+ * they have no relationship to. That is a confidentiality failure, not a
+ * cosmetic one, and it is worse than a wrong answer because the reply looks
+ * authoritative and belongs to somebody else.
+ *
  * sessionStorage rather than localStorage: a conversation belongs to the tab
- * the person is working in, and two projects open side by side must not share
- * one thread.
+ * the person is working in.
  */
-const CONVERSATION_KEY = 'ng_chat_conversation_id';
+const CONVERSATION_KEY_PREFIX = 'ng_chat_conversation_id:';
+
+function conversationKey(projectId) {
+  return `${CONVERSATION_KEY_PREFIX}${projectId || 'none'}`;
+}
 
 // Declared before the helpers that assign it: `storeConversationId` writes to
 // this binding, and a `let` referenced before its declaration is evaluated is a
 // TemporalDeadZone error rather than an undefined read.
 let conversationId = null;
+//: The project the id above belongs to. Compared before every use, so a
+//: conversation can never be spoken into a project it was not started in.
+let conversationProjectId = null;
 
-function loadConversationId() {
+function loadConversationId(projectId) {
   try {
-    return sessionStorage.getItem(CONVERSATION_KEY) || null;
+    return sessionStorage.getItem(conversationKey(projectId)) || null;
   } catch {
     return null;          // private mode, blocked storage: fall back to memory
   }
@@ -163,15 +178,39 @@ function loadConversationId() {
 
 function storeConversationId(id) {
   conversationId = id || null;
+  conversationProjectId = getActiveProjectId();
   try {
-    if (id) sessionStorage.setItem(CONVERSATION_KEY, id);
-    else sessionStorage.removeItem(CONVERSATION_KEY);
+    const key = conversationKey(conversationProjectId);
+    if (id) sessionStorage.setItem(key, id);
+    else sessionStorage.removeItem(key);
   } catch {
     /* memory-only for this tab */
   }
 }
 
-conversationId = loadConversationId();
+/**
+ * Drop the visible transcript and the thread id when the project changes.
+ *
+ * Clearing is the safe direction: the worst case is a user re-asking a
+ * question, against the worst case of one client reading another's answer.
+ */
+function resetConversationForProject() {
+  const pid = getActiveProjectId();
+  if (pid === conversationProjectId) return;
+  conversationProjectId = pid;
+  conversationId = loadConversationId(pid);
+  chatMessages.length = 0;
+  const body = document.getElementById('chatbot-messages');
+  if (body) body.innerHTML = '';
+  renderChatMessages();
+}
+
+conversationProjectId = getActiveProjectId();
+conversationId = loadConversationId(conversationProjectId);
+
+// Every screen already refetches on a project change; the assistant now does
+// the same instead of keeping a thread that belongs to the project just left.
+onProjectChange(() => resetConversationForProject());
 
 /**
  * Reload the visible transcript from the server's own record.
@@ -251,7 +290,14 @@ export async function askChatbotPrompt(query) {
   showTypingIndicator();
 
   try {
-    const res = await chatService.sendMessage(query, conversationId);
+    // Never continue a thread that belongs to another project. The listener
+    // above normally clears it, but a project switch that races an in-flight
+    // send would otherwise post this question into the previous project's
+    // conversation — and the orchestrator would answer it with that thread's
+    // context.
+    const threadId = (conversationProjectId === getActiveProjectId())
+      ? conversationId : null;
+    const res = await chatService.sendMessage(query, threadId);
     removeTypingIndicator();
     isGenerating = false;
 

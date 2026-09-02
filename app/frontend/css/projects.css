@@ -302,6 +302,15 @@
   letter-spacing: -0.01em;
 }
 
+/* A field the form does not require says so, rather than leaving the user to
+   discover it by submitting. Region in particular is better inferred from the
+   uploaded coordinates than answered from a dropdown. */
+.proj-field-optional {
+  font-weight: 400;
+  color: var(--proj-text-3, #9ca3af);
+  font-size: calc(13 * var(--u));
+}
+
 .proj-input,
 .proj-select {
   width: 100%;

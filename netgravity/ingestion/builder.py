@@ -46,6 +46,8 @@ def build_network(
     description: str = "",
     contracts: Optional[List[ContractRule]] = None,
     period_labels: Optional[Dict[str, str]] = None,
+    currency: Optional[str] = None,
+    geography: Optional[Dict[str, object]] = None,
 ) -> Tuple[CanonicalNetwork, List[RowIssue]]:
     """
     Assemble a CanonicalNetwork from validated records.
@@ -80,6 +82,9 @@ def build_network(
             network_id=network_id,
             description=description,
             period_labels=dict(period_labels or {}),
+            # Normalised here so "usd", " USD " and "Usd" are one currency.
+            currency=(str(currency).strip().upper() or None) if currency else None,
+            geography=dict(geography or {}),
         )
     except Exception as exc:  # Pydantic validation error
         raise NetworkBuildError(f"CanonicalNetwork rejected the assembled data: {exc}") from exc

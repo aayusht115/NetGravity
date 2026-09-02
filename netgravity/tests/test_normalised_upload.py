@@ -24,6 +24,7 @@ import pytest
 from app.backend.api.network_extractor import (
     build_network_from_dataframes,
     classify_sheet,
+    infer_geography,
 )
 from app.backend.services.errors import ValidationError
 from app.backend.services.network_assembler import (
@@ -542,3 +543,288 @@ class TestTheHorizonIsBounded:
         modelled, _ = choose_horizon(
             self.months(12), rows_per_period=_MAX_MODELLED_DEMAND_ROWS * 5)
         assert len(modelled) == 1
+
+
+# ------------------------------------------------- units, modes and currency
+#
+# A workbook from outside India exercises every assumption the pipeline used to
+# bake in: distance in miles, a real modal mix, dollars, and a warehouse cost
+# table. On the supplied US dataset each of these silently produced a wrong
+# number rather than an error — 51 corridors at 0 km, zero carbon, all-ROAD
+# telemetry, handling cost of zero, and rupee symbols against USD figures.
+
+@pytest.fixture
+def us_shaped_tables():
+    """A miniature US workbook: miles, mixed modes, USD, warehouse costs."""
+    facilities = pd.DataFrame([
+        ("F001", "Los Angeles Plant", "PLANT", "Los Angeles", "California",
+         33.9425, -118.4081, 55000, 4250000, "ACTIVE"),
+        ("F004", "Dallas DC", "DC", "Dallas", "Texas",
+         32.7767, -96.7970, 32000, 1620000, "ACTIVE"),
+    ], columns=["Facility_ID", "Facility_Name", "Facility_Type", "City", "State",
+                "Latitude", "Longitude", "Capacity_Units", "Fixed_Cost", "Status"])
+
+    markets = pd.DataFrame([
+        ("M001", "New York Metro", "New York", "New York", 40.7128, -74.0060, "Northeast", 2),
+    ], columns=["Market_ID", "Market_Name", "City", "State", "Latitude",
+                "Longitude", "Region", "Service_SLA_Days"])
+
+    lanes = pd.DataFrame([
+        ("L001", "F001", "F004", "PLANT", "DC", 1247.5, 2.4, 13238, True, "INTERMODAL"),
+        ("L002", "F004", "M001", "DC", "MARKET", 100.0, 0.9, 10253, True, "TL"),
+        ("L003", "F001", "M001", "PLANT", "MARKET", 2500.0, 5.0, 5000, False, "RAIL"),
+    ], columns=["Lane_ID", "Origin_ID", "Destination_ID", "Origin_Type",
+                "Destination_Type", "Distance_Miles", "Transit_Time_Days",
+                "Capacity_Units", "Active", "Transport_Mode"])
+
+    products = pd.DataFrame([
+        ("P001", "Sparkling Water", "CPG - Beverage", 3.63, 8.99),
+    ], columns=["Product_ID", "Product_Name", "Product_Category",
+                "Unit_Weight_Kg", "Unit_Cost"])
+
+    demand_history = pd.DataFrame([
+        ("2026-06", "M001", "P001", 2100),
+        ("2026-07", "M001", "P001", 2200),
+        ("2026-08", "M001", "P001", 2300),
+    ], columns=["Period", "Market_ID", "Product_ID", "Demand_Units"])
+
+    rates = pd.DataFrame([
+        ("L001", "P001", 1.62, "USD"),
+        ("L002", "P001", 1.50, "USD"),
+        # Priced against a lane no sheet defines — the orphan-reference case.
+        ("L099", "P001", 2.10, "USD"),
+    ], columns=["Lane_ID", "Product_ID", "Rate_Per_Unit", "Currency"])
+
+    # F004's RENT is restated at a later date AND duplicated, both of which the
+    # real workbook does.
+    warehouse = pd.DataFrame([
+        ("F001", "RENT", 89348, 1.62, "2023-09-01"),
+        ("F001", "LABOR", 283578, 5.16, "2023-09-01"),
+        ("F004", "RENT", 51927, 1.85, "2023-09-01"),
+        ("F004", "RENT", 78400, 2.80, "2025-07-01"),
+        ("F004", "RENT", 78400, 2.80, "2025-07-01"),
+        ("F004", "LABOR", 153451, 5.48, "2023-09-01"),
+    ], columns=["Facility_ID", "Cost_Type", "Monthly_Cost_USD",
+                "Cost_Per_Unit_Handled", "Effective_Date"])
+
+    return {
+        "Facilities": facilities, "Markets": markets, "Lanes": lanes,
+        "Products": products, "Demand_History": demand_history,
+        "Transportation_Rates": rates, "Warehouse_Costs": warehouse,
+    }
+
+
+class TestDistanceStatedInMiles:
+    def test_miles_are_converted_rather_than_ignored(self, us_shaped_tables):
+        """
+        `Distance_Miles` matched no alias, so every lane came through with no
+        distance at all: 0 km corridors, 0 kg carbon, and a distance-weighted
+        average of zero on a network spanning a continent.
+        """
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {l["laneId"]: l for l in st["lanes"]}
+        # Rounded to metres by the extractor, which is finer than any freight
+        # rate or emission factor this engine applies.
+        assert by_id["L001"]["distance"] == pytest.approx(1247.5 * 1.609344, abs=1e-3)
+        assert by_id["L002"]["distance"] == pytest.approx(100.0 * 1.609344, abs=1e-3)
+
+    def test_the_conversion_is_declared_not_silent(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        assert any("miles" in n and "1.609344" in n for n in st["notes"])
+        assert all(l["distanceSource"] == "miles" for l in st["lanes"])
+
+    def test_a_kilometre_column_still_wins(self, us_shaped_tables):
+        """A workbook carrying both is read in its canonical unit."""
+        lanes = us_shaped_tables["Lanes"].copy()
+        lanes["Distance_Km"] = [10.0, 20.0, 30.0]
+        us_shaped_tables["Lanes"] = lanes
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {l["laneId"]: l for l in st["lanes"]}
+        assert by_id["L001"]["distance"] == 10.0
+        assert by_id["L001"]["distanceSource"] == "km"
+
+    def test_distance_survives_into_the_canonical_network(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        network, assumptions, _ = assemble_network_from_structure(st)
+        assert all(l.distance_km > 0 for l in network.lanes)
+        assert any("miles" in a for a in assumptions)
+
+
+class TestTransportModeIsTheClientsNotOurs:
+    def test_the_uploaded_mode_is_read(self, us_shaped_tables):
+        """A literal "ROAD" was written onto every lane the extractor built."""
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {l["laneId"]: l for l in st["lanes"]}
+        assert by_id["L001"]["mode"] == "INTERMODAL"
+        # TL is a road service, and normalises onto the mode the engine models.
+        assert by_id["L002"]["mode"] == "ROAD"
+
+    def test_mode_reaches_the_lane_record(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        network, assumptions, _ = assemble_network_from_structure(st)
+        modes = {l.mode.value for l in network.lanes}
+        assert "INTERMODAL" in modes, (
+            "mode decides the emission factor; defaulting it to ROAD misprices "
+            "carbon on every intermodal corridor"
+        )
+        assert any("Transport mode taken from the upload" in a for a in assumptions)
+
+    def test_a_missing_mode_column_is_stated_not_assumed(self, normalised_tables):
+        st = build_network_from_dataframes(normalised_tables)
+        assert all(l["mode"] is None for l in st["lanes"])
+        assert any("no transport-mode column" in n.lower() for n in st["notes"])
+
+    def test_an_unmodelled_mode_is_named_rather_than_relabelled(self, us_shaped_tables):
+        lanes = us_shaped_tables["Lanes"].copy()
+        lanes.loc[lanes["Lane_ID"] == "L001", "Transport_Mode"] = "PIPELINE"
+        us_shaped_tables["Lanes"] = lanes
+        st = build_network_from_dataframes(us_shaped_tables)
+        assert {l["laneId"]: l["mode"] for l in st["lanes"]}["L001"] == "PIPELINE"
+        _, assumptions, _ = assemble_network_from_structure(st)
+        assert any("PIPELINE" in a for a in assumptions), (
+            "a mode this engine cannot cost must be named, not silently "
+            "substituted with ROAD"
+        )
+
+
+class TestCurrencyIsReadFromTheUpload:
+    def test_the_rates_table_states_the_currency(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        assert st["currency"] == "USD"
+
+    def test_it_reaches_the_canonical_network(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        network, _, _ = assemble_network_from_structure(st)
+        assert network.currency == "USD"
+
+    def test_assumption_text_uses_the_clients_currency(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        _, assumptions, _ = assemble_network_from_structure(st)
+        fixed = [a for a in assumptions if "fixed cost read as" in a]
+        assert fixed
+        assert all("$" in a for a in fixed)
+        assert not any("₹" in a for a in assumptions)
+
+    def test_an_upload_naming_no_currency_gets_none_not_rupees(self, us_shaped_tables):
+        rates = us_shaped_tables["Transportation_Rates"].drop(columns=["Currency"])
+        us_shaped_tables["Transportation_Rates"] = rates
+        # Drop the USD-suffixed header too, so nothing states a currency.
+        wh = us_shaped_tables["Warehouse_Costs"].rename(
+            columns={"Monthly_Cost_USD": "Monthly_Cost"})
+        us_shaped_tables["Warehouse_Costs"] = wh
+        st = build_network_from_dataframes(us_shaped_tables)
+        assert st["currency"] is None, (
+            "no currency must stay distinguishable from rupees; an amount with "
+            "an unknown unit is not an amount in INR"
+        )
+        assert any("no column in this upload states a currency" in n.lower()
+                   for n in st["notes"])
+
+    def test_a_column_header_can_name_the_currency(self, us_shaped_tables):
+        """`Monthly_Cost_USD` says what it is; nothing else in the file does."""
+        rates = us_shaped_tables["Transportation_Rates"].drop(columns=["Currency"])
+        us_shaped_tables["Transportation_Rates"] = rates
+        st = build_network_from_dataframes(us_shaped_tables)
+        assert st["currency"] == "USD"
+        assert st["currencyBasis"] == "named in a money column header"
+
+
+class TestWarehouseCostsBecomeHandlingCost:
+    def test_handling_cost_is_built_from_the_cost_lines(self, us_shaped_tables):
+        """
+        The sheet was classified "unknown" and dropped, so `handling_cost` was
+        zero network-wide and the optimiser moved units between sites as if
+        handling them were free.
+        """
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
+        assert by_id["F001"]["handlingCost"] == pytest.approx(1.62 + 5.16)
+
+    def test_a_restated_cost_line_supersedes_the_earlier_one(self, us_shaped_tables):
+        """F004 rent is restated at a later effective date. It is a rent
+        review, not a second rent."""
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
+        assert by_id["F004"]["handlingCost"] == pytest.approx(2.80 + 5.48)
+
+    def test_duplicate_rows_are_one_fact_not_several(self, us_shaped_tables):
+        """F004 later rent row appears twice; summing both doubles it."""
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
+        assert by_id["F004"]["handlingCost"] < 2.80 + 2.80 + 5.48
+
+    def test_it_reaches_the_facility_record(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        network, _, _ = assemble_network_from_structure(st)
+        handling = {f.id: f.handling_cost_per_unit for f in network.facilities}
+        assert handling["F001"] == pytest.approx(6.78)
+        assert handling["F004"] == pytest.approx(8.28)
+
+    def test_a_facilities_sheet_figure_is_not_overwritten(self, us_shaped_tables):
+        """The client own consolidated figure wins over a derived sum."""
+        facilities = us_shaped_tables["Facilities"].copy()
+        facilities["Handling_Cost_Per_Unit"] = [4.0, 4.0]
+        us_shaped_tables["Facilities"] = facilities
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
+        assert by_id["F001"]["handlingCost"] == 4.0
+
+
+class TestCrossSheetReferentialIntegrity:
+    def test_an_orphan_reference_is_reported(self, us_shaped_tables):
+        """
+        Row-level validity cannot see this: the file is 100% complete and the
+        L099 rates are still dropped by the join, silently.
+        """
+        st = build_network_from_dataframes(us_shaped_tables)
+        orphans = [p for p in st["integrity"] if p["type"] == "Orphan reference"]
+        assert orphans
+        assert orphans[0]["missingIds"] == ["L099"]
+        assert orphans[0]["count"] == 1
+
+    def test_it_is_also_surfaced_as_a_note(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        assert any("L099" in n for n in st["notes"])
+
+    def test_an_inactive_lane_is_defined_not_dangling(self, us_shaped_tables):
+        """
+        L003 is switched off, so the model does not carry it — but the sheet
+        DEFINES it. Reporting its rates as broken references would send a user
+        hunting for a row that is exactly where it belongs.
+        """
+        st = build_network_from_dataframes(us_shaped_tables)
+        assert "L003" not in {l["laneId"] for l in st["lanes"]}
+        missing = {i for p in st["integrity"] for i in p.get("missingIds", [])}
+        assert "L003" not in missing
+
+    def test_a_clean_workbook_reports_nothing(self, normalised_tables):
+        st = build_network_from_dataframes(normalised_tables)
+        assert st["integrity"] == []
+
+
+class TestGeographyIsInferredFromCoordinates:
+    def test_us_coordinates_are_not_india(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        assert st["geography"]["region"] == "United States"
+        assert st["geography"]["confidence"] == 1.0
+
+    def test_india_coordinates_are_india(self, normalised_tables):
+        st = build_network_from_dataframes(normalised_tables)
+        assert st["geography"]["region"] == "India"
+
+    def test_the_basis_is_stated_so_a_label_is_not_a_bare_assertion(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        assert "coordinate" in st["geography"]["basis"]
+
+    def test_bounds_are_the_extent_a_map_must_fit(self, us_shaped_tables):
+        b = build_network_from_dataframes(us_shaped_tables)["geography"]["bounds"]
+        assert b["lngMin"] < -100 and b["lngMax"] > -80
+
+    def test_geography_reaches_the_canonical_network(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        network, _, _ = assemble_network_from_structure(st)
+        assert network.geography.get("region") == "United States"
+
+    def test_no_coordinates_yields_no_region_rather_than_a_guess(self):
+        assert infer_geography([])["region"] is None
+        assert infer_geography([{"lat": None, "lng": None}])["region"] is None

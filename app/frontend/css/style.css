@@ -2944,3 +2944,22 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 /* Compatibility classes to satisfy smoke_test.py */
 .scn-strip-card {}
 .scn-multi-table {}
+
+/* A review action under each compared scenario's name.
+   The only route to a scenario's audit was the recommendation card's button,
+   which opens the RECOMMENDED scenario — so with a different one selected,
+   the sole review button on screen opened the wrong intervention. */
+.scn-col-review {
+  margin-top: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary, #6B2FA0);
+  background: transparent;
+  border: 1px solid var(--border-light, #e5e7eb);
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.scn-col-review:hover { background: var(--surface-2, #f8fafc); }
+.scn-col-review:focus-visible { outline: 2px solid var(--primary, #6B2FA0); outline-offset: 1px; }

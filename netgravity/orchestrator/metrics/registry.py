@@ -286,13 +286,24 @@ class KPIRegistry:
             )
 
         costs, demand = state.costs, state.demand
+
+        #: The money unit these figures are in, from the network that produced
+        #: them. Every money metric below said "INR" as a literal, so a USD
+        #: network's authoritative cost KPI carried the wrong unit — and the
+        #: unit is what a dashboard, an export and the reasoning agent all read
+        #: to decide how to render it.
+        #:
+        #: `"currency"` when the upload stated none: an amount whose unit is
+        #: unknown, which is honest and stays distinguishable from rupees.
+        money = getattr(state, "currency", None) or "currency"
+
         results: Dict[str, KPIResult] = {
             "business_network_cost": wrap("business_network_cost", costs.business_network_cost,
-                                         "INR", "BUSINESS_NETWORK_COST"),
+                                         money, "BUSINESS_NETWORK_COST"),
             "solver_objective": wrap("solver_objective", costs.solver_objective,
-                                     "INR", "MILP_OBJECTIVE"),
+                                     money, "MILP_OBJECTIVE"),
             "shortage_penalty_cost": wrap("shortage_penalty_cost", costs.shortage_penalty_cost,
-                                         "INR", "SHORTAGE_PENALTY"),
+                                         money, "SHORTAGE_PENALTY"),
             # The components that ADD UP to business_network_cost. They were
             # computed on every solve and carried on `CostBreakdown`, but the
             # registry exposed only the total — so the dashboard's cost
@@ -300,19 +311,19 @@ class KPIRegistry:
             # to read and rendered blank beneath a populated total. Each is the
             # business-cost layer's own figure, wrapped, not recomputed.
             "facility_cost": wrap("facility_cost", costs.facility_cost,
-                                  "INR", "FACILITY_FIXED_COST"),
+                                  money, "FACILITY_FIXED_COST"),
             "transport_cost": wrap("transport_cost", costs.transport_cost,
-                                   "INR", "TRANSPORT_COST"),
+                                   money, "TRANSPORT_COST"),
             "handling_cost": wrap("handling_cost", costs.handling_cost,
-                                  "INR", "HANDLING_COST"),
+                                  money, "HANDLING_COST"),
             "inventory_cost": wrap("inventory_cost", costs.inventory_cost,
-                                   "INR", "INVENTORY_COST"),
+                                   money, "INVENTORY_COST"),
             "carbon_cost": wrap("carbon_cost", costs.carbon_cost,
-                                "INR", "CARBON_COST"),
+                                money, "CARBON_COST"),
             "opening_cost": wrap("opening_cost", costs.opening_cost,
-                                 "INR", "FACILITY_OPENING_COST"),
+                                 money, "FACILITY_OPENING_COST"),
             "closure_cost": wrap("closure_cost", costs.closure_cost,
-                                 "INR", "FACILITY_CLOSURE_COST"),
+                                 money, "FACILITY_CLOSURE_COST"),
             "total_demand": wrap("total_demand", demand.total_demand, "units", "DEMAND_TOTAL"),
             "served_demand": wrap("served_demand", demand.served_demand, "units", "DEMAND_SERVED"),
             "unserved_demand": wrap("unserved_demand", demand.unserved_demand, "units", "DEMAND_UNSERVED"),
@@ -340,7 +351,7 @@ class KPIRegistry:
                                      "count", "PLANNING_PERIODS"),
             "cost_per_period": wrap("cost_per_period",
                                     getattr(state, "cost_per_period", 0.0),
-                                    "INR", "BUSINESS_COST_PER_PERIOD"),
+                                    money, "BUSINESS_COST_PER_PERIOD"),
         }
         if state.service is not None:
             results["pct_demand_in_sla"] = wrap(
@@ -497,6 +508,10 @@ class KPIRegistry:
         """Network-level REI summary, wrapped from `FacilityResilienceRegistry`."""
         reg = context.rei_registry
         eid = context.execution_id
+        # Same money unit as every other cost figure in this execution, read
+        # from the solved state rather than assumed.
+        _state = _single_network_state(context)
+        money = getattr(_state, "currency", None) or "currency"
         if reg is None:
             reason = context.unavailable_evidence.get("resilience.assess")
             return {
@@ -509,7 +524,7 @@ class KPIRegistry:
         return {
             "max_performance_impact": KPIResult(
                 metric_id="max_performance_impact", value=reg.max_performance_impact,
-                unit="INR", formula_id="PERFORMANCE_IMPACT",
+                unit=money, formula_id="PERFORMANCE_IMPACT",
                 source_capability="resilience.assess",
                 authoritative_owner="netgravity.resilience.rei",
                 snapshot_id=reg.network_snapshot_id, execution_id=eid,

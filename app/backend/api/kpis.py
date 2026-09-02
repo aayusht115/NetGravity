@@ -125,6 +125,10 @@ def create_kpi_blueprint(orchestrator: Optional[Orchestrator] = None,
             # this horizon and a caller reading /flows must not have to fetch
             # /network to learn what period its numbers are on.
             "horizon": analysis.get("horizon", {}),
+            # The money unit these figures are in. Every cost KPI carries it on
+            # its own `unit` too; it is repeated once at the envelope so a
+            # screen can format a currency without inspecting a metric.
+            "currency": analysis.get("currency"),
         }
 
     # ------------------------------------------------------------------

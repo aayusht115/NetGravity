@@ -60,7 +60,10 @@ logger = logging.getLogger(__name__)
 #: That is not hypothetical. It is how `horizon.by_facility` came back empty on
 #: a network whose horizon was solved correctly — the answer was right and a
 #: document written before the field existed was what got returned.
-_ANALYSIS_VERSION = 2
+#: 3 — the document gained `currency`, and every money metric's `unit` changed
+#: from the literal "INR" to the network's own currency. A cached v2 document
+#: would be served back with rupee units over dollar figures.
+_ANALYSIS_VERSION = 3
 
 
 class AnalysisService:
@@ -268,8 +271,19 @@ def serialise_analysis(registry: Any, ctx: Any) -> Dict[str, Any]:
     def dump(results: Dict[str, Any]) -> Dict[str, Any]:
         return {k: v.model_dump(mode="json") for k, v in results.items()}
 
+    # The money unit every cost in this analysis is denominated in, from the
+    # solved state. On the envelope rather than only on each metric's `unit`,
+    # so a caller formatting a screen reads it once instead of picking a metric
+    # and hoping it is a money one.
+    currency = None
+    for _key, _state in (getattr(ctx, "network_states", None) or {}).items():
+        currency = getattr(_state, "currency", None)
+        if currency:
+            break
+
     return {
         "execution_id": getattr(ctx, "execution_id", ""),
+        "currency": currency,
         # What span of time every cost and volume figure below covers.
         #
         # Read from the solve itself, not inferred. Without it a caller has a

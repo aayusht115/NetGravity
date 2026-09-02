@@ -380,6 +380,18 @@ def build_case16_network(
         demands     = [d.model_copy(deep=True) for d in DEMANDS],
         lanes       = [l.model_copy(deep=True) for l in LANES],
         config      = config,
+        # This fixture's costs ARE rupees — its facilities are Baddi, Delhi
+        # NCR, Mumbai and Kolkata and its rates were authored as INR. Stated
+        # here because the money unit is now read off the network rather than
+        # assumed to be INR by every reporting layer; a network that omits it
+        # gets amounts with no currency, which is the honest answer for an
+        # upload that names none, and the wrong one for a fixture that knows.
+        currency    = "INR",
+        geography   = {
+            "region": "India",
+            "basis": "Fabricated fixture; its facilities are Indian cities.",
+            "confidence": 1.0,
+        },
     )
     network = network.model_copy(update={"data_version": network.compute_data_version()})
     return network

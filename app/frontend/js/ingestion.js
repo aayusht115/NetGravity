@@ -138,6 +138,14 @@ const flow = {
   parseError: null,    // why the parse failed, when it did
   pdfReview: {},       // fileId -> { expanded: bool, reviewed: Set<termId> }
   cameFromApp: false,  // true when entered mid-session (app shell was showing), so Back should return there rather than to Create Project
+  //: The project's CURRENT dataset, from the server, as an audit record.
+  //:
+  //: `files` above is what THIS visit has attached. It starts empty on every
+  //: entry, which is right for a new upload and was the only thing the screen
+  //: ever showed — so a solved project reopened its uploader to "Uploaded
+  //: Files (0)" and there was no route to the file, the mapping, the quality
+  //: findings or the ingestion time behind its own numbers.
+  dataset: null,
 };
 
 let uidCounter = 0;
@@ -261,6 +269,8 @@ function renderUploadData() {
       ${topbar()}
       <h1 class="ing-title">Upload &amp; Align Network Datasets</h1>
       <p class="ing-subtitle">Upload CSVs, Excel order books, or Rate Card PDFs. NetGravity's AI will automatically align and prepare your data.</p>
+
+      ${currentDatasetHtml()}
 
       <div class="ing-card">
         <div class="ing-card-title">1. Upload Datasets</div>
@@ -912,16 +922,16 @@ function dataQualitySectionHtml() {
     <div class="ing-card" id="ing-dq-section" style="margin-top:16px">
       <div class="ing-card-title">Data quality</div>
       <div class="ing-card-sub">Measured on your file. ${invalid
-        ? `${invalid.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')} records need attention.`
-        : `All ${total.toLocaleString('en-IN')} records read cleanly.`}</div>
+        ? `${invalid.toLocaleString()} of ${total.toLocaleString()} records need attention.`
+        : `All ${total.toLocaleString()} records read cleanly.`}</div>
       <div class="ing-stats-row" style="margin-top:14px">
         <div class="ing-stat-item">
           <span class="ing-stat-icon tone-green">${I.checkCircle}</span>
-          <div><div class="ing-stat-value">${valid.toLocaleString('en-IN')} / ${total.toLocaleString('en-IN')}</div><div class="ing-stat-label">records valid (${dq.validPct ?? '—'}%)</div></div>
+          <div><div class="ing-stat-value">${valid.toLocaleString()} / ${total.toLocaleString()}</div><div class="ing-stat-label">records valid (${dq.validPct ?? '—'}%)</div></div>
         </div>
         <div class="ing-stat-item">
           <span class="ing-stat-icon ${invalid > 0 ? 'tone-amber' : 'tone-green'}">${I.warning}</span>
-          <div><div class="ing-stat-value">${invalid.toLocaleString('en-IN')}</div><div class="ing-stat-label">invalid records</div></div>
+          <div><div class="ing-stat-value">${invalid.toLocaleString()}</div><div class="ing-stat-label">invalid records</div></div>
         </div>
         <div class="ing-stat-item">
           <span class="ing-stat-icon ${issues.length ? 'tone-amber' : 'tone-green'}">${I.warning}</span>
@@ -943,7 +953,7 @@ function renderExcelIngestion(file) {
   const rows = flow.mapping[file.id] || [];
   const stats = flow.mapStats[file.id] || { detected: 0, auto: 0, review: 0, ignored: 0 };
   const nRows = rowsAnalyzed(file);
-  const rowsText = nRows === null ? 'Not read' : nRows.toLocaleString('en-IN');
+  const rowsText = nRows === null ? 'Not read' : nRows.toLocaleString();
   const sheets = sheetsOf(file);
   const parseError = (flow.parseErrors || {})[file.id] || flow.parseError;
   // Share of columns this build actually reads. Was a fixed 99% under the
@@ -1268,6 +1278,7 @@ function bindPdfIngestion(file) {
    ═══════════════════════════════════════════════════════════════ */
 export function showUploadData(project) {
   flow.project = project || null;
+  flow.dataset = null;
   flow.files = [];
   flow.queue = [];
   flow.queueIndex = 0;
@@ -1292,6 +1303,112 @@ export function showUploadData(project) {
   renderUploadData();
   const page = document.getElementById('upload-data-page');
   if (page) { page.classList.remove('hidden'); page.scrollTop = 0; }
+
+  // Then fetch what this project is already running on, and re-render. Async
+  // so the uploader is usable immediately; a project with no dataset simply
+  // renders nothing extra.
+  loadCurrentDataset();
+}
+
+/**
+ * The dataset this project's analysis currently runs on, from the server.
+ *
+ * This is the audit trail: the file, the mapping decisions as confirmed, the
+ * measured quality, the cross-sheet integrity findings, every assumption the
+ * assembly had to make, and when it was committed.
+ */
+async function loadCurrentDataset() {
+  // `getActiveProjectId()` FIRST: it is the id every authoritative request is
+  // already scoped by, and it is set whether the project was opened from the
+  // picker or restored from storage on a reload. `flow.project` and
+  // `getCurrentProject()` are both null on a restored session, which is
+  // exactly the case this panel exists for.
+  const projectId = getActiveProjectId()
+    || flow.project?.id
+    || (window.getCurrentProject && window.getCurrentProject()?.id);
+  if (!projectId) return;
+  try {
+    const res = await ingestionService.getDataset(projectId);
+    flow.dataset = (res && res.status && res.status !== 'NO_DATA') ? res : null;
+  } catch (e) {
+    // A missing audit record is not an error worth blocking the uploader for,
+    // but it must not render as "nothing was uploaded" either.
+    flow.dataset = null;
+  }
+  if (flow.dataset) renderUploadData();
+}
+
+/** The read-only record of the dataset this project is analysing. */
+function currentDatasetHtml() {
+  const d = flow.dataset;
+  if (!d) return '';
+  const c = d.committed;
+  if (!c) {
+    if (!d.preview) return '';
+    return `
+      <div class="ing-card">
+        <div class="ing-card-title">Parsed, not yet analysed</div>
+        <div class="ing-card-sub">This upload has been read but not confirmed,
+          so no KPI runs against it yet.</div>
+      </div>`;
+  }
+
+  const q = c.dataQuality || {};
+  const stats = c.mapStats || {};
+  const when = c.committed_at
+    ? new Date(c.committed_at * 1000).toLocaleString() : 'Not recorded';
+  const files = (c.files || []).map(f =>
+    `<li>${ingEsc(f.name)} &mdash; ${Number(f.rows || 0).toLocaleString()} rows
+       across ${(f.sheets || []).length} sheet(s)</li>`).join('');
+  const integrity = (c.integrity || []).map(i =>
+    `<li style="color:var(--red)">${ingEsc(i.detail)}</li>`).join('');
+  const assumptions = (c.assumptions || []).map(a =>
+    `<li>${ingEsc(a)}</li>`).join('');
+  const issues = (c.issues || []).map(i => `<li>${ingEsc(i)}</li>`).join('');
+  const geo = (c.geography || {}).region;
+
+  return `
+    <div class="ing-card">
+      <div class="ing-card-head-row">
+        <div class="ing-card-title">Current dataset
+          <span class="ing-count-badge">(${(c.files || []).length} file)</span></div>
+        <span class="ing-status-chip">${I.checkCircle}Analysing</span>
+      </div>
+      <div class="ing-card-sub">Committed ${ingEsc(when)} &middot; snapshot
+        <code>${ingEsc(c.snapshot_id || '')}</code></div>
+
+      <ul class="text-sm" style="margin:10px 0 0 18px;line-height:1.8">${files}</ul>
+
+      <div class="ing-stats-row" style="margin-top:12px">
+        <div class="ing-stat-item"><div><div class="ing-stat-value">${stats.auto ?? '—'} / ${stats.detected ?? '—'}</div>
+             <div class="ing-stat-label">columns mapped</div></div></div>
+        <div class="ing-stat-item"><div><div class="ing-stat-value">${stats.ignored ?? '—'}</div>
+             <div class="ing-stat-label">not used by the model</div></div></div>
+        <div class="ing-stat-item"><div><div class="ing-stat-value">${q.validPct ?? '—'}%</div>
+             <div class="ing-stat-label">records valid</div></div></div>
+        <div class="ing-stat-item"><div><div class="ing-stat-value">${c.currency || '—'}</div>
+             <div class="ing-stat-label">currency${geo ? ' &middot; ' + ingEsc(geo) : ''}</div></div></div>
+      </div>
+
+      ${integrity ? `<div class="ing-card-title" style="font-size:13px;margin-top:16px">
+          Referential integrity</div>
+        <ul class="text-sm" style="margin:6px 0 0 18px;line-height:1.7">${integrity}</ul>` : ''}
+
+      ${issues ? `<div class="ing-card-title" style="font-size:13px;margin-top:16px">
+          What the network cannot serve</div>
+        <ul class="text-sm" style="margin:6px 0 0 18px;line-height:1.7">${issues}</ul>` : ''}
+
+      ${assumptions ? `<details style="margin-top:16px">
+          <summary class="ing-card-title" style="font-size:13px;cursor:pointer">
+            Assumptions this reading had to make (${(c.assumptions || []).length})</summary>
+          <ul class="text-sm" style="margin:8px 0 0 18px;line-height:1.7">${assumptions}</ul>
+        </details>` : ''}
+
+      <div class="text-xs" style="color:var(--text-2);margin-top:14px">
+        Uploading a new file below replaces this dataset once you confirm the
+        mapping. Nothing changes until you do.
+      </div>
+    </div>`;
 }
 
 export function hideIngestionPages() {

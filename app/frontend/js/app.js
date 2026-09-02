@@ -9,12 +9,14 @@ import {
   PLANTS, DCS, MARKETS, LANES, EXTERNAL_SIGNALS, SCENARIOS,
   DEMAND_HISTORY, FORECAST,
   RECOMMENDATION, PERIODS, HOME_ACTION_ITEMS, FACILITY_KPIS,
-  GOVERNANCE_TIERS, SYSTEM_STATUS,
+  GOVERNANCE_TIERS, GOVERNANCE_TIERS_CURRENCY, SYSTEM_STATUS,
   formatCurrency, formatNumber, fmtNum, getUtilColor, getUtilLabel, getUtilTagClass,
   getFacilityById, getInsightsForFacility, getKpisForFacility, getOptimizedBaseCase,
   getNetworkInsights, NETWORK_RECOMMENDATION, OBSERVED_UTILISATION,
   isDCFacility, isPlantFacility, facilityRole, clearNetworkModel,
-  perPeriodLabel, SOLVE_HORIZON, horizonLabel
+  perPeriodLabel, SOLVE_HORIZON, horizonLabel,
+  formatCurrencyExact, currencySymbol, currencyLabel, NETWORK_GEOGRAPHY,
+  getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries
 } from './data.js';
 import { initMap, setNetworkState, invalidateMapSize, refreshAllMaps } from './map.js';
 import { initTwin3D, setTwin3DState, resizeTwin3D } from './twin3d.js';
@@ -241,14 +243,65 @@ function renderForecastSummary() {
   // is stated because the bare number means nothing to most readers.
   set('fc-accuracy', mase === null ? 'Not reported'
     : `${mase.toFixed(2)} (${mase < 1 ? 'better' : 'worse'} than naive)`);
-  set('fc-series', meta.shown || '—');
+  // The series ACTUALLY plotted, which changes when the picker changes.
+  // `meta.shown` is written once at hydration, so the title kept naming the
+  // default series after the user selected a different one.
+  const shownKey = FORECAST.seriesLabel || meta.shown || '—';
+  const shownName = FORECAST.seriesName
+    ? `${FORECAST.seriesName} (${shownKey})` : shownKey;
+  set('fc-series', shownName);
   set('fc-periods', `${DEMAND_HISTORY.months.length} periods`);
   set('fc-series-count', `${meta.series} market-product pair(s)`);
-  set('fc-chart-title', `Demand — ${meta.shown || 'Historical & Forecast'}`);
+  set('fc-chart-title', `Demand — ${shownName}`);
   set('fc-chart-tag', meta.status === 'OK' ? 'Observed + forecast' : meta.status);
   set('fc-chart-subtitle',
     `${DEMAND_HISTORY.months.length} observed periods + `
     + `${FORECAST.months.length}-period forecast · p10–p90 band`);
+  renderForecastSeriesSelect();
+}
+
+/**
+ * The series picker for the forecast chart.
+ *
+ * Every market-product pair the engine forecast, by name, with the id as the
+ * secondary detail. The screen used to plot one series — chosen for us, named
+ * "M002/P001" — and report "59 series forecast" beside it with no way to see
+ * any of the other 58.
+ */
+function renderForecastSeriesSelect() {
+  const select = document.getElementById('fc-series-select');
+  if (!select) return;
+
+  if (!FORECAST_CATALOGUE.length) {
+    select.innerHTML = '<option value="">No forecastable series</option>';
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+  const current = FORECAST.seriesLabel;
+  select.innerHTML = FORECAST_CATALOGUE.map((entry) => `
+    <option value="${entry.key}"${entry.key === current ? ' selected' : ''}>
+      ${entry.label} (${entry.key})
+    </option>`).join('');
+
+  if (!select.dataset.wired) {
+    select.dataset.wired = '1';
+    select.addEventListener('change', () => {
+      if (!selectForecastSeries(select.value)) return;
+      renderForecastChart('chart-forecast');
+      renderForecastSummary();
+    });
+  }
+}
+
+// Populate the picker when the catalogue arrives, not only when the Forecast
+// tab happens to render. `renderForecastSummary()` runs from `navigateToTab`
+// behind a `chartsInitialised` guard, so on a session where Home had already
+// drawn its forecast preview the picker was never filled and kept its
+// placeholder "Loading…" option forever.
+if (typeof window !== 'undefined') {
+  window.addEventListener('forecastCatalogueLoaded',
+    () => { try { renderForecastSeriesSelect(); } catch (e) { /* not mounted */ } });
 }
 
 window.addEventListener('networkDataLoaded', (e) => {
@@ -324,7 +377,11 @@ function updateTopBarLayout(tab) {
       subTitle.textContent = '· AI predictive projections';
     } else if (tab === 'twin') {
       mainTitle.innerHTML = 'Digital Twin';
-      subTitle.textContent = '· India network topology';
+      // Not 'India network topology'. The subtitle names the geography the
+      // loaded network is actually in, or simply says what the screen is.
+      subTitle.textContent = NETWORK_GEOGRAPHY.region
+        ? `· ${NETWORK_GEOGRAPHY.region} network topology`
+        : '· Network topology';
     } else if (tab === 'scenarios') {
       mainTitle.innerHTML = 'Scenario Planning';
       subTitle.textContent = '· Multi-echelon network optimization';
@@ -422,6 +479,54 @@ export function navigateToTab(tab) {
   }
 }
 
+/**
+ * Re-render whatever is on screen after the facility or period selection moved.
+ *
+ * There is one selection (`state.selectedFacility` / `state.selectedPeriod`)
+ * and several screens that scope themselves by it, but every selector's change
+ * handler called `renderHome()` and only `renderHome()`. `renderFacilityDashboard()`
+ * was reachable from exactly one place — `navigateToTab` — so on the KPI screen
+ * the dropdown moved, the state updated, and not one card, chart or corridor
+ * row changed: Bangalore selected, Delhi's 11.36% and 3,230/28,430 still on
+ * screen. A user reading a facility's numbers under another facility's name is
+ * the worst failure mode this application has, because nothing about it looks
+ * broken.
+ *
+ * Routing the refresh through the active tab means a new screen cannot
+ * reintroduce the bug by forgetting to subscribe: it registers here once.
+ */
+/**
+ * The sidebar's network identity, from the project that is open.
+ *
+ * Both values were literals in the markup — "India Network" and model version
+ * "v7.0" — displayed for every project. The name is the project's own; the
+ * region is what the data says, labelled as inferred when it was derived
+ * rather than stated.
+ */
+function renderSidebarMeta() {
+  const project = (typeof window.getCurrentProject === 'function')
+    ? window.getCurrentProject() : null;
+  const nameEl = document.getElementById('sidebar-network-name');
+  if (nameEl) nameEl.textContent = project?.name || '—';
+  const regionEl = document.getElementById('sidebar-network-region');
+  if (regionEl) {
+    const region = NETWORK_GEOGRAPHY.region || project?.region || '';
+    regionEl.textContent = region || 'Not set';
+    regionEl.title = NETWORK_GEOGRAPHY.basis || '';
+  }
+}
+
+function renderForSelection() {
+  // Home is always refreshed: its KPI strip and twin preview are scoped by the
+  // same selection, and it is the screen a user returns to.
+  renderHome();
+  if (state.activeTab === 'facility-dashboard') {
+    renderFacilityDashboard();
+  } else if (state.activeTab === 'twin') {
+    renderTwinTables();
+  }
+}
+
 // ─── Sidebar Collapse (icon rail <-> full labels) ────────────
 // Defaults to collapsed (see the .sidebar.collapsed class already on the
 // element in index.html), matching Dump/Home Overview-updated.png. The
@@ -514,17 +619,35 @@ function initTabs() {
       });
   });
 
+  // Header actions open an in-product panel, not a browser alert().
+  //
+  // `alert()` blocks the whole page until dismissed, is not styleable, cannot
+  // be closed by clicking away, and on a slow render leaves the app looking
+  // stalled or blank behind the modal dialog. For two informational panels
+  // that is a needless way to make a working product feel broken.
   document.getElementById('btn-topbar-notifications')?.addEventListener('click', () => {
     // This listed three fixed alerts about the prototype's demo footprint as
     // though they were live findings for whatever network was loaded.
     // Real threshold breaches for this network are reported on Home, sourced
     // from the KPI layer's triggered thresholds.
-    alert('Notifications & System Alerts\n\nNo active alert for this network.\n'
-      + 'Threshold breaches appear on the Home cockpit when the engine reports them.');
+    showInfoPanel('Notifications', `
+      <p>No active alert for this network.</p>
+      <p class="text-sm" style="color:var(--text-2)">Threshold breaches appear on
+      the Home cockpit when the engine reports them, naming the metric and the
+      threshold that fired.</p>`);
   });
 
   document.getElementById('btn-topbar-help')?.addEventListener('click', () => {
-    alert('Netgravity Help & Documentation\n\nAI Decision Intelligence for Logistics Networks.\n• Overview: Network telemetry & KPIs\n• Insights: AI-generated observations & diagnosis\n• Recommendations: Prescriptive optimization actions\n• Digital Twin: 2D/3D network topology\n• Scenarios: What-if decision planning');
+    showInfoPanel('Help', `
+      <p class="text-sm" style="color:var(--text-2)">AI decision intelligence for
+      logistics networks.</p>
+      <ul class="text-sm" style="margin:10px 0 0 18px;line-height:1.9">
+        <li><strong>Home</strong> &mdash; network telemetry, KPIs and findings</li>
+        <li><strong>KPIs</strong> &mdash; one facility at a time, with its corridors</li>
+        <li><strong>Digital Twin</strong> &mdash; 2D and 3D network topology</li>
+        <li><strong>Forecast</strong> &mdash; demand history and projection</li>
+        <li><strong>Scenarios</strong> &mdash; what-if planning against your network</li>
+      </ul>`);
   });
 
   // Profile menu: Profile (stub) / Sign out (back to landing sign-in)
@@ -544,7 +667,7 @@ function initTabs() {
     // server had never made about them.
     const user = getCurrentUser();
     if (!user) {
-      alert('User profile\n\nNo signed-in session was found.');
+      showInfoPanel('Profile', '<p>No signed-in session was found.</p>');
       return;
     }
     // A real screen, not an alert(): it is where a password is changed, a
@@ -553,7 +676,7 @@ function initTabs() {
     // paper. The alert is kept as the fallback if the module fails to load.
     import('./account-security.js')
       .then((m) => m.openAccountSecurity())
-      .catch(() => alert('User profile: ' + (user.name || '-')
+      .catch(() => showInfoPanel('Profile', 'User profile: ' + (user.name || '-')
         + ' | ' + (user.email || '-')
         + ' | role ' + (user.role || '-')
         + ' | ' + (user.organization || '-')));
@@ -816,7 +939,7 @@ function initHomeSelectors() {
       state.selectedFacility = selFacility.value;
       if (selFacilityPicker) selFacilityPicker.value = state.selectedFacility;
       if (homeTopFacility) homeTopFacility.value = state.selectedFacility;
-      renderHome();
+      renderForSelection();
     });
   }
 
@@ -834,7 +957,7 @@ function initHomeSelectors() {
     selPeriod.addEventListener('change', () => {
       state.selectedPeriod = selPeriod.value;
       if (homeTopPeriod) homeTopPeriod.value = state.selectedPeriod;
-      renderHome();
+      renderForSelection();
     });
   }
 
@@ -849,7 +972,7 @@ function initHomeSelectors() {
       state.selectedFacility = homeTopFacility.value;
       if (selFacility) selFacility.value = state.selectedFacility;
       if (selFacilityPicker) selFacilityPicker.value = state.selectedFacility;
-      renderHome();
+      renderForSelection();
     });
   }
 
@@ -859,7 +982,7 @@ function initHomeSelectors() {
     homeTopPeriod.addEventListener('change', () => {
       state.selectedPeriod = homeTopPeriod.value;
       if (selPeriod) selPeriod.value = state.selectedPeriod;
-      renderHome();
+      renderForSelection();
     });
   }
 
@@ -870,7 +993,7 @@ function initHomeSelectors() {
       state.facilityType = selKpiType.value;
       if (selForecastType) selForecastType.value = state.facilityType;
       populateFacilitySelector();
-      renderHome();
+      renderForSelection();
     });
   }
 
@@ -881,7 +1004,7 @@ function initHomeSelectors() {
       state.facilityType = selForecastType.value;
       if (selKpiType) selKpiType.value = state.facilityType;
       populateFacilitySelector();
-      renderHome();
+      renderForSelection();
     });
   }
 
@@ -889,7 +1012,8 @@ function initHomeSelectors() {
   if (selFacilityPicker) {
     selFacilityPicker.addEventListener('change', () => {
       state.selectedFacility = selFacilityPicker.value;
-      renderHome();
+      if (selFacility) selFacility.value = state.selectedFacility;
+      renderForSelection();
     });
   }
 
@@ -951,6 +1075,7 @@ function populateFacilitySelector() {
 
 // ─── Render Full Home ───────────────────────────────────────
 function renderHome() {
+  renderSidebarMeta();
   renderHomeKPIs();
   renderHomeForecast();
   renderHomeDigitalTwin();
@@ -1024,7 +1149,16 @@ export function renderFacilityDashboard() {
   const elDashTitle = document.getElementById('dash-title');
   if (elDashTitle) elDashTitle.textContent = `${fac.name} — Performance & Analytics`;
   const elDashSubtitle = document.getElementById('dash-subtitle');
-  if (elDashSubtitle) elDashSubtitle.textContent = `${fac.city}, ${fac.state} · ${fac.region} Region · Full operational telemetry and cost breakdown for ${period ? period.short : 'Aug 2026'}.`;
+  if (elDashSubtitle) {
+    // `fac.city`, `fac.state` and `fac.region` are not fields on a loaded
+    // facility, so this read "undefined, undefined · undefined Region" for
+    // every network. What the network does carry is the site's name, the
+    // inferred geography and the horizon the figures cover.
+    const where = NETWORK_GEOGRAPHY.region ? ` · ${NETWORK_GEOGRAPHY.region}` : '';
+    const span = horizonLabel() || (period ? period.short : 'the period as uploaded');
+    elDashSubtitle.textContent =
+      `${fac.id}${where} · Operational telemetry and cost breakdown across ${span}.`;
+  }
 
   // Corridors attached to this facility, computed BEFORE the cards because
   // three of them report on it. Lead time, distance and rate are uploaded
@@ -1082,7 +1216,7 @@ export function renderFacilityDashboard() {
         <div class="dash-metric-title">Total Operating Cost</div>
         <div class="dash-metric-val" style="color:var(--primary)">${formatCurrency(kpis?.totalCost?.value ?? null)}</div>
         <div class="dash-metric-sub">
-          <span>Handling: <strong>${fac.handlingCost == null ? '—' : '₹' + fac.handlingCost + '/unit'}</strong></span>
+          <span>Handling: <strong>${fac.handlingCost == null ? '—' : formatCurrencyExact(fac.handlingCost) + '/unit'}</strong></span>
           <!-- Was "↓ 3.2% vs budget". No budget is loaded anywhere in this build. -->
           <span class="text-muted">Not attributed per facility</span>
         </div>
@@ -1163,7 +1297,7 @@ export function renderFacilityDashboard() {
     summaryEl.innerHTML = `
       <div style="font-weight:700;color:var(--text-1);margin-bottom:6px">Corridor Network Health</div>
       <div>• <strong>${connectedLanes.length} active transportation corridors</strong> handle a collective flow of <strong>${formatNumber(totalFlow)} ${perPeriodLabel()}</strong>.</div>
-      <div class="mt-xs">• Weighted average transportation rate across all active arcs is <strong>₹${avgCost} / unit</strong>.</div>
+      <div class="mt-xs">• Weighted average transportation rate across all active arcs is <strong>${formatCurrencyExact(avgCost)} / unit</strong>.</div>
       <!-- Was "on-time transit confidence of 98.2%", a figure nothing in this
            build measures. Replaced with a fact the corridor set does carry. -->
       <div class="mt-xs">• ${leadTimes.length
@@ -1181,7 +1315,7 @@ export function renderFacilityDashboard() {
         <td><span class="tag ${l.direction === 'Inbound' ? 'tag-primary' : 'tag-muted'}">${l.direction}</span></td>
         <td class="num">${formatNumber(l.flow)} ${perPeriodLabel()}</td>
         <td class="num">${formatNumber(l.distance)} km</td>
-        <td class="num font-bold">₹${fmtNum(l.cost, 1)}</td>
+        <td class="num font-bold">${l.cost == null ? '—' : formatCurrencyExact(l.cost)}</td>
         <td class="num">${l.leadTime} days</td>
         <td><span class="tag tag-success">${l.mode}</span></td>
       </tr>
@@ -1355,7 +1489,7 @@ function renderHomeKPIs() {
 
   grid.innerHTML = [
     kpiStripItemHtml({
-      icon: '₹', value: formatCurrency(baselineCost), label: 'Total cost',
+      icon: currencySymbol() || '#', value: formatCurrency(baselineCost), label: 'Total cost',
       deltaPrefix: 'Source:',
       deltaText: costDetail,
       deltaNeutral: true,
@@ -1758,12 +1892,35 @@ function renderTwinStats() {
       if (el) el.textContent = String(value);
     });
 
+  // The em dash needs a VISIBLE reason, not only a tooltip.
+  //
+  // Refusing to invent a network-level risk band is right — no engine here
+  // owns that metric, and aggregating the per-facility figures on this screen
+  // would make it a second KPI engine. But an em dash beside "Overall Risk",
+  // on a map whose own cards report three sites above 90% utilisation, reads
+  // as "no risk found" rather than "not computed". A tooltip is not an answer:
+  // it is invisible until hovered and absent entirely on touch.
+  //
+  // So the tile says what IS known — how many sites are over the threshold,
+  // which the KPI layer does own — and names the metric that is missing.
+  const overThreshold = DCS.concat(PLANTS).filter(
+    (f) => typeof f.utilPct === 'number' && f.utilPct >= 90).length;
+  const riskText = overThreshold
+    ? `${overThreshold} site(s) ≥90%`
+    : 'Not computed';
   ['map2d-risk-label', 'twin3d-risk-label'].forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
-    el.textContent = '—';
-    el.title = 'No network-level risk metric has an authoritative owner yet; '
-             + 'risk is computed per facility.';
+    el.textContent = riskText;
+    el.style.fontSize = '13px';
+    el.title = overThreshold
+      ? `${overThreshold} facility/facilities are at or above the 90% `
+        + 'utilisation threshold. There is no network-level risk rating: risk '
+        + 'is computed per facility, and aggregating it here would invent a '
+        + 'metric no engine owns.'
+      : 'No network-level risk metric has an authoritative owner; risk is '
+        + 'computed per facility. This is not a statement that the network '
+        + 'carries no risk.';
   });
 }
 
@@ -1804,8 +1961,13 @@ function renderTwinTables() {
     dcBody.innerHTML = DCS.map(d => {
       const hasUtil = typeof d.utilPct === 'number' && Number.isFinite(d.utilPct);
       const color = hasUtil ? getUtilColor(d.utilPct) : 'var(--text-3)';
-      const label = hasUtil ? getUtilLabel(d.utilPct) : 'Not solved';
-      const tagClass = hasUtil ? getUtilTagClass(d.utilPct) : 'tag-muted';
+      // `d.isOpen === false` is the solver's decision not to use this site. It
+      // runs at 0%, which the utilisation bands read as "Healthy" — a green
+      // tag saying a facility performs well on a facility that is not
+      // operating. Operating status and utilisation health are different
+      // facts and get different answers.
+      const label = hasUtil ? getUtilLabel(d.utilPct, d.isOpen) : 'Not solved';
+      const tagClass = hasUtil ? getUtilTagClass(d.utilPct, d.isOpen) : 'tag-muted';
       return `
         <tr class="clickable-row" data-id="${d.id}">
           <td>${d.name}</td>
@@ -1873,14 +2035,17 @@ window.openFacilityPanel = function (facilityId) {
 
   document.getElementById('fp-content').innerHTML = `
     <div class="fp-title">${fac.name}</div>
-    <div class="fp-subtitle">${fac.city}, ${fac.state} · ${fac.region} Region</div>
+    <!-- city/state/region are not fields on a loaded facility; this rendered
+         "undefined, undefined - undefined Region". The network does carry the
+         site id and the inferred geography. -->
+    <div class="fp-subtitle">${fac.id}${NETWORK_GEOGRAPHY.region ? " · " + NETWORK_GEOGRAPHY.region : ""}</div>
     <div class="fp-stat"><span class="fp-stat-label">Type</span><span class="fp-stat-value">${isPlant ? 'Manufacturing Plant' : 'Distribution Centre'}</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Status</span><span class="fp-stat-value">${openStatusTag(fac)}</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Capacity</span><span class="fp-stat-value">${formatNumber(fac.capacity)} ${perPeriodLabel()}</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Current Throughput</span><span class="fp-stat-value">${formatNumber(fac.throughput)} ${perPeriodLabel()}</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Utilisation</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${getUtilTagClass(utilPct)}">${utilLabel}</span></span></div>
     ${isDC && fac.fixedCostPerYear != null ? `<div class="fp-stat"><span class="fp-stat-label">Fixed Cost</span><span class="fp-stat-value">${formatCurrency(fac.fixedCostPerYear)}/year</span></div>` : ''}
-    ${isDC && fac.handlingCost != null ? `<div class="fp-stat"><span class="fp-stat-label">Handling Cost</span><span class="fp-stat-value">₹${fac.handlingCost}/unit</span></div>` : ''}
+    ${isDC && fac.handlingCost != null ? `<div class="fp-stat"><span class="fp-stat-label">Handling Cost</span><span class="fp-stat-value">${formatCurrencyExact(fac.handlingCost)}/unit</span></div>` : ''}
     ${forecastSection}
     <div class="fp-stat"><span class="fp-stat-label">Risk / Bottleneck</span><span class="fp-stat-value"><span class="tag ${getUtilTagClass(utilPct)}">${riskStatus}</span></span></div>
     <div style="margin-top:var(--space-lg)">
@@ -1888,7 +2053,7 @@ window.openFacilityPanel = function (facilityId) {
       ${LANES.filter(l => l.from === facilityId || l.to === facilityId).map(l => `
         <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border-light);font-size:12px">
           <span>${l.from === facilityId ? '→ ' + getFacilityById(l.to)?.name : '← ' + getFacilityById(l.from)?.name}</span>
-          <span style="color:var(--text-3)">${formatNumber(l.flow)} ${perPeriodLabel()} · ₹${l.cost}/u</span>
+          <span style="color:var(--text-3)">${formatNumber(l.flow)} ${perPeriodLabel()} · ${formatCurrencyExact(l.cost)}/u</span>
         </div>
       `).join('')}
     </div>
@@ -2010,21 +2175,63 @@ function renderAdminSettingsModal() {
   const opt = SYSTEM_STATUS.optimisation;
   const fc = SYSTEM_STATUS.forecast;
   const d = SYSTEM_STATUS.data;
-  const ai = SYSTEM_STATUS.ai;
+
+  // Absence renders as absence. This block previously read from a hardcoded
+  // literal — 42 facilities, 380 lanes, 98.4% quality, ARIMA, a run dated
+  // 18/08/2026 — shown identically for every project. Model-governance
+  // metadata that describes a run which never happened is worse than no
+  // metadata: it is the surface a reviewer consults to decide whether to
+  // trust the analysis.
+  const or_ = (value, suffix = '') =>
+    (value === null || value === undefined || value === '')
+      ? '<span style="color:var(--text-3)">Not available</span>'
+      : `${value}${suffix}`;
+
+  const geographyLine = NETWORK_GEOGRAPHY.region
+    ? `${NETWORK_GEOGRAPHY.region}${NETWORK_GEOGRAPHY.basis
+        ? ` <span class="text-xs" style="color:var(--text-3)">(${NETWORK_GEOGRAPHY.basis})</span>` : ''}`
+    : null;
+
+  // Say when the approval bands are denominated in a currency other than the
+  // one this network is priced in. They are fixed INR policy amounts; read
+  // against a dollar network they understate the band by roughly eighty times.
+  const bandNote = (getActiveCurrency() && getActiveCurrency() !== GOVERNANCE_TIERS_CURRENCY)
+    ? `<div class="text-xs" style="color:var(--amber, #b45309);margin-top:6px">
+         These approval bands are configured in ${GOVERNANCE_TIERS_CURRENCY}. This
+         network is priced in ${getActiveCurrency()}, and no exchange rate is
+         configured — compare them yourself before relying on a tier.
+       </div>`
+    : '';
 
   body.innerHTML = `
     <div class="card-title" style="font-size:13px;margin:10px 0 6px">Guardrail Configuration &amp; Materiality Thresholds</div>
     <div style="border:1px solid var(--border-light);border-radius:var(--r-sm);padding:0 12px">${tiersHtml}</div>
+    ${bandNote}
 
-    <div class="card-title" style="font-size:13px;margin:18px 0 6px">Optimization Configuration</div>
+    <div class="card-title" style="font-size:13px;margin:18px 0 6px">This project&rsquo;s network</div>
     <div class="grid-2" style="gap:10px;font-size:12.5px">
-      <div><span class="text-muted">Solver</span><br><strong>${opt.solver}</strong></div>
-      <div><span class="text-muted">Status</span><br><strong>${opt.status}</strong></div>
-      <div><span class="text-muted">Last run</span><br><strong>${new Date(opt.lastRun).toLocaleString('en-IN')}</strong></div>
-      <div><span class="text-muted">Forecast model</span><br><strong>${fc.model}</strong></div>
-      <div><span class="text-muted">Forecast horizon</span><br><strong>${fc.horizon}</strong></div>
-      <div><span class="text-muted">Data quality</span><br><strong>${d.qualityPct}% (${d.facilities} facilities, ${d.lanes} lanes)</strong></div>
-      <div><span class="text-muted">AI agent</span><br><strong>${ai.agentStatus} — ${ai.model}</strong></div>
+      <div><span class="text-muted">Facilities</span><br><strong>${or_(d.facilities)}</strong></div>
+      <div><span class="text-muted">Markets</span><br><strong>${or_(d.markets)}</strong></div>
+      <div><span class="text-muted">Lanes</span><br><strong>${or_(d.lanes)}</strong></div>
+      <div><span class="text-muted">Geography</span><br><strong>${or_(geographyLine)}</strong></div>
+      <div><span class="text-muted">Currency</span><br><strong>${or_(getActiveCurrency())}</strong></div>
+      <div><span class="text-muted">Observed periods</span><br><strong>${or_(d.historicalPeriods)}</strong></div>
+    </div>
+
+    <div class="card-title" style="font-size:13px;margin:18px 0 6px">The run behind these figures</div>
+    <div class="grid-2" style="gap:10px;font-size:12.5px">
+      <div><span class="text-muted">Engine</span><br><strong>${or_(opt.solver)}</strong></div>
+      <div><span class="text-muted">Solver status</span><br><strong>${or_(opt.status)}</strong></div>
+      <div><span class="text-muted">Computed at</span><br><strong>${or_(opt.lastRun ? new Date(opt.lastRun).toLocaleString() : null)}</strong></div>
+      <div><span class="text-muted">Solve time</span><br><strong>${or_(opt.computeSeconds, ' s')}</strong></div>
+      <div><span class="text-muted">Planning horizon</span><br><strong>${or_(horizonLabel() || `${SOLVE_HORIZON.periodsModelled} period`)}</strong></div>
+      <div><span class="text-muted">Forecast engine</span><br><strong>${or_(fc.model)}</strong></div>
+      <div><span class="text-muted">Execution id</span><br><strong style="font-family:monospace;font-size:11px">${or_(opt.executionId)}</strong></div>
+      <div><span class="text-muted">Data version</span><br><strong style="font-family:monospace;font-size:11px">${or_(opt.dataVersion)}</strong></div>
+    </div>
+    <div class="text-xs" style="color:var(--text-3);margin-top:8px">
+      Every value above describes the analysis currently loaded. A field reads
+      &ldquo;Not available&rdquo; when this run did not produce it.
     </div>
 
     <div class="card-title" style="font-size:13px;margin:18px 0 6px">Trigger Keywords / Buckets</div>
@@ -2033,6 +2240,49 @@ function renderAdminSettingsModal() {
     <div class="card-title" style="font-size:13px;margin:18px 0 6px">Product Master / Configuration</div>
     <div class="text-xs" style="color:var(--text-2);font-style:italic">Not available — no Product Master data exists in this build yet.</div>
   `;
+}
+
+// ─── In-product info panel ──────────────────────────────────
+/**
+ * A dismissible panel for informational content.
+ *
+ * Replaces `alert()` on the header actions. A native alert blocks the event
+ * loop until dismissed — the page behind it stops rendering, which on a
+ * mid-render click leaves the application looking stalled or blank — and it
+ * cannot be closed by clicking away or styled to look like part of the product.
+ *
+ * Closes on the button, on the backdrop, and on Escape.
+ */
+function showInfoPanel(title, bodyHtml) {
+  document.getElementById('ng-info-panel')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'ng-info-panel';
+  overlay.className = 'modal-overlay active';
+  overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;'
+    + 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:600';
+  overlay.innerHTML = `
+    <div class="card" role="dialog" aria-modal="true" aria-label="${title}"
+         style="max-width:460px;width:calc(100% - 32px);max-height:80vh;overflow:auto">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div class="card-title" style="font-size:15px;margin:0">${title}</div>
+        <button class="btn btn-ghost btn-sm" id="ng-info-panel-close"
+                aria-label="Close">✕</button>
+      </div>
+      <div style="margin-top:10px;line-height:1.6">${bodyHtml}</div>
+    </div>`;
+
+  const close = () => {
+    overlay.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+  document.body.appendChild(overlay);
+  overlay.querySelector('#ng-info-panel-close')?.addEventListener('click', close);
+  document.addEventListener('keydown', onKey);
+  overlay.querySelector('#ng-info-panel-close')?.focus();
 }
 
 // ─── Notification Toast ─────────────────────────────────────
@@ -2055,64 +2305,125 @@ function showNotification(message) {
 }
 
 // ─── KPI Export Report ───────────────────────────────────────
+/** One CSV field: quoted, with embedded quotes doubled, never "undefined". */
+function csvCell(value) {
+  if (value === null || value === undefined || value === '') return '"Not available"';
+  return '"' + String(value).split('"').join('""') + '"';
+}
+
+/**
+ * Read one exported figure out of a facility KPI record.
+ *
+ * The record's fields are OBJECTS — `{ value, unit, delta }` — and the export
+ * interpolated them straight into a string, so "On-Time Service SLA" left the
+ * building as the literal text `[object Object]`. Three other rows named keys
+ * (`cost`, `invDays`, `fillRate`) that no record has ever carried, so they
+ * exported "Not available" on a fully solved network.
+ */
+function kpiField(kpis, key) {
+  const entry = kpis && kpis[key];
+  if (entry === null || entry === undefined) return null;
+  const value = (typeof entry === 'object') ? entry.value : entry;
+  return (value === null || value === undefined || Number.isNaN(Number(value)))
+    ? null : value;
+}
+
 export function exportFacilityReport() {
   const facId = state.selectedFacility;
   const fac = getFacilityById(facId) || DCS[0] || PLANTS[0];
   if (!fac) { showNotification('No facility is loaded to export.'); return; }
-  const kpis = getKpisForFacility(facId);
+  const kpis = getKpisForFacility(facId, state.selectedPeriod) || {};
   const insights = getInsightsForFacility(facId);
 
+  const util = kpiField(kpis, 'util');
+  const sla = kpiField(kpis, 'sla');
+  const cost = kpiField(kpis, 'totalCost');
+  const invDays = kpiField(kpis, 'inventoryDays');
+  const throughput = kpiField(kpis, 'throughput') ?? fac.throughput;
+  const capacity = kpiField(kpis, 'capacity') ?? fac.capacity;
+  const perPeriod = perPeriodLabel();
+  const ccy = getActiveCurrency();
+
+  // Location from what the network actually carries. `fac.city`, `fac.state`
+  // and `fac.region` are not fields on a loaded facility, so this row exported
+  // "undefined, undefined (undefined Region)" for every facility of every
+  // project — including the ones whose coordinates were on screen beside it.
+  const coords = (typeof fac.lat === 'number' && typeof fac.lng === 'number')
+    ? `${fac.lat.toFixed(4)}, ${fac.lng.toFixed(4)}` : null;
+  const location = [fac.name, NETWORK_GEOGRAPHY.region].filter(Boolean).join(' — ');
+
   const lines = [
-    '=== NetGravity Executive Facility Performance & Analytics Report ===',
-    'Generated Date,' + new Date().toLocaleDateString(),
-    'Facility Name,' + fac.name,
-    'Facility Type,' + (isPlantFacility(fac.id) ? 'Manufacturing Plant' : 'Distribution Centre'),
-    'Location,"' + fac.city + ', ' + fac.state + ' (' + fac.region + ' Region)"',
-    'Active Period,' + (state.selectedPeriod || 'as uploaded'),
+    '=== NetGravity Facility Performance Report ===',
+    'Generated,' + csvCell(new Date().toISOString()),
+    'Facility,' + csvCell(fac.name),
+    'Facility ID,' + csvCell(fac.id),
+    'Facility Type,' + csvCell(isPlantFacility(fac.id) ? 'Manufacturing Plant' : 'Distribution Centre'),
+    'Location,' + csvCell(location),
+    'Coordinates,' + csvCell(coords),
+    'Currency,' + csvCell(ccy),
+    'Planning horizon,' + csvCell(horizonLabel() || `${SOLVE_HORIZON.periodsModelled} period`),
+    'Period shown,' + csvCell(state.selectedPeriod || 'as uploaded'),
     '',
-    '=== Operational Telemetry & Capacity Horizon ===',
+    '=== Operational Telemetry ===',
     // An exported figure is evidence a reader may act on, so a metric the
     // engine did not produce is exported as "Not available" — never as a
     // plausible-looking number, and never with a status ("Target Met",
     // "Healthy") asserted over a value that does not exist. Peak utilisation
     // has no forecast behind it at all, so it is always reported as absent.
-    'Capacity (Units/Day),' + (fac.capacity ?? 'Not available'),
-    'Current Throughput (Units/Day),' + (fac.throughput ?? 'Not available'),
-    'Utilisation Rate,' + (fac.utilPct == null ? 'Not available' : fac.utilPct + '%'),
-    'Projected Peak Utilisation,Not available (no demand forecast for this facility)',
+    `Capacity (units/${perPeriod}),` + csvCell(capacity),
+    `Throughput (units/${perPeriod}),` + csvCell(throughput),
+    'Utilisation %,' + csvCell(util === null ? null : Number(util).toFixed(2)),
+    'Projected Peak Utilisation,' + csvCell(null) + ',"no demand forecast for this facility"',
     '',
     '=== Core Performance KPIs ===',
-    'Metric,Value,Target Benchmark,Status',
-    'On-Time Service SLA,' + (kpis.sla || 'Not available') + ',>=95.0%,' + (kpis.sla ? 'Reported' : 'Not available'),
-    'Monthly Operating Cost,' + (kpis.cost || 'Not available') + ',Budget Aligned,' + (kpis.cost ? 'Reported' : 'Not available'),
-    'Inventory Days of Supply,' + (kpis.invDays || 'Not available') + ',10-14 Days,' + (kpis.invDays ? 'Reported' : 'Not available'),
-    'Order Fill Rate,' + (kpis.fillRate || 'Not available') + ',>=98.0%,' + (kpis.fillRate ? 'Reported' : 'Not available'),
+    'Metric,Value,Unit,Status',
+    'Demand served within SLA,' + csvCell(sla) + ',' + csvCell('%')
+      + ',' + csvCell(sla === null ? null : 'Reported'),
+    'Operating cost,' + csvCell(cost) + ',' + csvCell(ccy)
+      + ',' + csvCell(cost === null ? null : 'Reported'),
+    'Inventory days of supply,' + csvCell(invDays) + ',' + csvCell('days')
+      + ',' + csvCell(invDays === null ? null : 'Reported'),
     '',
-    '=== AI Prescriptive Diagnosis & Risk Telemetry ===',
-    'Insight ID,Severity,Diagnosis Summary'
+    '=== Findings ===',
+    'Insight ID,Severity,Summary',
   ];
 
   if (insights && insights.length > 0) {
     insights.forEach(function (ins) {
-      const desc = ins.title || ins.desc || '';
-      lines.push('"' + ins.id + '","' + (ins.impact || 'Critical') + '","' + desc.split('"').join('""') + '"');
+      lines.push([
+        csvCell(ins.id),
+        // The insight's own severity, or absence. It was defaulted to
+        // "Critical", which asserts a severity the engine never assigned.
+        csvCell(ins.impact || ins.severity),
+        csvCell(ins.title || ins.headline || ins.desc),
+      ].join(','));
     });
   } else {
     // No insight has been generated for this network. Exporting two invented
     // ones about the prototype's demo footprint would put fabricated findings
     // into a file the user may circulate as analysis.
-    lines.push('"","No insight","No insight has been generated for this network yet."');
+    lines.push(csvCell('') + ',' + csvCell('No insight')
+      + ',' + csvCell('No insight has been generated for this network yet.'));
   }
 
-  const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent(lines.join('\r\n'));
+  // A Blob with an explicit filename, not a `data:` URL. Chrome ignores the
+  // `download` attribute's name on long data: URLs and saves the report under a
+  // generated temporary name, which is how an export meant to be circulated
+  // arrived as an unidentifiable file.
+  const stamp = new Date().toISOString().slice(0, 10);
+  const safeName = String(fac.name || fac.id).replace(/[^A-Za-z0-9_-]+/g, '_');
+  const blob = new Blob(['﻿' + lines.join('\r\n')],
+                        { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.setAttribute('href', csvContent);
-  link.setAttribute('download', 'NetGravity_KPI_Report_' + fac.id + '.csv');
+  link.href = url;
+  link.download = `NetGravity_KPI_${safeName}_${stamp}.csv`;
   document.body.appendChild(link);
   link.click();
   link.remove();
+  URL.revokeObjectURL(url);
 
-  showNotification('✓ Exported KPI report for ' + fac.name + ' (' + fac.id + '.csv)');
+  showNotification('Exported KPI report for ' + fac.name);
 }
 
 // Expose export on window
