@@ -560,6 +560,45 @@ def browser_checks() -> None:
                chat.replace("\n", " ")[:200])
         page.screenshot(path=str(SHOTS / "p107_chat.png"))
 
+        # ---- H-16 The assistant actually consulted its model ------------
+        #
+        # The whole reason this went unnoticed is that the fallback is seamless:
+        # with no TEXT_API_TOKEN in the web process the orchestrator answers
+        # from templates and rule-based intent, correctly and silently, forever.
+        # The status line is the one place the difference is stated, so it is
+        # the thing to assert.
+        status = page.evaluate("""() => {
+          const s = window.__ngServerStatus || {};
+          return { llm: !!(s.orchestrator && s.orchestrator.llm_available),
+                   header: (document.querySelector('.chatbot-back-row span')
+                            || {}).innerText || '' };
+        }""")
+        record("H-16", "The assistant reports its model tier truthfully",
+               (status["llm"] and "model assisted" in status["header"])
+               or (not status["llm"] and "deterministic" in status["header"]),
+               f"llm_available={status['llm']} header={status['header']!r}"
+               + "  (the web process never loaded .env, so the gateway was "
+               "unavailable for the life of the server and nothing said so)")
+
+        # ---- H-17 A conversation survives a reload ----------------------
+        cid_before = page.evaluate(
+            "() => sessionStorage.getItem('ng_chat_conversation_id')")
+        page.reload(wait_until="networkidle", timeout=60000)
+        page.wait_for_timeout(6000)
+        page.evaluate("window.openChatbotModal && window.openChatbotModal()")
+        page.wait_for_timeout(4000)
+        restored = page.evaluate(
+            """() => (document.getElementById('chatbot-chat-view') || {}).innerText || ''""")
+        cid_after = page.evaluate(
+            "() => sessionStorage.getItem('ng_chat_conversation_id')")
+        record("H-17", "A conversation survives a page reload",
+               bool(cid_before) and cid_after == cid_before
+               and "most utilised" in restored,
+               f"conversation {cid_before} kept={cid_after == cid_before}; "
+               f"restored {len(restored)} chars"
+               + "  (the id lived in a module variable, so a reload orphaned "
+               "the stored thread and 'Why?' had nothing to refer back to)")
+
         real_errors = [e for e in page_errors if "WebGLProgram" not in e
                        and "THREE." not in e]
         record("H-13", "No uncaught page errors",

@@ -137,6 +137,17 @@ _STANDALONE_VERBS = {
     "recommend", "suggest", "help", "teach", "send", "email", "call",
     "book", "buy", "order", "play", "search", "google", "remind",
 }
+
+#: Words that open a COMPLETE question. A message starting with one of these
+#: carries its own subject and verb, so it is a new request rather than a
+#: fragment leaning on the previous turn — see `_is_elliptical`. Closed set:
+#: these are the English interrogatives, not a vocabulary that grows with the
+#: domain.
+_INTERROGATIVES = {
+    "who", "whom", "whose", "what", "when", "where", "which", "how", "why",
+    "is", "are", "was", "were", "do", "does", "did", "can", "could", "should",
+    "would", "will", "has", "have", "had",
+}
 _RISK_WORDS = ("risk exposure", "exposure of", "risk of", "how exposed",
                "resilience of", "impact if", "rei", "how critical",
                "how important", "criticality")
@@ -732,7 +743,16 @@ class ConversationalNLU:
             # baseline and label the answer hypothetical — a wrong answer
             # dressed as a right one. The MILP needs a number and we will not
             # invent one.
-            if not scenarios:
+            #
+            # A spec that names an action but no magnitude is in exactly the
+            # same position as no spec at all: there is still no override to
+            # give the MILP. "A major customer is expanding in Delhi" resolves
+            # to CHANGE_DEMAND with nothing to multiply by, and it used to pass
+            # this check because a spec existed — then failed three steps later
+            # inside `ScenarioBuilder` with "CHANGE_DEMAND requires a
+            # demand_multiplier", taking the whole execution to FAILED. The
+            # user needed one question, not a dead run.
+            if not scenarios or not any(s.is_runnable for s in scenarios):
                 return AmbiguityKind.MISSING_PARAMETER
 
         # A resolved node with no recognisable operation: "Delhi.", "Do
@@ -809,6 +829,30 @@ class ConversationalNLU:
         # Points back at it.
         if any(f" {p} " in f" {stripped} " for p in _BACK_REFERENCES):
             return True
+
+        # A question that opens with an interrogative and was not caught above
+        # asks something COMPLETE. It has its own subject and its own verb, so
+        # it depends on nothing, and reading it as a follow-up answers a
+        # question the user did not ask.
+        #
+        # This is a structural test rather than another vocabulary entry, and
+        # that is the point. `_STANDALONE_VERBS` is a whitelist of imperative
+        # verbs, so it catches "tell me a joke" and cannot, even in principle,
+        # catch "who won the cricket world cup" — six words, no listed verb,
+        # therefore "a bare fragment", therefore an EXPLANATION of the previous
+        # turn. In a conversation that had been discussing the network that
+        # question was answered with the network's REI, unserved demand and
+        # baseline cost. Every figure was real and none of them had anything to
+        # do with what was asked. Growing the verb list one word at a time
+        # cannot fix that; not treating a complete question as a fragment can.
+        #
+        # The continuation and back-reference tests run FIRST and still win, so
+        # "what about Mumbai?" and "how much did that cost?" stay follow-ups.
+        # A bare "Why?" never reaches here — `_is_explanatory_fragment` claims
+        # it earlier in `understand()`.
+        if words[0] in _INTERROGATIVES:
+            return False
+
         # A bare fragment: no verb of its own to make it a request.
         return not any(w in _STANDALONE_VERBS for w in words)
 
@@ -960,7 +1004,20 @@ class ConversationalNLU:
         text: str,
     ) -> ConversationalIntent:
         options = [resolver.describe(fid) for fid in mention.resolved_ids]
-        names = ", ".join(o["id"] for o in options)
+        # The label AND the id. `describe()` has always returned
+        # "Delhi Distribution Center (DC)" and the question printed "F004" —
+        # so a user asked to choose between "F004, M001" was given two opaque
+        # keys, one of which is a distribution centre and the other a demand
+        # market. Which they are is the entire content of the question.
+        #
+        # The id stays because it is the answer: an exact id is what the entity
+        # resolver matches first, so naming it tells the user precisely what to
+        # type back.
+        names = ", ".join(
+            f"{o['label']} [{o['id']}]" if o.get("label") and o["label"] != o["id"]
+            else o["id"]
+            for o in options
+        )
         return ConversationalIntent(
             intent=Intent.UNKNOWN,
             clarity=IntentClarity.AMBIGUOUS,
@@ -968,8 +1025,8 @@ class ConversationalNLU:
             clarification=ClarificationRequest(
                 kind=AmbiguityKind.AMBIGUOUS_ENTITY,
                 question=(
-                    f"I found {len(options)} facilities matching "
-                    f"'{mention.phrase}': {names}. Which one do you mean?"
+                    f"'{mention.phrase}' matches {len(options)} nodes in your "
+                    f"network: {names}. Which one do you mean?"
                 ),
                 options=options,
             ),

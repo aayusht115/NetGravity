@@ -445,9 +445,31 @@ class ChatService:
         Critically, this distinguishes "we could not establish the facts" from
         "we did, and they are concerning" — the same distinction the governance
         layer records in `blocked_by_missing_evidence`.
+
+        And it distinguishes a question from a proposal. Governance classifies
+        the action a run IMPLIES, and a query implies `REPORT` — deliberately,
+        so that reports stay subject to the evidence rules rather than
+        short-circuiting at R0. But the verdict was then read out to the user in
+        the language of a blocked instruction: someone who asked "which DC is
+        most utilised?" was told "This requires a human decision and cannot be
+        actioned automatically", as though their question were awaiting
+        sign-off. Nothing was proposed and nothing was withheld; the network's
+        condition is simply such that changes to it could not be automated.
+        The verdict is unchanged and still shown — only its framing depends on
+        whether the user asked for something to happen.
         """
         classification = governance.classification.value
+        # REPORT and NONE both mean the run proposed no change to the network.
+        proposes_change = str(
+            getattr(getattr(governance, "action_type", None), "value",
+                    getattr(governance, "action_type", "") or "")
+        ).upper() not in ("REPORT", "NONE", "")
+
         if classification == "HUMAN_ONLY":
+            if not proposes_change:
+                return ("This is analysis only — nothing has been changed. "
+                        f"Acting on it would need a human decision: "
+                        f"{governance.reason}")
             return ("This requires a human decision and cannot be actioned "
                     f"automatically: {governance.reason}")
         if classification == "APPROVAL_REQUIRED":
@@ -455,6 +477,10 @@ class ChatService:
                 return ("Autonomous action is withheld because required evidence "
                         "is unavailable — not because measured risk is high. "
                         "A planner should review this.")
+            if not proposes_change:
+                return ("This is analysis only — nothing has been changed. "
+                        f"Acting on it would need planner approval: "
+                        f"{governance.reason}")
             return f"This needs planner approval before any action: {governance.reason}"
         if classification == "NO_ACTION":
             return ""
@@ -497,11 +523,35 @@ class ChatService:
             role.value: resolver.facilities_of_role(role)
             for role in (NodeRole.PLANT, NodeRole.DC, NodeRole.MARKET)
         }
+        # Names, not raw identifiers.
+        #
+        # This listed "F004, F005, F006, F007, F008" — the primary keys of the
+        # uploaded workbook — to a planner who calls them the Delhi, Bangalore
+        # and Pune DCs. The id is kept alongside because it is what the entity
+        # resolver matches first, so a follow-up can name one exactly.
+        #
+        # Deliberately NOT model-phrased, unlike every analytical answer in this
+        # service. The whole content here is counts and names, and
+        # `numeric_grounding._is_policeable` does not police bare counts — by
+        # design, because policing "three facilities" buries the failures that
+        # matter. A generated sentence asserting six distribution centres where
+        # there are five would therefore pass every guardrail this project has.
+        # The counts are already exact; there is nothing for a model to add
+        # that is worth an unchecked number.
+        def _listed(role: str, limit: int = 8) -> str:
+            ids = counts[role]
+            if not ids:
+                return "none"
+            shown = ", ".join(
+                f"{resolver.describe(fid)['label'].rsplit(' (', 1)[0]} [{fid}]"
+                for fid in ids[:limit]
+            )
+            return shown + (f", and {len(ids) - limit} more" if len(ids) > limit else "")
+
         reply = (
             f"From the current network snapshot ({snapshot.snapshot_id}): "
-            f"{len(counts['DC'])} distribution centres "
-            f"({', '.join(counts['DC']) or 'none'}), "
-            f"{len(counts['PLANT'])} plants, and "
+            f"{len(counts['DC'])} distribution centres ({_listed('DC')}), "
+            f"{len(counts['PLANT'])} plants ({_listed('PLANT')}), and "
             f"{len(counts['MARKET'])} demand markets. "
             f"These are observed counts read from the digital twin; no "
             f"optimization was run to produce them."
@@ -605,6 +655,13 @@ class ChatService:
     ) -> ChatResponse:
         resolver = EntityResolver(network)
         dcs = resolver.facilities_of_role(NodeRole.DC)
+        # Named, for the same reason the status answer names them: this is the
+        # message a user sees when they are already lost, and a list of primary
+        # keys is the least useful thing to hand them at that moment.
+        named = ", ".join(
+            f"{resolver.describe(fid)['label'].rsplit(' (', 1)[0]} [{fid}]"
+            for fid in dcs[:8]
+        ) + (f", and {len(dcs) - 8} more" if len(dcs) > 8 else "")
         response = ChatResponse(
             conversation_id=conversation_id,
             turn_id=turn_id,
@@ -613,7 +670,7 @@ class ChatService:
                 "the current network state, run what-if scenarios (closing a "
                 "facility, changing capacity), assess resilience exposure, or "
                 "combine an external event probability with exposure into a risk "
-                f"factor. Known distribution centres: {', '.join(dcs) or 'none'}."
+                f"factor. Known distribution centres: {named or 'none'}."
             ),
             intent=Intent.UNKNOWN.value,
             clarity=intent.clarity.value,

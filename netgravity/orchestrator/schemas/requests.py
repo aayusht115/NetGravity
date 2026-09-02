@@ -196,6 +196,47 @@ class ScenarioIntentSpec(BaseModel):
             return "SCALE"
         return None
 
+    @property
+    def missing_parameter(self) -> Optional[str]:
+        """
+        The quantity this spec still needs before a network can be built from
+        it, or None when it is complete.
+
+        A spec naming an action and a facility but no magnitude is not a
+        scenario — "a major customer is expanding in Delhi" gives CHANGE_DEMAND
+        with nothing to multiply by. `ScenarioBuilder` rejects it correctly
+        ("CHANGE_DEMAND requires a demand_multiplier"), but by then a workflow
+        is running: the step fails NON_RETRYABLE, the execution settles FAILED,
+        and the user gets "The analysis produced no narrative result" instead of
+        the one question that would have unblocked it — by how much?
+
+        Declared here, next to the fields, so the NLU can ask BEFORE planning
+        without restating `ScenarioBuilder`'s rules in a second place. The
+        builder stays the authority that enforces them; this is the same
+        condition read early enough to be a question rather than a failure.
+        """
+        if self.action == ScenarioActionType.CHANGE_DEMAND:
+            return None if self.demand_multiplier is not None else "demand_multiplier"
+        if self.action == ScenarioActionType.CHANGE_CAPACITY:
+            return None if self.capacity_operation else "capacity change"
+        if self.action == ScenarioActionType.CHANGE_TRANSPORT_COST:
+            return (None if self.transport_cost_multiplier is not None
+                    else "transport_cost_multiplier")
+        if self.action == ScenarioActionType.CHANGE_SLA:
+            return None if self.sla_days_delta is not None else "sla_days_delta"
+        if self.action == ScenarioActionType.ADD_FACILITY:
+            return None if self.new_facility is not None else "new facility details"
+        if self.action == ScenarioActionType.SHIFT_VOLUME:
+            return None if self.target_facility_id else "target facility"
+        # CLOSE_FACILITY and anything else carry their instruction in the
+        # action and the facility list alone.
+        return None
+
+    @property
+    def is_runnable(self) -> bool:
+        """Whether a network can actually be built from this spec."""
+        return self.missing_parameter is None
+
 
 class IntentResolution(BaseModel):
     """

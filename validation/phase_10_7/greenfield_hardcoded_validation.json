@@ -76,7 +76,7 @@
       "id": "L-03",
       "name": "The loading screen reports real work, not a timer",
       "status": "PASS",
-      "detail": "\u2726 Analysing Phase 10.7 Network Reading the analysis already computed for this network. Progress 1s elapsed 80% \u2014 4 of 5 steps complete \u2713 Reading your network 8 facilities, 36 lanes Done \u2713 Solving the "
+      "detail": "\u2726 Analysing Phase 10.7 Network Reading the analysis already computed for this network. Progress 3s elapsed 80% \u2014 4 of 5 steps complete \u2713 Reading your network 8 facilities, 36 lanes Done \u2713 Solving the "
     },
     {
       "id": "H-04",
@@ -124,7 +124,7 @@
       "id": "H-09",
       "name": "The analysis timestamp is real, not the literal '5 min ago'",
       "status": "PASS",
-      "detail": "Last analysed: 10 min ago"
+      "detail": "Last analysed: 11 h ago"
     },
     {
       "id": "H-10",
@@ -160,7 +160,19 @@
       "id": "H-12",
       "name": "The assistant does not announce a version that does not exist",
       "status": "PASS",
-      "detail": "\u2190 Back to FAQs & suggestions NetGravity v2.0.0 - grounded answers, model assisted Which DC is most utilised? \u2726 NETWORK_STATE_QUERY I find Pune Distribution Center is the most utilised DC at 116,799 un"
+      "detail": "\u2190 Back to FAQs & suggestions NetGravity v2.0.0 - grounded answers, model assisted Which DC is most utilised? \u2726 NETWORK_STATE_QUERY I find the Pune Distribution Center is the most utilised DC at 43.0% "
+    },
+    {
+      "id": "H-16",
+      "name": "The assistant reports its model tier truthfully",
+      "status": "PASS",
+      "detail": "llm_available=True header='NetGravity v2.0.0 - grounded answers, model assisted'  (the web process never loaded .env, so the gateway was unavailable for the life of the server and nothing said so)"
+    },
+    {
+      "id": "H-17",
+      "name": "A conversation survives a page reload",
+      "status": "PASS",
+      "detail": "conversation conv_c91f9f098555 kept=True; restored 564 chars  (the id lived in a module variable, so a reload orphaned the stored thread and 'Why?' had nothing to refer back to)"
     },
     {
       "id": "H-13",
@@ -170,8 +182,8 @@
     }
   ],
   "summary": {
-    "total": 28,
-    "passed": 28,
+    "total": 30,
+    "passed": 30,
     "failed": 0
   }
 }

@@ -2,11 +2,11 @@
   "scenario": "D",
   "name": "Failure / Insufficient Evidence",
   "original_user_request": "Review resilience and exposure for Delhi facilities.",
-  "duration_s": 26.61,
+  "duration_s": 1.12,
   "primary_chat_response": {
     "conversation_id": "conv_scen_d",
-    "turn_id": "70dca601-8d6",
-    "reply": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). Suggested next step: I recommend reviewing the quantified impact above before moving to a formal option appraisal. No action is proposed; this is analysis only.",
+    "turn_id": "491348d0-4b5",
+    "reply": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). Suggested next step: I recommend no structural change on this evidence: demand is served, no site is at its capacity threshold, and nothing in the plan is stranded. The next useful step is a scenario that tests a specific change you are considering, rather than a change this network is asking for. No action is proposed; this is analysis only.",
     "intent": "RESILIENCE_QUERY",
     "clarity": "CLEAR",
     "intent_schema_version": "1.0",
@@ -17,18 +17,18 @@
     ],
     "clarification": null,
     "provenance": "OBSERVED",
-    "execution_id": "fdb68798-27b",
+    "execution_id": "1af0473c-548",
     "workflow_id": "wf_resilience_query",
-    "network_snapshot_id": "snap_72a48e1a0664",
+    "network_snapshot_id": "snap_8dea7d8bc177",
     "scenario_id": null,
     "status": "COMPLETED",
     "results": {
       "resilience": {
         "network_id": "PHASE2_DELHI",
-        "data_version": "72a48e1a066440af",
-        "batch_id": "rei_05fe8484902f",
+        "data_version": "8dea7d8bc1775600",
+        "batch_id": "rei_00b7c9f15787",
         "batch_status": "COMPLETED_WITH_ERRORS",
-        "network_snapshot_id": "snap_72a48e1a0664",
+        "network_snapshot_id": "snap_8dea7d8bc177",
         "computed_for_snapshot_id": null,
         "material_fingerprint": "fp1_34ab4fd8199c2adc",
         "model_version": "1.2.0",
@@ -185,11 +185,25 @@
       "entity_id": null,
       "opening": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00).",
       "context": "",
-      "kpi_insights": [],
+      "kpi_insights": [
+        {
+          "theme": "Resilience",
+          "headline": "I see the greatest single-site exposure at DC_MUMBAI",
+          "narrative": "I see DC_MUMBAI carrying the highest relative economic exposure in this network (REI 1.00). That is where losing one site costs the most, so it is where a contingency is worth the most.",
+          "severity": "RISK",
+          "metric_refs": [
+            "rei.max_rei"
+          ],
+          "comparison_refs": [],
+          "driver_refs": [
+            "rei.highest_exposure_facility"
+          ]
+        }
+      ],
       "key_drivers": [
         "DC_MUMBAI carries the greatest disruption exposure"
       ],
-      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "recommendation": "I recommend no structural change on this evidence: demand is served, no site is at its capacity threshold, and nothing in the plan is stranded. The next useful step is a scenario that tests a specific change you are considering, rather than a change this network is asking for.",
       "limitation": "",
       "missing_information": [],
       "suggested_questions": [
@@ -202,17 +216,17 @@
       "LLM planner failed (Live planner call quota exhausted: reached maximum of 5 calls.); fell back to deterministic workflow planner.",
       "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
       "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE",
-      "reasoning: LLM reasoning output could not be parsed; deterministic template used. Cause: the gateway returned an empty body; no output to parse (output_tokens=1984)"
+      "reasoning: LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
     ],
     "errors": [],
-    "duration_seconds": 26.6051
+    "duration_seconds": 1.1177
   },
   "secondary_direct_response": {
-    "execution_id": "faff97ca-18f",
-    "request_id": "bb9a08d2-c517-4ff7-96c3-03cd83259433",
+    "execution_id": "a8ac4cc1-d20",
+    "request_id": "4f204cad-f49a-48c3-9355-b00dcf445efa",
     "status": "COMPLETED",
     "intent": "RESILIENCE_QUERY",
-    "network_snapshot_id": "snap_72a48e1a0664",
+    "network_snapshot_id": "snap_8dea7d8bc177",
     "scenario_id": null,
     "scenario_version": null,
     "is_hypothetical": false,
@@ -220,10 +234,10 @@
     "results": {
       "resilience": {
         "network_id": "PHASE2_DELHI",
-        "data_version": "72a48e1a066440af",
-        "batch_id": "rei_05fe8484902f",
+        "data_version": "8dea7d8bc1775600",
+        "batch_id": "rei_00b7c9f15787",
         "batch_status": "COMPLETED_WITH_ERRORS",
-        "network_snapshot_id": "snap_72a48e1a0664",
+        "network_snapshot_id": "snap_8dea7d8bc177",
         "computed_for_snapshot_id": null,
         "material_fingerprint": "fp1_34ab4fd8199c2adc",
         "model_version": "1.2.0",
@@ -350,7 +364,7 @@
         "DC_MUMBAI carries the greatest disruption exposure"
       ],
       "risks": [],
-      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "recommendation": "I recommend no structural change on this evidence: demand is served, no site is at its capacity threshold, and nothing in the plan is stranded. The next useful step is a scenario that tests a specific change you are considering, rather than a change this network is asking for.",
       "confidence": "LOW",
       "evidence": [
         "highest_exposure_facility = DC_MUMBAI"
@@ -361,11 +375,25 @@
         "entity_id": null,
         "opening": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00).",
         "context": "",
-        "kpi_insights": [],
+        "kpi_insights": [
+          {
+            "theme": "Resilience",
+            "headline": "I see the greatest single-site exposure at DC_MUMBAI",
+            "narrative": "I see DC_MUMBAI carrying the highest relative economic exposure in this network (REI 1.00). That is where losing one site costs the most, so it is where a contingency is worth the most.",
+            "severity": "RISK",
+            "metric_refs": [
+              "rei.max_rei"
+            ],
+            "comparison_refs": [],
+            "driver_refs": [
+              "rei.highest_exposure_facility"
+            ]
+          }
+        ],
         "key_drivers": [
           "DC_MUMBAI carries the greatest disruption exposure"
         ],
-        "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+        "recommendation": "I recommend no structural change on this evidence: demand is served, no site is at its capacity threshold, and nothing in the plan is stranded. The next useful step is a scenario that tests a specific change you are considering, rather than a change this network is asking for.",
         "limitation": "",
         "missing_information": [],
         "suggested_questions": [
@@ -376,7 +404,7 @@
       },
       "source": "template",
       "validation_warnings": [
-        "LLM reasoning output could not be parsed; deterministic template used. Cause: the gateway returned an empty body; no output to parse (output_tokens=1984)"
+        "LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
       ],
       "grounding_status": "GROUNDED",
       "grounded_claims": [
@@ -390,8 +418,8 @@
           "source": "rei_engine",
           "detail": "",
           "provenance": {
-            "execution_id": "faff97ca-18f",
-            "snapshot_id": "snap_72a48e1a0664",
+            "execution_id": "a8ac4cc1-d20",
+            "snapshot_id": "snap_8dea7d8bc177",
             "scenario_id": "",
             "source": "rei_engine",
             "fact": "rei.max_rei"
@@ -407,8 +435,25 @@
           "source": "rei_engine",
           "detail": "",
           "provenance": {
-            "execution_id": "faff97ca-18f",
-            "snapshot_id": "snap_72a48e1a0664",
+            "execution_id": "a8ac4cc1-d20",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "rei_engine",
+            "fact": "rei.max_rei"
+          }
+        },
+        {
+          "claim": "1.00",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "rei.max_rei",
+          "authoritative_value": 1.0,
+          "source": "rei_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "a8ac4cc1-d20",
+            "snapshot_id": "snap_8dea7d8bc177",
             "scenario_id": "",
             "source": "rei_engine",
             "fact": "rei.max_rei"
@@ -449,14 +494,14 @@
     "approval": null,
     "twin_states": [
       {
-        "state_id": "tws_snap_72a48e1a0664_optimized",
-        "snapshot_id": "snap_72a48e1a0664",
+        "state_id": "tws_snap_8dea7d8bc177_optimized",
+        "snapshot_id": "snap_8dea7d8bc177",
         "scenario_id": null,
         "state_type": "OPTIMIZED",
         "calculation_status": "PARTIAL",
         "n_facilities": 0,
         "n_flows": 0,
-        "generated_at": "2026-08-26T06:07:37.676574+00:00"
+        "generated_at": "2026-09-02T06:48:08.557654+00:00"
       }
     ],
     "errors": [],
@@ -464,11 +509,11 @@
       "LLM planner failed (Live planner call quota exhausted: reached maximum of 5 calls.); fell back to deterministic workflow planner.",
       "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
       "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE",
-      "reasoning: LLM reasoning output could not be parsed; deterministic template used. Cause: the gateway returned an empty body; no output to parse (output_tokens=1984)"
+      "reasoning: LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
     ],
-    "duration_seconds": 29.865,
-    "started_at": "2026-08-26T06:07:07.811772+00:00",
-    "completed_at": "2026-08-26T06:07:37.676751+00:00",
+    "duration_seconds": 0.8019,
+    "started_at": "2026-09-02T06:48:07.756408+00:00",
+    "completed_at": "2026-09-02T06:48:08.558297+00:00",
     "steps": [
       {
         "step_id": "load",
@@ -482,7 +527,7 @@
         "step_id": "rei",
         "capability": "resilience.assess",
         "status": "COMPLETED",
-        "duration_seconds": 0.0011,
+        "duration_seconds": 0.0013,
         "attempts": 1,
         "error": null
       },
@@ -490,7 +535,7 @@
         "step_id": "reason",
         "capability": "reasoning.synthesise",
         "status": "COMPLETED",
-        "duration_seconds": 29.862,
+        "duration_seconds": 0.7953,
         "attempts": 1,
         "error": null
       },
@@ -498,7 +543,7 @@
         "step_id": "govern",
         "capability": "governance.classify",
         "status": "COMPLETED",
-        "duration_seconds": 0.0001,
+        "duration_seconds": 0.0006,
         "attempts": 1,
         "error": null
       }
@@ -519,7 +564,7 @@
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:07:07.812513+00:00"
+      "timestamp": "2026-09-02T06:48:07.757422+00:00"
     },
     {
       "action": "CONTINUE",
@@ -529,7 +574,7 @@
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:07:07.813876+00:00"
+      "timestamp": "2026-09-02T06:48:07.759030+00:00"
     },
     {
       "action": "CONTINUE",
@@ -539,7 +584,7 @@
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:07:37.676150+00:00"
+      "timestamp": "2026-09-02T06:48:08.555337+00:00"
     },
     {
       "action": "CONTINUE",
@@ -549,15 +594,23 @@
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:07:37.676494+00:00"
+      "timestamp": "2026-09-02T06:48:08.557362+00:00"
     }
   ],
   "errors": [],
   "agentic_assessment": {
     "sequential_behavior": true,
     "adaptive_behavior": true,
-    "failure_trapped_by_manager": true,
-    "agentic_behavior_proven": true,
-    "classification": "PASS"
+    "replanning_observed": false,
+    "steps_executed": 4,
+    "chat_status": "COMPLETED",
+    "step_errors": [],
+    "failure_trapped": false,
+    "recovery_decisions": 0,
+    "agentic_behavior_proven": false,
+    "classification": "FAIL",
+    "failed_criteria": [
+      "injected failure was neither recorded nor recovered"
+    ]
   }
 }

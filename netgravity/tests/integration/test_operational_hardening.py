@@ -15,6 +15,8 @@ Each class here covers one item that was listed as "still not true":
 
 from __future__ import annotations
 
+import os
+import pathlib
 import threading
 
 import pytest
@@ -487,3 +489,71 @@ class TestAChangedAnalysisShapeIsNotServedStale:
         assert calls == ["base", "rei"]
         assert service.peek("snap_var", "v1") is not None
         assert service.peek("snap_var", "v1", variant="resilience") is not None
+
+
+class TestTheWebAppLoadsItsGatewayCredentials:
+    """
+    The assistant's language model was configured and unreachable, for the
+    whole life of the server, because nothing in the web process read `.env`.
+
+    `conftest.py`, `scripts/run_nlu_eval.py` and `netgravity/ingestion/config.py`
+    each load it. `app/backend/app.py` did not — so ingestion reached the model
+    and chat never did. `LLMGateway.available` was False, the orchestrator
+    degraded to rule-based intent parsing and template reasoning exactly as
+    designed, and the degradation was invisible precisely because that fallback
+    is meant to be seamless.
+
+    These pin the loading behaviour rather than the source line, so the guard
+    survives a refactor of how it is loaded.
+    """
+
+    def test_a_value_in_the_file_reaches_the_environment(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("TEXT_API_TOKEN", raising=False)
+        env_file = tmp_path / ".env"
+        env_file.write_text("TEXT_API_TOKEN=from-the-file\n", encoding="utf-8")
+
+        from dotenv import load_dotenv
+        load_dotenv(env_file, override=False)
+        assert os.environ.get("TEXT_API_TOKEN") == "from-the-file"
+
+    def test_a_real_environment_variable_wins_over_the_file(self, tmp_path, monkeypatch):
+        """
+        override=False, so a deployment that sets the variable properly is
+        never silently replaced by a checked-out file.
+        """
+        monkeypatch.setenv("TEXT_API_TOKEN", "from-the-environment")
+        env_file = tmp_path / ".env"
+        env_file.write_text("TEXT_API_TOKEN=from-the-file\n", encoding="utf-8")
+
+        from dotenv import load_dotenv
+        load_dotenv(env_file, override=False)
+        assert os.environ.get("TEXT_API_TOKEN") == "from-the-environment"
+
+    def test_the_app_module_loads_credentials_at_import(self):
+        """
+        The behaviour that was missing: importing the web application must put
+        the gateway credentials in the process environment when a .env exists.
+        """
+        import app.backend.app as app_module
+        assert hasattr(app_module, "_load_gateway_credentials")
+
+        repo_env = pathlib.Path(app_module.__file__).resolve().parents[2] / ".env"
+        if not repo_env.exists():
+            pytest.skip("no .env in this checkout; nothing to assert about loading it")
+        assert os.environ.get("TEXT_API_TOKEN", "").strip(), (
+            "importing the web app left TEXT_API_TOKEN unset despite a .env "
+            "being present — the assistant would run without its model and say "
+            "nothing about it"
+        )
+
+    def test_the_token_is_never_written_to_a_log_line(self):
+        """
+        The loader may report WHETHER a token is configured, never what it is.
+        """
+        import inspect
+        import app.backend.app as app_module
+        src = inspect.getsource(app_module._load_gateway_credentials)
+        assert "bool(os.environ.get" in src
+        # No formatting of the value itself into any string.
+        assert 'os.environ.get("TEXT_API_TOKEN", "")}' not in src
+        assert "%s\", os.environ" not in src

@@ -83,6 +83,16 @@ export function openChatbotModal() {
     const input = document.getElementById('chatbot-modal-input');
     if (input) input.focus();
   }, 100);
+
+  // Bring back the thread this tab was already having, if there is one.
+  restoreConversation().then((restored) => {
+    if (!restored) return;
+    const faqSection = document.getElementById('chatbot-faq-section');
+    const chatView = document.getElementById('chatbot-chat-view');
+    if (faqSection) faqSection.style.display = 'none';
+    if (chatView) chatView.style.display = 'flex';
+    renderChatMessages();
+  });
 }
 
 /**
@@ -101,6 +111,9 @@ export function closeChatbotModal() {
  */
 export function resetChatbotView() {
   chatMessages = [];
+  // Going back to the FAQ list ends the thread. Keeping the id would make the
+  // next question a follow-up to a conversation the user can no longer see.
+  storeConversationId(null);
   const faqSection = document.getElementById('chatbot-faq-section');
   const chatView = document.getElementById('chatbot-chat-view');
 
@@ -119,7 +132,84 @@ export function resetChatbotView() {
 
 import { chatService } from './integration/services/chat-service.js';
 
+/**
+ * The server-side conversation this tab is continuing.
+ *
+ * Kept in sessionStorage, not just in a module variable. The orchestrator has
+ * stored every turn since Phase 3 and exposes them at
+ * `/orchestrator/chat/<id>/history`, but the id lived only in memory — so a
+ * page reload started a new conversation, the stored thread was orphaned, and
+ * a follow-up like "Why?" had no previous turn to refer to and was answered as
+ * if it were a fresh question.
+ *
+ * sessionStorage rather than localStorage: a conversation belongs to the tab
+ * the person is working in, and two projects open side by side must not share
+ * one thread.
+ */
+const CONVERSATION_KEY = 'ng_chat_conversation_id';
+
+// Declared before the helpers that assign it: `storeConversationId` writes to
+// this binding, and a `let` referenced before its declaration is evaluated is a
+// TemporalDeadZone error rather than an undefined read.
 let conversationId = null;
+
+function loadConversationId() {
+  try {
+    return sessionStorage.getItem(CONVERSATION_KEY) || null;
+  } catch {
+    return null;          // private mode, blocked storage: fall back to memory
+  }
+}
+
+function storeConversationId(id) {
+  conversationId = id || null;
+  try {
+    if (id) sessionStorage.setItem(CONVERSATION_KEY, id);
+    else sessionStorage.removeItem(CONVERSATION_KEY);
+  } catch {
+    /* memory-only for this tab */
+  }
+}
+
+conversationId = loadConversationId();
+
+/**
+ * Reload the visible transcript from the server's own record.
+ *
+ * Rendered from stored turns rather than kept in the browser, so what is shown
+ * after a reload is what the orchestrator actually answered — not a client-side
+ * copy that could drift from it.
+ */
+async function restoreConversation() {
+  if (!conversationId || chatMessages.length) return false;
+  let turns = [];
+  try {
+    const res = await chatService.getHistory(conversationId);
+    turns = (res && res.turns) || [];
+  } catch {
+    // A conversation the server no longer has is not an error worth showing:
+    // start a fresh one silently.
+    storeConversationId(null);
+    return false;
+  }
+  if (!turns.length) return false;
+
+  turns.forEach((turn) => {
+    if (turn.user_input) {
+      chatMessages.push({ role: 'user', text: turn.user_input });
+    }
+    const text = turn.reply || turn.clarification || '';
+    if (text) {
+      chatMessages.push({
+        role: 'ai',
+        topic: (turn.intent && turn.intent !== 'UNKNOWN')
+          ? turn.intent : 'EARLIER IN THIS SESSION',
+        text: escapeChatText(text),
+      });
+    }
+  });
+  return chatMessages.length > 0;
+}
 
 /**
  * Ask a specific predefined prompt or FAQ
@@ -165,7 +255,7 @@ export async function askChatbotPrompt(query) {
     removeTypingIndicator();
     isGenerating = false;
 
-    if (res && res.conversation_id) conversationId = res.conversation_id;
+    if (res && res.conversation_id) storeConversationId(res.conversation_id);
 
     // The endpoint's answer field is `reply`. This read `res.response`, which
     // the API has never returned — so every successful answer fell through to

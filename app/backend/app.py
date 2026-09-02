@@ -47,6 +47,45 @@ FRONTEND_DIR = os.path.join(
 )
 
 # ---------------------------------------------------------------------------
+# Gateway credentials
+# ---------------------------------------------------------------------------
+# `.env` holds `TEXT_API_TOKEN`, and nothing in this process read it.
+#
+# `conftest.py`, `scripts/run_nlu_eval.py` and `netgravity/ingestion/config.py`
+# each load it; the web application did not. So the ingestion pipeline reached
+# the language model and the assistant never did: `LLMGateway.available` was
+# False for the entire lifetime of the server, the orchestrator degraded to
+# rule-based intent parsing and template reasoning exactly as designed, and the
+# degradation was invisible because that fallback is meant to be seamless. The
+# chat surface worked — it just answered every question without ever consulting
+# the model the deployment is configured for.
+#
+# Real environment variables win over the file, so a deployment that sets
+# TEXT_API_TOKEN properly is unaffected, and an empty/absent .env leaves the
+# documented offline path exactly as it was.
+def _load_gateway_credentials() -> None:
+    try:
+        from dotenv import load_dotenv
+    except ImportError:      # python-dotenv absent: env vars only, still valid
+        logger.info("app.env.dotenv_unavailable using process environment only")
+        return
+    env_path = Path(__file__).resolve().parents[2] / ".env"
+    if not env_path.exists():
+        logger.info("app.env.no_dotenv_file path=%s", env_path)
+        return
+    # override=False: a real environment variable always beats the file.
+    load_dotenv(env_path, override=False)
+    # Whether it is configured, never what it is. The token must not reach a
+    # log, and this line is the one most likely to be pasted into a ticket.
+    logger.info(
+        "app.env.loaded path=%s text_api_token_configured=%s",
+        env_path, bool(os.environ.get("TEXT_API_TOKEN", "").strip()),
+    )
+
+
+_load_gateway_credentials()
+
+# ---------------------------------------------------------------------------
 # Environment configuration (brief §26)
 # ---------------------------------------------------------------------------
 ENV = os.environ.get("NETGRAVITY_ENV", "development").strip().lower()

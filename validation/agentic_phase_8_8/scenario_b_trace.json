@@ -2,11 +2,11 @@
   "scenario": "B",
   "name": "External Disruption",
   "original_user_request": "A major disruption is affecting Mumbai. Assess the impact on network resilience, cost and service, and recommend mitigation.",
-  "duration_s": 43.28,
+  "duration_s": 30.05,
   "primary_chat_response": {
     "conversation_id": "conv_scen_b",
-    "turn_id": "44ebabd0-04b",
-    "reply": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). Suggested next step: I recommend reviewing the quantified impact above before moving to a formal option appraisal. No action is proposed; this is analysis only.",
+    "turn_id": "4b6571ef-445",
+    "reply": "I see a business network cost of 1,200.00 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I could not use the following analyses; their values are UNKNOWN (not zero): forecast.demand (UNAVAILABLE). I see external evidence for OTHER affecting Mumbai, severity HIGH, with NO defensible probability available (source: user_report). Suggested next step: I recommend no structural change on this evidence: demand is served, no site is at its capacity threshold, and nothing in the plan is stranded. The next useful step is a scenario that tests a specific change you are considering, rather than a change this network is asking for. No action is proposed; this is analysis only.",
     "intent": "RESILIENCE_QUERY",
     "clarity": "CLEAR",
     "intent_schema_version": "1.0",
@@ -17,18 +17,81 @@
     ],
     "clarification": null,
     "provenance": "OBSERVED",
-    "execution_id": "17007dad-6d2",
-    "workflow_id": "wf_resilience_query",
-    "network_snapshot_id": "snap_72a48e1a0664",
+    "execution_id": "1ac0cf04-91b",
+    "workflow_id": "resilience-mumbai-obs-analysis-v1",
+    "network_snapshot_id": "snap_8dea7d8bc177",
     "scenario_id": null,
     "status": "COMPLETED",
     "results": {
+      "network": {
+        "network_id": "PHASE2_DELHI",
+        "data_version": "8dea7d8bc1775600",
+        "optimization_mode": "BROWNFIELD_SCENARIO_OPTIMIZATION",
+        "is_hypothetical": false,
+        "solver_status": "OPTIMAL",
+        "is_feasible": true,
+        "solver_objective": 1200.0,
+        "business_network_cost": 1200.0,
+        "cost_components": {
+          "facility_cost": 0.0,
+          "opening_cost": 0.0,
+          "closure_cost": 0.0,
+          "transport_cost": 1200.0,
+          "handling_cost": 0.0,
+          "inventory_cost": 0.0,
+          "carbon_cost": 0.0
+        },
+        "shortage_penalty_cost": 0.0,
+        "reconciliation_is_closed": true,
+        "total_demand": 300.0,
+        "served_demand": 300.0,
+        "unserved_demand": 0.0,
+        "demand_fill_rate": 1.0,
+        "unserved_demand_rate": 0.0,
+        "open_facilities": [
+          "DC_DELHI",
+          "DC_KOLKATA",
+          "DC_MUMBAI",
+          "PLANT_N"
+        ],
+        "closed_facilities": [],
+        "avg_utilization_pct": 1.57,
+        "total_carbon_kg": 3.72,
+        "pct_demand_in_sla": 100.0,
+        "sla_mode": "LAST_MILE",
+        "service_unsupported_features": [],
+        "run_id": "48321216",
+        "result_kind": "OBSERVED_RESULT",
+        "baseline_snapshot_id": "snap_8dea7d8bc177",
+        "model_version": "1.2.0",
+        "execution_id": "1ac0cf04-91b"
+      },
+      "kpis": {
+        "business_network_cost": 1200.0,
+        "cost_components": {
+          "facility_cost": 0.0,
+          "opening_cost": 0.0,
+          "closure_cost": 0.0,
+          "transport_cost": 1200.0,
+          "handling_cost": 0.0,
+          "inventory_cost": 0.0,
+          "carbon_cost": 0.0
+        },
+        "total_demand": 300.0,
+        "served_demand": 300.0,
+        "unserved_demand": 0.0,
+        "demand_fill_rate": 1.0,
+        "pct_demand_in_sla": 100.0,
+        "avg_utilization_pct": 1.57,
+        "total_carbon_kg": 3.72,
+        "n_open_facilities": 4
+      },
       "resilience": {
         "network_id": "PHASE2_DELHI",
-        "data_version": "72a48e1a066440af",
-        "batch_id": "rei_259824bed18e",
+        "data_version": "8dea7d8bc1775600",
+        "batch_id": "rei_ba779e9647c1",
         "batch_status": "COMPLETED_WITH_ERRORS",
-        "network_snapshot_id": "snap_72a48e1a0664",
+        "network_snapshot_id": "snap_8dea7d8bc177",
         "computed_for_snapshot_id": null,
         "material_fingerprint": "fp1_34ab4fd8199c2adc",
         "model_version": "1.2.0",
@@ -148,7 +211,34 @@
         ]
       }
     },
-    "risk": null,
+    "risk": {
+      "results": [],
+      "not_computable": [
+        {
+          "status": "NOT_COMPUTABLE",
+          "not_computable_reason": "NO_EVENT_PROBABILITY",
+          "likelihood": null,
+          "rei": 1.0,
+          "risk_factor": null,
+          "formula": "RF = P + REI - P*REI",
+          "provenance": {
+            "likelihood": "external_signal:user_report|basis=none",
+            "rei": "rei_registry:rei_ba779e9647c1@snap_8dea7d8bc177"
+          },
+          "facility_id": "DC_MUMBAI",
+          "notes": [
+            "No defensible event probability (P) was available. Severity, confidence and source quality are NOT probabilities and are never substituted for one."
+          ]
+        }
+      ],
+      "max_risk_factor": null,
+      "highest_risk_entity": null,
+      "network_id": "PHASE2_DELHI",
+      "data_version": "8dea7d8bc1775600",
+      "warnings": [
+        "DC_MUMBAI: RF NOT_COMPUTABLE (NO_EVENT_PROBABILITY)"
+      ]
+    },
     "governance": {
       "action_type": "REPORT",
       "classification": "AUTO_ACTION",
@@ -161,12 +251,14 @@
         "action_type": "REPORT",
         "is_feasible": true,
         "cost_impact_pct": null,
-        "unserved_demand_rate": null,
+        "unserved_demand_rate": 0.0,
         "rei": 1.0,
         "risk_factor": null,
-        "confidence": "LOW",
+        "confidence": "MEDIUM",
         "data_quality_ok": true,
-        "missing_evidence": {},
+        "missing_evidence": {
+          "forecast.demand": "UNAVAILABLE: No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot."
+        },
         "missing_critical_evidence": [],
         "unresolved_evidence": {},
         "grounding_failed": false,
@@ -183,47 +275,176 @@
       "schema_version": "2.0",
       "scope": "NETWORK",
       "entity_id": null,
-      "opening": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00).",
-      "context": "",
-      "kpi_insights": [],
+      "opening": "I see a business network cost of 1,200.00 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty.",
+      "context": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I could not use the following analyses; their values are UNKNOWN (not zero): forecast.demand (UNAVAILABLE). I see external evidence for OTHER affecting Mumbai, severity HIGH, with NO defensible probability available (source: user_report).",
+      "kpi_insights": [
+        {
+          "theme": "Cost",
+          "headline": "I see the current cost position clearly",
+          "narrative": "I see business network cost at 1,200.00 per period. I use this as the decision baseline for comparing any scenario.",
+          "severity": "INFORMATION",
+          "metric_refs": [
+            "network_state.business_network_cost"
+          ],
+          "comparison_refs": [],
+          "driver_refs": []
+        },
+        {
+          "theme": "Service",
+          "headline": "I see all stated demand served",
+          "narrative": "I see a demand fill rate of 1.000. Every unit of stated demand is served by this plan, so service is not what constrains it.",
+          "severity": "INFORMATION",
+          "metric_refs": [
+            "network_state.demand_fill_rate"
+          ],
+          "comparison_refs": [],
+          "driver_refs": []
+        },
+        {
+          "theme": "Carbon",
+          "headline": "I see the transport emissions this plan implies",
+          "narrative": "I see 3.72 kg of CO2 from the transport in this plan, on the declared emission factors. Whether that is priced into the objective is a configuration choice, and it does not change the quantity.",
+          "severity": "INFORMATION",
+          "metric_refs": [
+            "network_state.total_carbon_kg"
+          ],
+          "comparison_refs": [],
+          "driver_refs": []
+        },
+        {
+          "theme": "Resilience",
+          "headline": "I see the greatest single-site exposure at DC_MUMBAI",
+          "narrative": "I see DC_MUMBAI carrying the highest relative economic exposure in this network (REI 1.00). That is where losing one site costs the most, so it is where a contingency is worth the most.",
+          "severity": "RISK",
+          "metric_refs": [
+            "rei.max_rei"
+          ],
+          "comparison_refs": [],
+          "driver_refs": [
+            "rei.highest_exposure_facility"
+          ]
+        }
+      ],
       "key_drivers": [
         "DC_MUMBAI carries the greatest disruption exposure"
       ],
-      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
-      "limitation": "",
-      "missing_information": [],
+      "recommendation": "I recommend no structural change on this evidence: demand is served, no site is at its capacity threshold, and nothing in the plan is stranded. The next useful step is a scenario that tests a specific change you are considering, rather than a change this network is asking for.",
+      "limitation": "Combined risk factor unavailable \u2014 see reason above.",
+      "missing_information": [
+        {
+          "question_ref": "forecast.demand",
+          "question": "Can you provide the missing forecast.demand evidence?",
+          "impact": "It would let me strengthen or complete this briefing.",
+          "blocking": false
+        }
+      ],
       "suggested_questions": [
         "What is driving this result?",
         "Which node or lane should I examine?"
       ],
-      "evidence_completeness": "COMPLETE"
+      "evidence_completeness": "PARTIAL"
     },
     "warnings": [
-      "LLM planner failed (Live planner returned unparseable output: {\n  \"workflow_id\": \"resilience_mumbai_001\",\n  \"steps\": [\n    {\n      \"step_id\": \"load_snapshot\",\n      \"capability\": \"network.load_snapshot\",\n      \"description\": \"Pin and verify current network state); fell back to deterministic workflow planner.",
+      "No defensible event probability could be established from the external evidence (severity=HIGH, confidence=0.80). RF will report NOT_COMPUTABLE. Severity and confidence are not probabilities and are never substituted for one.",
       "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
       "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE",
-      "reasoning: LLM reasoning output could not be parsed; deterministic template used. Cause: the gateway returned an empty body; no output to parse (output_tokens=1984)"
+      "no observed history for 3 market-product pair(s): MKT_EAST/P1, MKT_NORTH/P1, MKT_WEST/P1. They are reported unforecastable rather than defaulted.",
+      "Escalation on capability 'forecast.demand': Capability 'forecast.demand' failed after 1 attempt(s): No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot.",
+      "risk: DC_MUMBAI: RF NOT_COMPUTABLE (NO_EVENT_PROBABILITY)",
+      "step 's9' running with degraded evidence; unavailable: forecast.demand",
+      "reasoning: LLM reasoning output could not be parsed; deterministic template used. Cause: the response exhausted the gateway's 2000-token output budget (output_tokens=2000), so the JSON was truncated mid-structure. This is a response-length problem, not malformed model behaviour: a reasoning model spends part of that budget on internal reasoning before emitting text."
     ],
-    "errors": [],
-    "duration_seconds": 43.2776
+    "errors": [
+      {
+        "step_id": "s5",
+        "capability": "forecast.demand",
+        "code": "MISSING_DATA",
+        "message": "No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot.",
+        "failure_class": "REQUIRES_HUMAN"
+      }
+    ],
+    "duration_seconds": 30.0495
   },
   "secondary_direct_response": {
-    "execution_id": "57a2c0cf-6c8",
-    "request_id": "145da09f-0162-43c8-b4b7-23714903b14c",
-    "status": "COMPLETED",
+    "execution_id": "0a628b2c-189",
+    "request_id": "28933e39-3349-40f6-9549-8aa566e5eadd",
+    "status": "REQUIRES_HUMAN",
     "intent": "RESILIENCE_QUERY",
-    "network_snapshot_id": "snap_72a48e1a0664",
+    "network_snapshot_id": "snap_8dea7d8bc177",
     "scenario_id": null,
     "scenario_version": null,
     "is_hypothetical": false,
-    "summary": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see external evidence for DISRUPTION affecting DC_MUMBAI, severity UNKNOWN, stated probability 0.85 (source: logistics_news).",
+    "summary": "I see a business network cost of 1,200.00 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see a combined risk factor of 1.000 for DC_MUMBAI. I could not use the following analyses; their values are UNKNOWN (not zero): forecast.demand (UNAVAILABLE). I see external evidence for DISRUPTION affecting DC_MUMBAI, severity UNKNOWN, stated probability 0.85 (source: logistics_news).",
     "results": {
+      "network": {
+        "network_id": "PHASE2_DELHI",
+        "data_version": "8dea7d8bc1775600",
+        "optimization_mode": "BROWNFIELD_SCENARIO_OPTIMIZATION",
+        "is_hypothetical": false,
+        "solver_status": "OPTIMAL",
+        "is_feasible": true,
+        "solver_objective": 1200.0,
+        "business_network_cost": 1200.0,
+        "cost_components": {
+          "facility_cost": 0.0,
+          "opening_cost": 0.0,
+          "closure_cost": 0.0,
+          "transport_cost": 1200.0,
+          "handling_cost": 0.0,
+          "inventory_cost": 0.0,
+          "carbon_cost": 0.0
+        },
+        "shortage_penalty_cost": 0.0,
+        "reconciliation_is_closed": true,
+        "total_demand": 300.0,
+        "served_demand": 300.0,
+        "unserved_demand": 0.0,
+        "demand_fill_rate": 1.0,
+        "unserved_demand_rate": 0.0,
+        "open_facilities": [
+          "DC_DELHI",
+          "DC_KOLKATA",
+          "DC_MUMBAI",
+          "PLANT_N"
+        ],
+        "closed_facilities": [],
+        "avg_utilization_pct": 1.57,
+        "total_carbon_kg": 3.72,
+        "pct_demand_in_sla": 100.0,
+        "sla_mode": "LAST_MILE",
+        "service_unsupported_features": [],
+        "run_id": "1118e375",
+        "result_kind": "OBSERVED_RESULT",
+        "baseline_snapshot_id": "snap_8dea7d8bc177",
+        "model_version": "1.2.0",
+        "execution_id": "0a628b2c-189"
+      },
+      "kpis": {
+        "business_network_cost": 1200.0,
+        "cost_components": {
+          "facility_cost": 0.0,
+          "opening_cost": 0.0,
+          "closure_cost": 0.0,
+          "transport_cost": 1200.0,
+          "handling_cost": 0.0,
+          "inventory_cost": 0.0,
+          "carbon_cost": 0.0
+        },
+        "total_demand": 300.0,
+        "served_demand": 300.0,
+        "unserved_demand": 0.0,
+        "demand_fill_rate": 1.0,
+        "pct_demand_in_sla": 100.0,
+        "avg_utilization_pct": 1.57,
+        "total_carbon_kg": 3.72,
+        "n_open_facilities": 4
+      },
       "resilience": {
         "network_id": "PHASE2_DELHI",
-        "data_version": "72a48e1a066440af",
-        "batch_id": "rei_259824bed18e",
+        "data_version": "8dea7d8bc1775600",
+        "batch_id": "rei_ba779e9647c1",
         "batch_status": "COMPLETED_WITH_ERRORS",
-        "network_snapshot_id": "snap_72a48e1a0664",
+        "network_snapshot_id": "snap_8dea7d8bc177",
         "computed_for_snapshot_id": null,
         "material_fingerprint": "fp1_34ab4fd8199c2adc",
         "model_version": "1.2.0",
@@ -343,75 +564,140 @@
         ]
       }
     },
-    "risk": null,
+    "risk": {
+      "results": [
+        {
+          "status": "COMPUTED",
+          "not_computable_reason": null,
+          "likelihood": 0.85,
+          "rei": 1.0,
+          "risk_factor": 1.0,
+          "formula": "RF = P + REI - P*REI",
+          "provenance": {
+            "likelihood": "external_signal:logistics_news|basis=port strike warning",
+            "rei": "rei_registry:rei_ba779e9647c1@snap_8dea7d8bc177"
+          },
+          "facility_id": "DC_MUMBAI",
+          "notes": []
+        }
+      ],
+      "not_computable": [],
+      "max_risk_factor": 1.0,
+      "highest_risk_entity": "DC_MUMBAI",
+      "network_id": "PHASE2_DELHI",
+      "data_version": "8dea7d8bc1775600",
+      "warnings": []
+    },
     "reasoning": {
-      "summary": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see external evidence for DISRUPTION affecting DC_MUMBAI, severity UNKNOWN, stated probability 0.85 (source: logistics_news).",
+      "summary": "I see a business network cost of 1,200.00 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty. I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see a combined risk factor of 1.000 for DC_MUMBAI. I could not use the following analyses; their values are UNKNOWN (not zero): forecast.demand (UNAVAILABLE). I see external evidence for DISRUPTION affecting DC_MUMBAI, severity UNKNOWN, stated probability 0.85 (source: logistics_news).",
       "key_drivers": [
         "DC_MUMBAI carries the greatest disruption exposure"
       ],
-      "risks": [],
-      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
-      "confidence": "LOW",
+      "risks": [
+        "Risk factor 1.000 at DC_MUMBAI.",
+        "Incomplete evidence: forecast.demand (UNAVAILABLE)."
+      ],
+      "recommendation": "I recommend no structural change on this evidence: demand is served, no site is at its capacity threshold, and nothing in the plan is stranded. The next useful step is a scenario that tests a specific change you are considering, rather than a change this network is asking for.",
+      "confidence": "MEDIUM",
       "evidence": [
-        "highest_exposure_facility = DC_MUMBAI"
+        "business_network_cost = 1,200.00",
+        "highest_exposure_facility = DC_MUMBAI",
+        "risk_factor = 1.000"
       ],
       "briefing": {
         "schema_version": "2.0",
         "scope": "NETWORK",
         "entity_id": null,
-        "opening": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00).",
-        "context": "I see external evidence for DISRUPTION affecting DC_MUMBAI, severity UNKNOWN, stated probability 0.85 (source: logistics_news).",
-        "kpi_insights": [],
+        "opening": "I see a business network cost of 1,200.00 per period; this is the operating-cost view from the optimizer, separate from any mathematical shortage penalty.",
+        "context": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see a combined risk factor of 1.000 for DC_MUMBAI. I could not use the following analyses; their values are UNKNOWN (not zero): forecast.demand (UNAVAILABLE). I see external evidence for DISRUPTION affecting DC_MUMBAI, severity UNKNOWN, stated probability 0.85 (source: logistics_news).",
+        "kpi_insights": [
+          {
+            "theme": "Cost",
+            "headline": "I see the current cost position clearly",
+            "narrative": "I see business network cost at 1,200.00 per period. I use this as the decision baseline for comparing any scenario.",
+            "severity": "INFORMATION",
+            "metric_refs": [
+              "network_state.business_network_cost"
+            ],
+            "comparison_refs": [],
+            "driver_refs": []
+          },
+          {
+            "theme": "Service",
+            "headline": "I see all stated demand served",
+            "narrative": "I see a demand fill rate of 1.000. Every unit of stated demand is served by this plan, so service is not what constrains it.",
+            "severity": "INFORMATION",
+            "metric_refs": [
+              "network_state.demand_fill_rate"
+            ],
+            "comparison_refs": [],
+            "driver_refs": []
+          },
+          {
+            "theme": "Carbon",
+            "headline": "I see the transport emissions this plan implies",
+            "narrative": "I see 3.72 kg of CO2 from the transport in this plan, on the declared emission factors. Whether that is priced into the objective is a configuration choice, and it does not change the quantity.",
+            "severity": "INFORMATION",
+            "metric_refs": [
+              "network_state.total_carbon_kg"
+            ],
+            "comparison_refs": [],
+            "driver_refs": []
+          },
+          {
+            "theme": "Resilience",
+            "headline": "I see the greatest single-site exposure at DC_MUMBAI",
+            "narrative": "I see DC_MUMBAI carrying the highest relative economic exposure in this network (REI 1.00). That is where losing one site costs the most, so it is where a contingency is worth the most.",
+            "severity": "RISK",
+            "metric_refs": [
+              "rei.max_rei"
+            ],
+            "comparison_refs": [],
+            "driver_refs": [
+              "rei.highest_exposure_facility"
+            ]
+          }
+        ],
         "key_drivers": [
           "DC_MUMBAI carries the greatest disruption exposure"
         ],
-        "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
-        "limitation": "",
-        "missing_information": [],
+        "recommendation": "I recommend no structural change on this evidence: demand is served, no site is at its capacity threshold, and nothing in the plan is stranded. The next useful step is a scenario that tests a specific change you are considering, rather than a change this network is asking for.",
+        "limitation": "Risk factor 1.000 at DC_MUMBAI.",
+        "missing_information": [
+          {
+            "question_ref": "forecast.demand",
+            "question": "Can you provide the missing forecast.demand evidence?",
+            "impact": "It would let me strengthen or complete this briefing.",
+            "blocking": false
+          }
+        ],
         "suggested_questions": [
           "What is driving this result?",
           "Which node or lane should I examine?"
         ],
-        "evidence_completeness": "COMPLETE"
+        "evidence_completeness": "PARTIAL"
       },
       "source": "template",
       "validation_warnings": [
-        "LLM reasoning output could not be parsed; deterministic template used. Cause: the gateway returned an empty body; no output to parse (output_tokens=1984)"
+        "LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
       ],
       "grounding_status": "GROUNDED",
       "grounded_claims": [
         {
-          "claim": "1.00",
-          "value": 1.0,
-          "kind": "RATIO",
+          "claim": "1,200.00",
+          "value": 1200.0,
+          "kind": "UNKNOWN",
           "verdict": "GROUNDED",
-          "matched_fact": "rei.max_rei",
-          "authoritative_value": 1.0,
-          "source": "rei_engine",
+          "matched_fact": "network_state.solver_objective",
+          "authoritative_value": 1200.0,
+          "source": "optimization_result",
           "detail": "",
           "provenance": {
-            "execution_id": "57a2c0cf-6c8",
-            "snapshot_id": "snap_72a48e1a0664",
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
             "scenario_id": "",
-            "source": "rei_engine",
-            "fact": "rei.max_rei"
-          }
-        },
-        {
-          "claim": "0.85",
-          "value": 0.85,
-          "kind": "RATIO",
-          "verdict": "GROUNDED",
-          "matched_fact": "external_evidence.event_probability",
-          "authoritative_value": 0.85,
-          "source": "risk_engine",
-          "detail": "",
-          "provenance": {
-            "execution_id": "57a2c0cf-6c8",
-            "snapshot_id": "snap_72a48e1a0664",
-            "scenario_id": "",
-            "source": "risk_engine",
-            "fact": "external_evidence.event_probability"
+            "source": "optimization_result",
+            "fact": "network_state.solver_objective"
           }
         },
         {
@@ -419,16 +705,33 @@
           "value": 1.0,
           "kind": "RATIO",
           "verdict": "GROUNDED",
-          "matched_fact": "rei.max_rei",
+          "matched_fact": "network_state.demand_fill_rate",
           "authoritative_value": 1.0,
-          "source": "rei_engine",
+          "source": "kpi_engine",
           "detail": "",
           "provenance": {
-            "execution_id": "57a2c0cf-6c8",
-            "snapshot_id": "snap_72a48e1a0664",
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
             "scenario_id": "",
-            "source": "rei_engine",
-            "fact": "rei.max_rei"
+            "source": "kpi_engine",
+            "fact": "network_state.demand_fill_rate"
+          }
+        },
+        {
+          "claim": "1.000",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.demand_fill_rate",
+          "authoritative_value": 1.0,
+          "source": "kpi_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "kpi_engine",
+            "fact": "network_state.demand_fill_rate"
           }
         },
         {
@@ -436,39 +739,199 @@
           "value": 0.85,
           "kind": "RATIO",
           "verdict": "GROUNDED",
-          "matched_fact": "external_evidence.event_probability",
+          "matched_fact": "risk.results[0].likelihood",
           "authoritative_value": 0.85,
           "source": "risk_engine",
           "detail": "",
           "provenance": {
-            "execution_id": "57a2c0cf-6c8",
-            "snapshot_id": "snap_72a48e1a0664",
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
             "scenario_id": "",
             "source": "risk_engine",
-            "fact": "external_evidence.event_probability"
+            "fact": "risk.results[0].likelihood"
+          }
+        },
+        {
+          "claim": "1,200.00",
+          "value": 1200.0,
+          "kind": "UNKNOWN",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.solver_objective",
+          "authoritative_value": 1200.0,
+          "source": "optimization_result",
+          "detail": "",
+          "provenance": {
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "optimization_result",
+            "fact": "network_state.solver_objective"
+          }
+        },
+        {
+          "claim": "1.00",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.demand_fill_rate",
+          "authoritative_value": 1.0,
+          "source": "kpi_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "kpi_engine",
+            "fact": "network_state.demand_fill_rate"
+          }
+        },
+        {
+          "claim": "1.000",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.demand_fill_rate",
+          "authoritative_value": 1.0,
+          "source": "kpi_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "kpi_engine",
+            "fact": "network_state.demand_fill_rate"
+          }
+        },
+        {
+          "claim": "0.85",
+          "value": 0.85,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "risk.results[0].likelihood",
+          "authoritative_value": 0.85,
+          "source": "risk_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "risk_engine",
+            "fact": "risk.results[0].likelihood"
+          }
+        },
+        {
+          "claim": "1,200.00",
+          "value": 1200.0,
+          "kind": "UNKNOWN",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.solver_objective",
+          "authoritative_value": 1200.0,
+          "source": "optimization_result",
+          "detail": "",
+          "provenance": {
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "optimization_result",
+            "fact": "network_state.solver_objective"
+          }
+        },
+        {
+          "claim": "1.000",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.demand_fill_rate",
+          "authoritative_value": 1.0,
+          "source": "kpi_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "kpi_engine",
+            "fact": "network_state.demand_fill_rate"
+          }
+        },
+        {
+          "claim": "3.72 kg",
+          "value": 3.72,
+          "kind": "UNITS",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.total_carbon_kg",
+          "authoritative_value": 3.72,
+          "source": "kpi_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "kpi_engine",
+            "fact": "network_state.total_carbon_kg"
+          }
+        },
+        {
+          "claim": "1.00",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.demand_fill_rate",
+          "authoritative_value": 1.0,
+          "source": "kpi_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "kpi_engine",
+            "fact": "network_state.demand_fill_rate"
+          }
+        },
+        {
+          "claim": "1.000",
+          "value": 1.0,
+          "kind": "RATIO",
+          "verdict": "GROUNDED",
+          "matched_fact": "network_state.demand_fill_rate",
+          "authoritative_value": 1.0,
+          "source": "kpi_engine",
+          "detail": "",
+          "provenance": {
+            "execution_id": "0a628b2c-189",
+            "snapshot_id": "snap_8dea7d8bc177",
+            "scenario_id": "",
+            "source": "kpi_engine",
+            "fact": "network_state.demand_fill_rate"
           }
         }
       ],
-      "unavailable_evidence": {}
+      "unavailable_evidence": {
+        "forecast.demand": {
+          "status": "UNAVAILABLE",
+          "reason": "No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot."
+        }
+      }
     },
     "governance": {
       "action_type": "REPORT",
-      "classification": "AUTO_ACTION",
-      "reason": "'REPORT' produces analysis only and does not modify observed network state.",
+      "classification": "HUMAN_ONLY",
+      "reason": "Risk factor 1.000 meets the 0.800 human-decision threshold.",
       "triggered_rules": [
-        "R7_ANALYTICAL_ONLY"
+        "R6_RISK_FACTOR_HUMAN"
       ],
-      "governing_rule": "R7_ANALYTICAL_ONLY",
+      "governing_rule": "R6_RISK_FACTOR_HUMAN",
       "evaluated": {
         "action_type": "REPORT",
         "is_feasible": true,
         "cost_impact_pct": null,
-        "unserved_demand_rate": null,
+        "unserved_demand_rate": 0.0,
         "rei": 1.0,
-        "risk_factor": null,
+        "risk_factor": 1.0,
         "confidence": "LOW",
         "data_quality_ok": true,
-        "missing_evidence": {},
+        "missing_evidence": {
+          "forecast.demand": "UNAVAILABLE: No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot."
+        },
         "missing_critical_evidence": [],
         "unresolved_evidence": {},
         "grounding_failed": false,
@@ -483,56 +946,114 @@
     "approval": null,
     "twin_states": [
       {
-        "state_id": "tws_snap_72a48e1a0664_optimized",
-        "snapshot_id": "snap_72a48e1a0664",
+        "state_id": "tws_snap_8dea7d8bc177_optimized",
+        "snapshot_id": "snap_8dea7d8bc177",
         "scenario_id": null,
         "state_type": "OPTIMIZED",
         "calculation_status": "PARTIAL",
-        "n_facilities": 0,
-        "n_flows": 0,
-        "generated_at": "2026-08-26T06:05:26.234667+00:00"
+        "n_facilities": 4,
+        "n_flows": 6,
+        "generated_at": "2026-09-02T06:48:03.633692+00:00"
       }
     ],
-    "errors": [],
+    "errors": [
+      {
+        "step_id": "s4",
+        "capability": "forecast.demand",
+        "code": "MISSING_DATA",
+        "message": "No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot.",
+        "failure_class": "REQUIRES_HUMAN"
+      }
+    ],
     "warnings": [
-      "LLM planner failed (Live planner returned unparseable output: {\n  \"workflow_id\": \"resilience_mumbai_impact_v1\",\n  \"steps\": [\n    {\n      \"step_id\": \"s1\",\n      \"capability\": \"network.load_snapshot\",\n      \"description\": \"Pin and verify current observed network s); fell back to deterministic workflow planner.",
       "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
       "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE",
-      "reasoning: LLM reasoning output could not be parsed; deterministic template used. Cause: the gateway returned an empty body; no output to parse (output_tokens=1984)"
+      "no observed history for 3 market-product pair(s): MKT_EAST/P1, MKT_NORTH/P1, MKT_WEST/P1. They are reported unforecastable rather than defaulted.",
+      "Escalation on capability 'forecast.demand': Capability 'forecast.demand' failed after 1 attempt(s): No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot.",
+      "step 's10' running with degraded evidence; unavailable: forecast.demand",
+      "reasoning: LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
     ],
-    "duration_seconds": 44.7404,
-    "started_at": "2026-08-26T06:04:41.494698+00:00",
-    "completed_at": "2026-08-26T06:05:26.235137+00:00",
+    "duration_seconds": 14.9034,
+    "started_at": "2026-09-02T06:47:48.731459+00:00",
+    "completed_at": "2026-09-02T06:48:03.634863+00:00",
     "steps": [
       {
-        "step_id": "load",
+        "step_id": "s1",
         "capability": "network.load_snapshot",
+        "status": "COMPLETED",
+        "duration_seconds": 0.0001,
+        "attempts": 1,
+        "error": null
+      },
+      {
+        "step_id": "s2",
+        "capability": "external.interpret_signal",
+        "status": "COMPLETED",
+        "duration_seconds": 0.0001,
+        "attempts": 1,
+        "error": null
+      },
+      {
+        "step_id": "s3",
+        "capability": "resilience.assess",
+        "status": "COMPLETED",
+        "duration_seconds": 0.0023,
+        "attempts": 1,
+        "error": null
+      },
+      {
+        "step_id": "s4",
+        "capability": "forecast.demand",
+        "status": "FAILED",
+        "duration_seconds": 0.0003,
+        "attempts": 1,
+        "error": "MISSING_DATA"
+      },
+      {
+        "step_id": "s5",
+        "capability": "market.score_signal",
         "status": "COMPLETED",
         "duration_seconds": 0.0,
         "attempts": 1,
         "error": null
       },
       {
-        "step_id": "rei",
-        "capability": "resilience.assess",
+        "step_id": "s6",
+        "capability": "optimization.solve",
         "status": "COMPLETED",
-        "duration_seconds": 0.0009,
+        "duration_seconds": 0.0343,
         "attempts": 1,
         "error": null
       },
       {
-        "step_id": "reason",
-        "capability": "reasoning.synthesise",
+        "step_id": "s7",
+        "capability": "kpi.summarise",
         "status": "COMPLETED",
-        "duration_seconds": 22.7406,
+        "duration_seconds": 0.0,
         "attempts": 1,
         "error": null
       },
       {
-        "step_id": "govern",
+        "step_id": "s8",
+        "capability": "risk.compute_rf",
+        "status": "COMPLETED",
+        "duration_seconds": 0.0002,
+        "attempts": 1,
+        "error": null
+      },
+      {
+        "step_id": "s9",
         "capability": "governance.classify",
         "status": "COMPLETED",
-        "duration_seconds": 0.0003,
+        "duration_seconds": 0.0001,
+        "attempts": 1,
+        "error": null
+      },
+      {
+        "step_id": "s10",
+        "capability": "reasoning.synthesise",
+        "status": "COMPLETED",
+        "duration_seconds": 1.1759,
         "attempts": 1,
         "error": null
       }
@@ -540,50 +1061,116 @@
   },
   "executed_steps": [
     "network.load_snapshot",
+    "external.interpret_signal",
     "resilience.assess",
-    "reasoning.synthesise",
-    "governance.classify"
+    "forecast.demand",
+    "market.score_signal",
+    "optimization.solve",
+    "kpi.summarise",
+    "risk.compute_rf",
+    "governance.classify",
+    "reasoning.synthesise"
   ],
   "decisions": [
     {
       "action": "CONTINUE",
-      "reason": "Step 'load' completed successfully; proceeding to next planned capability.",
-      "step_id": "load",
+      "reason": "Step 's1' completed successfully; proceeding to next planned capability.",
+      "step_id": "s1",
       "capability": "network.load_snapshot",
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:05:03.491226+00:00"
+      "timestamp": "2026-09-02T06:48:02.414691+00:00"
     },
     {
       "action": "CONTINUE",
-      "reason": "Step 'rei' completed successfully; proceeding to next planned capability.",
-      "step_id": "rei",
+      "reason": "Step 's2' completed successfully; proceeding to next planned capability.",
+      "step_id": "s2",
+      "capability": "external.interpret_signal",
+      "replan_proposal": null,
+      "escalation": null,
+      "metadata": {},
+      "timestamp": "2026-09-02T06:48:02.415744+00:00"
+    },
+    {
+      "action": "CONTINUE",
+      "reason": "Step 's3' completed successfully; proceeding to next planned capability.",
+      "step_id": "s3",
       "capability": "resilience.assess",
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:05:03.492315+00:00"
+      "timestamp": "2026-09-02T06:48:02.418719+00:00"
     },
     {
       "action": "CONTINUE",
-      "reason": "Step 'reason' completed successfully; proceeding to next planned capability.",
-      "step_id": "reason",
-      "capability": "reasoning.synthesise",
+      "reason": "Optional step 's4' failed (Autonomous recovery exhausted for 'forecast.demand': No observed demand history is available for this network, so no forecast can be produced. History reaches the forecaster through the ingestion staging zone; none was found for any market in the current snapshot.); continuing degraded execution.",
+      "step_id": "s4",
+      "capability": "forecast.demand",
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:05:26.233541+00:00"
+      "timestamp": "2026-09-02T06:48:02.419543+00:00"
     },
     {
       "action": "CONTINUE",
-      "reason": "Step 'govern' completed successfully; proceeding to next planned capability.",
-      "step_id": "govern",
+      "reason": "Step 's5' completed successfully; proceeding to next planned capability.",
+      "step_id": "s5",
+      "capability": "market.score_signal",
+      "replan_proposal": null,
+      "escalation": null,
+      "metadata": {},
+      "timestamp": "2026-09-02T06:48:02.419905+00:00"
+    },
+    {
+      "action": "CONTINUE",
+      "reason": "Step 's6' completed successfully; proceeding to next planned capability.",
+      "step_id": "s6",
+      "capability": "optimization.solve",
+      "replan_proposal": null,
+      "escalation": null,
+      "metadata": {},
+      "timestamp": "2026-09-02T06:48:02.454693+00:00"
+    },
+    {
+      "action": "CONTINUE",
+      "reason": "Step 's7' completed successfully; proceeding to next planned capability.",
+      "step_id": "s7",
+      "capability": "kpi.summarise",
+      "replan_proposal": null,
+      "escalation": null,
+      "metadata": {},
+      "timestamp": "2026-09-02T06:48:02.455143+00:00"
+    },
+    {
+      "action": "CONTINUE",
+      "reason": "Step 's8' completed successfully; proceeding to next planned capability.",
+      "step_id": "s8",
+      "capability": "risk.compute_rf",
+      "replan_proposal": null,
+      "escalation": null,
+      "metadata": {},
+      "timestamp": "2026-09-02T06:48:02.455630+00:00"
+    },
+    {
+      "action": "CONTINUE",
+      "reason": "Step 's9' completed successfully; proceeding to next planned capability.",
+      "step_id": "s9",
       "capability": "governance.classify",
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:05:26.234446+00:00"
+      "timestamp": "2026-09-02T06:48:02.455965+00:00"
+    },
+    {
+      "action": "CONTINUE",
+      "reason": "Step 's10' completed successfully; proceeding to next planned capability.",
+      "step_id": "s10",
+      "capability": "reasoning.synthesise",
+      "replan_proposal": null,
+      "escalation": null,
+      "metadata": {},
+      "timestamp": "2026-09-02T06:48:03.632815+00:00"
     }
   ],
   "risk_refused_from_forecast": false,
@@ -591,8 +1178,17 @@
     "sequential_behavior": true,
     "adaptive_behavior": true,
     "replanning_observed": false,
+    "steps_executed": 10,
+    "chat_status": "COMPLETED",
+    "step_errors": [
+      "MISSING_DATA"
+    ],
     "risk_isolated_from_demand": false,
-    "agentic_behavior_proven": true,
-    "classification": "PASS"
+    "agentic_behavior_proven": false,
+    "classification": "FAIL",
+    "failed_criteria": [
+      "risk_isolated_from_demand",
+      "1 step error(s)"
+    ]
   }
 }
