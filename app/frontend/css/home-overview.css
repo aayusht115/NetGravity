@@ -655,3 +655,643 @@
   font-size: 11px;
   color: #9ca3af;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   OVERVIEW — reworked against Dump/home overview.png
+   ═══════════════════════════════════════════════════════════════
+
+   Three rows, in the order a reader needs them:
+
+     .ov-head      what page this is: title and strapline, on one line
+     .ov-main      the alert and what needs a decision, beside the twin
+     .ov-signals   the external signals influencing the network
+
+   `.ov-main` is a two-column, two-row grid, and the twin spans both of its
+   rows: it starts level with the alert and ends level with the bottom of the
+   attention card. A band of three headline KPIs used to sit between the head
+   and this grid; removing it is what gave the twin the top half of its
+   height back. The figures it carried are not lost — fill rate, network
+   cost and the facility-by-facility breakdown are the KPIs tab, which is one
+   click away in the sidebar.
+
+   Scope (project, facility, period) is the top bar's, on every screen. This
+   page owns no selector of its own.
+
+   Sizes are the application's own: style.css sets html{font-size:14px},
+   .card-title 15px, .btn 13px, .tag 11px; home-overview.css uses 19-22px for
+   a card's own headline. Nothing here invents a scale.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* `#tab-home.active`, NOT `#tab-home`.
+   `.tab-panel { display: none }` is a class selector; an ID selector beats it
+   outright, so `#tab-home { display: flex }` made Home visible on every tab —
+   the Digital Twin page rendered its own header with the whole Overview laid
+   out underneath it. Qualifying on `.active` means the rule simply does not
+   match when Home is not the current tab, and `.tab-panel`'s `display: none`
+   applies unopposed. */
+#tab-home.active {
+  display: flex;
+  flex-direction: column;
+  /* At LEAST the window, and taller when the second row asks for it.
+     `flex: 1` (= `1 1 0%`) pinned this page to exactly one screen, which is
+     why the body grid and the signals row had to share it and the twin only
+     ever got what the signals row left. */
+  flex: 1 0 auto;
+  /* 12px, not 14: at 1050px the rows overran the window by 55px, which
+     is the worst amount to overrun by — enough to hide the last row's bottom
+     edge, not enough to look like a page that scrolls. */
+  gap: 12px;
+}
+
+/* ─── row 0: page head ────────────────────────────────────────── */
+.ov-head {
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+/* Title and strapline read as one line: "Overview · Your network health and
+   key actions at a glance." Baseline alignment, not centre — the two have
+   very different cap heights and centring them makes the smaller text look
+   like it is floating. */
+.ov-head-text {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.ov-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text-1);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.ov-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* The separator belongs to the layout, not to the sentence, so it is drawn
+   rather than typed — a screen reader reads the two as two phrases. */
+.ov-head-text .ov-subtitle::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--border, #d9dde5);
+  margin-right: 10px;
+  vertical-align: middle;
+}
+
+/* ─── the alert, now a card of its own ────────────────────────────
+   It used to share one bordered band with three KPI tiles. The tiles are
+   gone (they sat on top of the twin and were the reason the twin only got
+   the bottom half of the page), so the alert carries its own chrome and
+   the twin takes the height they were using. */
+.ov-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-light, #eceef2);
+  border-radius: 14px;
+  min-width: 0;
+}
+
+.ov-alert.tone-warn  { background: #fff7f4; }
+.ov-alert.tone-error { background: #fef4f4; }
+.ov-alert.tone-ok    { background: #f4fbf7; }
+
+.ov-alert-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
+}
+
+.ov-alert-icon svg { width: 34px; height: 34px; }
+.ov-alert.tone-warn  .ov-alert-icon { color: #dc2626; }
+.ov-alert.tone-error .ov-alert-icon { color: #b91c1c; }
+.ov-alert.tone-ok    .ov-alert-icon { color: #157f3c; }
+
+.ov-alert-text { min-width: 0; }
+
+.ov-alert-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.35;
+}
+
+/* The figure a reader came for, at the size that says so. */
+.ov-alert-figure {
+  margin-top: 5px;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: #dc2626;
+}
+
+.ov-alert-figure span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0;
+  margin-left: 4px;
+}
+
+.ov-alert-sub {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.ov-alert-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.ov-alert-link:hover { text-decoration: underline; }
+.ov-alert-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ─── the body: alert + attention on the left, twin on the right ──
+   Two columns, two rows. The twin spans both rows, so it runs from the top
+   of the alert card down to the bottom of the attention card — which is
+   what "extend the twin vertically till the warning card" means. The rows
+   are `auto` then `minmax(0, 1fr)`: the alert takes the height its text
+   needs and the attention card absorbs the rest, so the twin's height is
+   the sum and never depends on the twin's own content. */
+.ov-main {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+  /* The first screen, in full.
+     `--ov-main-top` is the measured distance from the top of the window to
+     the top of this grid — the top bar plus the page's padding plus the head
+     row — written by `sizeOverviewToWindow()` in app.js on load and on every
+     resize, because two of those three vary with the chrome and none of them
+     is knowable from here. The fallback is the value it measures at 1680x1050
+     so the page is right before the first measurement lands.
+
+     The effect a reader sees: "Needs your attention" and the digital twin
+     both reach the bottom edge of the window, and "Signals influencing your
+     network" begins below the fold. */
+  flex: 0 0 auto;
+  min-height: calc(100vh - var(--ov-main-top, 126px) - var(--space-lg, 24px));
+  /* And no more. A bounded row is what makes the attention card's own
+     scroller work: unbounded, the card grew to its findings list and pushed
+     the twin past the bottom of the window instead of ending at it. */
+  max-height: calc(100vh - var(--ov-main-top, 126px) - var(--space-lg, 24px));
+}
+
+.ov-main > .ov-alert     { grid-column: 1; grid-row: 1; }
+.ov-main > .ov-attn-card { grid-column: 1; grid-row: 2; }
+.ov-main > .ov-twin-card { grid-column: 2; grid-row: 1 / span 2; }
+
+.ov-attn-card,
+.ov-twin-card,
+.ov-signals-card {
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-light, #eceef2);
+  border-radius: 14px;
+  min-width: 0;
+}
+
+.ov-attn-card {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 0;
+}
+
+.ov-attn-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 12px;
+}
+
+.ov-attn-star { display: flex; color: var(--primary); }
+.ov-attn-star svg { width: 19px; height: 19px; }
+
+.ov-attn-title,
+.ov-twin-title,
+.ov-signals-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  margin: 0;
+}
+
+/* The body scrolls, the footer does not: the status row and the timestamp are
+   how a reader knows the figures above are current, and they used to be pushed
+   off the bottom by a feed that had no height limit of its own. */
+.ov-attn-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 12px;
+}
+
+.ov-attn-section + .ov-attn-section { margin-top: 12px; }
+
+.ov-attn-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.ov-attn-section-label.tone-why    { color: var(--primary); }
+.ov-attn-section-label.tone-impact { color: #a8710c; }
+.ov-attn-section-label.tone-next   { color: var(--primary); }
+
+.ov-attn-section-text {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-2);
+}
+
+.ov-attn-section-text strong { color: var(--text-1); font-weight: 700; }
+
+.ov-attn-more-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  cursor: pointer;
+}
+
+.ov-attn-more-link:hover { text-decoration: underline; }
+
+.ov-attn-next {
+  display: flex;
+  gap: 11px;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 11px;
+  background: #faf7fe;
+  border: 1px solid #ece2fa;
+}
+
+.ov-attn-next-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #f1e9fb;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.ov-attn-next-icon svg { width: 17px; height: 17px; }
+.ov-attn-next-text { min-width: 0; }
+
+.ov-attn-next-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.4;
+  margin-top: 1px;
+}
+
+.ov-attn-next-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+.ov-attn-next-limit {
+  margin-top: 6px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #a8710c;
+}
+
+.ov-attn-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 42px;
+  margin-top: 12px;
+  border: none;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.ov-attn-cta:hover { background: var(--primary-dark, #58268a); }
+.ov-attn-cta:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.ov-attn-rest { margin-top: 14px; }
+
+.ov-attn-rest summary {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  cursor: pointer;
+  padding: 6px 0;
+  list-style: revert;
+}
+
+.ov-attn-rest summary:hover { color: var(--primary); }
+
+.ov-attn-rest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.ov-attn-rest-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--border-light, #eceef2);
+  border-radius: 8px;
+  background: #ffffff;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ov-attn-rest-item:hover { border-color: var(--primary); background: #faf7fe; }
+
+.ov-attn-rest-cat {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  flex-shrink: 0;
+}
+
+.ov-attn-rest-cat.cat-risk { color: #c0392b; }
+.ov-attn-rest-cat.cat-opportunity { color: #157f3c; }
+
+.ov-attn-rest-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-1);
+  line-height: 1.4;
+}
+
+.ov-attn-empty {
+  padding: 24px 4px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+.ov-attn-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 11px 0 13px;
+  border-top: 1px solid var(--border-light, #eceef2);
+  flex-shrink: 0;
+}
+
+.ov-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: #e6f6ee;
+  color: #157f3c;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.ov-status-pill svg { width: 13px; height: 13px; }
+
+.ov-refresh-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.ov-refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.ov-refresh-btn svg { width: 13px; height: 13px; }
+.ov-refresh-btn:hover { background: #f3f0f8; color: var(--primary); }
+.ov-refresh-btn.spinning svg { animation: ovSpin 0.9s linear infinite; }
+
+@keyframes ovSpin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ov-refresh-btn.spinning svg { animation: none; }
+}
+
+/* ─── the twin ────────────────────────────────────────────────── */
+/* A height that leaves the row about as tall as the attention card beside it
+   has content for. The map was `flex: 1` against a `min-height: 360px`, and
+   with nothing else in its column it grew to whatever the page allowed —
+   pushing the row to ~700px and leaving 250px of white space under the
+   attention card's last line. */
+/* No fixed height any more. The card spans both grid rows and is a column
+   flex container, so the map simply takes whatever is left under the card's
+   own heading — which is the point of the change. */
+#tab-home.active .home-twin-map-wrap {
+  flex: 1 1 auto;
+  min-height: 300px;
+}
+
+.ov-twin-card {
+  display: flex;
+  flex-direction: column;
+  padding: 16px 18px 18px;
+}
+
+.ov-twin-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+/* ─── row 3: signals ──────────────────────────────────────────── */
+.ov-signals-card {
+  padding: 14px 18px 15px;
+  /* Clearance for the fixed "Ask Netgravity" button, which is bottom-right
+     and was sitting on top of the third signal card's chip. */
+  padding-right: 18px;
+}
+
+.ov-signals-row > .ov-signal:last-child { padding-right: 14px; }
+
+/* Below this the FAB and the last card genuinely collide, so the row gives it
+   a lane rather than overlapping. */
+@media (max-width: 1500px) {
+  .ov-signals-card { padding-bottom: 26px; }
+}
+
+.ov-signals-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.ov-signals-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ov-signal {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-light, #eceef2);
+  border-radius: 11px;
+  min-width: 0;
+}
+
+.ov-signal-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #f5f1fc;
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.ov-signal-icon svg { width: 19px; height: 19px; }
+.ov-signal-text { min-width: 0; }
+
+.ov-signal-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ov-signal-meta {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.ov-signal-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ov-signal-chip svg { width: 12px; height: 12px; }
+.ov-signal-chip.tone-ok      { background: #e6f6ee; color: #157f3c; }
+.ov-signal-chip.tone-info    { background: #fdf3e2; color: #a8710c; }
+.ov-signal-chip.tone-pending { background: #f1f2f5; color: #64748b; }
+
+.ov-signals-empty {
+  grid-column: 1 / -1;
+  padding: 18px 4px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+
+/* ─── responsive ──────────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  /* One column. The twin stops spanning rows — with nothing beside it there
+     is nothing to span — and takes a stated height instead of the leftover
+     space, because in a stacked layout there is no leftover space to take.
+     `grid-row: auto` has to be restored explicitly: the span above is set on
+     the element, not on the container. */
+  .ov-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    flex: 0 0 auto;
+    /* Stacked, three cards deep, there is no "first screen" to fill: the row
+       is as tall as its contents and the page scrolls. */
+    min-height: 0;
+    max-height: none;
+  }
+  .ov-main > .ov-alert,
+  .ov-main > .ov-attn-card,
+  .ov-main > .ov-twin-card { grid-column: 1; grid-row: auto; }
+  .ov-attn-body { overflow-y: visible; }
+  #tab-home.active .home-twin-map-wrap { height: 340px; flex: 0 0 340px; }
+}
+
+@media (max-width: 900px) {
+  .ov-signals-row { grid-template-columns: minmax(0, 1fr); }
+  .ov-head { gap: 8px; }
+}

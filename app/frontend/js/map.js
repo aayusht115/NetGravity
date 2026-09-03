@@ -21,7 +21,8 @@ import {
   formatCurrencyExact,
   NETWORK_GEOGRAPHY,
 } from './data.js';
-import { INDIA_BASEMAP_DATA_URI } from './basemap-data.js';
+import { WORLD_COUNTRIES, countriesContaining, networkWindow,
+         loadAdmin1 } from './world-basemap.js';
 import { CONFIG } from './integration/config.js';
 
 // ─── State ──────────────────────────────────────────────────
@@ -36,7 +37,9 @@ let currentState = 'actual';
 /**
  * The ground the network is drawn on.
  *
- * This used to be an unconditional tile request to
+ * Two things were wrong with what this replaces.
+ *
+ * It began as an unconditional tile request to
  * `https://{s}.basemaps.cartocdn.com/light_all/...` — a third-party service on
  * an anonymous quota. When that quota or a corporate network refuses, the
  * service does not return an error: it returns a perfectly valid PNG with
@@ -45,73 +48,142 @@ let currentState = 'actual';
  * plotted on top of a watermark announcing that their software was
  * misconfigured, and nothing in the application could tell.
  *
- * `INDIA_BASEMAP_DATA_URI` is an India basemap embedded in the application —
- * the same image the 3D twin already stands on, so the two views agree. It
- * needs no key, no quota and no internet connection, and it cannot change
- * underneath us.
+ * The fix for that was `INDIA_BASEMAP_DATA_URI`, a raster photograph of India
+ * embedded in the application. It needed no key and no internet — but it is a
+ * photograph of ONE COUNTRY, cropped to 4-39N / 65-100E. A network anywhere
+ * else got a bare 10-degree graticule: a US network's twelve facilities on an
+ * empty grid, correct coordinates, no land.
  *
- * WHY AN IMAGE OVERLAY IS GEOMETRICALLY EXACT HERE, and not an approximation:
- * `L.ImageOverlay` stretches the image linearly between its two corners in the
- * map's own PROJECTED space, which for Leaflet's default CRS is Web Mercator.
- * The embedded image is itself a Web Mercator crop taken between exactly these
- * corners (see `twin3d.js`, which reprojects with the same constants). A
- * linear stretch between the projected corners of a Mercator crop reproduces
- * the crop, so every facility lands on the pixel its real coordinates belong
- * to. Using an equirectangular image here would visibly bow the coastline.
+ * Now the land is vector. `WORLD_COUNTRIES` is Natural Earth 110m — 177
+ * countries, public domain, bundled, ~180 KB — drawn as GeoJSON polygons by
+ * Leaflet's own renderer. It needs no key, no quota and no connection; it
+ * covers every network anywhere; it stays sharp at any zoom instead of
+ * pixelating past zoom 8; and, because the 3D twin builds its ground plane
+ * from the SAME rings, the two views cannot drift apart.
  */
-const BASEMAP_BOUNDS = [[4.0, 65.0], [39.0, 100.0]];  // [[latMin,lngMin],[latMax,lngMax]]
 
-//: Beyond this the embedded raster is being upscaled, so panning stops being
-//: informative. Live tiles (see CONFIG.MAP_TILE_URL) lift the cap.
-const BASEMAP_MAX_ZOOM = 8;
+/** Land, borders and water — a quiet ground that never competes with the network. */
+const BASEMAP_STYLE = {
+  // Internal borders are a hair lighter than national ones, so the hierarchy
+  // reads without a legend: coast, then country, then state.
+  subdivision: '#b9c8db',
+  subdivisionActive: '#91a6c0',
+  // Land lighter than water, the way a printed atlas reads. The first pass had
+  // land #eef2f7 on water #f8fafc — a 4% luminance difference, so the
+  // coastline was technically drawn and effectively invisible.
+  water: '#cddced',
+  land: '#f6f9fc',
+  landActive: '#ffffff',     // countries this network actually has sites in
+  border: '#a9b8cb',
+  borderActive: '#7f93ad',
+  graticule: '#dfe8f2',
+};
 
 /**
- * Does the loaded network actually sit on the embedded basemap?
+ * Countries the loaded network has sites in.
  *
- * The India raster covers 4–39N, 65–100E. A US network fits none of it, so
- * `fitToNetwork` correctly panned to North America and the map became an empty
- * grey field — the nodes and corridors were drawn, on nothing, while the
- * counters beside the canvas correctly reported 24 nodes and 51 corridors.
- *
- * Rather than showing a basemap of the wrong continent or a blank one, the map
- * checks whether the network is inside the raster's extent and says what it is
- * doing when it is not.
+ * Used to lift those few out of the rest of the world, so a US network reads
+ * as "the United States, with context around it" rather than as an undammed
+ * world map. Recomputed only when the network changes.
  */
-function networkFitsBasemap() {
+function activeCountryNames() {
   const pts = [...PLANTS, ...DCS, ...MARKETS]
     .filter((n) => Number.isFinite(n.lat) && Number.isFinite(n.lng));
-  if (!pts.length) return true;   // nothing to contradict the default view
-  const [[latMin, lngMin], [latMax, lngMax]] = BASEMAP_BOUNDS;
-  const inside = pts.filter((n) => n.lat >= latMin && n.lat <= latMax
-                                && n.lng >= lngMin && n.lng <= lngMax);
-  // A network mostly inside still gets the raster; one clearly elsewhere does
-  // not get a basemap of a country it has no sites in.
-  return inside.length / pts.length >= 0.6;
+  if (!pts.length) return new Set();
+  return new Set(countriesContaining(pts).map((c) => c.name));
 }
 
 /**
- * A neutral graticule for a network the embedded raster does not cover.
+ * Meridians and parallels, under the land.
  *
- * Meridians and parallels every 10 degrees, labelled. It is not a map of the
- * land, and it does not pretend to be: it gives the eye a coordinate frame so
- * relative position and corridor length stay readable. Configure
- * `MAP_TILE_URL` for a real basemap anywhere in the world.
+ * Kept from the old graticule-only fallback, because it does something the
+ * coastlines do not: it gives distance a scale. It is quiet enough to read as
+ * a grid rather than as data.
  */
-function addGraticule(map) {
-  const layer = L.layerGroup().addTo(map);
-  const style = { color: '#cbd5e1', weight: 1, opacity: 0.7, interactive: false };
-  for (let lat = -80; lat <= 80; lat += 10) {
+function addGraticule(map, step = 10) {
+  const layer = L.layerGroup();
+  const style = { color: BASEMAP_STYLE.graticule, weight: 1, opacity: 0.9,
+                  interactive: false };
+  for (let lat = -80; lat <= 80; lat += step) {
     L.polyline([[lat, -180], [lat, 180]], style).addTo(layer);
   }
-  for (let lng = -180; lng <= 180; lng += 10) {
+  for (let lng = -180; lng <= 180; lng += step) {
     L.polyline([[-85, lng], [85, lng]], style).addTo(layer);
   }
-  L.polyline([[0, -180], [0, 180]],
-             { ...style, color: '#94a3b8', weight: 1.5 }).addTo(layer);
   return layer;
 }
 
-function addBaseLayer(map) {
+/**
+ * The country layer.
+ *
+ * `L.geoJSON` reads [lng, lat] pairs, which is GeoJSON order and the reverse
+ * of Leaflet's own [lat, lng] — it does the swap itself, so the rings go in
+ * exactly as `world-basemap.js` stores them and as the 3D twin reads them.
+ */
+function addCountries(map) {
+  const active = activeCountryNames();
+  return L.geoJSON(WORLD_COUNTRIES, {
+    // Behind every node and corridor, and never in the way of a click.
+    interactive: false,
+    pane: 'tilePane',
+    style: (feature) => {
+      const isActive = active.has(feature.properties.name);
+      return {
+        fillColor: isActive ? BASEMAP_STYLE.landActive : BASEMAP_STYLE.land,
+        fillOpacity: 1,
+        color: isActive ? BASEMAP_STYLE.borderActive : BASEMAP_STYLE.border,
+        weight: isActive ? 0.9 : 0.6,
+        interactive: false,
+      };
+    },
+  });
+}
+
+/**
+ * States, provinces and prefectures, drawn inside the countries.
+ *
+ * Borders only — no fill. The country layer beneath already paints the land,
+ * and filling each subdivision again would double the geometry for no visual
+ * gain and put a seam on every shared edge.
+ *
+ * Added asynchronously: the module is 1.6 MB and the map is useful without
+ * it. The countries are on screen from the first frame; the internal borders
+ * arrive a moment later.
+ */
+function addSubdivisions(map, containerId) {
+  loadAdmin1().then((admin1) => {
+    if (!admin1) return;
+    // The map may have been torn down while this was in flight.
+    if (maps[containerId] !== map) return;
+    const active = activeCountryNames();
+    const layer = L.geoJSON(admin1.collection, {
+      interactive: false,
+      pane: 'tilePane',
+      style: (feature) => {
+        const isActive = active.has(feature.properties.admin);
+        return {
+          fill: false,
+          color: isActive ? BASEMAP_STYLE.subdivisionActive : BASEMAP_STYLE.subdivision,
+          weight: isActive ? 0.9 : 0.5,
+          opacity: isActive ? 1 : 0.55,
+          interactive: false,
+        };
+      },
+    }).addTo(map);
+    // Registered so a basemap rebuild removes it with everything else.
+    const record = baseLayers[containerId];
+    if (record) record.layers.push(layer);
+    // NOT bringToBack(). The country layer is in the same pane and paints an
+    // OPAQUE fill, so sending the borders behind it hid every one of them —
+    // 9,402 paths in the DOM and a blank map. Added after the countries, they
+    // draw on top of the fills; nodes and corridors live in `overlayPane`,
+    // which Leaflet stacks above `tilePane` regardless, so they still win.
+  });
+}
+
+function addBaseLayer(map, containerId) {
+  // A configured tile service still wins: it is photographic, and someone who
+  // has set one has decided they want it.
   if (CONFIG.MAP_TILE_URL) {
     const tiles = L.tileLayer(CONFIG.MAP_TILE_URL, {
       maxZoom: 18,
@@ -119,42 +191,14 @@ function addBaseLayer(map) {
     }).addTo(map);
     return { kind: 'tiles', layers: [tiles], control: null };
   }
-  if (!networkFitsBasemap()) {
-    map.getContainer().style.background = '#f8fafc';
-    return {
-      kind: 'graticule',
-      layers: [addGraticule(map)],
-      control: addBasemapNotice(map),
-    };
-  }
-  const overlay = L.imageOverlay(INDIA_BASEMAP_DATA_URI, BASEMAP_BOUNDS, {
-    opacity: 1,
-    interactive: false,
-    // Behind every node and corridor.
-    zIndex: 1,
-  }).addTo(map);
-  map.setMaxZoom(BASEMAP_MAX_ZOOM);
-  return { kind: 'embedded', layers: [overlay], control: null };
-}
 
-/** Say why there is no land under the network, rather than showing grey. */
-function addBasemapNotice(map) {
-  const notice = L.control({ position: 'topright' });
-  notice.onAdd = () => {
-    const div = L.DomUtil.create('div', 'map-basemap-notice');
-    div.style.cssText = 'background:rgba(255,255,255,.94);border:1px solid #e2e8f0;'
-      + 'border-radius:8px;padding:8px 10px;font-size:11px;line-height:1.5;'
-      + 'max-width:230px;color:#475569;box-shadow:0 2px 8px rgba(15,23,42,.08)';
-    const region = NETWORK_GEOGRAPHY.region ? ` (${NETWORK_GEOGRAPHY.region})` : '';
-    div.innerHTML = `<strong>No basemap for this region${region}</strong><br>`
-      + 'The bundled basemap covers India only. Nodes and corridors are plotted '
-      + 'at their true coordinates on a 10&deg; graticule. Configure '
-      + '<code>MAP_TILE_URL</code> for worldwide tiles.';
-    L.DomEvent.disableClickPropagation(div);
-    return div;
-  };
-  notice.addTo(map);
-  return notice;
+  map.getContainer().style.background = BASEMAP_STYLE.water;
+  const grat = addGraticule(map).addTo(map);
+  const land = addCountries(map).addTo(map);
+  const record = { kind: 'vector', layers: [grat, land], control: null };
+  baseLayers[containerId] = record;
+  addSubdivisions(map, containerId);
+  return record;
 }
 
 // ─── Styles & Color Tokens ──────────────────────────────────
@@ -193,14 +237,24 @@ export function initMap(containerId, options = {}) {
   const map = L.map(containerId, {
     center: center,
     zoom: zoom,
-    zoomControl: true,
+    // Bottom-left, not Leaflet's default top-left: the top-left corner of a
+    // map card is where the network's own figures go (see
+    // .twin3d-stats-overlay), and the +/- buttons were sitting on top of
+    // them — which is why the 2D copy had been pushed to the right-hand side
+    // and stopped matching the 3D twin.
+    zoomControl: false,
     attributionControl: false,
     scrollWheelZoom: scrollWheelZoom,
   });
-
-  baseLayers[containerId] = addBaseLayer(map);
+  L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
   maps[containerId] = map;
+  // Read-only handle for diagnostics: "where is the map looking" is otherwise
+  // unanswerable from outside this module.
+  if (typeof window !== 'undefined' && containerId === 'map-twin') {
+    window.__ngTwinMap = map;
+  }
+  baseLayers[containerId] = addBaseLayer(map, containerId);
   layerGroups[containerId] = {
     nodes: L.layerGroup().addTo(map),
     flows: L.layerGroup().addTo(map),
@@ -216,8 +270,14 @@ export function initMap(containerId, options = {}) {
     renderScenarioDigitalTwin(containerId, options.initialScenario, options.mode || 'scenario');
   } else {
     renderNetwork(containerId, currentState);
-    fitToNetwork(containerId);
   }
+  // Framed AFTER drawing, on BOTH paths. It used to be inside the `else`, so
+  // the only map built through the scenario path — Scenario Planning's
+  // baseline twin — kept the literal `center: [22.5, 79.5], zoom: 4.2` it was
+  // constructed with: central India, for every network ever loaded. The nodes
+  // and lanes were drawn correctly the whole time, several thousand kilometres
+  // off the left edge of a map nobody had ever pointed at them.
+  fitToNetwork(containerId);
 
   // Add legend
   addLegend(map, options.isCompact);
@@ -235,16 +295,24 @@ export function initMap(containerId, options = {}) {
  */
 export function refreshAllMaps() {
   Object.keys(maps).forEach((id) => {
-    if (id === 'scenario-leaflet-map') return;
     // Re-choose the basemap: a map built before hydration was framed on the
     // bundled India raster, and the network that has since loaded may be
     // somewhere else entirely. Without this the first view of a US network is
     // its nodes drawn over the Deccan.
     rebuildBaseLayer(id);
-    renderNetwork(id, currentState);
+    // The scenario map's NODES belong to whichever scenario is selected, and
+    // scenarios.js redraws them from its own `authoritativeDataLoaded`
+    // handler. Drawing the plain network over them here would replace a
+    // scenario's plan with the baseline's. Its basemap and framing are still
+    // this function's business — skipping the map entirely, as this used to,
+    // is why it kept an India basemap and an India viewport for every network.
+    if (id !== 'scenario-leaflet-map') {
+      renderNetwork(id, currentState);
+    }
     fitToNetwork(id);
     try { maps[id].invalidateSize(); } catch (e) { /* not yet visible */ }
   });
+  renderMapLegendCounts();
 }
 
 /**
@@ -256,10 +324,11 @@ export function refreshAllMaps() {
 function rebuildBaseLayer(containerId) {
   const map = maps[containerId];
   if (!map) return;
-  const wantsRaster = Boolean(CONFIG.MAP_TILE_URL) || networkFitsBasemap();
+  // Always rebuilt on a network change, because the country layer highlights
+  // the countries the network is IN — which is a property of the data, not of
+  // the map. The old check compared basemap KINDS and so never fired for two
+  // different networks that happened to want the same kind.
   const current = baseLayers[containerId];
-  const currentIsRaster = current && current.kind !== 'graticule';
-  if (current && wantsRaster === currentIsRaster) return;
 
   (current?.layers || []).forEach((layer) => {
     try { map.removeLayer(layer); } catch (e) { /* already gone */ }
@@ -269,7 +338,7 @@ function rebuildBaseLayer(containerId) {
   }
   map.getContainer().style.background = '';
   map.setMaxZoom(18);
-  baseLayers[containerId] = addBaseLayer(map);
+  baseLayers[containerId] = addBaseLayer(map, containerId);
 }
 
 /**
@@ -281,15 +350,53 @@ function rebuildBaseLayer(containerId) {
 export function fitToNetwork(containerId) {
   const map = maps[containerId];
   if (!map) return;
-  const pts = [...PLANTS, ...DCS, ...MARKETS]
-    .filter((n) => Number.isFinite(n.lat) && Number.isFinite(n.lng))
-    .map((n) => [n.lat, n.lng]);
-  if (pts.length < 2) return;
+  const nodes = [...PLANTS, ...DCS, ...MARKETS];
+  // `networkWindow()` — the same call the 3D twin projects its ground plane
+  // onto. This used to be `fitBounds(points, {padding: [40,40]})`, which is a
+  // padding in SCREEN PIXELS and therefore a different amount of geography in
+  // every container size; the twin padded by a share of the span. The two
+  // views were framed by two rules and agreed only by coincidence.
+  const win = networkWindow(nodes);
+  if (!win) return;
   try {
-    map.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 7 });
+    map.fitBounds(
+      L.latLngBounds([[win.latMin, win.lngMin], [win.latMax, win.lngMax]]),
+      { padding: [0, 0], maxZoom: 7 },
+    );
   } catch (e) {
     /* Degenerate bounds — keep the default view. */
   }
+}
+
+/**
+ * A map has just become visible: re-measure it, then frame it.
+ *
+ * `initMap('map-twin')` runs when the Digital Twin tab opens, and at that
+ * moment `#twin-2d-panel` is `display: none` because 3D is the default view.
+ * Leaflet therefore fitted the network into a 0x0 container, which resolves to
+ * the minimum zoom — so clicking "2D Map" showed the whole world with the
+ * network as a coloured speck over Georgia. `invalidateSize()` alone does not
+ * fix it: it corrects the viewport and leaves the zoom where it was.
+ *
+ * Only for reveal. It must NOT run on every window resize, or it would throw
+ * away a pan or zoom the user had just made.
+ */
+export function revealMap(containerId) {
+  const map = maps[containerId];
+  if (!map) return;
+  try {
+    map.invalidateSize();
+  } catch (e) {
+    return;   // still not laid out; the next reveal will catch it
+  }
+  const size = map.getSize();
+  if (!size || size.x < 40 || size.y < 40) return;
+  fitToNetwork(containerId);
+}
+
+/** Is this container's map mounted yet? */
+export function hasMap(containerId) {
+  return Boolean(maps[containerId]);
 }
 
 // ─── Invalidate Map Size ────────────────────────────────────
@@ -433,6 +540,8 @@ export function renderScenarioDigitalTwin(containerId, scenarioId, mode = 'scena
     const marker = createNodeMarker(m, 'market', containerId, null);
     lg.nodes.addLayer(marker);
   });
+
+  renderMapLegendCounts();
 }
 
 // ─── Scenario Network Data Resolver ─────────────────────────
@@ -603,6 +712,8 @@ function renderNetwork(containerId, state) {
     const marker = createNodeMarker(m, 'market', containerId);
     lg.nodes.addLayer(marker);
   });
+
+  renderMapLegendCounts();
 }
 
 // ─── Flow Data per State (Digital Twin Tab) ─────────────────
@@ -745,27 +856,49 @@ function iconChip(bg, glyph) {
   return `<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:${bg}22;font-size:10px;margin-right:6px;flex-shrink:0">${glyph}</span>`;
 }
 
+/** A "n" chip for a legend row, so the legend says how big the network is. */
+function legendCount(kind) {
+  return `<span class="map-legend-count" data-legend-count="${kind}">0</span>`;
+}
+
+/**
+ * Fill every legend count on the page from the network as it now stands.
+ *
+ * Both legends — the 3D one in the markup and the Leaflet control below —
+ * carry `data-legend-count` rows rather than each counting for itself, so
+ * there is one rule for what "how many DCs" means and the two views can never
+ * disagree. Called on every network refresh and by `renderTwinStats()`.
+ */
+export function renderMapLegendCounts() {
+  if (typeof document === 'undefined') return;
+  const counts = { plant: PLANTS.length, dc: DCS.length, market: MARKETS.length };
+  document.querySelectorAll('[data-legend-count]').forEach((el) => {
+    const n = counts[el.getAttribute('data-legend-count')];
+    el.textContent = Number.isFinite(n) ? String(n) : '0';
+  });
+}
+
 function addLegend(map, isCompact = false) {
   const legend = L.control({ position: 'bottomright' });
   legend.onAdd = function () {
     const div = L.DomUtil.create('div');
     if (isCompact) {
       div.style.cssText =
-        'background:rgba(255,255,255,0.94);padding:7px 10px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,.1);font-size:10.5px;line-height:1.6;font-family:Inter,sans-serif;border:1px solid #cbd5e1';
+        'background:rgba(255,255,255,0.94);padding:7px 10px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,.1);font-size:11.5px;line-height:1.7;font-family:Inter,sans-serif;border:1px solid #cbd5e1';
       div.innerHTML = `
-        <div style="display:flex;align-items:center">${iconChip(COLORS.plant, '🏭')}Plant</div>
-        <div style="display:flex;align-items:center">${iconChip(COLORS.dc, '🏪')}Distribution Centre</div>
-        <div style="display:flex;align-items:center">${iconChip(COLORS.market, '📦')}Market</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.plant, '🏭')}Plant${legendCount('plant')}</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.dc, '🏪')}Distribution Centre${legendCount('dc')}</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.market, '📦')}Market${legendCount('market')}</div>
       `;
     } else {
       div.style.cssText =
-        'background:white;padding:10px 14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:11.5px;line-height:1.5;font-family:Inter,sans-serif';
+        'background:white;padding:10px 14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:12px;line-height:1.75;font-family:Inter,sans-serif';
       div.innerHTML = `
-        <div style="display:flex;align-items:center;margin-bottom:5px">${iconChip(COLORS.plant, '🏭')}Plant</div>
-        <div style="display:flex;align-items:center;margin-bottom:5px">${iconChip(COLORS.dc, '🏪')}Distribution Centre</div>
-        <div style="display:flex;align-items:center">${iconChip(COLORS.market, '📦')}Demand Market</div>
+        <div style="display:flex;align-items:center;margin-bottom:5px">${iconChip(COLORS.plant, '🏭')}Plant${legendCount('plant')}</div>
+        <div style="display:flex;align-items:center;margin-bottom:5px">${iconChip(COLORS.dc, '🏪')}Distribution Centre${legendCount('dc')}</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.market, '📦')}Demand Market${legendCount('market')}</div>
         <div style="margin-top:7px;padding-top:7px;border-top:1px solid #eee">
-          <div style="font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">DC Ring = Utilisation</div>
+          <div style="font-weight:700;font-size:10.5px;color:#64748b;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">DC Ring = Utilisation</div>
           <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-right:7px"></span>Critical (&gt;95%)</div>
           <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:7px"></span>Stress (85–95%)</div>
           <div style="display:flex;align-items:center"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:7px"></span>Healthy (&lt;85%)</div>
@@ -775,4 +908,8 @@ function addLegend(map, isCompact = false) {
     return div;
   };
   legend.addTo(map);
+  // The legend is built once, at initMap — usually before any network has
+  // loaded — so its counts start at 0 and are filled the moment there is
+  // something to count.
+  setTimeout(renderMapLegendCounts, 0);
 }

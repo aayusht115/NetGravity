@@ -36,10 +36,12 @@ export const CONFIG = {
    * result is a map that renders the client's own facilities on top of a
    * watermark telling them their software is misconfigured.
    *
-   * The map now draws on an India basemap embedded in the application
-   * (`js/basemap-data.js`, the same image the 3D twin stands on), so it needs
-   * no external service, no key, and no internet connection, and it cannot
-   * change under the application's feet.
+   * The map now draws vector country outlines bundled with the application
+   * (`js/world-basemap.js` — Natural Earth 110m, public domain, the same rings
+   * the 3D twin triangulates its ground from), so it needs no external
+   * service, no key and no internet connection, it covers every network
+   * anywhere rather than one country, and it cannot change under the
+   * application's feet.
    *
    * Set this to a tile template — your own tile server, or a keyed provider
    * with the key already in the URL — to use live tiles instead. Nothing else

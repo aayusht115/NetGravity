@@ -205,7 +205,21 @@ def upload_and_parse():
     detected = auto = review = ignored = 0
 
     for storage in uploaded:
-        fname = _validate_upload(storage)
+        # Per file, not per request. `_validate_upload` sat outside the try
+        # below, so one file of an unsupported type — a PDF, which the
+        # uploader accepts and has its own review screen — raised straight
+        # past every other file in the batch. The workbook uploaded beside it
+        # was never read, and the mapping screen opened with nothing on it and
+        # no explanation. A rejected file is now named in `parse_errors` like
+        # any other unreadable one; a request in which EVERY file is rejected
+        # still fails, below, because `all_tables` is empty.
+        try:
+            fname = _validate_upload(storage)
+        except ValidationError as exc:
+            rejected = secure_filename(storage.filename or "") or "a file"
+            logger.warning("ingestion.preview.rejected file=%s err=%s", rejected, exc)
+            parse_errors.append({"file": rejected, "error": str(exc)})
+            continue
         try:
             tables = extract_tables_from_file(storage)
         except Exception as exc:  # noqa: BLE001 — reported, never silently dropped

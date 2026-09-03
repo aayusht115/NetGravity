@@ -43,6 +43,10 @@
   --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px; --space-2xl: 48px;
   --sidebar-w: 220px;
   --header-h: 56px;
+  /* The fixed "Ask Netgravity" button's footprint: 28px from the bottom plus
+     its 52px height, and a little air. Anything that must stay readable in
+     the bottom-right corner keeps this much clear of it. */
+  --ng-fab-clearance: 84px;
   --transition: .2s cubic-bezier(.4,0,.2,1);
 }
 
@@ -55,7 +59,12 @@ button { cursor: pointer; font-family: inherit; }
 input, select, textarea { font-family: inherit; font-size: inherit; }
 
 /* ─── App Shell ───────────────────────────────────────────── */
-.app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+/* Exactly one window tall. `min-height: 100vh` with an auto height is not the
+   same thing: the shell then sized to its CONTENT, its content is .app-body,
+   and .app-body's own `flex: 1` sized back to the shell — so a tall page
+   simply pushed the whole shell taller and every `height: 100%` inside it
+   inherited the new, wrong number. */
+.app-shell { display: flex; flex-direction: column; height: 100vh; }
 
 /* ─── Header ──────────────────────────────────────────────── */
 .app-header {
@@ -82,7 +91,25 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .status-dot.warning { background: var(--amber); }
 
 /* ─── Body Layout ─────────────────────────────────────────── */
-.app-body { display: flex; flex: 1; min-height: 100vh; }
+/* Exactly one window tall, and it does not scroll: the page area inside it
+   does (see .main-content).
+
+   It was `min-height: 100vh` with an auto height, so its real height was its
+   content's — and its content is .main-content, whose own height came back
+   from this element. The circularity resolved 56px too tall on Home (a page
+   built to fit exactly), which put a scrollbar on a screen with nothing below
+   the fold, and ran away completely on the Digital Twin: the map panel took
+   1140px in a 1050px window. Pinning the shell breaks the loop, and every
+   `height: 100%` / `flex: 1` inside it now resolves against a real number. */
+.app-body {
+  display: flex;
+  flex: 1;
+  /* `min-height: 0`, NOT `100vh`: this is a flex item in a shell that is
+     already exactly one window tall, so it takes the whole of it — and a
+     minimum of its own would only stop it shrinking back. */
+  min-height: 0;
+  overflow: hidden;
+}
 
 /* ─── Sidebar ─────────────────────────────────────────────── */
 .sidebar {
@@ -118,13 +145,31 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 /* ─── Main Content ────────────────────────────────────────── */
 .main-content {
   flex: 1; padding: var(--space-lg);
-  max-width: 1280px; width: 100%;
+  /* No width cap. It used to be `max-width: 1280px`, which Home alone opted
+     out of (.home-full-bleed) — so on any window wider than 1280 + sidebar
+     every OTHER page ended in a band of empty page down the right-hand side
+     while Home reached the edge. Same shell, two different content widths,
+     which is what "some screens have margins on the right side" is. */
+  max-width: none; width: 100%;
+  /* Column flex so a tab panel can use flex:1 to reach the bottom edge of
+     the page, the way #tab-home already does. .main-content is stretched to
+     the full viewport height by its flex-row parent, but a block child sized
+     to its own content has no way to know about that extra space. */
+  display: flex;
+  flex-direction: column;
   /* Without this, a flex item's automatic minimum width is the max-content
      size of its widest child (a table, a toggle-group row, etc.) — on
      viewports narrower than that content's natural width, the item
      refuses to shrink and instead overflows the whole page horizontally
      rather than just clipping/scrolling its own content. */
   min-width: 0;
+  /* The page area is the scroll container, not the window. A long page (the
+     Forecast, the KPI tables) scrolls here; a page built to fit the window
+     does not scroll at all, and the sticky top bar sticks to the top of the
+     content rather than to a window that never moves. */
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 /* Home Overview spans the full width instead of the 1280px cap, and
@@ -134,11 +179,9 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
    .main-content itself is stretched to the full viewport height by its
    own flex-row parent (.app-body), but a plain block child sized to its
    own content has no way to know or fill that extra space on its own. */
-.main-content.home-full-bleed {
-  max-width: none;
-  display: flex;
-  flex-direction: column;
-}
+/* Retained as a hook — the full-bleed column layout it used to switch on is
+   now the base rule for every page, so this adds nothing on its own. */
+.main-content.home-full-bleed { max-width: none; }
 
 /* ─── Tab Panels ──────────────────────────────────────────── */
 .tab-panel { display: none; animation: fadeIn .3s ease; }
@@ -157,8 +200,23 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   margin: calc(-1 * var(--space-lg));
   padding: var(--space-lg);
   background: linear-gradient(180deg, #f8f4fd 0%, #f1e7fa 55%, #e9d9f6 100%);
-  min-height: calc(100vh - var(--header-h) - 2 * var(--space-lg));
 }
+
+/* Fill the space left under the two header rows, exactly — the way #tab-home
+   does. This was `min-height: calc(100vh - var(--header-h) - 2*space-lg)`,
+   which counted the global top bar but not the page-title row below it, so
+   every one of these pages was about 50px taller than its window and the
+   whole shell scrolled by that much with nothing at the bottom to see.
+   `flex: 1 0 auto` fills what is actually left and still grows past it when
+   the page genuinely has more content than fits. */
+#tab-facility-dashboard.active,
+#tab-forecast.active,
+#tab-scenarios.active {
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ─── Cards ───────────────────────────────────────────────── */
@@ -618,11 +676,47 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .project-select-btn { transition: border-color 0.15s ease, background 0.15s ease; }
 .project-select-btn:hover { border-color: #9218EA !important; background: #f5f1fb !important; }
 
-/* Facility/Period controls when relocated into the global topbar's left
-   area (Home Overview only) — same look as .topbar-controls in the
-   sub-topbar row, just without the auto left-margin that positions it
-   there. */
-#home-top-controls { margin-left: 0; }
+/* The application's Facility/Period pair, in the top bar's left area beside
+   the project selector — on every page, not only Home (see
+   updateTopBarLayout). Same look as .topbar-controls had in the sub-topbar
+   row, without the auto left-margin that pushed it to the right there. */
+#home-top-controls { margin-left: 0; min-width: 0; }
+
+/* The top bar now carries the project, the facility and the period on its
+   left and four controls on its right. At 1100px that is wider than the
+   window, and the page scrolled sideways. It gives way in the order things
+   can be spared: first the gaps, then the words "Facility" and "Period"
+   (each sits directly above a select that names itself), then the selects
+   themselves truncate. */
+.topbar-left-area { min-width: 0; flex: 1 1 auto; }
+#home-top-controls .topbar-facility-select,
+#home-top-controls .topbar-period-select {
+  min-width: 0;
+  max-width: 220px;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1400px) {
+  .topbar-left-area { gap: 9px; }
+  #home-top-controls { gap: 10px; }
+  #home-top-controls .topbar-facility-select { max-width: 168px; }
+  #home-top-controls .topbar-period-select { max-width: 120px; }
+}
+
+@media (max-width: 1180px) {
+  #home-top-controls .topbar-control-group .control-label { display: none; }
+  #home-top-controls .topbar-facility-select { max-width: 140px; }
+  .app-global-topbar { padding-left: 18px; padding-right: 18px; }
+  .topbar-right-area { gap: 10px; }
+}
+
+@media (max-width: 1000px) {
+  /* Below this the project button's own label is the first thing to go —
+     the folder icon and the project name after it still identify it. */
+  .project-select-btn span strong { max-width: 120px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; display: inline-block;
+    vertical-align: bottom; }
+}
 
 .topbar-right-area {
   display: flex;
@@ -756,6 +850,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   border-bottom: 1px solid var(--border-light);
   min-height: 50px;
   gap: 16px;
+  /* Paints ABOVE the tab panel below it.
+     Each panel is pulled up by `margin: calc(-1 * var(--space-lg))` so its
+     gradient bleeds to the edges of the shell — which also pulls it 20px up
+     over this row, and since the panel comes later in the document it won its
+     overlap: the bottom of "Digital Twin" was covered by the panel's
+     background. A stacking context here puts the row back on top. Below the
+     global top bar's z-index of 90, so that still covers this when sticky. */
+  position: relative;
+  z-index: 1;
 }
 
 .sub-topbar-title-wrap,
@@ -765,12 +868,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   gap: 8px;
 }
 
+/* Home's own `.ov-title` is the reference: 22px / 800 / -0.025em. Every
+   other page's title is drawn at that size so a reader moving between tabs
+   sees one heading scale rather than a 21px one here and a 22px one there. */
 .sub-topbar-main-title,
 .greeting-text {
-  font-size: 21px;
+  font-size: 22px;
   color: #111827;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  letter-spacing: -0.025em;
 }
 
 .sub-topbar-main-title strong,
@@ -779,9 +885,11 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   font-weight: 700;
 }
 
+/* 13px, matching Home's `.ov-subtitle` — the strapline that now sits on the
+   same line as "Overview". */
 .sub-topbar-sub-title,
 .greeting-sub {
-  font-size: 12.5px;
+  font-size: 13px;
   color: #6b7280;
   font-weight: 400;
 }
@@ -1947,7 +2055,14 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 .scn-map-wrap {
-  height: 360px;
+  /* Taller than the flat 360px it was.
+     `fitBounds` fits the network in BOTH dimensions, so the short dimension
+     decides the zoom: in a 1368x358 box a network shaped like the continental
+     United States was framed by its height, and the extra width filled with
+     two thousand miles of empty Atlantic. A taller box brings the zoom up and
+     the network fills the frame — and the space it takes was empty page
+     underneath it anyway. */
+  height: clamp(360px, 46vh, 520px);
   border-radius: var(--r-md);
   overflow: hidden;
   position: relative;
@@ -2602,6 +2717,11 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 /* ─── Floating Stats Overlay (Light Theme) ───────────────── */
+/* Top-left, on the 2D map and the 3D twin alike. The 2D copy carried an
+   inline `left:auto; right:16px`, so the same three figures were on opposite
+   sides of the same card depending on which view you were in — and the eye
+   had to find them again every time you toggled. Leaflet's zoom control moves
+   to the bottom-left to make room (see initMap). */
 .twin3d-stats-overlay {
   position: absolute;
   top: 16px;
@@ -2613,10 +2733,13 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 .twin3d-stat {
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  /* Opaque, and no `backdrop-filter`.
+     A backdrop filter makes the compositor snapshot and blur everything
+     behind the element on every paint — and these sit on top of a WebGL
+     canvas, so every scroll frame paid for three of them. Over an already
+     opaque map the blur was invisible anyway; the alpha goes up instead. */
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 10px;
   padding: 8px 14px;
   display: flex;
@@ -2651,10 +2774,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 .twin3d-hint span {
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 20px;
   padding: 6px 18px;
   font-size: 11px;
@@ -2670,14 +2791,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   bottom: 16px;
   right: 16px;
   z-index: 10;
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 10px;
-  padding: 8px 12px;
-  font-size: 10px;
-  line-height: 1.7;
+  padding: 11px 14px;
+  /* 12px, up from 10. The key to the whole map was set two steps below the
+     application's smallest body size, which made the one thing on screen
+     that explains the picture the hardest thing on it to read. */
+  font-size: 12px;
+  line-height: 1.75;
   color: var(--text-2);
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
   pointer-events: none;
@@ -2686,20 +2808,31 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .twin3d-legend-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   white-space: nowrap;
 }
 
 .twin3d-legend-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
   flex-shrink: 0;
 }
 
+/* The count sits at the end of its row, right-aligned so the three numbers
+   form a column the eye can compare without reading the labels again. */
+.twin3d-legend-count,
+.map-legend-count {
+  margin-left: auto;
+  padding-left: 10px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-1);
+}
+
 .twin3d-legend-title {
   font-weight: 700;
-  font-size: 9px;
+  font-size: 10.5px;
   color: var(--text-3);
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -2710,6 +2843,491 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   margin-top: 6px;
   padding-top: 6px;
   border-top: 1px solid #eee;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DIGITAL TWIN PAGE — one screen, three equal boxes
+   ═══════════════════════════════════════════════════════════ */
+
+/* The page is a column: toolbar, map, then the three tables. Declared on
+   `#tab-twin.active` so `.tab-panel { display: none }` still hides it — an
+   unqualified `#tab-twin { display: flex }` is an ID selector and would beat
+   that class outright, showing this page under every other tab. */
+#tab-twin.active {
+  display: flex;
+  flex-direction: column;
+  /* At least the window, and taller when the map and the tables ask for it.
+     The three boxes below the map still scroll INSIDE themselves — that is
+     what keeps their heights level and their headers in place — but the map
+     itself is now the size it needs to be read at rather than whatever was
+     left over on a short screen. */
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+#tab-twin .twin-toolbar { flex: 0 0 auto; }
+
+/* A STATED height, not "whatever is left".
+   `flex: 1 1 auto` here fed a loop: the panel had no definite height, so the
+   `height: 100%` on the WebGL container below resolved to auto, the canvas
+   fell back to its own drawing-buffer height, that became the panel's content
+   height, the panel grew to it, and the next resize set a bigger buffer. It
+   settled at a 1361px map in a 1050px window. A number breaks the loop, and
+   it is also the honest way to say how tall this card should be: taller than
+   the ~460px it used to get, and the same on every screen of a given size. */
+#tab-twin .twin-view-panel {
+  flex: 0 0 auto;
+  height: clamp(420px, 58vh, 660px);
+}
+
+#tab-twin .twin-view-panel .twin3d-container,
+#tab-twin .twin-view-panel .map-container,
+#tab-twin .twin-view-panel .map-container.tall {
+  height: 100%;
+  min-height: 0;
+}
+
+/* The three boxes below the map.
+   They used to be as tall as their own row count — 34 markets beside 4 plants
+   meant one box four times the height of its neighbour and a page that
+   scrolled past the map to reach the bottom of it. Now every box is the same
+   stated height and each scrolls inside itself, so the row is level and the
+   page below the map does not move. */
+#tab-twin .grid-3 {
+  flex: 0 0 auto;
+  align-items: stretch;
+  margin-bottom: 0;
+}
+
+#tab-twin .grid-3 > .card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#tab-twin .grid-3 > .card > .card-table-scroll {
+  flex: 1 1 auto;
+  /* Deeper than the 150-250px it was: at the low end only three rows of a
+     twelve-row table were visible at once, which is a scrollbar pretending to
+     be a list. Still a STATED height, so all three boxes stay level whatever
+     they hold. */
+  height: clamp(240px, 34vh, 380px);
+  overflow: auto;
+}
+
+/* A header that scrolls away leaves the reader looking at four unlabelled
+   columns (Nielsen #6). */
+#tab-twin .grid-3 .ng-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-card, #ffffff);
+}
+
+/* ════════════════════════════════════════════════════════
+   FORECAST PAGE — Dump/Demand forecast.png
+   ════════════════════════════════════════════════════════
+
+   The same two-column, two-row grid as the Overview's `.ov-main`, and for the
+   same reason: the alert takes the height its text needs, the attention card
+   absorbs the rest, and the tall thing on the right spans both so it runs the
+   full height of the column beside it. Here the tall thing is the chart.
+
+   The alert, the attention card and the signals row are the Overview's own
+   components, by class — no second stylesheet for the same three cards, and
+   no second renderer (see renderForecastPage in app.js). Only the chart card
+   below is new.
+   ════════════════════════════════════════════════════════ */
+
+#tab-forecast.active {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 0 auto;
+  min-height: 0;
+}
+
+.fc-main {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+  flex: 0 0 auto;
+  /* The first screen, in full — the same rule Home's `.ov-main` follows, off
+     the same measured variable (sizePageToWindow() in app.js). The signals
+     row therefore begins below the fold. */
+  /* Clearance for the fixed "Ask Netgravity" button (bottom: 28px, height:
+     52px — see .floating-chatbot-fab). On Home the button lands on the
+     corner of a map and nothing is lost; here it lands on the x-axis, and an
+     axis whose last two periods are behind a button is an axis that has to
+     be scrolled to read. */
+  min-height: calc(100vh - var(--fc-main-top, 150px) - var(--ng-fab-clearance, 84px));
+  /* And no MORE than one screen. Without the cap the row grows to whatever
+     the attention card's findings list happens to be, which pushes the chart
+     down until its x-axis is under the floating button again. Bounded, the
+     findings list scrolls inside its own card (`.ov-attn-body`) and the
+     chart stays where the reader left it. */
+  max-height: calc(100vh - var(--fc-main-top, 150px) - var(--ng-fab-clearance, 84px));
+}
+
+.fc-main > .ov-alert      { grid-column: 1; grid-row: 1; }
+.fc-main > .ov-attn-card  { grid-column: 1; grid-row: 2; }
+.fc-main > .fc-chart-card { grid-column: 2; grid-row: 1 / span 2; }
+
+/* ─── the chart card ────────────────────────────────────── */
+.fc-chart-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  padding: 16px 18px 14px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-light, #eceef2);
+  border-radius: 14px;
+}
+
+.fc-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+/* 16px / 700 — `.ov-attn-title`'s own values, so the three card headings on
+   this page are one heading. */
+.fc-chart-title {
+  display: flex;
+  align-items: center;
+  /* One line, as in the mockup. Wrapping put "Demand —" on its own line
+     above the series whenever the market and product names were long, which
+     on a real catalogue is most of them; the picker truncates instead, and
+     the full name is in its own option list and in the methodology panel. */
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin: 0;
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+}
+
+.fc-chart-title-prefix { flex-shrink: 0; }
+
+/* A select that reads as the rest of the title.
+   The caret is drawn beside it rather than as a background image so the
+   control can be sized to its own text and still show that it opens. */
+.fc-series-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: 7px;
+  padding: 1px 4px 1px 2px;
+  margin-left: -2px;
+  transition: background var(--t-fast, .15s ease);
+}
+
+.fc-series-wrap:hover { background: #f4f1fa; }
+
+.fc-series-select {
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  color: var(--primary);
+  cursor: pointer;
+  appearance: none;
+  text-overflow: ellipsis;
+}
+
+.fc-series-select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.fc-series-select:disabled { color: var(--text-3); cursor: not-allowed; }
+
+.fc-series-caret {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
+.fc-chart-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 13px — `.btn`'s size, which is the application's button scale. */
+.fc-ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border, #e2e6ec);
+  border-radius: 9px;
+  background: var(--bg-card, #ffffff);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--t-fast, .15s ease), color var(--t-fast, .15s ease);
+}
+
+.fc-ghost-btn svg { width: 14px; height: 14px; }
+.fc-ghost-btn:hover { border-color: var(--primary); color: var(--primary); }
+.fc-ghost-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.fc-menu-wrap { position: relative; }
+
+.fc-kebab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border, #e2e6ec);
+  border-radius: 9px;
+  background: var(--bg-card, #ffffff);
+  color: var(--text-3);
+  cursor: pointer;
+  transition: border-color var(--t-fast, .15s ease), color var(--t-fast, .15s ease);
+}
+
+.fc-kebab-btn svg { width: 16px; height: 16px; }
+.fc-kebab-btn:hover { border-color: var(--primary); color: var(--primary); }
+.fc-kebab-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.fc-menu {
+  position: absolute;
+  top: 38px;
+  right: 0;
+  z-index: 40;
+  min-width: 232px;
+  padding: 5px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-light, #eceef2);
+  border-radius: 11px;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.fc-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fc-menu-item:hover { background: #f5f1fb; color: var(--primary); }
+.fc-menu-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+/* ─── the key ────────────────────────────────────────────── */
+.fc-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 12px 0 6px;
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.fc-legend-item { display: inline-flex; align-items: center; gap: 8px; }
+/* `hidden` has to win over the class above, or the capacity key stays on
+   screen for a chart that draws no capacity line — which sends the reader
+   looking for a red rule that is not there. */
+.fc-legend-item[hidden] { display: none; }
+
+.fc-legend-line { width: 22px; height: 0; border-top: 2.5px solid var(--primary); }
+.fc-legend-line.dashed { border-top-style: dashed; }
+.fc-legend-line.capacity { border-top-color: #dc2626; }
+
+.fc-legend-swatch {
+  width: 22px;
+  height: 11px;
+  border-radius: 3px;
+  background: rgba(107, 47, 160, 0.14);
+}
+
+/* ─── the plot ──────────────────────────────────────────── */
+.fc-chart-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 260px;
+}
+
+.fc-chart-wrap canvas { display: block; }
+
+/* Which half of the axis is observation and which is projection. */
+.fc-axis-note {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 8px;
+  padding: 0 4px;
+  flex-shrink: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.fc-axis-span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.fc-axis-rule {
+  flex: 1 1 auto;
+  height: 0;
+  border-top: 1px solid var(--border, #e2e6ec);
+}
+
+.fc-axis-span::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 0;
+  border-top: 1px solid var(--border, #e2e6ec);
+}
+
+/* ─── how the number was produced ───────────────────────────── */
+.fc-method-panel {
+  position: absolute;
+  right: 18px;
+  top: 58px;
+  z-index: 30;
+  width: min(400px, calc(100% - 36px));
+  max-height: calc(100% - 78px);
+  overflow-y: auto;
+  padding: 14px 16px 16px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-light, #eceef2);
+  border-radius: 12px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16);
+}
+
+.fc-method-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.fc-method-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.fc-method-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.fc-method-close svg { width: 15px; height: 15px; }
+.fc-method-close:hover { background: #f3f4f6; color: var(--text-1); }
+
+.fc-method-grid { margin: 0; }
+
+.fc-method-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border-light, #f1f2f5);
+}
+
+.fc-method-row:last-child { border-bottom: none; }
+
+.fc-method-row dt {
+  font-size: 12.5px;
+  color: var(--text-2);
+  flex-shrink: 0;
+}
+
+.fc-method-row dd {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.fc-method-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+
+.fc-method-prov { font-style: italic; }
+
+/* ─── signals ──────────────────────────────────────────── */
+.fc-signals-all {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-light, #eceef2);
+}
+
+/* ─── responsive ──────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .fc-main {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    /* Stacked, there is no first screen to fill or to cap. */
+    min-height: 0;
+    max-height: none;
+  }
+  .fc-main > .ov-alert,
+  .fc-main > .ov-attn-card,
+  .fc-main > .fc-chart-card { grid-column: 1; grid-row: auto; }
+  .fc-chart-wrap { height: 340px; flex: 0 0 340px; }
+  .fc-method-panel { position: static; width: auto; max-height: none; margin-top: 12px;
+                     box-shadow: none; }
 }
 
 /* ─── Dynamic 3D HUD Tooltip (Light Theme) ───────────────── */
@@ -2790,8 +3408,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   border-top: 1px solid var(--border-light);
   padding-top: 5px;
 }
-
-
 
 
 

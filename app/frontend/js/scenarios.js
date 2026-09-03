@@ -11,7 +11,8 @@
 
 import { SCENARIOS, DCS, PLANTS, MARKETS, formatNumber, formatCurrency,
          SOLVE_HORIZON, currencyLabel, withCurrency } from './data.js';
-import { initMap, renderScenarioDigitalTwin, invalidateMapSize } from './map.js';
+import { initMap, renderScenarioDigitalTwin, invalidateMapSize,
+         revealMap } from './map.js';
 import { scenarioService } from './integration/services/scenario-service.js';
 import {
   mapScenarioRecord, baselineFromScenarioRecord, BASELINE_SCENARIO_ID,
@@ -340,7 +341,14 @@ export function initScenarios() {
   renderScenarioMapToggle();
   wireScenarioEvents();
 
-  // Initialize visual context 2D digital twin map
+  // Initialize visual context 2D digital twin map.
+  //
+  // `zoom` / `center` are only the view before anything is known about the
+  // network; `initMap` re-frames onto the actual nodes as soon as it has
+  // drawn them. `initScenarios()` also runs at app boot, when this panel is
+  // `display: none` and the container is 0x0 — a map framed at that size
+  // resolves to the minimum zoom — so `updateScenarioMap()` re-measures and
+  // re-frames once the page is actually on screen.
   setTimeout(() => {
     initMap('scenario-leaflet-map', {
       zoom: 4.2,
@@ -560,6 +568,12 @@ function updateScenarioMap() {
   renderScenarioDigitalTwin('scenario-leaflet-map', mapActiveId, mode);
   renderScenarioMapCaption();
   invalidateMapSize('scenario-leaflet-map');
+  // Re-frame on the scenario just drawn. A scenario can open a greenfield
+  // site outside the baseline's own extent, and a map held at the baseline's
+  // frame would draw that site off the edge — the reader would see lanes
+  // leaving the picture towards a DC that appears not to exist. The delay
+  // lets invalidateSize() land first, so the fit is against a real viewport.
+  setTimeout(() => revealMap('scenario-leaflet-map'), 60);
 }
 
 /**

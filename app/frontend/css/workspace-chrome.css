@@ -58,6 +58,52 @@
 
 .wc-topbar-wide .wc-topbar-inner { max-width: 1600px; }
 
+/* The bar spans the window on the ingestion screens, which have a rail of
+   their own on the left and no centred content column to line up with. */
+.wc-topbar-full .wc-topbar-inner { max-width: none; padding: 0 20px; }
+
+.wc-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* ─── Project pill ────────────────────────────────────────────── */
+/* Which project am I in? Sized against .btn (13px) rather than the brand, so
+   it reads as a control next to the lockup and not a second title. */
+.wc-project {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  max-width: 260px;
+  padding: 0 10px;
+  border: 1px solid var(--wc-line);
+  border-radius: 9px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wc-ink);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.wc-project:hover { border-color: var(--wc-purple); background: var(--wc-purple-wash); }
+.wc-project:focus-visible { outline: 2px solid var(--wc-purple); outline-offset: 1px; }
+.wc-project svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--wc-ink-3); }
+.wc-project:hover svg { color: var(--wc-purple); }
+
+.wc-project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.wc-project-caret { display: flex; }
+
 .wc-brand {
   display: flex;
   align-items: center;
@@ -414,8 +460,18 @@
 }
 
 /* ─── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 1040px) {
+  /* The pill keeps its icon and caret so the control — and therefore the way
+     out of this project — is still reachable; only the name folds away. */
+  .wc-project { max-width: 150px; }
+}
+
 @media (max-width: 860px) {
   .wc-topbar-inner { padding: 0 16px; }
+  .wc-topbar-full .wc-topbar-inner { padding: 0 14px; }
+  .wc-topbar-left { gap: 10px; }
   .wc-account-text,
   .wc-account-caret { display: none; }
+  .wc-project-name { display: none; }
+  .wc-project { max-width: none; padding: 0 8px; }
 }

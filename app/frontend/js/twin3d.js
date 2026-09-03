@@ -1,18 +1,28 @@
 /**
- * NetGravity — 3D Digital Twin (Flat India Map · Light Mode)
- * ==========================================================
- * A flat, real-world basemap of India (extracted directly from the same
- * CARTO/Leaflet tiles used by the 2D map) sits as the ground plane, with the
- * supply chain network rendered as glowing 3D beacons and flight-style flow
- * arcs standing on top of it. Coordinates use the exact Web Mercator
- * projection the basemap was captured with, so every node lines up
- * pixel-accurately with the real geography beneath it.
+ * NetGravity — 3D Digital Twin (Light Mode)
+ * =========================================
+ * The 2D map's geography, standing up.
+ *
+ * The ground plane is built from `world-basemap.js` — the same Natural Earth
+ * country rings `map.js` hands to Leaflet — projected through the same Web
+ * Mercator maths onto the same lat/lng window `networkWindow()` gives the 2D
+ * map. So the two views are not two pictures kept in step by hand: the 3D
+ * scene is the 2D map extruded, and a coastline that moves in one moves in
+ * the other because there is only one set of coordinates.
+ *
+ * It used to stand on a raster photograph of India, applied only when the
+ * network happened to sit inside 4-39N / 65-100E. Anywhere else the plane was
+ * blank: a US network's twelve facilities floated over white while the
+ * counters beside them correctly reported 24 nodes and 51 corridors. Vector
+ * land works for every network, everywhere, and stays sharp at any zoom.
  */
 
 /* global THREE */
 import { PLANTS, DCS, MARKETS, LANES, formatNumber, getUtilColor, getUtilLabel,
          perPeriodLabel } from './data.js';
-import { INDIA_BASEMAP_DATA_URI } from './basemap-data.js';
+import { WORLD_COUNTRIES, countriesContaining, networkWindow,
+         clipRingToBounds, ringIntersects, loadAdmin1,
+         admin1IfLoaded } from './world-basemap.js';
 
 // ─── Basemap Calibration ─────────────────────────────────────
 // The basemap image was captured from a live Leaflet map (CARTO "light_all"
@@ -42,28 +52,25 @@ const captureTopLeftPx = {
 //
 // The lat/lng box the ground plane represents.
 //
-// This was fixed to `CROP_BOUNDS` — the India crop the bundled basemap image
-// was taken from — so `geoTo3D` produced u/v far outside [0,1] for any network
-// elsewhere in the world. A US network's twelve facilities were projected way
-// off the ground plane and out of frame: the scene rendered the India basemap
-// with nothing on it, while the counters beside it correctly reported 24 nodes
-// and 51 corridors.
-//
-// The window now defaults to the India crop (so an Indian network keeps the
-// photographic basemap, pixel-aligned exactly as before) and is replaced by the
-// network's own Mercator extent when the network lies elsewhere. Then the
-// basemap texture is dropped, because a photograph of India under a US network
-// is worse than no photograph — and a graticule takes its place.
+// This was fixed to the India crop the bundled photograph was taken from, so
+// `geoTo3D` produced u/v far outside [0,1] for any network elsewhere and the
+// nodes projected off the plane entirely. It is now whatever
+// `networkWindow()` returns for the loaded network — the SAME call the 2D map
+// frames itself with — so the two views show the same ground at the same
+// scale, and both follow the data.
 let PROJECTION = null;
 
-function makeProjection(bounds, { textured }) {
+/** The window used before any network has loaded: the whole world. */
+const DEFAULT_BOUNDS = { latMin: -60, latMax: 78, lngMin: -170, lngMax: 178 };
+
+function makeProjection(bounds) {
   const topLeft = mercatorWorldXY(bounds.latMax, bounds.lngMin, MERCATOR_ZOOM);
   const bottomRight = mercatorWorldXY(bounds.latMin, bounds.lngMax, MERCATOR_ZOOM);
   const imgW = bottomRight.x - topLeft.x;
   const imgH = bottomRight.y - topLeft.y;
   const width = 84;
   return {
-    bounds, textured, topLeft, imgW, imgH,
+    bounds, topLeft, imgW, imgH,
     width,
     // Aspect follows the window, so a wide network is not squashed into a
     // portrait plane, and a tall one is not stretched across a landscape one.
@@ -71,55 +78,46 @@ function makeProjection(bounds, { textured }) {
   };
 }
 
-const INDIA_PROJECTION = makeProjection(CROP_BOUNDS, { textured: true });
-PROJECTION = INDIA_PROJECTION;
-
-/** Does every node sit inside the bundled basemap's crop? */
-function insideIndiaCrop(nodes) {
-  const pts = nodes.filter((n) => Number.isFinite(n.lat) && Number.isFinite(n.lng));
-  if (!pts.length) return true;
-  const inside = pts.filter((n) =>
-    n.lat >= CROP_BOUNDS.latMin && n.lat <= CROP_BOUNDS.latMax
-    && n.lng >= CROP_BOUNDS.lngMin && n.lng <= CROP_BOUNDS.lngMax);
-  return inside.length / pts.length >= 0.6;
-}
+PROJECTION = makeProjection(DEFAULT_BOUNDS);
 
 /**
- * Choose the ground plane for the network currently loaded.
+ * Point the ground plane at the network currently loaded.
  *
- * Returns true when the projection changed, so the caller knows the scene has
- * to be rebuilt rather than merely re-populated.
+ * Returns true when the window actually moved, so the caller knows the plane
+ * has to be rebuilt rather than merely re-populated. Comparing the bounds
+ * rather than a basemap "kind" matters: two different networks in the same
+ * country want the same KIND of ground and completely different windows, and
+ * the old check saw no difference between them.
  */
 function updateProjection() {
   const nodes = [...PLANTS, ...DCS, ...MARKETS];
-  const previouslyTextured = PROJECTION.textured;
-
-  if (insideIndiaCrop(nodes)) {
-    PROJECTION = INDIA_PROJECTION;
-    return previouslyTextured !== true;
-  }
-
-  const pts = nodes.filter((n) => Number.isFinite(n.lat) && Number.isFinite(n.lng));
-  if (!pts.length) return false;
-
-  const lats = pts.map((n) => n.lat);
-  const lngs = pts.map((n) => n.lng);
-  // A tenth of the span as margin, and a floor so a single-city network does
-  // not project onto a degenerate zero-width plane.
-  const padLat = Math.max((Math.max(...lats) - Math.min(...lats)) * 0.15, 1.5);
-  const padLng = Math.max((Math.max(...lngs) - Math.min(...lngs)) * 0.15, 1.5);
-  PROJECTION = makeProjection({
-    latMin: Math.max(-84, Math.min(...lats) - padLat),
-    latMax: Math.min(84, Math.max(...lats) + padLat),
-    lngMin: Math.max(-179, Math.min(...lngs) - padLng),
-    lngMax: Math.min(179, Math.max(...lngs) + padLng),
-  }, { textured: false });
-  return previouslyTextured !== false;
+  const bounds = networkWindow(nodes) || DEFAULT_BOUNDS;
+  const b = PROJECTION.bounds;
+  const same = Math.abs(b.latMin - bounds.latMin) < 1e-6
+    && Math.abs(b.latMax - bounds.latMax) < 1e-6
+    && Math.abs(b.lngMin - bounds.lngMin) < 1e-6
+    && Math.abs(b.lngMax - bounds.lngMax) < 1e-6;
+  if (same) return false;
+  PROJECTION = makeProjection(bounds);
+  return true;
 }
 
 // ─── Light-theme color palette ───────────────────────────────
 const THEME_COLORS = {
   bg:          0xf8fafc, // Slate 50
+  // The 2D map's BASEMAP_STYLE, as numbers. Land lighter than water, the way
+  // a printed atlas reads; the first pass had the two within 4% luminance of
+  // each other, so the coastline was drawn and invisible.
+  water:       0xcddced, // the plate the land sits on
+  land:        0xf6f9fc, // countries with no site in them
+  landActive:  0xffffff, // countries this network has sites in
+  coast:       0xa9b8cb,
+  coastActive: 0x7f93ad,
+  // Lighter than the coastline, so the hierarchy reads without a legend:
+  // coast, then country, then state.
+  border:      0xb9c8db,
+  borderActive: 0x91a6c0,
+  graticule:   0xdfe8f2,
   plant:       0x5b21b6, // Kearney Purple (deep)
   plantGlow:   0x8b5cf6,
   dcHealthy:   0x047857, // Emerald (deep)
@@ -134,6 +132,8 @@ const THEME_COLORS = {
 
 // ─── Module State ───────────────────────────────────────────
 let scene, camera, renderer, controls;
+/* The pointer has moved (or the camera has) since the last hover test. */
+let pointerDirty = true;
 let containerEl = null;
 let animationId = null;
 let isInitialised = false;
@@ -203,6 +203,7 @@ export function initTwin3D(containerId) {
   setupInteraction();
 
   isInitialised = true;
+  watchVisibility();
   animate();
 }
 
@@ -253,7 +254,12 @@ export function rebuildTwin3D() {
       group.remove(child);
     });
   });
-  if (projectionMoved) setupMapBase();
+  if (projectionMoved) {
+    setupMapBase();
+    // A different country is a different picture, so the reader's own angle
+    // on the last one is no longer a view of anything. Re-fit from scratch.
+    cameraIsUsers = false;
+  }
 
   nodeMeshes = [];
   flowArcs = [];
@@ -278,6 +284,102 @@ if (typeof window !== 'undefined') {
   window.twin3dNodeCount = twin3dNodeCount;
 }
 
+/**
+ * Has the user moved the camera themselves?
+ *
+ * Their view is theirs: once they have orbited, nothing in this module
+ * re-frames the scene under them. Reset when a new network is built, because
+ * an angle chosen for one country is not a view of another.
+ */
+let cameraIsUsers = false;
+
+/**
+ * Pull the camera in or out until the ground plane fills the viewport.
+ *
+ * The camera used to sit at a literal `(0, 78, 64)` for every container.
+ * That distance was chosen against one shape of panel; in a taller one the
+ * plane shrinks into the middle with a band of empty background above and
+ * below it, and in a very wide one it runs off the sides. The direction is
+ * still the fixed isometric one — only the distance moves.
+ *
+ * Measured, not calculated: project the plane's four corners with the camera
+ * as it stands, read how far the widest one falls outside the frame, and
+ * scale the distance by that. Two or three passes converge, and it is exact
+ * for any field of view, aspect or tilt, including one the user has dragged
+ * to. `0.92` leaves a hair of margin so the plane's edge is not flush with
+ * the canvas edge.
+ */
+function frameCameraToPlane() {
+  if (!camera || !controls || !PROJECTION) return;
+  const halfW = PROJECTION.width / 2;
+  const halfH = PROJECTION.height / 2;
+  if (!(halfW > 0) || !(halfH > 0)) return;
+  const target = controls.target.clone();
+
+  // Fit the NODES, and let the ground sheet run off the edges.
+  //
+  // Fitting the whole plane means fitting a rectangle shaped like the
+  // network's bounding box into a card shaped like nothing in particular. In
+  // a tall card and a wide network — the United States in a 895x850 panel —
+  // the width decides the zoom and the picture ends up a thin band of map
+  // with empty background above and below it. Framing on the sites instead
+  // crops the corners of the sheet, which carry no information, and puts the
+  // network across the middle of the card at a size worth reading.
+  //
+  // The plane is the fallback for a scene with no nodes yet, so the very
+  // first frame after a cold init is still framed on something.
+  const pad = 4;
+  const points = nodeMeshes.length
+    ? nodeMeshes.map((n) => n.pos3D.clone())
+    : [];
+  const corners = points.length
+    ? (() => {
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+      points.forEach((v) => {
+        minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
+        minZ = Math.min(minZ, v.z); maxZ = Math.max(maxZ, v.z);
+      });
+      if (!Number.isFinite(minX) || !Number.isFinite(minZ)) return null;
+      return [
+        new THREE.Vector3(minX - pad, 0, minZ - pad),
+        new THREE.Vector3(maxX + pad, 0, minZ - pad),
+        new THREE.Vector3(minX - pad, 0, maxZ + pad),
+        new THREE.Vector3(maxX + pad, 0, maxZ + pad),
+      ];
+    })()
+    : null;
+  const box = corners || [
+    new THREE.Vector3(-halfW, 0, -halfH), new THREE.Vector3(halfW, 0, -halfH),
+    new THREE.Vector3(-halfW, 0, halfH), new THREE.Vector3(halfW, 0, halfH),
+  ];
+  const dir = camera.position.clone().sub(target);
+  if (dir.lengthSq() === 0) return;
+  let dist = dir.length();
+  dir.normalize();
+
+  for (let pass = 0; pass < 4; pass += 1) {
+    camera.position.copy(target).addScaledVector(dir, dist);
+    camera.lookAt(target);
+    camera.updateMatrixWorld(true);
+    camera.updateProjectionMatrix();
+    let worst = 0;
+    for (let i = 0; i < box.length; i += 1) {
+      const ndc = box[i].clone().project(camera);
+      if (!Number.isFinite(ndc.x) || !Number.isFinite(ndc.y)) return;
+      worst = Math.max(worst, Math.abs(ndc.x), Math.abs(ndc.y));
+    }
+    if (!(worst > 0)) return;
+    if (Math.abs(worst - 0.92) < 0.01) break;
+    dist = Math.min(controls.maxDistance,
+                    Math.max(controls.minDistance, dist * (worst / 0.92)));
+  }
+
+  camera.position.copy(target).addScaledVector(dir, dist);
+  camera.lookAt(target);
+  camera.updateProjectionMatrix();
+  try { controls.update(); } catch (e) { /* not wired yet */ }
+}
+
 export function resizeTwin3D() {
   if (!containerEl || !renderer || !camera) return;
   const w = containerEl.clientWidth || 800;
@@ -285,17 +387,72 @@ export function resizeTwin3D() {
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
+  // A container that changed shape needs the fit redone — unless the reader
+  // has set their own view, which is not ours to overwrite.
+  if (!cameraIsUsers) frameCameraToPlane();
 }
 
 export function resumeTwin3D() {
   if (!isInitialised) return;
   resizeTwin3D();
-  if (!animationId) animate();
+  watchVisibility();
+  if (!animationId && isOnScreen && !document.hidden) animate();
 }
 
 export function disposeTwin3D() {
   if (animationId) cancelAnimationFrame(animationId);
   animationId = null;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Only render while somebody is looking at it
+   ═══════════════════════════════════════════════════════════════
+   `animate()` re-arms itself with `requestAnimationFrame` and nothing ever
+   cancelled it: `disposeTwin3D` was exported and never called. So a full
+   WebGL draw plus a raycast over every node ran sixty times a second for the
+   rest of the session — on the Forecast page, on Scenario Planning, on the
+   KPI tables, none of which show this canvas. That is the scroll lag: the
+   compositor was sharing the frame budget with a 3D scene nobody could see.
+
+   An IntersectionObserver is the right instrument because the canvas is
+   re-parented between Home's card and the Digital Twin tab, and because a
+   page can also scroll it out of view without changing tab. `visibilitychange`
+   covers the background-tab case, which the observer does not report. */
+let isOnScreen = true;
+let visibilityWatched = false;
+
+function setRunning(shouldRun) {
+  if (shouldRun) {
+    if (!animationId && isInitialised) animate();
+    return;
+  }
+  if (animationId) cancelAnimationFrame(animationId);
+  animationId = null;
+}
+
+function watchVisibility() {
+  if (visibilityWatched || typeof window === 'undefined') return;
+  visibilityWatched = true;
+
+  if (typeof IntersectionObserver === 'function') {
+    const io = new IntersectionObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      isOnScreen = !!(entry && entry.isIntersecting);
+      setRunning(isOnScreen && !document.hidden);
+    }, { threshold: 0 });
+    // The observed element is the CANVAS, not the container: the container is
+    // whichever card currently holds it, and that changes.
+    if (renderer && renderer.domElement) io.observe(renderer.domElement);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    setRunning(isOnScreen && !document.hidden);
+  });
+}
+
+/** Diagnostics only: is the render loop currently running? */
+export function twin3dIsRendering() {
+  return animationId !== null;
 }
 
 // ─── Scene Setup ────────────────────────────────────────────
@@ -365,79 +522,212 @@ function setupLighting() {
   scene.add(accentLight);
 }
 
-// ─── Map Base (real basemap image, extracted from the 2D map) ─────
+// ─── Ground plane (the 2D map's own countries, triangulated) ──────
+/**
+ * Which countries this network actually has sites in.
+ *
+ * Answered by the same point-in-polygon walk over the same rings the 2D map
+ * draws, so the two views highlight the same countries. Cached per rebuild —
+ * it is 177 features against every node, and the scene rebuilds on every
+ * state change.
+ */
+let activeCountries = new Set();
+
+function refreshActiveCountries() {
+  const pts = [...PLANTS, ...DCS, ...MARKETS];
+  activeCountries = new Set(countriesContaining(pts).map((c) => c.name));
+}
+
+/**
+ * A country ring as a THREE.Shape on the ground.
+ *
+ * `ShapeGeometry` builds its triangles in the XY plane, and the plane is then
+ * laid flat by rotating -90 degrees about X — which sends (sx, sy, 0) to
+ * (sx, 0, -sy). So a world point (x, z) has to be entered as (x, -z), or the
+ * whole map comes out mirrored north-to-south. It did, the first time.
+ */
+function ringToShape(ring) {
+  const shape = new THREE.Shape();
+  for (let i = 0; i < ring.length; i += 1) {
+    const v = geoTo3D(ring[i][1], ring[i][0], 0);
+    if (i === 0) shape.moveTo(v.x, -v.z);
+    else shape.lineTo(v.x, -v.z);
+  }
+  shape.closePath();
+  return shape;
+}
+
+/** The same ring as a closed line, for the coastline on top of the land. */
+function ringToLinePoints(ring) {
+  const pts = ring.map(([lng, lat]) => geoTo3D(lat, lng, 0.05));
+  if (pts.length) pts.push(pts[0]);
+  return pts;
+}
+
 function setupMapBase() {
-  const { width, height, textured } = PROJECTION;
-  const baseGeo = new THREE.PlaneGeometry(width, height);
+  const { width, height, bounds } = PROJECTION;
+  refreshActiveCountries();
 
-  // Create resilient base material with immediate light-gray fallback
-  const baseMat = new THREE.MeshBasicMaterial({
-    color: 0xf1f5f9,
-    toneMapped: false,
-  });
-  const basePlate = new THREE.Mesh(baseGeo, baseMat);
-  basePlate.rotation.x = -Math.PI / 2;
-  basePlate.position.y = 0;
-  terrainGroup.add(basePlate);
+  // Water first: the plate everything else sits on.
+  const water = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    new THREE.MeshBasicMaterial({ color: THEME_COLORS.water, toneMapped: false }),
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = 0;
+  terrainGroup.add(water);
 
-  // Subtle border trim
-  const borderGeo = new THREE.EdgesGeometry(baseGeo);
-  const borderMat = new THREE.LineBasicMaterial({ color: 0xcbd5e1 });
-  const borderLines = new THREE.LineSegments(borderGeo, borderMat);
-  borderLines.rotation.x = -Math.PI / 2;
-  borderLines.position.y = 0.02;
-  terrainGroup.add(borderLines);
+  addGroundGraticule();
 
-  // The bundled basemap photograph is of India. It is applied only when the
-  // projection window IS the India crop it was captured from — otherwise the
-  // ground plane shows a coordinate graticule, because a photograph of the
-  // wrong continent under a client's facilities is worse than no photograph.
-  if (textured) {
-    const basemapUri = (typeof INDIA_BASEMAP_DATA_URI !== 'undefined') ? INDIA_BASEMAP_DATA_URI :
-                       (typeof window !== 'undefined' && window.INDIA_BASEMAP_DATA_URI) ? window.INDIA_BASEMAP_DATA_URI : null;
-    if (basemapUri) {
-      const loader = new THREE.TextureLoader();
-      loader.load(basemapUri, (texture) => {
-        texture.anisotropy = 16;
-        texture.generateMipmaps = true;
-        baseMat.color.setHex(0xffffff);
-        baseMat.map = texture;
-        baseMat.needsUpdate = true;
-      }, undefined, (err) => {
-        console.warn('[NetGravity 3D] Using fallback terrain styling:', err);
-      });
-    }
-  } else {
-    addGroundGraticule();
+  // Land. Each ring is clipped to the window before it is triangulated, so a
+  // country crossing the edge is cut at the edge rather than drawn past the
+  // plate — Canada hanging off the side reads as a fault even when the
+  // geometry is right.
+  const plainShapes = [];
+  const activeShapes = [];
+  const plainLines = [];
+  const activeLines = [];
+
+  for (const entry of countryRingsByName()) {
+    const { ring, name } = entry;
+    if (!ringIntersects(ring, bounds)) continue;
+    const clipped = clipRingToBounds(ring, bounds);
+    if (!clipped) continue;
+    const isActive = activeCountries.has(name);
+    (isActive ? activeShapes : plainShapes).push(ringToShape(clipped));
+    (isActive ? activeLines : plainLines).push(ringToLinePoints(clipped));
   }
 
-  // Soft ground shadow plane underneath, so the map reads as slightly raised
-  const shadowGeo = new THREE.PlaneGeometry(width * 1.06, height * 1.06);
-  const shadowMat = new THREE.MeshBasicMaterial({
-    color: 0xcbd5e1,
-    transparent: true,
-    opacity: 0.5,
-  });
-  const shadowMesh = new THREE.Mesh(shadowGeo, shadowMat);
+  const addLand = (shapes, color, y) => {
+    if (!shapes.length) return;
+    // One geometry for every ring of a kind: 177 countries as 177 meshes is
+    // 177 draw calls a frame for something that never moves.
+    const geo = new THREE.ShapeGeometry(shapes);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+      color, toneMapped: false, side: THREE.DoubleSide,
+    }));
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.position.y = y;
+    terrainGroup.add(mesh);
+  };
+  addLand(plainShapes, THEME_COLORS.land, 0.02);
+  addLand(activeShapes, THEME_COLORS.landActive, 0.03);
+
+  const addCoast = (lineSets, color, opacity) => {
+    if (!lineSets.length) return;
+    const positions = [];
+    for (const pts of lineSets) {
+      for (let i = 0; i + 1 < pts.length; i += 1) {
+        positions.push(pts[i].x, pts[i].y, pts[i].z,
+                       pts[i + 1].x, pts[i + 1].y, pts[i + 1].z);
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position',
+                     new THREE.Float32BufferAttribute(positions, 3));
+    terrainGroup.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+      color, transparent: true, opacity,
+    })));
+  };
+  addCoast(plainLines, THEME_COLORS.coast, 0.75);
+  addCoast(activeLines, THEME_COLORS.coastActive, 1);
+  addSubdivisionBorders(addCoast);
+
+  // The plate's own edge, so the ground reads as a finite object.
+  const borderGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(width, height));
+  const borderLines = new THREE.LineSegments(
+    borderGeo, new THREE.LineBasicMaterial({ color: 0xcbd5e1 }));
+  borderLines.rotation.x = -Math.PI / 2;
+  borderLines.position.y = 0.08;
+  terrainGroup.add(borderLines);
+
+  // Soft ground shadow underneath, so the map reads as slightly raised.
+  const shadowMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(width * 1.06, height * 1.06),
+    new THREE.MeshBasicMaterial({ color: 0xcbd5e1, transparent: true, opacity: 0.5 }),
+  );
   shadowMesh.rotation.x = -Math.PI / 2;
   shadowMesh.position.y = -0.35;
   terrainGroup.add(shadowMesh);
 }
 
 /**
+ * State and province borders on the ground plane.
+ *
+ * The same rings `map.js` hands to Leaflet, through the same projection and
+ * the same clip — so a border that bends in one view bends in the other.
+ *
+ * Lines, not filled shapes. The land is already painted by the country layer
+ * underneath; filling each subdivision again would double the triangle count
+ * for no visual gain and put a seam along every shared edge.
+ *
+ * The module is loaded on demand, so this runs twice: once now with whatever
+ * is already in memory (nothing, on a first visit) and again from the `.then`
+ * when it arrives. `setupMapBase` is idempotent for this group, because the
+ * second pass adds to `terrainGroup` which the next rebuild clears wholesale.
+ */
+function addSubdivisionBorders(addCoast) {
+  const draw = (admin1) => {
+    if (!admin1 || !terrainGroup) return;
+    const { bounds } = PROJECTION;
+    const plain = [];
+    const active = [];
+    for (const entry of admin1.rings) {
+      if (!ringIntersects(entry.ring, bounds)) continue;
+      const clipped = clipRingToBounds(entry.ring, bounds);
+      if (!clipped) continue;
+      (activeCountries.has(entry.admin) ? active : plain)
+        .push(ringToLinePoints(clipped));
+    }
+    addCoast(plain, THEME_COLORS.border, 0.55);
+    addCoast(active, THEME_COLORS.borderActive, 1);
+  };
+
+  const already = admin1IfLoaded();
+  if (already) { draw(already); return; }
+  // Captured so a scene rebuilt while this was in flight does not get the
+  // borders of the window it has since left.
+  const forProjection = PROJECTION;
+  loadAdmin1().then((admin1) => {
+    if (PROJECTION !== forProjection) return;
+    draw(admin1);
+  });
+}
+
+/**
+ * Every country ring paired with its country's name.
+ *
+ * `countryRings()` returns rings alone, which is all the geometry needs; the
+ * ground plane also has to know which country a ring belongs to in order to
+ * lift the ones the network is in. Built once and cached with the rings.
+ */
+let _namedRings = null;
+function countryRingsByName() {
+  if (_namedRings) return _namedRings;
+  _namedRings = [];
+  for (const f of WORLD_COUNTRIES.features) {
+    for (const poly of f.geometry.coordinates) {
+      if (poly[0] && poly[0].length >= 4) {
+        _namedRings.push({ ring: poly[0], name: f.properties.name });
+      }
+    }
+  }
+  return _namedRings;
+}
+
+/**
  * A latitude/longitude grid on the ground plane.
  *
- * Drawn when the projection window is not the India crop, so a network
- * anywhere in the world still has a spatial frame of reference: the lines are
- * real meridians and parallels at the same Mercator projection the nodes use,
- * so a corridor crossing three of them has crossed thirty degrees.
+ * It does something the coastlines do not: it gives distance a scale. Real
+ * meridians and parallels at the same Mercator projection the nodes use, so a
+ * corridor crossing three of them has crossed thirty degrees.
  */
 function addGroundGraticule() {
   const { bounds } = PROJECTION;
   const span = Math.max(bounds.latMax - bounds.latMin, bounds.lngMax - bounds.lngMin);
   const step = span > 60 ? 20 : span > 25 ? 10 : span > 10 ? 5 : 2;
   const mat = new THREE.LineBasicMaterial({
-    color: 0xcbd5e1, transparent: true, opacity: 0.85,
+    color: THEME_COLORS.graticule, transparent: true, opacity: 0.9,
   });
   const at = (lat, lng) => geoTo3D(lat, lng, 0.01);
   const add = (a, b) => {
@@ -834,7 +1124,8 @@ function createFallbackControls(cam, dom) {
   const api = {
     target,
     enabled: true,
-    enableDamping: true,
+    // See setupControls(): release means stop, in both controllers.
+    enableDamping: false,
     dampingFactor: 0.07,
     enablePan: true,
     panSpeed: 0.8,
@@ -843,8 +1134,9 @@ function createFallbackControls(cam, dom) {
     maxDistance: 150,
     maxPolarAngle: Math.PI / 2.2,
     minPolarAngle: Math.PI / 12,
+    // Never. See setupControls(): nothing turns this on.
     autoRotate: false,
-    autoRotateSpeed: 0.3,
+    autoRotateSpeed: 0,
   };
 
   function onDown(e) {
@@ -941,8 +1233,15 @@ function setupControls() {
     controls = createFallbackControls(camera, renderer.domElement);
   }
 
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.07;
+  // Damping off: release means stop.
+  //
+  // Inertia is a nice feel on a globe you are browsing and the wrong one on a
+  // map you are reading coordinates off — it keeps turning after you let go,
+  // so the frame you judged a node's position against is not the frame you
+  // left it in. Decay is also asymptotic, never exactly zero, so "it has
+  // stopped" was never quite true: at 60fps that is invisible, and on a
+  // software renderer at 4fps it drifts for seconds.
+  controls.enableDamping = false;
   controls.enablePan = true;
   controls.panSpeed = 0.8;
   controls.rotateSpeed = 0.55;
@@ -950,9 +1249,17 @@ function setupControls() {
   controls.maxDistance = 150;
   controls.maxPolarAngle = Math.PI / 2.2;
   controls.minPolarAngle = Math.PI / 12;
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.3;
+  // The scene does not turn on its own. A map that drifts while you are
+  // reading it moves the thing you are pointing at, and every reading of a
+  // node's position is taken against a frame that has since moved — so the
+  // twin holds still and turns only when dragged.
+  controls.autoRotate = false;
+  controls.autoRotateSpeed = 0;
   controls.target.set(0, 0, -2);
+  // From the first drag or wheel, the view belongs to the reader.
+  controls.addEventListener('start', () => { cameraIsUsers = true; });
+  // Turning the scene moves the nodes under a stationary cursor.
+  controls.addEventListener('change', () => { pointerDirty = true; });
 }
 
 // ─── Interaction & HUD Tooltip ──────────────────────────────
@@ -972,6 +1279,7 @@ function setupInteraction() {
     const rect = canvas.getBoundingClientRect();
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    pointerDirty = true;
   };
 
   canvas.addEventListener('mousemove', updateMouseCoords);
@@ -992,15 +1300,9 @@ function setupInteraction() {
     }
   });
 
-  let idleTimer;
-  canvas.addEventListener('pointerdown', () => {
-    if (controls) controls.autoRotate = false;
-    clearTimeout(idleTimer);
-  });
-
-  canvas.addEventListener('pointerup', () => {
-    idleTimer = setTimeout(() => { if (controls) controls.autoRotate = true; }, 5000);
-  });
+  // No idle timer re-starting the spin five seconds after you let go. It made
+  // the view a moving target the moment you stopped touching it — and the one
+  // person it never inconvenienced was whoever was already dragging.
 }
 
 function updateHoverState() {
@@ -1111,10 +1413,15 @@ function animate() {
   animationId = requestAnimationFrame(animate);
 
   const delta = clock.getDelta();
-  const time = clock.getElapsedTime();
 
   if (controls) controls.update();
-  updateHoverState();
+  // Only when the pointer has actually moved, or the camera has. A raycast
+  // against every node's hit mesh on a still scene under a still cursor can
+  // only ever return the answer it returned last frame.
+  if (pointerDirty) {
+    pointerDirty = false;
+    updateHoverState();
+  }
 
   // Animate Photons
   photonStreams.forEach(ps => {
@@ -1127,16 +1434,29 @@ function animate() {
     posAttr.needsUpdate = true;
   });
 
-  // Pulse Rings & Rotate Plants
-  nodeMeshes.forEach((n, i) => {
-    if (n.baseRing) {
-      const pulseScale = 1.0 + Math.sin(time * 2.5 + i * 0.8) * 0.08;
-      n.baseRing.scale.set(pulseScale, pulseScale, 1);
-    }
-    if (n.type === 'plant') {
-      n.coreMesh.rotation.y = time * 0.6;
-    }
-  });
+  // The base rings used to breathe (sin(t) * 8% scale) and plant cores used to
+  // spin on their own axis. Neither encoded anything: a plant turning faster
+  // did not mean a plant doing more, and a ring at the top of its pulse did
+  // not mean a site under more load. On a screen someone reads figures off,
+  // motion that carries no meaning is just something to look away from — so
+  // the only thing left moving is the flow along the corridors, which does
+  // carry meaning: it shows which way goods travel.
 
   renderer.render(scene, camera);
+}
+
+/**
+ * Where the camera is, for a test that needs to ask "did the VIEW move".
+ *
+ * A pixel diff cannot answer that: the photons crossing the corridors change
+ * thousands of pixels a second while the camera sits perfectly still. Read
+ * only — nothing in the application calls it.
+ */
+export function twin3dCameraState() {
+  if (!camera) return null;
+  return {
+    x: +camera.position.x.toFixed(4),
+    y: +camera.position.y.toFixed(4),
+    z: +camera.position.z.toFixed(4),
+  };
 }

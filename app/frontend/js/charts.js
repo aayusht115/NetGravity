@@ -12,6 +12,94 @@ import { DEMAND_HISTORY, FORECAST, SCENARIOS, perPeriodLabel,
 
 const chartInstances = {};
 
+/**
+ * Two annotations the mockup asks for, drawn straight onto the canvas.
+ *
+ * A Chart.js plugin rather than a second charting library: the annotation
+ * plugin is a separate bundle, and these are two lines and two labels.
+ *
+ *   * A dashed vertical rule at the last OBSERVED period, captioned
+ *     "Forecast starts". Without it the reader has to work out where
+ *     measurement stops and projection begins from the line's dash pattern
+ *     alone, and the two are drawn in the same colour.
+ *   * The capacity line's own value, at the right-hand end of it, so the red
+ *     rule is a number rather than a decoration.
+ *
+ * Both are skipped when the thing they describe is not on the chart.
+ */
+const forecastAnnotations = {
+  id: 'ngForecastAnnotations',
+  afterDatasetsDraw(chart, _args, opts) {
+    const { ctx, chartArea, scales } = chart;
+    if (!chartArea || !scales || !scales.x || !scales.y) return;
+    const compact = opts && opts.compact;
+
+    // ── the forecast boundary ──
+    const idx = opts ? opts.splitIndex : -1;
+    if (typeof idx === 'number' && idx >= 0) {
+      const x = scales.x.getPixelForValue(idx);
+      if (Number.isFinite(x)) {
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = '#8b7bb8';
+        ctx.beginPath();
+        ctx.moveTo(x, chartArea.top + (compact ? 2 : 20));
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+        ctx.restore();
+
+        if (!compact) {
+          const label = 'Forecast starts';
+          ctx.save();
+          ctx.font = '600 11px Inter, system-ui, sans-serif';
+          const w = ctx.measureText(label).width + 16;
+          const bx = Math.min(Math.max(x - w / 2, chartArea.left),
+                              chartArea.right - w);
+          const by = chartArea.top + 2;
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = '#dfd7ee';
+          ctx.lineWidth = 1;
+          if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(bx, by, w, 20, 6);
+            ctx.fill();
+            ctx.stroke();
+          } else {
+            ctx.fillRect(bx, by, w, 20);
+            ctx.strokeRect(bx, by, w, 20);
+          }
+          ctx.fillStyle = '#4b3a6b';
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'center';
+          ctx.fillText(label, bx + w / 2, by + 10);
+          ctx.restore();
+        }
+      }
+    }
+
+    // ── what the red rule is worth ──
+    const cap = opts ? opts.capacity : null;
+    if (!compact && typeof cap === 'number' && Number.isFinite(cap)) {
+      const y = scales.y.getPixelForValue(cap);
+      if (Number.isFinite(y) && y > chartArea.top && y < chartArea.bottom) {
+        const label = `Capacity ${opts.capacityLabel || ''}`.trim();
+        ctx.save();
+        ctx.font = '700 11px Inter, system-ui, sans-serif';
+        ctx.fillStyle = '#dc2626';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'top';
+        ctx.fillText(label, chartArea.right - 4, y + 5);
+        ctx.restore();
+      }
+    }
+  },
+};
+
+if (typeof Chart !== 'undefined' && Chart.register) {
+  Chart.register(forecastAnnotations);
+}
+
 // ─── Forecast Chart ─────────────────────────────────────────
 export function renderForecastChart(canvasId) {
   if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
@@ -69,7 +157,7 @@ export function renderForecastChart(canvasId) {
       labels: allLabels,
       datasets: [
         {
-          label: 'Historical Demand',
+          label: 'Historical',
           data: histData,
           borderColor: '#6B2FA0',
           backgroundColor: 'rgba(107,47,160,.08)',
@@ -91,7 +179,7 @@ export function renderForecastChart(canvasId) {
           tension: 0.3,
         },
         {
-          label: 'Upper Bound',
+          label: 'Forecast range (p90)',
           data: upperData,
           borderColor: 'rgba(107,47,160,.2)',
           backgroundColor: 'rgba(107,47,160,.06)',
@@ -101,7 +189,7 @@ export function renderForecastChart(canvasId) {
           tension: 0.3,
         },
         {
-          label: 'Lower Bound',
+          label: 'Forecast range (p10)',
           data: lowerData,
           borderColor: 'rgba(107,47,160,.2)',
           borderWidth: 1,
@@ -124,8 +212,26 @@ export function renderForecastChart(canvasId) {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
+      // Head room for the "Forecast starts" chip, which is drawn inside the
+      // canvas and would otherwise sit on the topmost gridline.
+      layout: { padding: { top: isCompact ? 0 : 12, right: isCompact ? 0 : 8 } },
       plugins: {
+        ngForecastAnnotations: {
+          compact: isCompact,
+          // The last OBSERVED period: the forecast series starts by repeating
+          // it, so this index is the join rather than the first projection.
+          splitIndex: histLabels.length - 1,
+          capacity: hasCap ? capValue : null,
+          capacityLabel: hasCap
+            ? `~ ${capValue >= 1000 ? (capValue / 1000).toFixed(1) + 'K'
+                                    : formatNumber(capValue)}` : '',
+        },
         legend: {
+          // Off on the full-size chart: the card draws its own key above the
+          // plot (`.fc-legend`), which does not re-wrap every time the series
+          // changes and does not name the two bounds datasets that only exist
+          // to shade the band between them.
+          display: isCompact,
           position: 'top',
           labels: {
             usePointStyle: true,
@@ -161,7 +267,19 @@ export function renderForecastChart(canvasId) {
           grid: { color: '#f0f0f5' },
           ticks: {
             font: { family: 'Inter', size: isCompact ? 9 : 11 },
-            callback: v => (v / 1000).toFixed(0) + 'K',
+            // One decimal below 10K.
+            //
+            // `toFixed(0)` on a 500-unit step printed "8K" for both 8,000 and
+            // 8,500 — an axis with two identical labels a gridline apart, and
+            // a reader who reads a value off it gets the wrong number. The
+            // decimal is dropped again when it is a zero, and above 10K the
+            // step is never fine enough to need it.
+            callback: (v) => {
+              const k = v / 1000;
+              if (Math.abs(k) >= 10) return k.toFixed(0) + 'K';
+              const t = k.toFixed(1);
+              return (t.endsWith('.0') ? t.slice(0, -2) : t) + 'K';
+            },
           },
           title: {
             display: !isCompact,

@@ -262,7 +262,7 @@
     <div class="app-body">
 
       <!-- ═══════════════════════════════════════ SIDEBAR -->
-      <nav class="sidebar collapsed" id="sidebar">
+      <nav class="sidebar" id="sidebar">
         <!-- Collapse toggle: default is icon-only (Dump/Home Overview-updated.png);
              expanding restores the labelled nav below. -->
         <div class="sidebar-toggle-row">
@@ -298,11 +298,11 @@
              Insights/Recommendations no longer have their own sidebar entry —
              they live in Home's merged attention feed instead. -->
         <div class="sidebar-nav">
-          <div class="nav-item active" data-tab="home" id="nav-item-home" title="Home">
+          <div class="nav-item active" data-tab="home" id="nav-item-home" title="Overview">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M3 10L10 3l7 7M5 8.5V16a1 1 0 001 1h3v-4h2v4h3a1 1 0 001-1V8.5" />
             </svg>
-            <span>Home</span>
+            <span>Overview</span>
           </div>
 
           <div class="nav-item" data-tab="facility-dashboard" id="nav-item-kpis" title="KPIs">
@@ -331,11 +331,11 @@
             <span>Forecast</span>
           </div>
 
-          <div class="nav-item" data-tab="scenarios" id="nav-item-scenarios" title="Scenario Planning">
+          <div class="nav-item" data-tab="scenarios" id="nav-item-scenarios" title="Scenarios">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 13l2 2 4-4" />
             </svg>
-            <span>Scenario Planning</span>
+            <span>Scenarios</span>
           </div>
         </div>
 
@@ -380,7 +380,10 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
 
-            <!-- Facility & Period (Home Overview only — other tabs keep their own copy in the sub-topbar row) -->
+            <!-- Facility & Period: the application's scope pair, in the same
+                 place on every page (see updateTopBarLayout). Hidden only on
+                 Scenario Planning, where a scenario is solved over the whole
+                 network and neither control would change anything. -->
             <div class="topbar-controls" id="home-top-controls">
               <div class="topbar-control-group">
                 <span class="control-label">Facility</span>
@@ -403,7 +406,10 @@
           </div>
 
           <div class="topbar-right-area">
-            <!-- Upload Data Button: ONLY available on Home Overview page -->
+            <!-- Upload Data: available from every page. It is a global
+                 action on a global bar — hiding it on four of five screens
+                 made the top bar change shape as you moved between tabs, and
+                 sent anyone wanting to load a file back to Home first. -->
 
             <button class="btn-topbar-upload" id="btn-topbar-upload" title="Upload Network Data">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -448,7 +454,15 @@
           </div>
         </header>
 
-                <!-- Second Row: Customised Page Title / Greeting + Facility & Period Selectors in Parallel -->
+                <!-- Second Row: the page's own title.
+                     `#topbar-controls` below is the sub-topbar's old copy of
+                     Facility/Period. It is never shown — the pair lives in
+                     the top bar on every screen now — but `#sel-facility` /
+                     `#sel-period` remain the application's source of truth
+                     for the current scope: every screen reads them, and
+                     `initHomeSelectors()` keeps them in step with the visible
+                     pair. Removing them would mean rewiring the scope of the
+                     whole application to delete one hidden row. -->
         <div class="app-sub-topbar" id="app-sub-topbar">
           <div class="sub-topbar-title-wrap" id="sub-topbar-title-wrap">
             <span class="sub-topbar-main-title" id="sub-topbar-main-title">Hello, <strong id="logged-in-user-name"></strong></span>
@@ -476,89 +490,99 @@
           </div>
         </div>
 
-                <!-- ─────────────────── TAB: HOME (Network Decision Command Center) -->
-                <!-- ─────────────────── TAB: HOME (Network Decision Command Center) -->
+        <!-- ─────────────────── TAB: HOME (Overview) ───────────────
+             Laid out against Dump/home overview.png:
+
+               row 0  "Overview" and its strapline, on one line
+               row 1  the alert and what needs a decision, beside the twin —
+                      one grid, with the twin spanning both of its rows
+               row 2  the external signals influencing the network
+
+             A band of three headline KPIs used to sit between rows 0 and 1,
+             on top of the twin. Removing it is what gives the twin the full
+             height of the column beside it; the figures themselves are the
+             KPIs tab, one click away in the sidebar.
+
+             Scope — project, facility, period — is the top bar's, and it is
+             the same bar on every screen (see updateTopBarLayout). -->
         <section class="tab-panel active" id="tab-home">
-          <div class="home2-container">
 
-            <!-- LEFT: unified scrollable attention feed (insights + recommendations merged) -->
-            <div class="home2-left-col">
-              <div class="home2-attn-card">
-                <div class="home2-attn-header">
-                  <h2 class="home2-attn-title">Here's what needs <span class="home2-attn-highlight">your attention</span></h2>
-                  <p class="home2-attn-sub">AI has prioritized the most important network opportunities and risks from your uploaded data.</p>
-                  <div class="home2-attn-status-row">
-                    <span class="home2-status-pill"><span class="home2-status-dot"></span>Data uploaded successfully</span>
-                    <span class="home2-refresh-text">Last analysed: <span id="home2-refresh-time">not yet analysed</span>
-                      <button type="button" class="home2-refresh-btn" id="home2-refresh-btn" title="Refresh">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                      </button>
-                    </span>
-                  </div>
-                </div>
-                <div class="home2-attn-scroll" id="home-attention-list">
-                  <!-- Populated by JS: merged insights + recommendations feed -->
-                </div>
-                <!-- What the engine recommends doing next, and why. One
-                     sentence chosen by the evidence — see
-                     renderNetworkRecommendation() in js/app.js. -->
-                <div class="home2-rec" id="home-recommendation"></div>
+          <!-- row 0 -->
+          <div class="ov-head">
+            <div class="ov-head-text">
+              <h1 class="ov-title">Overview</h1>
+              <p class="ov-subtitle">Your network health and key actions at a glance.</p>
+            </div>
+          </div>
+
+          <!-- rows 1 + 2, as ONE grid.
+               Left column: the alert, then what needs a decision.
+               Right column: the digital twin, spanning both of those rows so
+               it stands the full height of the column beside it rather than
+               starting halfway down it. -->
+          <div class="ov-main">
+            <div class="ov-alert" id="ov-alert"><!-- renderOverviewAlert() --></div>
+
+            <div class="ov-attn-card">
+              <div class="ov-attn-head">
+                <span class="ov-attn-star" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2.6 14.9 9 21.8 9.8 16.7 14.5 18.1 21.3 12 17.9 5.9 21.3 7.3 14.5 2.2 9.8 9.1 9"/></svg>
+                </span>
+                <h2 class="ov-attn-title">Needs your attention</h2>
+              </div>
+              <div class="ov-attn-body" id="ov-attn-body">
+                <!-- renderHomeAttentionFeed(): why it matters / impact /
+                     recommended next step, plus the rest of the findings -->
+              </div>
+              <div class="ov-attn-foot">
+                <span class="ov-status-pill" id="ov-status-pill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.4"/><polyline points="8.4 12.2 11 14.8 15.8 9.6"/></svg>
+                  <span id="ov-status-text">Data uploaded successfully</span>
+                </span>
+                <span class="ov-refresh-text">Last analysed:
+                  <span id="home2-refresh-time">not yet analysed</span>
+                  <button type="button" class="ov-refresh-btn" id="home2-refresh-btn"
+                          title="Re-run the analysis" aria-label="Re-run the analysis">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  </button>
+                </span>
               </div>
             </div>
 
-            <!-- RIGHT: Digital Twin (3D) — the KPI row that used to sit
-                 above this now lives in the full-width strip below both
-                 columns, so the map gets the whole column's height. -->
-            <div class="home2-right-col">
-
-              <div class="home2-twin-card" id="home-twin-block">
-                <div class="home2-twin-header">
-                  <h2 class="home2-twin-title">Digital twin of your network</h2>
-                  <div class="home2-twin-controls">
-                    <button class="home-section-link" id="btn-open-digital-twin" data-action="navigateToTab" data-arg="twin">
-                      <span>Open Digital Twin</span>
-                      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
-                        <path d="M5 10h10M11 6l4 4-4 4"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                <!-- Wrapper stays put across re-renders — twin3d.js clears
-                     #home-map-twin's innerHTML itself when (re)initialising
-                     the 3D scene, so the callout lives as a sibling instead
-                     of a child, or it would get wiped out with it. -->
-                <div class="home-twin-map-wrap">
-                  <!-- 3D Digital Twin (same Three.js engine as the Digital
-                       Twin tab — see twin3d.js, re-parented on tab switch).
-                       Clicking/dragging the map itself no longer navigates
-                       away — only the "Open Digital Twin" link above does. -->
-                  <div class="home-twin-map-container" id="home-map-twin">
-                    <!-- Populated by twin3d.js -->
-                  </div>
-                  <div class="home-twin-callout" id="home-twin-callout">
-                    <!-- Populated by JS: selected-facility snapshot -->
-                  </div>
-                </div>
+            <div class="ov-twin-card" id="home-twin-block">
+              <div class="ov-twin-head">
+                <h2 class="ov-twin-title">Network overview (Digital Twin)</h2>
+                <button class="home-section-link" id="btn-open-digital-twin"
+                        data-action="navigateToTab" data-arg="twin">
+                  <span>Open Digital Twin</span>
+                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+                </button>
               </div>
-
+              <!-- The wrapper stays put across re-renders: twin3d.js clears
+                   #home-map-twin's innerHTML when (re)initialising the scene,
+                   so the callout lives as a sibling or it is wiped with it. -->
+              <div class="home-twin-map-wrap">
+                <div class="home-twin-map-container" id="home-map-twin"></div>
+                <div class="home-twin-callout" id="home-twin-callout"></div>
+              </div>
             </div>
-
           </div>
 
-          <!-- BOTTOM: full-width Network Today KPI strip (3 headline KPIs) -->
-          <div class="home2-kpi-strip">
-            <div class="home2-kpi-strip-label">Network today</div>
-            <div class="home2-kpi-strip-row" id="home-kpi-grid">
-              <!-- Populated by JS -->
+          <!-- row 3 -->
+          <div class="ov-signals-card">
+            <div class="ov-signals-head">
+              <h2 class="ov-signals-title">Signals influencing your network</h2>
+              <button class="home-section-link" id="btn-view-all-signals"
+                      data-action="navigateToTab" data-arg="forecast">
+                <span>View all signals</span>
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+              </button>
             </div>
-            <button class="home-section-link home2-kpi-strip-viewall" id="btn-view-all-kpis" data-action="navigateToTab" data-arg="facility-dashboard">
-              <span>View all KPIs</span>
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2">
-                <path d="M5 10h10M11 6l4 4-4 4"/>
-              </svg>
-            </button>
+            <div class="ov-signals-row" id="ov-signals-row">
+              <!-- renderHomeSignals() -->
+            </div>
           </div>
+
         </section>
 
         <!-- Insights and Recommendations tabs removed: an insight card on
@@ -700,7 +724,9 @@
                  own z-index:0 above gives it a real stacking context so Leaflet's
                  internal panes/controls (which carry z-index up to 1000) stay
                  contained inside it instead of escaping past this sibling. -->
-            <div class="twin3d-stats-overlay" id="map2d-stats" style="left:auto;right:16px;z-index:1100">
+            <!-- Top-left, the same corner as the 3D twin's. z-index clears
+                 Leaflet's own panes, which reach 1000. -->
+            <div class="twin3d-stats-overlay" id="map2d-stats" style="z-index:1100">
               <div class="twin3d-stat">
                 <span class="twin3d-stat-value" id="map2d-node-count">19</span>
                 <span class="twin3d-stat-label">Network Nodes</span>
@@ -738,11 +764,17 @@
             <div class="twin3d-hint">
               <span>🖱️ Drag to rotate · Scroll to zoom · Click node to inspect</span>
             </div>
-            <!-- Legend: node types + what the DC halo color means -->
+            <!-- Legend: node types, HOW MANY of each are on the map, and
+                 what the DC halo colour means. The counts are the answer to
+                 "how big is this network" — a question the map itself can
+                 only answer by counting dots, and one the reader should not
+                 have to hold in their head (Nielsen #6). Filled by
+                 renderTwinStats() from PLANTS / DCS / MARKETS. -->
             <div class="twin3d-legend">
-              <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#5b21b6"></span>Plant</div>
-              <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#94a3b8"></span>Distribution Centre</div>
-              <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#075985"></span>Demand Market</div>
+              <div class="twin3d-legend-title">Network</div>
+              <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#5b21b6"></span>Plant<span class="twin3d-legend-count" data-legend-count="plant">0</span></div>
+              <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#94a3b8"></span>Distribution Centre<span class="twin3d-legend-count" data-legend-count="dc">0</span></div>
+              <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#075985"></span>Demand Market<span class="twin3d-legend-count" data-legend-count="market">0</span></div>
               <div class="twin3d-legend-divider">
                 <div class="twin3d-legend-title">DC Color = Utilisation</div>
                 <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b91c1c"></span>Critical (&gt;95%)</div>
@@ -805,57 +837,164 @@
         </section>
 
         <!-- ─────────────────── TAB: FORECAST -->
+        <!-- ─────────────────── TAB: FORECAST ─────────────────
+             Laid out against Dump/Demand forecast.png:
+
+               row 0  what needs a decision, beside the forecast itself
+               row 1  the external signals influencing this forecast
+
+             The left column is the SAME alert and attention card the Overview
+             shows, drawn by the same two functions into a different container
+             — not a second copy. That is deliberate and it is what the mockup
+             asks for: the finding that matters and the step the reasoning
+             agent recommends are network-level facts, and they are as true
+             here, beside the demand that produced them, as they are on Home.
+
+             The reasoning agent has no FORECAST scope (NETWORK, FACILITY,
+             LANE, SCENARIO, COMPARISON, RESILIENCE, INGESTION — see
+             netgravity/orchestrator/schemas/reasoning.py), and
+             /api/forecast is a deterministic route with `llm_used: false`.
+             So there is no forecast-specific recommended action to show, and
+             this card says which scope its recommendation belongs to rather
+             than implying the agent wrote it about the chart. -->
         <section class="tab-panel" id="tab-forecast">
 
-          <div class="card mb-lg">
-            <div class="card-header">
-              <div>
-                <div class="card-title" id="fc-chart-title">Demand — Historical & Forecast</div>
-                <div class="card-subtitle" id="fc-chart-subtitle">Observed history + forecast · Confidence band
-                </div>
+          <!-- row 0 -->
+          <div class="fc-main">
+
+            <div class="ov-alert" id="fc-alert"><!-- renderOverviewAlert() --></div>
+
+            <div class="ov-attn-card">
+              <div class="ov-attn-head">
+                <span class="ov-attn-star" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2.6 14.9 9 21.8 9.8 16.7 14.5 18.1 21.3 12 17.9 5.9 21.3 7.3 14.5 2.2 9.8 9.1 9"/></svg>
+                </span>
+                <h2 class="ov-attn-title">Needs your attention</h2>
               </div>
-              <div style="display:flex;align-items:center;gap:10px">
-                <!-- The engine forecasts every market-product pair; the screen
-                     plotted one and offered no way to reach the rest, while
-                     reporting "59 series forecast" beside it. -->
-                <label class="text-xs" for="fc-series-select" style="color:var(--text-2)">Series</label>
-                <select class="form-select" id="fc-series-select" style="min-width:240px;font-size:12.5px">
-                  <option value="">Loading&hellip;</option>
-                </select>
-                <span class="tag tag-muted" id="fc-chart-tag">&mdash;</span>
+              <div class="ov-attn-body" id="fc-attn-body">
+                <!-- renderHomeAttentionFeed('fc-attn-body') -->
+              </div>
+              <div class="ov-attn-foot">
+                <span class="ov-status-pill" id="fc-status-pill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.4"/><polyline points="8.4 12.2 11 14.8 15.8 9.6"/></svg>
+                  <span>Data uploaded successfully</span>
+                </span>
+                <span class="ov-refresh-text">Last analysed:
+                  <span id="fc-refresh-time">not yet analysed</span>
+                  <button type="button" class="ov-refresh-btn" id="fc-refresh-btn"
+                          title="Re-run the analysis" aria-label="Re-run the analysis">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                  </button>
+                </span>
               </div>
             </div>
-            <div class="chart-wrap tall">
-              <canvas id="chart-forecast"></canvas>
+
+            <div class="fc-chart-card">
+              <div class="fc-chart-head">
+                <!-- The title IS the series picker.
+                     The engine forecasts every market-product pair it has
+                     history for — 59 on the test workbook — and the mockup's
+                     title names exactly one of them. A select styled as the
+                     title keeps the mockup's line and keeps the other 58
+                     reachable, instead of burying them behind a menu. -->
+                <h2 class="fc-chart-title">
+                  <span class="fc-chart-title-prefix">Demand &mdash;</span>
+                  <span class="fc-series-wrap">
+                    <select class="fc-series-select" id="fc-series-select"
+                            aria-label="Which market and product to plot">
+                      <option value="">Loading&hellip;</option>
+                    </select>
+                    <svg class="fc-series-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                  </span>
+                </h2>
+                <div class="fc-chart-actions">
+                  <button type="button" class="fc-ghost-btn" id="fc-methodology-btn"
+                          aria-expanded="false" aria-controls="fc-method-panel">
+                    <span>View methodology</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4 11.5 12.5"/><path d="M18 14.5V19a1.6 1.6 0 0 1-1.6 1.6H5A1.6 1.6 0 0 1 3.4 19V7.6A1.6 1.6 0 0 1 5 6h4.5"/></svg>
+                  </button>
+                  <div class="fc-menu-wrap">
+                    <button type="button" class="fc-kebab-btn" id="fc-more-btn"
+                            aria-haspopup="menu" aria-expanded="false"
+                            aria-label="More forecast actions">
+                      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>
+                    </button>
+                    <div class="fc-menu" id="fc-more-menu" role="menu" hidden>
+                      <button type="button" class="fc-menu-item" role="menuitem" id="fc-menu-methodology">How this forecast was produced</button>
+                      <button type="button" class="fc-menu-item" role="menuitem" id="fc-menu-download">Download this series (CSV)</button>
+                      <button type="button" class="fc-menu-item" role="menuitem" id="fc-menu-signals">Jump to external signals</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- The chart's own key, in the card rather than inside the
+                   canvas: Chart.js draws its legend at whatever width is
+                   left, and it wrapped differently every time the series
+                   changed. -->
+              <div class="fc-legend" id="fc-legend" aria-hidden="true">
+                <span class="fc-legend-item"><span class="fc-legend-line solid"></span>Historical</span>
+                <span class="fc-legend-item"><span class="fc-legend-line dashed"></span>Forecast</span>
+                <span class="fc-legend-item"><span class="fc-legend-swatch"></span>Forecast range (p10&ndash;p90)</span>
+                <span class="fc-legend-item" id="fc-legend-capacity"><span class="fc-legend-line capacity"></span>Capacity</span>
+              </div>
+
+              <div class="fc-chart-wrap">
+                <canvas id="chart-forecast"></canvas>
+              </div>
+
+              <!-- Which half of the x-axis is observation and which is
+                   projection. The dashed line inside the chart marks the
+                   join; this names the two sides of it. -->
+              <div class="fc-axis-note" id="fc-axis-note">
+                <span class="fc-axis-span" id="fc-axis-hist"><span class="fc-axis-rule"></span>Historical</span>
+                <span class="fc-axis-span" id="fc-axis-fore"><span class="fc-axis-rule"></span>Forecast</span>
+              </div>
+
+              <!-- How the number was produced. Everything the "Forecast
+                   Summary" card used to list, behind the button the mockup
+                   puts in the header. -->
+              <div class="fc-method-panel" id="fc-method-panel" hidden>
+                <div class="fc-method-head">
+                  <h3 class="fc-method-title">How this forecast was produced</h3>
+                  <button type="button" class="fc-method-close" id="fc-method-close" aria-label="Close">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+                  </button>
+                </div>
+                <dl class="fc-method-grid">
+                  <div class="fc-method-row"><dt>Model</dt><dd id="fc-model">&mdash;</dd></div>
+                  <div class="fc-method-row"><dt>Horizon</dt><dd id="fc-horizon">&mdash;</dd></div>
+                  <div class="fc-method-row"><dt>Forecast accuracy (MASE)</dt><dd id="fc-accuracy">&mdash;</dd></div>
+                  <div class="fc-method-row"><dt>Series shown</dt><dd id="fc-series">&mdash;</dd></div>
+                  <div class="fc-method-row"><dt>History observed</dt><dd id="fc-periods">&mdash;</dd></div>
+                  <div class="fc-method-row"><dt>Series forecast</dt><dd id="fc-series-count">&mdash;</dd></div>
+                  <div class="fc-method-row"><dt>Status</dt><dd id="fc-chart-tag">&mdash;</dd></div>
+                </dl>
+                <p class="fc-method-note" id="fc-chart-subtitle">&mdash;</p>
+                <p class="fc-method-note fc-method-prov" id="fc-method-prov"></p>
+              </div>
             </div>
           </div>
 
-          <div class="grid-2">
-            <div class="card">
-              <div class="card-header">
-                <div class="card-title">Forecast Summary</div>
-                <span class="tag tag-muted">Statistical/ML</span>
-              </div>
-              <div class="fp-stat"><span class="fp-stat-label">Model</span><span class="fp-stat-value" id="fc-model">—</span></div>
-              <div class="fp-stat"><span class="fp-stat-label">Horizon</span><span class="fp-stat-value" id="fc-horizon">—</span>
-              </div>
-              <div class="fp-stat"><span class="fp-stat-label">Forecast accuracy (MASE)</span><span
-                  class="fp-stat-value" id="fc-accuracy">—</span></div>
-              <div class="fp-stat"><span class="fp-stat-label">Series shown</span><span class="fp-stat-value" id="fc-series">—</span></div>
-              <div class="fp-stat"><span class="fp-stat-label">History observed</span><span class="fp-stat-value"
-                  id="fc-periods">—</span></div>
-              <div class="fp-stat"><span class="fp-stat-label">Series forecast</span><span class="fp-stat-value"
-                  id="fc-series-count">—</span></div>
+          <!-- row 1 -->
+          <div class="ov-signals-card" id="fc-signals-card">
+            <div class="ov-signals-head">
+              <h2 class="ov-signals-title">External signals influencing this forecast</h2>
+              <button class="home-section-link" id="fc-view-all-signals"
+                      aria-expanded="false" aria-controls="fc-signals-all">
+                <span id="fc-view-all-signals-label">View all signals</span>
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+              </button>
             </div>
-
-            <div class="card">
-              <div class="card-header">
-                <div class="card-title">External Signals</div>
-                <span class="signal-badge">External signal / hypothesis</span>
-              </div>
-              <div id="external-signals">
-                <!-- Populated by JS -->
-              </div>
+            <div class="ov-signals-row" id="fc-signals-row">
+              <!-- renderHomeSignals('fc-signals-row') -->
+            </div>
+            <!-- Everything the upload stated about each signal — rationale,
+                 geography, direction, magnitude, confidence, intended use.
+                 The three cards above are the summary; this is the detail
+                 they summarise, and it is what "View all signals" opens. -->
+            <div class="fc-signals-all" id="fc-signals-all" hidden>
+              <div id="external-signals"><!-- renderDataIntelligence() --></div>
             </div>
           </div>
         </section>

@@ -42,6 +42,8 @@ export const CHROME_ICONS = {
   chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>`,
   shield: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>`,
   signOut: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  folder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`,
+  swap: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 2 21 6 17 10"/><line x1="21" y1="6" x2="8" y2="6"/><polyline points="7 14 3 18 7 22"/><line x1="3" y1="18" x2="16" y2="18"/></svg>`,
 };
 
 export function wcEscape(s) {
@@ -166,12 +168,6 @@ export async function signOut() {
    ═══════════════════════════════════════════════════════════════ */
 
 /**
- * The shared top bar.
- *
- * `variant` only affects width: 'wide' spans the screen (Select Project),
- * 'default' matches the narrower content column of the other two.
- */
-/**
  * The role as a label.
  *
  * The server stores it as a constant — `PLANNER`, `ADMIN` — and shouting it at
@@ -185,20 +181,43 @@ function roleLabel(role) {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-export function workspaceTopbarHtml({ variant = 'default' } = {}) {
+/**
+ * The shared top bar.
+ *
+ * `variant` only affects width: 'wide' spans the screen (Select Project),
+ * 'default' matches the narrower content column of the other two.
+ *
+ * `project` — when a screen is working inside one project, its name is shown
+ * as a pill beside the brand. The ingestion screens are several steps and
+ * several minutes long, and until now nothing on them named the project the
+ * upload was about to be committed to; the only way to check was to abandon
+ * the flow. The pill both states it and offers the one action that changes it.
+ */
+export function workspaceTopbarHtml({ variant = 'default', project = null } = {}) {
   const user = getCurrentUser();
   const name = (user && (user.name || '').trim()) || (user && user.email) || '';
   const role = roleLabel(user && user.role);
+  const projectName = project && String(project.name || '').trim();
   return `
     <header class="wc-topbar wc-topbar-${wcEscape(variant)}">
       <div class="wc-topbar-inner">
-        <div class="wc-brand" data-wc="home" role="button" tabindex="0"
-             title="Netgravity">
-          ${CHROME_ICONS.logo}
-          <div class="wc-brand-text">
-            <div class="wc-brand-title">Netgravity</div>
-            <div class="wc-brand-sub">by Kearney</div>
+        <div class="wc-topbar-left">
+          <div class="wc-brand" data-wc="home" role="button" tabindex="0"
+               title="Netgravity">
+            ${CHROME_ICONS.logo}
+            <div class="wc-brand-text">
+              <div class="wc-brand-title">Netgravity</div>
+              <div class="wc-brand-sub">by Kearney</div>
+            </div>
           </div>
+          ${projectName ? `
+          <button class="wc-project" type="button" data-wc="project"
+                  aria-haspopup="menu" aria-expanded="false"
+                  title="${wcEscape(projectName)}">
+            ${CHROME_ICONS.folder}
+            <span class="wc-project-name">${wcEscape(projectName)}</span>
+            <span class="wc-project-caret">${CHROME_ICONS.chevronDown}</span>
+          </button>` : ''}
         </div>
         <div class="wc-topbar-right">
           <button class="wc-icon-btn wc-bell" type="button" data-wc="bell"
@@ -263,6 +282,32 @@ const HELP_TEXT = {
       exact column headers the parser recognises.</p>
     <p>Nothing you upload reaches the optimiser until you have reviewed the
       mapping and confirmed it.</p>`,
+
+  mapping: `
+    <p>Netgravity read every column in your file and matched each one to a field
+      it models. This screen is where you check that before anything is
+      committed.</p>
+    <ul>
+      <li><strong>Confidence</strong> is how the match was made.
+        <em>High</em> — the sheet was identified and the column name is a known
+        alias for that table's field. <em>Medium</em> — the sheet could not be
+        identified, so the field is the best match across every table type and
+        is a guess. <em>Low</em> — no field matched.</li>
+      <li><strong>Status</strong> is what happens next.
+        <em>Used</em> reaches a calculation. <em>Review</em> reaches a
+        calculation as suggested unless you change it. <em>Not used</em> is
+        parsed and then ignored — this build reads no field from it.</li>
+      <li><strong>Mapped to field</strong> is editable on every row. Changing it
+        marks the row resolved and updates the counts above.</li>
+      <li>Each <strong>sheet tab</strong> shows how many of that sheet's columns
+        the model reads, and what the parser decided the sheet is.</li>
+    </ul>
+    <p>Sheets are identified by their <em>columns</em>, not their names, so a
+      sheet called "Sheet1" is read correctly and one called "Facilities" with
+      unrecognised headers is not.</p>
+    <p><strong>Confirm mapping &amp; continue</strong> commits this mapping and
+      builds the network. You can return with Back until then; nothing has been
+      written yet.</p>`,
 };
 
 /**
@@ -313,6 +358,13 @@ export function bindWorkspaceTopbar(root = document, { help = 'projects' } = {})
     if (open) return;
     openAccountMenu(e.currentTarget);
   });
+
+  host.querySelector('[data-wc="project"]')?.addEventListener('click', (e) => {
+    const open = document.querySelector('.wc-menu-project');
+    closeMenus();
+    if (open) return;
+    openProjectMenu(e.currentTarget);
+  });
 }
 
 /** Anchor a floating menu under a control, kept inside the viewport. */
@@ -354,6 +406,34 @@ function openActivityMenu(anchor) {
 
   ACTIVITY.forEach((a) => { a.seen = true; });
   paintBellDot();
+}
+
+/**
+ * What the project pill offers.
+ *
+ * One entry, because one thing is actually possible from here: leave this
+ * project for another. Renaming, archiving and sharing live on Select Project
+ * where the server routes for them are; repeating them here as dead items
+ * would say this screen can do more than it can.
+ */
+function openProjectMenu(anchor) {
+  const label = anchor.querySelector('.wc-project-name')?.textContent || '';
+  const menu = mountMenu(anchor, 'wc-menu-project', `
+    <div class="wc-menu-head">Current project</div>
+    <div class="wc-menu-identity">
+      <div class="wc-menu-identity-name">${wcEscape(label)}</div>
+      <div class="wc-menu-identity-mail">Everything you upload here is committed
+        to this project only.</div>
+    </div>
+    <button class="wc-menu-item" type="button" data-wc-menu="switch" role="menuitem">
+      ${CHROME_ICONS.swap}<span>Switch project&hellip;</span>
+    </button>`);
+
+  menu.querySelector('[data-wc-menu="switch"]')?.addEventListener('click', () => {
+    menu.remove();
+    anchor.setAttribute('aria-expanded', 'false');
+    if (typeof window.showSelectProject === 'function') window.showSelectProject();
+  });
 }
 
 function openAccountMenu(anchor) {
