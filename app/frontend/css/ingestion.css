@@ -20,10 +20,9 @@
    (see .chatbot-modal-overlay in chatbot.css).
    ═══════════════════════════════════════════════════════════ */
 
-#upload-data-page,
-#ingestion-page {
-  overflow-y: auto;
-}
+/* .proj-page is a flex column that does not scroll; .proj-scroll inside it
+   does. These two pages inherit that, so the top bar stays put while a long
+   mapping table moves under it. */
 
 .ing-body {
   position: relative;
@@ -34,88 +33,11 @@
   padding: calc(42 * var(--u)) calc(72 * var(--u)) calc(56 * var(--u));
 }
 
-/* ─── Shared top bar: brand + help + avatar ──────────────────── */
-.ing-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: calc(34 * var(--u));
-}
-
-.ing-topbar-left {
-  display: flex;
-  align-items: center;
-  gap: calc(22 * var(--u));
-}
-
-/* Decorative only — no click-to-navigate, unlike the sidebar lockup. */
-.ing-brand {
-  display: flex;
-  align-items: center;
-  gap: calc(10 * var(--u));
-}
-
-.ing-brand-logo {
-  width: calc(28 * var(--u));
-  height: calc(28 * var(--u));
-  flex-shrink: 0;
-}
-
-.ing-brand-name {
-  font-size: calc(18 * var(--u));
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--proj-text-1);
-}
-
-.ing-topbar-right {
-  display: flex;
-  align-items: center;
-  gap: calc(14 * var(--u));
-}
-
-.ing-back-home-btn {
-  display: flex;
-  align-items: center;
-  gap: calc(4 * var(--u));
-  background: none;
-  border: 1px solid var(--proj-border);
-  border-radius: calc(8 * var(--u));
-  padding: calc(7 * var(--u)) calc(12 * var(--u)) calc(7 * var(--u)) calc(6 * var(--u));
-  font-family: inherit;
-  font-size: calc(14 * var(--u));
-  font-weight: 600;
-  color: var(--proj-text-2);
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.ing-back-home-btn svg { width: calc(16 * var(--u)); height: calc(16 * var(--u)); }
-
-.ing-back-home-btn:hover {
-  border-color: var(--brand-purple);
-  color: var(--brand-purple);
-}
-
-/* Reuse the app shell's own topbar-icon-btn / user-avatar-ak classes
-   (defined in style.css) so this screen's chrome literally is the
-   same chrome as the authenticated app — just scaled to --u. */
-.ing-topbar-right .topbar-icon-btn {
-  width: calc(36 * var(--u));
-  height: calc(36 * var(--u));
-}
-
-.ing-topbar-right .topbar-icon-btn svg {
-  width: calc(17 * var(--u));
-  height: calc(17 * var(--u));
-}
-
-.ing-topbar-right .user-avatar-ak {
-  width: calc(34 * var(--u));
-  height: calc(34 * var(--u));
-  font-size: calc(12 * var(--u));
-  cursor: default;
-}
+/* The top bar these screens used to define for themselves now comes from
+   workspace-chrome.css, shared with Select Project and Create Project. The
+   rules that were here styled a brand lockup, a back pill, a help button with
+   no handler behind it, and an avatar — four things the shared bar already
+   has, three of which had drifted from their equivalents elsewhere. */
 
 .ing-title {
   font-size: calc(34 * var(--u));
@@ -258,37 +180,9 @@
 .ing-add-more:hover { text-decoration: underline; }
 .ing-add-more svg { width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
 
-.ing-file-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: calc(20 * var(--u));
-  font-size: calc(14.5 * var(--u));
-}
 
-.ing-file-table th {
-  text-align: left;
-  font-size: calc(13 * var(--u));
-  font-weight: 600;
-  color: var(--proj-text-3);
-  padding: 0 calc(14 * var(--u)) calc(12 * var(--u));
-  border-bottom: 1px solid var(--proj-border-soft);
-  white-space: nowrap;
-}
 
-.ing-file-table td {
-  padding: calc(14 * var(--u)) calc(14 * var(--u));
-  border-bottom: 1px solid #f4f2f8;
-  vertical-align: middle;
-  color: var(--proj-text-2);
-}
 
-.ing-file-table tr:last-child td { border-bottom: none; }
-
-.ing-file-name-cell {
-  display: flex;
-  align-items: center;
-  gap: calc(13 * var(--u));
-}
 
 .ing-file-icon {
   width: calc(34 * var(--u));
@@ -1356,4 +1250,479 @@
   background: #ffffff;
   padding-bottom: 8px;
   z-index: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   UPLOAD DATA — reworked against Dump/new project data upload.png
+
+   Only this screen. The rules above are shared with the two
+   mapping-review screens, which are still laid out in the --u
+   reference pixel; overriding them globally would have rescaled
+   both of those to match a mock that does not describe them.
+
+   Sizes are the authenticated app's — style.css .card-title 15px,
+   .btn 13px, .tag 11px, form controls 13px — not the pixel sizes
+   of the mockup image, which is drawn about a third larger than
+   every other surface in the product. See the note in projects.css.
+   ═══════════════════════════════════════════════════════════ */
+#upload-data-page .ing-body {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 22px 32px 32px;
+}
+
+#upload-data-page .ing-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+#upload-data-page .ing-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  color: var(--proj-text-1);
+  margin: 0;
+}
+
+#upload-data-page .ing-subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--proj-text-3);
+  max-width: 760px;
+}
+
+#upload-data-page .ing-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: stretch;
+}
+
+#upload-data-page .ing-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--proj-surface);
+  border: 1px solid var(--proj-border);
+  border-radius: 14px;
+  padding: 18px 20px 18px;
+  margin: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* .card-title in style.css. */
+#upload-data-page .ing-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--proj-text-1);
+}
+
+#upload-data-page .ing-card-icon { display: flex; color: var(--proj-purple, #9218EA); }
+#upload-data-page .ing-card-icon svg { width: 17px; height: 17px; }
+
+#upload-data-page .ing-card-sub {
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--proj-text-3);
+}
+
+#upload-data-page .ing-card-bullets {
+  margin: 4px 0 0;
+  padding-left: 17px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--proj-text-3);
+}
+
+#upload-data-page .ing-card-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#upload-data-page .ing-count-badge { color: var(--proj-text-3); font-weight: 600; }
+
+#upload-data-page .ing-add-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: var(--proj-purple, #9218EA);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 2px;
+  white-space: nowrap;
+}
+
+#upload-data-page .ing-add-more:hover { text-decoration: underline; }
+#upload-data-page .ing-add-more svg { width: 15px; height: 15px; }
+
+/* ─── Dropzone ───────────────────────────────────────────── */
+#upload-data-page .ing-dropzone {
+  margin-top: 14px;
+  flex: 1 1 auto;
+  min-height: 210px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed #d9c9f2;
+  border-radius: 12px;
+  background: #fcfaff;
+  cursor: pointer;
+  padding: 22px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+#upload-data-page .ing-dropzone:hover,
+#upload-data-page .ing-dropzone:focus-visible,
+#upload-data-page .ing-dropzone.dragover {
+  border-color: var(--proj-purple, #9218EA);
+  background: #f9f4ff;
+  outline: none;
+}
+
+#upload-data-page .ing-dropzone-icon { display: flex; color: var(--proj-purple, #9218EA); }
+#upload-data-page .ing-dropzone-icon svg { width: 30px; height: 30px; }
+
+#upload-data-page .ing-dropzone-main {
+  margin-top: 13px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--proj-text-1);
+  letter-spacing: -0.01em;
+}
+
+#upload-data-page .ing-dropzone-or {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--proj-text-3);
+}
+
+#upload-data-page .ing-attach-btn {
+  margin-top: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 18px;
+  border: 1px solid var(--proj-border);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--proj-purple, #9218EA);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(16, 12, 34, 0.05);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+#upload-data-page .ing-attach-btn:hover {
+  border-color: var(--proj-purple, #9218EA);
+  transform: translateY(-1px);
+}
+
+#upload-data-page .ing-attach-btn svg { width: 15px; height: 15px; }
+
+#upload-data-page .ing-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  line-height: 1.45;
+}
+
+#upload-data-page .ing-error:empty { display: none; }
+#upload-data-page .ing-error::before { content: '⚠'; line-height: 1.4; }
+
+/* ─── Card footer links ──────────────────────────────────── */
+#upload-data-page .ing-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+#upload-data-page .ing-foot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--proj-purple, #9218EA);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+
+#upload-data-page .ing-foot-link:hover { text-decoration: underline; }
+#upload-data-page .ing-foot-link svg { width: 15px; height: 15px; }
+#upload-data-page .ing-foot-link:disabled { opacity: 0.5; cursor: progress; text-decoration: none; }
+
+/* ─── Uploaded files ─────────────────────────────────────── */
+#upload-data-page .ing-empty-files {
+  flex: 1 1 auto;
+  min-height: 210px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+  border: none;
+  background: none;
+}
+
+#upload-data-page .ing-empty-tile {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  background: #f3ecfd;
+  color: #c9a9f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+#upload-data-page .ing-empty-tile svg { width: 28px; height: 28px; }
+
+#upload-data-page .ing-empty-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--proj-text-1);
+  letter-spacing: -0.01em;
+}
+
+#upload-data-page .ing-empty-sub {
+  margin-top: 5px;
+  font-size: 12.5px;
+  color: var(--proj-text-3);
+}
+
+#upload-data-page .ing-file-list {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1 1 auto;
+  min-height: 210px;
+}
+
+#upload-data-page .ing-file-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px 12px 11px;
+  border: 1px solid var(--proj-border);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+#upload-data-page .ing-file-card.failed { border-color: #f3c9c6; background: #fffbfb; }
+
+#upload-data-page .ing-file-card-main { flex: 1; min-width: 0; }
+
+#upload-data-page .ing-file-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  background: #16794a;
+}
+
+#upload-data-page .ing-file-icon.type-pdf { background: #c62d1f; }
+#upload-data-page .ing-file-icon.type-csv { background: #1f5fc6; }
+
+#upload-data-page .ing-file-meta-name {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--proj-text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#upload-data-page .ing-file-meta-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--proj-text-3);
+}
+
+#upload-data-page .ing-file-ok {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+#upload-data-page .ing-file-failed {
+  margin-top: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #dc2626;
+  line-height: 1.4;
+}
+
+#upload-data-page .ing-file-failed svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 1px; }
+
+/* .tag in style.css. */
+#upload-data-page .ing-type-chip,
+#upload-data-page .ing-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#upload-data-page .ing-type-chip { background: #f7f7fa; color: var(--proj-text-2); }
+#upload-data-page .ing-status-chip { background: #f0fdf4; color: #16a34a; }
+#upload-data-page .ing-status-chip svg { width: 12px; height: 12px; }
+#upload-data-page .ing-status-chip.reading { background: #f5f0fa; color: #6B2FA0; }
+
+#upload-data-page .ing-row-delete {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--proj-text-4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+#upload-data-page .ing-row-delete svg { width: 15px; height: 15px; }
+#upload-data-page .ing-row-delete:hover { background: #fef2f2; color: #dc2626; }
+
+/* ─── Footer ─────────────────────────────────────────────── */
+#upload-data-page .ing-footer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--proj-border);
+}
+
+#upload-data-page .ing-skip-link {
+  background: none;
+  border: none;
+  color: var(--proj-text-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 6px 2px;
+}
+
+#upload-data-page .ing-skip-link:hover { color: var(--proj-purple, #9218EA); }
+
+#upload-data-page .ing-footer-bar .proj-btn-primary { height: 40px; padding: 0 22px; font-size: 13.5px; }
+
+/* ─── The mapping-review screens' back pill row ──────────── */
+.ing-subbar {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px 32px 0;
+}
+
+/* ─── Upload help panel ──────────────────────────────────── */
+.ing-help-loading { color: var(--proj-text-4); }
+.ing-help-tables { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
+
+.ing-help-table {
+  border: 1px solid var(--proj-border, #e8e8ef);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.ing-help-table-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 5px;
+}
+
+.ing-help-cols { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.ing-help-cols code {
+  background: #f3f0f8;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  color: #4b3a63;
+}
+
+#upload-data-page .ing-status-chip.reading { background: #f5f0fa; color: #6B2FA0; }
+
+.ing-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid rgba(107, 47, 160, 0.25);
+  border-top-color: #6B2FA0;
+  animation: ingSpin 0.8s linear infinite;
+}
+
+@keyframes ingSpin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ing-spinner { animation-duration: 2.4s; }
+}
+
+@media (max-width: 1000px) {
+  #upload-data-page .ing-split { grid-template-columns: 1fr; }
+  #upload-data-page .ing-dropzone,
+  #upload-data-page .ing-empty-files,
+  #upload-data-page .ing-file-list { min-height: 0; }
+}
+
+@media (max-width: 860px) {
+  #upload-data-page .ing-body { padding: 16px 16px 28px; }
+  #upload-data-page .ing-head-row { flex-direction: column-reverse; align-items: flex-start; gap: 12px; }
+  #upload-data-page .ing-title { font-size: 19px; }
+  #upload-data-page .ing-footer-bar { flex-direction: column-reverse; align-items: stretch; }
+  .ing-subbar { padding: 12px 16px 0; }
 }

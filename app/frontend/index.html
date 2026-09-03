@@ -23,6 +23,7 @@
   <link rel="stylesheet" href="css/insight-detail.css">
   <link rel="stylesheet" href="css/agent-reasoning.css">
   <link rel="stylesheet" href="css/chatbot.css">
+  <link rel="stylesheet" href="css/workspace-chrome.css">
   <link rel="stylesheet" href="css/projects.css">
   <link rel="stylesheet" href="css/ingestion.css">
   <script src="js/landing-bootstrap.js"></script>
@@ -62,7 +63,7 @@
             <label class="auth-label" for="signin-email">Email address</label>
             <div class="auth-input-wrap">
               <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span>
-              <input type="email" id="signin-email" class="auth-input" placeholder="you@company.com" required autocomplete="email" />
+              <input type="email" id="signin-email" class="auth-input" placeholder="you@kearney.com" required autocomplete="email" />
             </div>
           </div>
           <div class="auth-field-group">
@@ -78,6 +79,12 @@
           <div class="signin-actions-row">
             <a class="auth-forgot-link" data-action="switchAuthPanel" data-arg="reset">Forgot password?</a>
           </div>
+          <!-- Failure slot. showAuthError() used to create this element and
+               append it to the end of the form; on a fixed-height, overflow
+               hidden page that put the reason below the fold. Every panel now
+               carries the slot where the reason belongs, and the reserved panel
+               height accounts for it, so revealing it moves nothing. -->
+          <div class="auth-error-box" id="signin-error" role="alert" hidden></div>
           <button type="submit" class="btn-landing-primary">
             <span>Sign in</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -111,7 +118,7 @@
             <label class="auth-label" for="signup-email">Work email</label>
             <div class="auth-input-wrap">
               <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span>
-              <input type="email" id="signup-email" class="auth-input" placeholder="you@company.com" required autocomplete="email" />
+              <input type="email" id="signup-email" class="auth-input" placeholder="you@kearney.com" required autocomplete="email" />
             </div>
           </div>
           <div class="auth-field-group">
@@ -129,20 +136,39 @@
               </button>
             </div>
           </div>
-          <div class="auth-requirements-box">
-            <div class="auth-requirements-header">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
-              <span>Password requirements</span>
-            </div>
-            <div class="auth-requirements-list">
-              <div class="auth-req-item"><svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg> 8+ characters</div>
-              <div class="auth-req-item"><svg width="12" height="12" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg> Uppercase & number</div>
+          <div class="auth-field-group">
+            <label class="auth-label" for="signup-password-confirm">Confirm password</label>
+            <div class="auth-input-wrap">
+              <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+              <input type="password" id="signup-password-confirm" class="auth-input" placeholder="Re-enter your password" required autocomplete="new-password" />
+              <button type="button" class="auth-password-toggle" title="Toggle password visibility">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
             </div>
           </div>
-          <label class="auth-checkbox-row">
-            <input type="checkbox" checked required />
-            <span>I agree to the <a href="#" data-action="preventDefault">Terms of Service</a> and <a href="#" data-action="preventDefault">Privacy Policy</a></span>
-          </label>
+          <!-- Live requirement checklist. Every item ships unmet and is driven
+               from the field by bindPasswordRequirements() in js/auth.js, so the
+               list states the rule before anything is typed and then reports
+               against what was actually typed. It previously carried two items
+               painted green unconditionally, one of them naming a floor of 8
+               that the server does not have: it refuses anything under 12. -->
+          <div class="auth-requirements-box" id="signup-requirements">
+            <div class="auth-requirements-header">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+              <span>Password must contain:</span>
+            </div>
+            <ul class="auth-requirements-list" id="signup-requirements-list">
+              <li class="auth-req-item" data-req="length"><span class="auth-req-mark" aria-hidden="true"></span><span class="auth-req-text">At least 12 characters</span><span class="auth-req-state">not met</span></li>
+              <li class="auth-req-item" data-req="upper"><span class="auth-req-mark" aria-hidden="true"></span><span class="auth-req-text">1 uppercase letter</span><span class="auth-req-state">not met</span></li>
+              <li class="auth-req-item" data-req="lower"><span class="auth-req-mark" aria-hidden="true"></span><span class="auth-req-text">1 lowercase letter</span><span class="auth-req-state">not met</span></li>
+              <li class="auth-req-item" data-req="digit"><span class="auth-req-mark" aria-hidden="true"></span><span class="auth-req-text">1 number</span><span class="auth-req-state">not met</span></li>
+              <li class="auth-req-item" data-req="symbol"><span class="auth-req-mark" aria-hidden="true"></span><span class="auth-req-text">1 special character</span><span class="auth-req-state">not met</span></li>
+            </ul>
+          </div>
+          <!-- Failure slot, directly under the checklist so "the requirements
+               above" is literally true. See the note on the sign-in panel for
+               why it is in the markup rather than appended on demand. -->
+          <div class="auth-error-box" id="signup-error" role="alert" hidden></div>
           <button type="submit" class="btn-landing-primary">
             <span>Create account</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -164,9 +190,10 @@
             <label class="auth-label" for="panel-reset-email">Work email</label>
             <div class="auth-input-wrap">
               <span class="auth-input-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></span>
-              <input type="email" id="panel-reset-email" class="auth-input" placeholder="you@company.com" required autocomplete="email" />
+              <input type="email" id="panel-reset-email" class="auth-input" placeholder="you@kearney.com" required autocomplete="email" />
             </div>
           </div>
+          <div class="auth-error-box" id="reset-error" role="alert" hidden></div>
           <button type="submit" class="btn-landing-primary">
             <span>Send reset link</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
@@ -180,7 +207,13 @@
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </div>
           <div class="auth-conf-title">Check your email</div>
-          <div class="auth-conf-desc">We've sent a password reset link to <span class="auth-conf-email" id="panel-conf-email-target"></span>.<br>Please check your inbox.</div>
+          <!-- The server will not confirm whether an account exists for the
+               address, so neither does this. The copy is here rather than
+               written in from JavaScript on every path, and JavaScript writes
+               into this element rather than over the box that holds it — doing
+               the latter took the heading and the button back to sign-in with
+               it, which is how the confirmed screen lost its way out. -->
+          <div class="auth-conf-desc" id="panel-reset-conf-desc">If an account exists for that address, a reset link is on its way. It is valid for 30 minutes and can be used once.</div>
           <button type="button" class="btn-landing-primary" data-action="switchAuthPanel" data-arg="signin">
             <span>Back to sign in</span>
           </button>

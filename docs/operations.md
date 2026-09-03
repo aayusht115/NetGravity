@@ -176,6 +176,26 @@ Self-contained, and honest about which parts of an identity system it is:
 | Single sign-on | OpenID Connect, authorization code + PKCE |
 | **Not provided** | SAML, SCIM provisioning, directory sync (deprovisioning), password history, admin-initiated resets |
 
+### What the sign-up form adds, and what it does not
+
+The form is stricter than the server, and only in that direction. It shows a
+live checklist — 12 characters, an upper-case letter, a lower-case letter, a
+digit, a symbol — and refuses to submit until every item is met, so nothing it
+accepts can come back rejected for its shape. The server's own floor is
+unchanged and remains the authority: length, plus the common-password refusal.
+Composition rules are the form's advice, not a server policy; a password
+created through the API or by an administrator is held only to the floor.
+
+The form also accepts only `@kearney.com` addresses for **account creation**.
+This is a guard on the form. `POST /api/auth/signup` still accepts any
+syntactically valid address, so it stops a person filling in the wrong address,
+not a client calling the API directly. Sign-in and password reset are
+deliberately **not** restricted: an account can also arrive through single
+sign-on or an administrator, and refusing those a way in — or a way to
+recover — would lock out a user the server is willing to authenticate. If the
+restriction needs to be a rule rather than a prompt, it belongs in
+`SecurityService.signup` beside `validate_password_strength`.
+
 ### Single sign-on (OIDC)
 
 Off unless configured. `/api/auth/oidc/providers` reports whether it is on, and

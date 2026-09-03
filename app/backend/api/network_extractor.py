@@ -418,6 +418,51 @@ _COLUMN_ROLES: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
     ),
 }
 
+#: The sheet name this application looks for, per role. Any of the aliases in
+#: `classify_sheet` still work — a sheet is identified by its columns, not its
+#: name — but these are the names the downloadable template uses, so a workbook
+#: built from it classifies without ambiguity.
+SHEET_TEMPLATE_NAMES: Dict[str, str] = {
+    "facilities": "Facilities",
+    "markets": "Markets",
+    "lanes": "Lanes",
+    "products": "Products",
+    "demand_history": "Demand_History",
+    "capacity_history": "Capacity_History",
+    "lane_rates": "Lane_Rates",
+    "warehouse_costs": "Warehouse_Costs",
+    "signals": "Signals",
+}
+
+
+def upload_schema() -> List[Dict[str, Any]]:
+    """
+    The sheets and columns this build reads, for the upload template.
+
+    Derived from `_COLUMN_ROLES` — the same table `classify_column_name` uses —
+    so a template can never describe a column the parser does not recognise, and
+    a column added to the parser appears in the template without anyone
+    remembering to add it. The first alias is the preferred header because it is
+    the one `classify_sheet` and `classify_column_name` were written around.
+    """
+    sheets: List[Dict[str, Any]] = []
+    for role, entries in _COLUMN_ROLES.items():
+        columns = []
+        for label, aliases in entries:
+            ordered = list(dict.fromkeys(aliases))
+            columns.append({
+                "label": label,
+                "header": ordered[0] if ordered else label,
+                "accepted": ordered,
+            })
+        sheets.append({
+            "role": role,
+            "sheet": SHEET_TEMPLATE_NAMES.get(role, role.title()),
+            "columns": columns,
+        })
+    return sheets
+
+
 #: What the UI offers in its "mapped to" dropdown, and the label for a column
 #: this build does not read.
 NOT_USED = "Not used by the model"

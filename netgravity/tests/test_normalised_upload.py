@@ -828,3 +828,74 @@ class TestGeographyIsInferredFromCoordinates:
     def test_no_coordinates_yields_no_region_rather_than_a_guess(self):
         assert infer_geography([])["region"] is None
         assert infer_geography([{"lat": None, "lng": None}])["region"] is None
+
+
+class TestTheUploadTemplateDescribesThisParser:
+    """
+    "Download template" on the upload screen builds a workbook from
+    `GET /api/ingestions/preview/schema`, which is generated from the
+    extractor's own `_COLUMN_ROLES`. These tests hold the two together: a
+    template that offered a column the parser does not read, or omitted one it
+    does, would send the user away to fill in the wrong spreadsheet.
+
+    The arrangement this replaces is the one that produced the mapping
+    screen's nine hand-typed dropdown options, none of which matched what the
+    server sent — so every row rendered as the first one.
+    """
+
+    def test_every_sheet_role_the_extractor_knows_is_offered(self):
+        from app.backend.api.network_extractor import _COLUMN_ROLES, upload_schema
+        roles = {s["role"] for s in upload_schema()}
+        assert roles == set(_COLUMN_ROLES)
+
+    def test_every_column_is_one_the_parser_recognises(self):
+        from app.backend.api.network_extractor import (
+            classify_column_name, upload_schema,
+        )
+        for sheet in upload_schema():
+            for column in sheet["columns"]:
+                field, status, _confidence = classify_column_name(
+                    column["header"], sheet["role"])
+                assert status == "auto", (sheet["sheet"], column["header"], status)
+                assert field == column["label"], (column["header"], field)
+
+    def test_a_template_sheet_classifies_as_the_role_it_was_built_for(self):
+        """
+        Headers alone, no rows: `classify_sheet` reads the column signature, so
+        a template filled in by the user lands on the branch it was built for.
+        """
+        from app.backend.api.network_extractor import classify_sheet, upload_schema
+        # Roles that share every id column with a master table are identified by
+        # columns the template does carry; the ones below are the unambiguous
+        # set and are the sheets a user actually fills in.
+        checked = {"facilities", "markets", "lanes", "products",
+                   "demand_history", "warehouse_costs"}
+        for sheet in upload_schema():
+            if sheet["role"] not in checked:
+                continue
+            headers = [c["header"] for c in sheet["columns"]]
+            frame = pd.DataFrame(columns=headers)
+            assert classify_sheet(frame) == sheet["role"], sheet["sheet"]
+
+    def test_the_preferred_header_is_the_first_accepted_alias(self):
+        from app.backend.api.network_extractor import upload_schema
+        for sheet in upload_schema():
+            for column in sheet["columns"]:
+                assert column["header"] == column["accepted"][0]
+                assert len(column["accepted"]) == len(set(column["accepted"]))
+
+    def test_sheet_names_are_ones_excel_will_accept(self):
+        from app.backend.api.network_extractor import upload_schema
+        seen = set()
+        for sheet in upload_schema():
+            name = sheet["sheet"]
+            assert 0 < len(name) <= 31, name
+            assert not set(name) & set('[]:*?/\\'), name
+            assert name.lower() not in seen
+            seen.add(name.lower())
+
+    def test_the_endpoint_serves_it_and_requires_a_session(self):
+        from app.backend.app import app
+        with app.test_client() as client:
+            anonymous = client.get("/api/ingestions/preview/schema")
+            assert anonymous.status_code in (401, 403)

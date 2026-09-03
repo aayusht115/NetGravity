@@ -35,9 +35,9 @@ import { initChatbot } from './chatbot.js';
 import { triggerAgentReasoning } from './agent-reasoning.js';
 import { apiClient } from './integration/api-client.js';
 import { initActions } from './actions.js';
-import { authService } from './integration/services/auth-service.js';
+import { showInfoPanel, signOut } from './workspace-chrome.js';
 import { getActiveProjectId, setActiveProject } from './integration/project-context.js';
-import { loadIdentity, getCurrentUser, clearCurrentUser } from './identity.js';
+import { loadIdentity, getCurrentUser } from './identity.js';
 import { kpiService } from './integration/services/kpi-service.js';
 import { twinService } from './integration/services/twin-service.js';
 import { mapNetworkKPIsToCards } from './integration/mappers/kpi-mapper.js';
@@ -681,26 +681,16 @@ function initTabs() {
         + ' | role ' + (user.role || '-')
         + ' | ' + (user.organization || '-')));
   });
-  document.getElementById('profile-menu-signout')?.addEventListener('click', async () => {
+  document.getElementById('profile-menu-signout')?.addEventListener('click', () => {
     document.getElementById('profile-dropdown-menu')?.classList.remove('open');
-    // Sign-out now REVOKES the session and clears the model.
-    //
-    // It used to call `returnToLanding()` only: the bearer token stayed in
-    // localStorage and the previous user's network stayed in memory, so the
-    // next person to use the browser was signed in as them — and with session
-    // restore on boot, a refresh would have put them straight back into that
-    // account's projects.
-    try {
-      await authService.logout();
-    } catch (e) {
-      // The local session is cleared regardless; a server that cannot be
-      // reached must not leave the user apparently signed in.
-      apiClient.setToken(null);
-    }
-    clearCurrentUser();
-    clearNetworkModel();
-    setActiveProject(null);
-    if (typeof window.returnToLanding === 'function') window.returnToLanding();
+    // One implementation, in js/workspace-chrome.js, shared with the account
+    // menu on the project screens. Sign-out REVOKES the session and clears the
+    // model: it used to call `returnToLanding()` only, so the bearer token
+    // stayed in localStorage and the previous user's network stayed in memory
+    // — the next person to use the browser was signed in as them, and a
+    // refresh put them straight back into that account's projects. Two copies
+    // of that would be two chances to get it wrong again.
+    signOut();
   });
 
   // "Current Project" pill: opens Select Project so the user can switch
@@ -2243,47 +2233,10 @@ function renderAdminSettingsModal() {
 }
 
 // ─── In-product info panel ──────────────────────────────────
-/**
- * A dismissible panel for informational content.
- *
- * Replaces `alert()` on the header actions. A native alert blocks the event
- * loop until dismissed — the page behind it stops rendering, which on a
- * mid-render click leaves the application looking stalled or blank — and it
- * cannot be closed by clicking away or styled to look like part of the product.
- *
- * Closes on the button, on the backdrop, and on Escape.
- */
-function showInfoPanel(title, bodyHtml) {
-  document.getElementById('ng-info-panel')?.remove();
+/* showInfoPanel lives in js/workspace-chrome.js and is imported above.
+   There were two of these — one here for the app shell, one for the
+   project screens — differing only in which card class they borrowed. */
 
-  const overlay = document.createElement('div');
-  overlay.id = 'ng-info-panel';
-  overlay.className = 'modal-overlay active';
-  overlay.style.cssText = 'display:flex;align-items:center;justify-content:center;'
-    + 'position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:600';
-  overlay.innerHTML = `
-    <div class="card" role="dialog" aria-modal="true" aria-label="${title}"
-         style="max-width:460px;width:calc(100% - 32px);max-height:80vh;overflow:auto">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-        <div class="card-title" style="font-size:15px;margin:0">${title}</div>
-        <button class="btn btn-ghost btn-sm" id="ng-info-panel-close"
-                aria-label="Close">✕</button>
-      </div>
-      <div style="margin-top:10px;line-height:1.6">${bodyHtml}</div>
-    </div>`;
-
-  const close = () => {
-    overlay.remove();
-    document.removeEventListener('keydown', onKey);
-  };
-  const onKey = (e) => { if (e.key === 'Escape') close(); };
-
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-  document.body.appendChild(overlay);
-  overlay.querySelector('#ng-info-panel-close')?.addEventListener('click', close);
-  document.addEventListener('keydown', onKey);
-  overlay.querySelector('#ng-info-panel-close')?.focus();
-}
 
 // ─── Notification Toast ─────────────────────────────────────
 function showNotification(message) {

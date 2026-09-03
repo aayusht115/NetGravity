@@ -54,6 +54,7 @@ from app.backend.api.network_extractor import (
     classify_column_name,
     classify_sheet,
     extract_tables_from_file,
+    upload_schema,
 )
 
 logger = logging.getLogger(__name__)
@@ -428,6 +429,22 @@ def commit_preview():
             "forecasts now run against your uploaded data."
         ),
     }), 201
+
+
+@ingestion_dynamic_bp.route("/schema", methods=["GET"])
+@require_auth
+def get_upload_schema():
+    """
+    The sheets and columns an upload may contain, for the template download.
+
+    Read-only, project-independent, and generated from the extractor's own
+    `_COLUMN_ROLES` table rather than restated anywhere. The upload screen used
+    to offer no template at all; the alternative — a column list written into
+    the frontend — is the arrangement that already produced a "mapped to"
+    dropdown whose nine hand-typed options did not include what the server sent,
+    so every row rendered as the first one.
+    """
+    return jsonify({"sheets": upload_schema()}), 200
 
 
 @ingestion_dynamic_bp.route("/active", methods=["GET"])

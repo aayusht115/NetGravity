@@ -28,7 +28,37 @@ from __future__ import annotations
 import logging
 import mimetypes
 import os
+import sys
 from pathlib import Path
+
+# The repository root, before anything is imported from it.
+#
+# Run through `run.py`, sys.path[0] is the repo root and every
+# `from app.backend...` / `from netgravity...` import resolves. Run directly —
+# `python app/backend/app.py`, which is what someone does when they open the
+# file that defines the application — sys.path[0] is THIS directory, and every
+# one of those imports raises ModuleNotFoundError. Each is caught by a
+# `try/except` that records the reason and carries on, so the server started,
+# printed its banner, served the frontend, and answered every API route from
+# the static catch-all: `POST /api/auth/login` came back 405 METHOD NOT ALLOWED
+# with `Allow: GET`, because the only rule that matched it was the one that
+# serves files. Nobody could sign in, and the log showed a healthy boot.
+#
+# Both entry points now put the root on the path, so the file is runnable the
+# obvious way.
+_REPO_ROOT = str(Path(__file__).resolve().parents[2])
+_THIS_DIR = str(Path(__file__).resolve().parent)
+# Prepending the root is not enough on its own. Neither `app/` nor
+# `app/backend/` has an `__init__.py`, so `app` is a NAMESPACE package — and a
+# namespace portion only wins if no ordinary module of that name is found
+# anywhere on the path. `app/backend/` is sys.path[0] when this file is run
+# directly, and it contains `app.py`, so `import app` bound to this very
+# script: "No module named 'app.backend'; 'app' is not a package". The script
+# directory is dropped as well, which is safe because nothing under
+# `app/backend/` imports a sibling by bare name.
+sys.path[:] = [p for p in sys.path if os.path.abspath(p or os.getcwd()) != _THIS_DIR]
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
@@ -249,9 +279,31 @@ def _security_headers(response):
 
 @app.route("/api/status", methods=["GET"])
 def api_status():
-    """Health check. Public by design — carries no customer data."""
+    """
+    Health check. Public by design — carries no customer data.
+
+    `status` is derived from what actually mounted, not stated. It was the
+    literal "ok", so a process whose every blueprint had failed to import —
+    no auth, no projects, no ingestion, no orchestrator — reported itself
+    healthy at the top and buried `"mounted": false` four keys down. A check
+    that answers "ok" when nobody can sign in is worse than no check: it is
+    the thing an operator looks at to decide whether to look further.
+    """
+    degraded = [
+        name for name, state in (
+            ("application_api", _APP_API_STATUS),
+            ("orchestrator", _ORCHESTRATOR_STATUS),
+            ("ingestion", _INGESTION_STATUS),
+        ) if not state.get("mounted")
+    ]
+    # The API layer carries authentication and every project route: without it
+    # the process serves files and nothing else.
+    status = ("ok" if not degraded
+              else "unavailable" if "application_api" in degraded
+              else "degraded")
     return jsonify({
-        "status": "ok",
+        "status": status,
+        "degraded": degraded,
         "version": "2.0.0",
         "environment": ENV,
         "engine": "netgravity MILP (PuLP/HiGHS)",

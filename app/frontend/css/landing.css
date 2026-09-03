@@ -82,6 +82,20 @@
   display: none !important;
 }
 
+/* The app shell stays in normal flow behind the landing page, and at a
+   short viewport its own minimum height gave the document a few pixels
+   of scroll — a scrollbar on a screen with nothing below the fold, on a
+   page that is a fixed 100vh and cannot usefully be scrolled at all.
+   The document is pinned to the viewport while the landing page is up,
+   and released the moment it is hidden and the shell becomes the page.
+   Both elements, and the height with it: `overflow` on one of them
+   alone still left the shell's own minimum height sticking out. */
+html:has(#landing-page:not(.hidden)),
+body:has(#landing-page:not(.hidden)) {
+  height: 100%;
+  overflow: hidden;
+}
+
 /* ─── Left Hero Column (Auth & Headline) ──────────────────── */
 #landing-page .landing-hero-left {
   position: relative;
@@ -95,20 +109,38 @@
   /* The column is centred, so its total flow height must not depend on
      which panel is showing — otherwise the brand and headline drift as
      the user switches. .landing-auth-panel reserves a constant slot for
-     that; this top padding then lands the centred result on the
-     reference position (brand ink at y=54 of the 941 frame). */
-  padding: calc(28 * var(--u)) 0 0 calc(72 * var(--u));
+     that; this top padding then lands the centred result.
+
+     Measured budget, in reference units, at the binding aspect ratio
+     (anything at or wider than 1672/941, where the column is exactly
+     941u tall — see --u):
+
+       12  padding-top
+       54  brand            +  56  gap
+      132  headline (2 lines) + 48  gap
+      592  reserved panel slot
+      ---
+      894  content, leaving 47u of free height, centred 23.5u top and
+           bottom. Sign-up with its failure message showing measures
+           ~584u, which is what sets the reserve. */
+  padding: calc(12 * var(--u)) 0 0 calc(72 * var(--u));
   box-sizing: border-box;
   z-index: 5;
   user-select: text;
 }
 
 /* Brand Lockup */
+/* The two gaps below (brand → headline, headline → panel) are the column's
+   only slack. The panel slot grew when sign-up gained a confirmation field,
+   a five-line requirement checklist and a reserved failure message; the
+   slack was spent on that rather than letting the column run past the
+   bottom of a viewport that cannot scroll. Both gaps are shared by all
+   three panels, so the brand and headline still sit in one fixed place. */
 #landing-page .landing-brand {
   display: flex;
   align-items: center;
   gap: calc(23 * var(--u));
-  margin-bottom: calc(96 * var(--u));
+  margin-bottom: calc(56 * var(--u));
   cursor: pointer;
   width: fit-content;
 }
@@ -147,7 +179,7 @@
   line-height: 1.18;
   letter-spacing: -0.035em;
   color: var(--landing-text-main);
-  margin: 0 0 calc(72 * var(--u)) 0;
+  margin: 0 0 calc(48 * var(--u)) 0;
   width: calc(640 * var(--u));
   max-width: 100%;
 }
@@ -158,15 +190,22 @@
 
 /* ─── In-Place Auth Panels ────────────────────────────────── */
 /* Reserved panel slot. Every panel occupies the same vertical space
-   whatever its content height (sign-in ~436, sign-up ~505, reset ~303,
-   reset-confirmation ~354 ref-px), so the brand and headline above it
-   never move when switching. Panels fill from the top of the slot, and
-   the reserve is set by the tallest of them. */
+   whatever its content height, so the brand and headline above it never
+   move when switching. Panels fill from the top of the slot, and the
+   reserve is set by the tallest state any of them can reach — which is
+   sign-up with its failure message showing, not sign-up at rest. Sizing
+   the reserve to the resting state would have meant the composition
+   shifted the moment a password was rejected, which is precisely when a
+   moving target is least welcome.
+
+   The reserve is the whole reason the panel never scrolls: #landing-page
+   is a fixed 100vh with overflow hidden, so anything past the slot is
+   simply not on the screen. If a panel gains a field, re-measure. */
 #landing-page .landing-auth-panel {
   display: none;
   width: calc(398 * var(--u));
   max-width: 100%;
-  min-height: calc(506 * var(--u));
+  min-height: calc(592 * var(--u));
 }
 
 #landing-page .landing-auth-panel.active {
@@ -386,7 +425,7 @@
   background: #ffffff;
   border: 1px solid #e8e4f2;
   border-radius: calc(10 * var(--u));
-  padding: calc(10 * var(--u)) calc(14 * var(--u));
+  padding: calc(8 * var(--u)) calc(13 * var(--u));
   margin-bottom: calc(12 * var(--u));
 }
 
@@ -397,49 +436,108 @@
   font-size: calc(13 * var(--u));
   font-weight: 600;
   color: var(--brand-purple);
-  margin-bottom: calc(5 * var(--u));
+  margin-bottom: calc(4 * var(--u));
 }
 
 #landing-page .auth-requirements-list {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: calc(4 * var(--u));
+  gap: calc(4 * var(--u)) calc(10 * var(--u));
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
+/* Unmet is the resting state. The list previously rendered every item in
+   the "satisfied" green whatever was in the field — including an empty
+   one — so it read as a claim about the password rather than a rule about
+   passwords, and it was wrong every time until the last keystroke. */
 #landing-page .auth-req-item {
   display: flex;
   align-items: center;
-  gap: calc(5 * var(--u));
+  gap: calc(6 * var(--u));
   font-size: calc(12 * var(--u));
-  color: #16a34a;
-  font-weight: 500;
-}
-
-#landing-page .auth-checkbox-row {
-  display: flex;
-  align-items: flex-start;
-  gap: calc(9 * var(--u));
-  margin-bottom: calc(16 * var(--u));
-  font-size: calc(13.5 * var(--u));
-  color: var(--landing-text-sub);
   line-height: 1.35;
-  cursor: pointer;
-}
-
-#landing-page .auth-checkbox-row input {
-  margin-top: calc(2 * var(--u));
-  accent-color: var(--brand-purple);
-  width: calc(16 * var(--u));
-  height: calc(16 * var(--u));
-}
-
-#landing-page .auth-checkbox-row a {
-  color: var(--brand-purple);
+  color: var(--landing-text-muted);
   font-weight: 500;
-  text-decoration: underline;
+  transition: color 0.15s ease;
+}
+
+#landing-page .auth-req-item.is-met {
+  color: #16a34a;
+}
+
+#landing-page .auth-req-mark {
+  flex: 0 0 auto;
+  width: calc(13 * var(--u));
+  height: calc(13 * var(--u));
+  border-radius: 50%;
+  border: max(1px, calc(1.5 * var(--u))) solid #c8c2d6;
+  background: #ffffff;
+  position: relative;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+#landing-page .auth-req-item.is-met .auth-req-mark {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
+#landing-page .auth-req-item.is-met .auth-req-mark::after {
+  content: '';
+  position: absolute;
+  left: calc(4.2 * var(--u));
+  top: calc(1.4 * var(--u));
+  width: calc(2.6 * var(--u));
+  height: calc(5.6 * var(--u));
+  border: solid #ffffff;
+  border-width: 0 max(1px, calc(1.6 * var(--u))) max(1px, calc(1.6 * var(--u))) 0;
+  transform: rotate(45deg);
+}
+
+/* The tick is decorative, so the state is carried in text for anyone
+   reading the list through a screen reader rather than looking at it. */
+#landing-page .auth-req-state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ─── Failure message ─────────────────────────────────────────
+   One slot per panel, in the markup rather than created on demand, so
+   the reserved panel height above can account for it. */
+#landing-page .auth-error-box {
+  margin: calc(10 * var(--u)) 0;
+  padding: calc(8 * var(--u)) calc(12 * var(--u));
+  border-radius: calc(10 * var(--u));
+  background: #fef2f2;
+  border: 1px solid #f7cccc;
+  color: #b91c1c;
+  font-size: calc(12 * var(--u));
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* The requirements box supplies the gap above it. */
+#landing-page .auth-requirements-box + .auth-error-box {
+  margin-top: 0;
 }
 
 /* Confirmation Box */
+/* The confirmation carries its own heading, so the panel's — "Reset
+   password / Enter your email and we'll send you a recovery link" —
+   is both redundant and, once the address has been sent, wrong. */
+#landing-page #panel-reset.is-confirmed .auth-panel-header {
+  display: none;
+}
+
 #landing-page .auth-confirmation-box {
   display: flex;
   flex-direction: column;
@@ -479,17 +577,18 @@
   color: var(--brand-purple);
 }
 
-/* The signup panel carries three fields plus the requirements box and
-   consent row, so it is the tallest of the three. Only its own interior
-   is tightened — never the brand or headline above it, which must not
-   move between panels (see the reserved panel height above). */
-#landing-page:has(#panel-signup.active) .auth-panel-header { margin-bottom: calc(18 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-field-group { margin-bottom: calc(8 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-label { margin-bottom: calc(6 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-input { height: calc(42 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-requirements-box { margin-bottom: calc(7 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-checkbox-row { margin-bottom: calc(9 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-panel-footer { margin-top: calc(21 * var(--u)); }
+/* The signup panel carries four fields plus a five-line requirements box,
+   so it is by some distance the tallest of the three. Only its own
+   interior is tightened — never the brand or headline above it, which
+   must not move between panels (see the reserved panel height above). */
+#landing-page:has(#panel-signup.active) .auth-panel-header { margin-bottom: calc(12 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-panel-title { margin-bottom: calc(6 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-field-group { margin-bottom: calc(7 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-label { margin-bottom: calc(4 * var(--u)); font-size: calc(13.5 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-input { height: calc(38 * var(--u)); font-size: calc(14.5 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-requirements-box { margin-bottom: calc(8 * var(--u)); }
+#landing-page:has(#panel-signup.active) .btn-landing-primary { height: calc(50 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-panel-footer { margin-top: calc(12 * var(--u)); }
 
 /* ─── Right Hero Column (Full-bleed Map Artwork) ───────────── */
 /* Anchored to the viewport edges so the raster's own top, right

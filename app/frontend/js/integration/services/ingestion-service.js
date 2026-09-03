@@ -36,6 +36,17 @@ export const ingestionService = {
     return apiClient.post('/api/ingestions/preview/commit', { project_id: pid });
   },
 
+  /**
+   * The sheets and columns an upload may contain.
+   *
+   * Generated on the server from the extractor's own column table, so the
+   * downloadable template describes what the parser actually reads rather than
+   * a list maintained separately in the frontend and free to drift from it.
+   */
+  async getUploadSchema() {
+    return apiClient.get('/api/ingestions/preview/schema');
+  },
+
   async getActivePreview(projectId = null) {
     return apiClient.get('/api/ingestions/preview/active', {
       project_id: projectId || getActiveProjectId(),

@@ -128,7 +128,7 @@ def main() -> int:
     threading.Thread(target=server.serve_forever, daemon=True).start()
     time.sleep(1.0)
 
-    email = f"proto-{uuid.uuid4().hex[:8]}@example.com"
+    email = f"proto-{uuid.uuid4().hex[:8]}@kearney.com"
     password = "Netgravity@2026"
     errors: list = []
 
@@ -152,6 +152,7 @@ def main() -> int:
         page.fill("#signup-name", "Prototype Tester")
         page.fill("#signup-email", email)
         page.fill("#signup-password", password)
+        page.fill("#signup-password-confirm", password)
         page.screenshot(path=str(SHOTS / "p02_signup.png"))
         page.evaluate("window.completeAuth('signup')")
         page.wait_for_selector("#create-project-page:not(.hidden)", timeout=30000)

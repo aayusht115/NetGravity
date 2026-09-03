@@ -23,6 +23,10 @@ import {
   reportAnalysisStage,
 } from './analysis-loading.js';
 import { clearNetworkModel } from './data.js';
+import {
+  bindWorkspaceTopbar, recordActivity, showInfoPanel, workspaceTopbarHtml,
+} from './workspace-chrome.js';
+import { firstNameOf, getCurrentUser } from './identity.js';
 
 /* ─── Workspace data ───────────────────────────────────────────────
    Populated from the backend for the signed-in user. Phase 10.0 removed
@@ -76,6 +80,37 @@ function regionLabel(p) {
     : text;
 }
 
+/**
+ * The mark beside a region name.
+ *
+ * The mock shows a country flag. Regional-indicator emoji are the only way to
+ * write one in text, and Windows ships no font that draws them — Chrome on
+ * Windows renders 🇮🇳 as the two letters "IN", which reads as a rendering
+ * fault rather than a flag. A pin is drawn identically everywhere and says the
+ * same thing: this is where the network is.
+ */
+const REGION_PIN = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="2.8"/></svg>`;
+
+/**
+ * What kind of workspace this is, from what the server says about it.
+ *
+ * There is no project `type` on the backend — `ProjectRecord` carries name,
+ * region, client, description, status and the bound snapshot — so this reports
+ * the workspace's actual stage rather than inventing a category. A project
+ * with a network bound is a network the user has designed; one without is
+ * still being set up; the bundled synthetic workspace is neither.
+ */
+function projectType(p) {
+  if (p.isDemo) return { label: 'Sample network', tone: 'sample' };
+  if (p.hasNetwork) return { label: 'Network design', tone: 'design' };
+  return { label: 'Awaiting setup', tone: 'setup' };
+}
+
+function typeChip(p) {
+  const t = projectType(p);
+  return `<span class="proj-type-chip tone-${t.tone}">${escapeHtml(t.label)}</span>`;
+}
+
 /* ─── View state ─────────────────────────────────────────────── */
 const ui = {
   /* 'first' when the user has just created an account (no projects yet),
@@ -85,7 +120,19 @@ const ui = {
   search: '',
   sort: 'updated',
   view: 'list',
+  /* Filters, applied on top of the search term. Every value is a real
+     property of the record the server returned — there is no filter here
+     for a field the backend does not have. */
+  filters: { status: '', owner: '', region: '' },
+  /* 'loading' | 'ready' | 'error' — what the list is currently doing, so the
+     screen can say so rather than showing one empty table for all three. */
+  listState: 'loading',
+  listError: '',
 };
+
+function activeFilterCount() {
+  return Object.values(ui.filters).filter(Boolean).length;
+}
 
 /* The project currently open in the app shell — set on create/open, read
    by the topbar's Upload Data button (see app.js) so a mid-session
@@ -94,27 +141,24 @@ let currentProject = null;
 
 /* ─── Icons ──────────────────────────────────────────────────── */
 const ICONS = {
-  logo: `<svg class="proj-logo-svg" viewBox="0 0 48 48" fill="none">
-      <line x1="10" y1="10" x2="10" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
-      <line x1="38" y1="10" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
-      <line x1="12" y1="12" x2="36" y2="36" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
-      <circle cx="10" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-      <circle cx="38" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-      <circle cx="10" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-      <circle cx="38" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-    </svg>`,
   file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
   globe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z"/></svg>`,
   client: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V6a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15"/><path d="M13 10h6a1 1 0 0 1 1 1v10"/><line x1="8" y1="9" x2="8" y2="9.01"/><line x1="8" y1="13" x2="8" y2="13.01"/><line x1="8" y1="17" x2="8" y2="17.01"/><line x1="17" y1="14" x2="17" y2="14.01"/><line x1="17" y1="18" x2="17" y2="18.01"/></svg>`,
   folder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>`,
-  arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
   chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>`,
   plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
   kebab: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg>`,
   search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>`,
   grid: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/></svg>`,
   list: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>`,
-  help: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.85.83c0 1.67-2.45 2.5-2.45 2.5"/><line x1="12" y1="17" x2="12" y2="17"/></svg>`,
+  uploadCloud: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.5a4 4 0 0 0-1-7.87 6 6 0 0 0-11.6 1.5A3.5 3.5 0 0 0 6 17"/><polyline points="9 13 12 10 15 13"/><line x1="12" y1="10" x2="12" y2="19"/></svg>`,
+  filter: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="21 4 3 4 10 12.2 10 18.5 14 20.5 14 12.2 21 4"/></svg>`,
+  chevronDown: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
+  folderSolid: `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.2 6.6A2 2 0 0 1 5.2 4.8h3.4a1 1 0 0 1 .8.4l1.2 1.6h8.2a2 2 0 0 1 2 2v8.8a2 2 0 0 1-2 2H5.2a2 2 0 0 1-2-2z"/></svg>`,
+  upload: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 9 12 4 17 9"/><line x1="12" y1="4" x2="12" y2="16"/></svg>`,
+  pencil: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>`,
+  copy: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+  open: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`,
 };
 
 /* Decorative flow-lines wash, bottom right of both screens. */
@@ -130,27 +174,11 @@ function decorSvg() {
   return `<svg class="proj-decor" viewBox="0 0 760 520" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${curves}${dots}</svg>`;
 }
 
-function brandLockup() {
-  return `<div class="proj-brand" data-action="returnToLanding" title="Back to Netgravity">
-      ${ICONS.logo}
-      <div>
-        <div class="proj-brand-title">Netgravity</div>
-        <div class="proj-brand-sub">by Kearney</div>
-      </div>
-    </div>`;
-}
-
-/* Decorative-only lockup (no click-to-landing) — used on screens reachable
-   mid-session, where the logo shouldn't double as a sign-out shortcut. */
-function brandLockupStatic() {
-  return `<div class="proj-brand proj-brand-static">
-      ${ICONS.logo}
-      <div>
-        <div class="proj-brand-title">Netgravity</div>
-        <div class="proj-brand-sub">by Kearney</div>
-      </div>
-    </div>`;
-}
+/* The brand lockup these screens used to render for themselves now comes from
+   the shared top bar — see workspaceTopbarHtml() in js/workspace-chrome.js.
+   Two nearly-identical local copies, one of which linked to the landing page
+   and one of which did not, were the reason the same logo signed you out on
+   one screen and did nothing on the next. */
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => (
@@ -172,50 +200,68 @@ export function renderCreateProject() {
   const clientOpts = CLIENTS.map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
 
   page.innerHTML = `
-    ${decorSvg()}
-    ${brandLockup()}
-    <div class="proj-create-body">
-      <div class="proj-create-head">
-        <h1 class="proj-create-title">Create Project</h1>
-        <p class="proj-create-sub">Set up a logistics network workspace to analyze, simulate, and optimize decisions.</p>
-      </div>
+    ${workspaceTopbarHtml()}
+    <div class="proj-scroll">
+      ${decorSvg()}
+      <div class="proj-create-body">
+        <button type="button" class="proj-back-pill" id="proj-create-back">
+          ${ICONS.chevronLeft}<span>Back</span>
+        </button>
 
-      <form class="proj-form-card" id="proj-create-form" novalidate>
-        <div class="proj-form-row split">
-          <span class="proj-row-icon">${ICONS.file}</span>
-          <div class="proj-field-pair">
-            <div>
-              <label class="proj-field-label" for="proj-name">Project name</label>
-              <input class="proj-input" id="proj-name" type="text" placeholder="Enter project name" autocomplete="off" />
-            </div>
-            <span class="proj-row-icon">${ICONS.globe}</span>
-            <div>
-              <label class="proj-field-label" for="proj-region">Region / Scope <span class="proj-field-optional">(optional)</span></label>
-              <select class="proj-select placeholder" id="proj-region">
-                <option value="">Infer from my uploaded data</option>
-                ${regionOpts}
-              </select>
-            </div>
-          </div>
+        <div class="proj-create-head">
+          <h1 class="proj-create-title">Create Project</h1>
+          <p class="proj-create-sub">Set up a logistics network workspace to analyze, simulate, and optimize decisions.</p>
         </div>
 
-        <div class="proj-form-row">
-          <span class="proj-row-icon">${ICONS.client}</span>
-          <div>
-            <label class="proj-field-label" for="proj-client">Client <span class="proj-field-optional">(optional)</span></label>
-            <input class="proj-input" id="proj-client" type="text" list="proj-client-list" placeholder="Who is this network for?" autocomplete="off" />
-            <datalist id="proj-client-list">${clientOpts}</datalist>
+        <form class="proj-form-card" id="proj-create-form" novalidate>
+          <div class="proj-form-row split">
+            <span class="proj-row-icon">${ICONS.file}</span>
+            <div class="proj-field-pair">
+              <div>
+                <label class="proj-field-label" for="proj-name">Project name</label>
+                <input class="proj-input" id="proj-name" type="text" placeholder="Enter project name" autocomplete="off" />
+              </div>
+              <span class="proj-row-icon">${ICONS.globe}</span>
+              <div>
+                <label class="proj-field-label" for="proj-region">Region / Scope <span class="proj-field-optional">(optional)</span></label>
+                <select class="proj-select placeholder" id="proj-region"
+                        aria-describedby="proj-region-hint">
+                  <option value="">Infer from my uploaded data</option>
+                  ${regionOpts}
+                </select>
+                <!-- What this field decides is not guessable from its label,
+                     and leaving it blank is the better answer more often than
+                     not. Saying so here is cheaper than a user finding out
+                     from a map of the wrong continent. -->
+                <div class="proj-field-hint" id="proj-region-hint">
+                  Sets the map and currency. Left blank, it is read from the
+                  coordinates in your data.
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-      </form>
 
-      <div class="proj-create-actions">
-        <button type="button" class="proj-btn-primary" id="proj-create-submit">Proceed to upload data</button>
-        <div class="proj-error" id="proj-create-error"></div>
-        <button type="button" class="proj-link-btn" id="proj-create-cancel">${cancelLabel}</button>
+          <div class="proj-form-row">
+            <span class="proj-row-icon">${ICONS.client}</span>
+            <div>
+              <label class="proj-field-label" for="proj-client">Client <span class="proj-field-optional">(optional)</span></label>
+              <input class="proj-input" id="proj-client" type="text" list="proj-client-list" placeholder="Who is this network for?" autocomplete="off" />
+              <datalist id="proj-client-list">${clientOpts}</datalist>
+            </div>
+          </div>
+        </form>
+
+        <div class="proj-create-actions">
+          <button type="button" class="proj-btn-primary proj-btn-lg" id="proj-create-submit">
+            ${ICONS.uploadCloud}<span>Proceed to upload data</span>
+          </button>
+          <div class="proj-error" id="proj-create-error"></div>
+          <button type="button" class="proj-link-btn" id="proj-create-cancel">${cancelLabel}</button>
+        </div>
       </div>
     </div>`;
 
+  bindWorkspaceTopbar(page, { help: 'create' });
   bindCreateProject();
 }
 
@@ -229,15 +275,35 @@ function bindCreateProject() {
     sel?.addEventListener('change', () => sel.classList.toggle('placeholder', !sel.value));
   });
 
-  nameInput?.addEventListener('input', () => { if (errorEl) errorEl.textContent = ''; });
+  nameInput?.addEventListener('input', () => {
+    if (errorEl) errorEl.textContent = '';
+    nameInput.removeAttribute('aria-invalid');
+  });
 
-  document.getElementById('proj-create-submit')?.addEventListener('click', () => {
+  const submitBtn = document.getElementById('proj-create-submit');
+  const submitLabel = submitBtn?.querySelector('span');
+  let submitting = false;
+
+  const submit = () => {
+    // One project per press. Without this a double-click — or Enter held down
+    // — created two workspaces, and the second was the one the user landed in
+    // while the first sat in their list with no data and no explanation.
+    if (submitting) return;
+
     const name = (nameInput?.value || '').trim();
     if (!name) {
-      if (errorEl) errorEl.textContent = 'Give the project a name to continue.';
+      if (errorEl) {
+        errorEl.textContent = 'Give the project a name — it is how you will '
+          + 'find this network later.';
+      }
+      nameInput?.setAttribute('aria-invalid', 'true');
       nameInput?.focus();
       return;
     }
+
+    submitting = true;
+    if (submitBtn) submitBtn.disabled = true;
+    if (submitLabel) submitLabel.textContent = 'Creating project…';
 
     const payload = {
       name,
@@ -257,35 +323,66 @@ function bindCreateProject() {
       PROJECTS.forEach((p, i) => { p.rank = i + 1; });
       currentProject = project;
       setActiveProject(project.id);
+      recordActivity(`Project “${project.name}” created.`, 'success');
 
       // Data upload/AI ingestion is the next step, not the app itself —
       // see js/ingestion.js for Upload Data → mapping → network build.
       if (typeof window.showUploadData === 'function') window.showUploadData(project);
       else enterApp();
     }).catch((err) => {
+      // Say what happened and what to do about it. The button comes back so
+      // the attempt can be repeated — a failed create used to leave the screen
+      // exactly as it was, with no indication anything had been tried.
       if (errorEl) {
-        errorEl.textContent = err?.message || 'The project could not be created.';
+        errorEl.textContent = `${err?.message || 'The project could not be created.'} `
+          + 'Nothing was saved — check the name and try again.';
       }
+      submitting = false;
+      if (submitBtn) submitBtn.disabled = false;
+      if (submitLabel) submitLabel.textContent = 'Proceed to upload data';
     });
+  };
+
+  submitBtn?.addEventListener('click', submit);
+  // Enter anywhere in the form submits it, as it would in any form.
+  document.getElementById('proj-create-form')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+      e.preventDefault();
+      submit();
+    }
   });
 
-  document.getElementById('proj-create-cancel')?.addEventListener('click', () => {
+  // Both routes out of this screen go to the same place — the pill at the top
+  // and the link under the button — so the user does not have to work out
+  // which of two "back" controls is the real one.
+  const leave = () => {
     if (ui.createOrigin === 'first') {
       hideProjectPages();
       if (typeof window.returnToLanding === 'function') window.returnToLanding();
     } else {
       showSelectProject();
     }
-  });
+  };
+  document.getElementById('proj-create-cancel')?.addEventListener('click', leave);
+  document.getElementById('proj-create-back')?.addEventListener('click', leave);
 }
 
 /* ═══════════════════════════════════════════════════════════════
    SELECT PROJECT
    ═══════════════════════════════════════════════════════════════ */
+function matchesFilters(p) {
+  const f = ui.filters;
+  if (f.status && p.status !== f.status) return false;
+  if (f.owner && p.owner !== f.owner) return false;
+  if (f.region && (p.region || '(none)') !== f.region) return false;
+  return true;
+}
+
 function visibleProjects() {
   const q = ui.search.trim().toLowerCase();
-  const list = PROJECTS.filter(p =>
-    !q || p.name.toLowerCase().includes(q) || p.region.toLowerCase().includes(q));
+  const list = PROJECTS.filter(p => matchesFilters(p)).filter(p =>
+    !q || p.name.toLowerCase().includes(q) || (p.region || '').toLowerCase().includes(q)
+    || (p.client || '').toLowerCase().includes(q));
 
   const sorters = {
     updated: (a, b) => a.rank - b.rank,
@@ -295,9 +392,32 @@ function visibleProjects() {
   return list.slice().sort(sorters[ui.sort] || sorters.updated);
 }
 
+/**
+ * The server's own status, coloured by what it means.
+ *
+ * "Analysis ready" is the state the mock calls "Ready to view"; a workspace
+ * with nothing ingested says so instead of borrowing the ready wording.
+ */
 function statusChip(status) {
-  const cls = status === 'In progress' ? 'proj-chip-progress' : 'proj-chip-draft';
+  const cls = status === 'Analysis ready' ? 'proj-chip-ready'
+    : status === 'Awaiting data' ? 'proj-chip-waiting'
+      : 'proj-chip-draft';
   return `<span class="proj-chip ${cls}">${escapeHtml(status)}</span>`;
+}
+
+/** Region with its flag, or the three-state label when none is stated. */
+function regionCell(p) {
+  if (!p.region) return regionLabel(p);
+  return `<span class="proj-region"><span class="proj-flag">${REGION_PIN}</span>${regionLabel(p)}</span>`;
+}
+
+function rowActions(p) {
+  return `<div class="proj-row-actions">
+      <button class="proj-open-outline" type="button" data-open="${p.id}">Open</button>
+      <button class="proj-kebab" type="button" data-menu="${p.id}"
+              aria-haspopup="menu" aria-expanded="false"
+              aria-label="More actions for ${escapeHtml(p.name)}">${ICONS.kebab}</button>
+    </div>`;
 }
 
 function recentCard(p) {
@@ -306,31 +426,73 @@ function recentCard(p) {
         <span class="proj-folder-tile">${ICONS.folder}</span>
         <div class="proj-recent-meta">
           <div class="proj-recent-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
-          <div class="proj-recent-when">Last opened &nbsp;·&nbsp; ${escapeHtml(p.updated)}</div>
+          <div class="proj-recent-region">${regionCell(p)}</div>
         </div>
       </div>
-      <button class="proj-open-btn" type="button" data-open="${p.id}">
-        <span>Open project</span>${ICONS.arrowRight}
-      </button>
+      <div class="proj-recent-foot">
+        ${statusChip(p.status)}
+        ${rowActions(p)}
+      </div>
     </div>`;
 }
 
 function listBody(rows) {
+  // Still fetching: skeleton rows, so the screen reads as "loading" rather
+  // than "you have no projects".
+  if (ui.listState === 'loading' && !rows.length) {
+    return `<div class="proj-table-wrap" aria-busy="true">
+        <div class="proj-skeleton" role="status">
+          <span class="sr-only">Loading your projects…</span>
+          <div class="proj-skeleton-row"></div>
+          <div class="proj-skeleton-row"></div>
+          <div class="proj-skeleton-row"></div>
+        </div>
+      </div>`;
+  }
+
+  // The fetch failed. Say what failed and offer the one action that helps,
+  // rather than an empty table that reads as an answer.
+  if (ui.listState === 'error' && !rows.length) {
+    return `<div class="proj-table-wrap"><div class="proj-empty">
+        <strong>Your projects could not be loaded</strong>
+        ${escapeHtml(ui.listError)}.<br>
+        Your work is on the server, not in this page — nothing has been lost.
+        <div><button type="button" class="proj-btn-primary" data-empty="retry">Try again</button></div>
+      </div></div>`;
+  }
+
   if (!rows.length) {
-    return `<div class="proj-table-wrap"><div class="proj-empty">No projects match “${escapeHtml(ui.search)}”.</div></div>`;
+    const narrowed = ui.search.trim() || activeFilterCount();
+    const body = ui.search.trim()
+      ? `<strong>No projects match “${escapeHtml(ui.search)}”</strong>
+         Try a shorter search term, or clear it to see everything.`
+      : activeFilterCount()
+        ? `<strong>No projects match these filters</strong>
+           ${activeFilterCount()} filter${activeFilterCount() === 1 ? ' is' : 's are'} applied.`
+        : `<strong>No projects yet</strong>
+           A project is one logistics network — its data, its baseline and every
+           scenario you run against it.`;
+    const action = narrowed
+      ? '<div><button type="button" class="proj-btn-primary" data-empty="clear">Clear search and filters</button></div>'
+      : '<div><button type="button" class="proj-btn-primary" data-empty="create">Create your first project</button></div>';
+    return `<div class="proj-table-wrap"><div class="proj-empty">${body}${action}</div></div>`;
   }
 
   if (ui.view === 'grid') {
     return `<div class="proj-card-grid">${rows.map(p => `
-      <div class="proj-grid-card" data-open="${p.id}">
+      <div class="proj-grid-card">
         <div class="proj-recent-top">
           <span class="proj-folder-tile">${ICONS.folder}</span>
           <div class="proj-recent-meta">
             <div class="proj-recent-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</div>
-            <div class="proj-recent-when">${regionLabel(p)}</div>
+            <div class="proj-recent-region">${regionCell(p)}</div>
           </div>
         </div>
-        <div class="proj-grid-foot"><span>${escapeHtml(p.updated)}</span>${statusChip(p.status)}</div>
+        <div class="proj-grid-chips">${typeChip(p)}${statusChip(p.status)}</div>
+        <div class="proj-recent-foot">
+          <span class="proj-grid-when">${escapeHtml(p.updated)}</span>
+          ${rowActions(p)}
+        </div>
       </div>`).join('')}</div>`;
   }
 
@@ -338,23 +500,20 @@ function listBody(rows) {
       <table class="proj-table">
         <thead>
           <tr>
-            <th>Project name</th><th>Region / Scope</th><th>Last updated</th>
-            <th>Owner</th><th>Status</th><th></th>
+            <th>Project name</th><th>Type</th><th>Region / Scope</th>
+            <th>Status</th><th class="proj-th-actions">Actions</th>
           </tr>
         </thead>
         <tbody>
           ${rows.map(p => `
-            <tr data-open="${p.id}">
-              <td><span class="proj-row-name">${ICONS.folder}${escapeHtml(p.name)}</span></td>
-              <td>${regionLabel(p)}</td>
-              <td>${escapeHtml(p.updated)}</td>
-              <td><span class="proj-chip proj-chip-owner">${escapeHtml(p.owner)}</span></td>
+            <tr>
+              <td><span class="proj-row-name">
+                <span class="proj-row-folder">${ICONS.folderSolid}</span>${escapeHtml(p.name)}
+              </span></td>
+              <td>${typeChip(p)}</td>
+              <td>${regionCell(p)}</td>
               <td>${statusChip(p.status)}</td>
-              <!-- A "More options" kebab sat here with no handler and no
-                   menu: clicking it did nothing, on every row, forever.
-                   Removed rather than left as a promise the product does
-                   not keep. Restore it with the menu, not before. -->
-              <td></td>
+              <td class="proj-td-actions">${rowActions(p)}</td>
             </tr>`).join('')}
         </tbody>
       </table>
@@ -365,50 +524,63 @@ export function renderSelectProject() {
   const page = document.getElementById('select-project-page');
   if (!page) return;
 
-  const recents = PROJECTS.slice().sort((a, b) => a.rank - b.rank).slice(0, 3);
+  const recents = PROJECTS.slice().sort((a, b) => a.rank - b.rank).slice(0, 2);
+  const filterCount = activeFilterCount();
+  const sortLabel = { updated: 'Last updated', name: 'Name', status: 'Status' }[ui.sort]
+    || 'Last updated';
 
   page.innerHTML = `
-    ${decorSvg()}
-    ${brandLockupStatic()}
-    <button class="proj-back-btn" type="button" id="proj-select-back">${ICONS.chevronLeft}<span>Back</span></button>
-    <button class="proj-help-btn" type="button" title="Help">${ICONS.help}</button>
-
-    <div class="proj-select-body">
-      <div class="proj-select-head">
-        <div>
-          <h1 class="proj-select-title">Select or create a project</h1>
-          <p class="proj-select-sub">Work on your logistics networks, analyze performance, and run AI-powered scenarios.</p>
+    ${workspaceTopbarHtml({ variant: 'wide' })}
+    <div class="proj-scroll">
+      <div class="proj-select-body">
+        ${selectCameFromApp ? `
+        <button type="button" class="proj-back-pill" id="proj-select-back">
+          ${ICONS.chevronLeft}<span>Back to ${escapeHtml(currentProject ? currentProject.name : 'the workspace')}</span>
+        </button>` : ''}
+        <div class="proj-select-head">
+          <div>
+            <h1 class="proj-select-title">Welcome back, ${escapeHtml(firstNameOf(getCurrentUser()))}! <span class="proj-wave">👋</span></h1>
+            <p class="proj-select-sub">Plan, analyze and optimise your logistics networks with AI-powered scenarios.</p>
+          </div>
+          <button class="proj-btn-primary" type="button" id="proj-new-btn">${ICONS.plus}<span>Create new project</span></button>
         </div>
-        <button class="proj-btn-primary" type="button" id="proj-new-btn">${ICONS.plus}<span>Create new project</span></button>
-      </div>
 
-      <div class="proj-section-title">Recent projects</div>
-      <div class="proj-recent-grid">${recents.map(recentCard).join('')}</div>
-
-      <div class="proj-section-title">All projects</div>
-      <div class="proj-toolbar">
-        <div class="proj-search-wrap">
-          <span class="proj-search-icon">${ICONS.search}</span>
-          <input class="proj-search" id="proj-search" type="search" placeholder="Search projects" value="${escapeHtml(ui.search)}" autocomplete="off" />
+        ${recents.length ? `
+        <div class="proj-section-row">
+          <div class="proj-section-title">Recent projects</div>
+          <button class="proj-viewall" type="button" id="proj-view-all">View all</button>
         </div>
-        <div class="proj-toolbar-right">
-          <label class="proj-sort">Sort by:
-            <select id="proj-sort">
-              <option value="updated"${ui.sort === 'updated' ? ' selected' : ''}>Last updated</option>
-              <option value="name"${ui.sort === 'name' ? ' selected' : ''}>Name</option>
-              <option value="status"${ui.sort === 'status' ? ' selected' : ''}>Status</option>
-            </select>
-          </label>
-          <div class="proj-view-toggle">
-            <button class="proj-view-btn${ui.view === 'grid' ? ' active' : ''}" type="button" data-view="grid" title="Grid view">${ICONS.grid}</button>
-            <button class="proj-view-btn${ui.view === 'list' ? ' active' : ''}" type="button" data-view="list" title="List view">${ICONS.list}</button>
+        <div class="proj-recent-grid">${recents.map(recentCard).join('')}</div>` : ''}
+
+        <div class="proj-section-row" id="proj-all-anchor">
+          <div class="proj-section-title">All projects</div>
+        </div>
+        <div class="proj-toolbar">
+          <div class="proj-search-wrap">
+            <span class="proj-search-icon">${ICONS.search}</span>
+            <input class="proj-search" id="proj-search" type="search" placeholder="Search projects by name" value="${escapeHtml(ui.search)}" autocomplete="off" />
+          </div>
+          <div class="proj-toolbar-right">
+            <button class="proj-tool-btn${filterCount ? ' active' : ''}" type="button" id="proj-filter-btn"
+                    aria-haspopup="dialog" aria-expanded="false">
+              ${ICONS.filter}<span>Filters</span>${filterCount ? `<span class="proj-tool-count">${filterCount}</span>` : ''}
+            </button>
+            <button class="proj-tool-btn" type="button" id="proj-sort-btn"
+                    aria-haspopup="menu" aria-expanded="false">
+              <span class="proj-tool-muted">Sort:</span><span>${escapeHtml(sortLabel)}</span>${ICONS.chevronDown}
+            </button>
+            <div class="proj-view-toggle">
+              <button class="proj-view-btn${ui.view === 'list' ? ' active' : ''}" type="button" data-view="list" title="List view" aria-label="List view">${ICONS.list}</button>
+              <button class="proj-view-btn${ui.view === 'grid' ? ' active' : ''}" type="button" data-view="grid" title="Grid view" aria-label="Grid view">${ICONS.grid}</button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div id="proj-list-slot">${listBody(visibleProjects())}</div>
+        <div id="proj-list-slot">${listBody(visibleProjects())}</div>
+      </div>
     </div>`;
 
+  bindWorkspaceTopbar(page, { help: 'projects' });
   bindSelectProject();
 }
 
@@ -417,12 +589,241 @@ function refreshList() {
   if (slot) slot.innerHTML = listBody(visibleProjects());
 }
 
+/* ─── Floating popovers (filters, sort, row menu) ─────────────── */
+function closeProjPopovers() {
+  document.querySelectorAll('.proj-pop').forEach(el => el.remove());
+  document.querySelectorAll('#select-project-page [aria-expanded="true"]')
+    .forEach(b => b.setAttribute('aria-expanded', 'false'));
+}
+
+function mountPop(anchor, className, html, { align = 'right' } = {}) {
+  closeProjPopovers();
+  const pop = document.createElement('div');
+  pop.className = `proj-pop ${className}`;
+  pop.innerHTML = html;
+  document.body.appendChild(pop);
+
+  const r = anchor.getBoundingClientRect();
+  const w = pop.offsetWidth;
+  const rawLeft = align === 'right' ? r.right - w : r.left;
+  pop.style.left = `${Math.round(Math.max(12, Math.min(rawLeft, window.innerWidth - w - 12)))}px`;
+  // Flip above the anchor when there is not room below, so a menu on the last
+  // row of a long list is not opened off the bottom of the screen.
+  const belowRoom = window.innerHeight - r.bottom;
+  const h = pop.offsetHeight;
+  pop.style.top = belowRoom < h + 16 && r.top > h + 16
+    ? `${Math.round(r.top - h - 8)}px`
+    : `${Math.round(r.bottom + 8)}px`;
+  anchor.setAttribute('aria-expanded', 'true');
+  return pop;
+}
+
+/** Distinct values actually present, so no filter offers an empty result. */
+function filterOptions() {
+  const uniq = (vals) => Array.from(new Set(vals.filter(Boolean))).sort();
+  return {
+    status: uniq(PROJECTS.map(p => p.status)),
+    owner: uniq(PROJECTS.map(p => p.owner)),
+    region: uniq(PROJECTS.map(p => p.region)),
+    hasUnset: PROJECTS.some(p => !p.region),
+  };
+}
+
+function openFilterPop(anchor) {
+  const o = filterOptions();
+  const group = (key, label, values, extra = '') => `
+    <div class="proj-pop-group">
+      <div class="proj-pop-label">${label}</div>
+      <div class="proj-pop-chips">
+        <button type="button" class="proj-pop-chip${ui.filters[key] ? '' : ' on'}" data-filter="${key}" data-value="">All</button>
+        ${values.map(v => `<button type="button" class="proj-pop-chip${ui.filters[key] === v ? ' on' : ''}" data-filter="${key}" data-value="${escapeHtml(v)}">${escapeHtml(v)}</button>`).join('')}
+        ${extra}
+      </div>
+    </div>`;
+
+  const pop = mountPop(anchor, 'proj-pop-filter', `
+    <div class="proj-pop-head">Filters</div>
+    ${group('status', 'Status', o.status)}
+    ${group('owner', 'Owner', o.owner)}
+    ${group('region', 'Region / Scope', o.region,
+    o.hasUnset ? `<button type="button" class="proj-pop-chip${ui.filters.region === '(none)' ? ' on' : ''}" data-filter="region" data-value="(none)">Not set</button>` : '')}
+    <div class="proj-pop-foot">
+      <button type="button" class="proj-pop-clear" id="proj-filter-clear">Clear all</button>
+    </div>`);
+
+  pop.addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-filter]');
+    if (chip) {
+      ui.filters[chip.dataset.filter] = chip.dataset.value;
+      closeProjPopovers();
+      renderSelectProject();
+      return;
+    }
+    if (e.target.closest('#proj-filter-clear')) {
+      ui.filters = { status: '', owner: '', region: '' };
+      closeProjPopovers();
+      renderSelectProject();
+    }
+  });
+}
+
+function openSortPop(anchor) {
+  const opts = [
+    ['updated', 'Last updated'],
+    ['name', 'Name'],
+    ['status', 'Status'],
+  ];
+  const pop = mountPop(anchor, 'proj-pop-menu', opts.map(([v, label]) => `
+    <button type="button" class="proj-pop-item${ui.sort === v ? ' on' : ''}" data-sort="${v}">
+      <span>${label}</span>${ui.sort === v ? '<span class="proj-pop-tick">✓</span>' : ''}
+    </button>`).join(''));
+
+  pop.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-sort]');
+    if (!item) return;
+    ui.sort = item.dataset.sort;
+    closeProjPopovers();
+    renderSelectProject();
+  });
+}
+
+/**
+ * The per-project menu.
+ *
+ * Every entry does something this build can actually do. There is no Delete
+ * because there is no delete endpoint — `/api/projects/<id>` accepts GET, PUT
+ * and PATCH only — and a Delete that silently fails is worse than none.
+ */
+function openRowMenu(anchor, id) {
+  const p = PROJECTS.find(x => x.id === id);
+  if (!p) return;
+  const readOnly = p.owner === 'Sample';
+
+  const pop = mountPop(anchor, 'proj-pop-menu', `
+    <button type="button" class="proj-pop-item" data-act="open">${ICONS.open}<span>Open project</span></button>
+    <button type="button" class="proj-pop-item" data-act="upload">${ICONS.upload}<span>Upload data</span></button>
+    <button type="button" class="proj-pop-item" data-act="rename"${readOnly ? ' disabled title="The bundled sample workspace cannot be renamed."' : ''}>${ICONS.pencil}<span>Rename…</span></button>
+    <div class="proj-pop-sep"></div>
+    <button type="button" class="proj-pop-item" data-act="copy">${ICONS.copy}<span>Copy project ID</span></button>`);
+
+  pop.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-act]');
+    if (!item || item.disabled) return;
+    const act = item.dataset.act;
+    closeProjPopovers();
+    if (act === 'open') { openProject(id); return; }
+    if (act === 'upload') {
+      currentProject = p;
+      setActiveProject(p.id);
+      if (typeof window.showUploadData === 'function') window.showUploadData(p);
+      return;
+    }
+    if (act === 'rename') { openRenameDialog(p); return; }
+    if (act === 'copy') {
+      const done = () => recordActivity(`Project ID copied: ${p.id}`);
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(p.id).then(done).catch(() => {
+          showInfoPanel('Project ID', `<p><code>${escapeHtml(p.id)}</code></p>`);
+        });
+      } else {
+        showInfoPanel('Project ID', `<p><code>${escapeHtml(p.id)}</code></p>`);
+      }
+    }
+  });
+}
+
+/** Rename through `PUT /api/projects/<id>`, the endpoint that already exists. */
+function openRenameDialog(p) {
+  const close = showInfoPanel('Rename project', `
+    <label class="proj-field-label" for="proj-rename-input">Project name</label>
+    <input class="proj-input" id="proj-rename-input" type="text"
+           value="${escapeHtml(p.name)}" autocomplete="off" />
+    <div class="proj-error" id="proj-rename-error"></div>
+    <div class="proj-modal-actions">
+      <button type="button" class="proj-link-btn" id="proj-rename-cancel">Cancel</button>
+      <button type="button" class="proj-btn-primary" id="proj-rename-save">Save name</button>
+    </div>`);
+
+  const input = document.getElementById('proj-rename-input');
+  const err = document.getElementById('proj-rename-error');
+  input?.focus();
+  input?.select();
+
+  const save = () => {
+    const name = (input?.value || '').trim();
+    if (!name) { if (err) err.textContent = 'A project needs a name.'; return; }
+    if (name === p.name) { close(); return; }
+    projectService.updateProject(p.id, { name })
+      .then((updated) => {
+        const mapped = mapProjectRecord(updated);
+        const idx = PROJECTS.findIndex(x => x.id === p.id);
+        if (idx >= 0) PROJECTS[idx] = { ...mapped, rank: PROJECTS[idx].rank };
+        if (currentProject && currentProject.id === p.id) currentProject = PROJECTS[idx];
+        const nameEl = document.getElementById('topbar-current-project-name');
+        if (nameEl && currentProject && currentProject.id === p.id) {
+          nameEl.textContent = mapped.name;
+        }
+        recordActivity(`Project renamed to “${mapped.name}”.`, 'success');
+        close();
+        renderSelectProject();
+      })
+      .catch((e) => {
+        if (err) err.textContent = e?.message || 'The project could not be renamed.';
+      });
+  };
+
+  document.getElementById('proj-rename-save')?.addEventListener('click', save);
+  document.getElementById('proj-rename-cancel')?.addEventListener('click', close);
+  input?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); save(); }
+  });
+}
+
 function bindSelectProject() {
   const page = document.getElementById('select-project-page');
   if (!page) return;
 
   document.getElementById('proj-new-btn')?.addEventListener('click', () => showCreateProject('existing'));
+
+  // Only rendered when this screen was opened from inside the app; a user who
+  // has just signed in has nothing to go back to but the landing page, and the
+  // account menu is where signing out belongs.
   document.getElementById('proj-select-back')?.addEventListener('click', backFromSelectProject);
+
+  // "View all" is a jump to the full list, and it drops the filters and search
+  // that are hiding rows from it — a link labelled "view all" that scrolls to a
+  // filtered list would show fewer projects than it promises.
+  document.getElementById('proj-view-all')?.addEventListener('click', () => {
+    const hadNarrowing = ui.search.trim() || activeFilterCount();
+    ui.search = '';
+    ui.filters = { status: '', owner: '', region: '' };
+    if (hadNarrowing) renderSelectProject();
+    document.getElementById('proj-all-anchor')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
+  const filterBtn = document.getElementById('proj-filter-btn');
+  filterBtn?.addEventListener('click', () => {
+    const open = document.querySelector('.proj-pop-filter');
+    closeProjPopovers();
+    if (!open) openFilterPop(filterBtn);
+  });
+
+  const sortBtn = document.getElementById('proj-sort-btn');
+  sortBtn?.addEventListener('click', () => {
+    const open = document.querySelector('.proj-pop-menu');
+    closeProjPopovers();
+    if (!open) openSortPop(sortBtn);
+  });
+
+  // One dismisser, replaced on every render rather than stacked.
+  if (window.__projDismiss) document.removeEventListener('click', window.__projDismiss);
+  window.__projDismiss = (e) => {
+    if (e.target.closest('.proj-pop')) return;
+    if (e.target.closest('#proj-filter-btn, #proj-sort-btn, .proj-kebab')) return;
+    closeProjPopovers();
+  };
+  document.addEventListener('click', window.__projDismiss);
 
   const search = document.getElementById('proj-search');
   // `input` alone is not enough on `<input type="search">`.
@@ -446,9 +847,6 @@ function bindSelectProject() {
     if (e.key === 'Escape') { search.value = ''; applySearch(); }
   });
 
-  const sort = document.getElementById('proj-sort');
-  sort?.addEventListener('change', () => { ui.sort = sort.value; refreshList(); });
-
   page.querySelectorAll('.proj-view-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       ui.view = btn.dataset.view;
@@ -457,12 +855,51 @@ function bindSelectProject() {
     });
   });
 
-  // One delegated handler covers recent cards, table rows and grid cards.
-  page.addEventListener('click', e => {
-    if (e.target.closest('[data-noopen]')) return;
-    const opener = e.target.closest('[data-open]');
-    if (opener) openProject(opener.dataset.open);
-  });
+  // One delegated handler covers recent cards, table rows, grid cards and the
+  // per-row menu — attached to the page element ONCE, not once per render.
+  //
+  // `renderSelectProject` replaces this element's innerHTML but not the element
+  // itself, so re-binding here stacked a second identical listener on every
+  // re-render. Two listeners meant a kebab click opened the menu and then
+  // immediately closed it, and a rename — which re-renders — made every row
+  // menu on the screen stop working.
+  if (page.dataset.delegated !== '1') {
+    page.dataset.delegated = '1';
+    page.addEventListener('click', e => {
+      // The empty and error states offer the one action that helps. They are
+      // delegated because `refreshList()` re-renders the list slot on every
+      // keystroke in the search box WITHOUT re-running this binder — a handler
+      // attached to the button by id survived the first render and no other,
+      // so "Clear search and filters" silently stopped working the moment the
+      // search that produced it was typed.
+      const empty = e.target.closest('[data-empty]');
+      if (empty) {
+        const act = empty.dataset.empty;
+        if (act === 'create') { showCreateProject('existing'); return; }
+        if (act === 'clear') {
+          ui.search = '';
+          ui.filters = { status: '', owner: '', region: '' };
+          renderSelectProject();
+          return;
+        }
+        if (act === 'retry') { showSelectProject(); return; }
+      }
+
+      const menuBtn = e.target.closest('[data-menu]');
+      if (menuBtn) {
+        const open = document.querySelector('.proj-pop-menu');
+        closeProjPopovers();
+        if (!open) openRowMenu(menuBtn, menuBtn.dataset.menu);
+        return;
+      }
+      if (e.target.closest('[data-noopen]')) return;
+      const opener = e.target.closest('[data-open]');
+      if (opener) openProject(opener.dataset.open);
+    });
+    page.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeProjPopovers();
+    });
+  }
 }
 
 /** Called by ingestion.js once a newly created project's data has been
@@ -551,19 +988,32 @@ export function showSelectProject() {
   hideLanding();
   hideProjectPages();
   if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
-  
-  // Asynchronously fetch projects from backend and update view
+
+  // The screen says which of three things is true, rather than showing the
+  // same empty table for all of them: still fetching, fetched and empty, or
+  // the fetch failed. It used to render an empty list immediately and refresh
+  // only on a NON-EMPTY response — so a user with no projects, and a user
+  // whose request had failed, both saw the identical "no projects" table with
+  // no way to tell that anything had gone wrong or was still happening.
+  ui.listState = PROJECTS.length ? 'ready' : 'loading';
+  ui.listError = '';
+
   projectService.listProjects().then(remoteProjects => {
-    if (remoteProjects && remoteProjects.length > 0) {
-      remoteProjects.forEach(rp => {
-        const mapped = mapProjectRecord(rp);
-        const idx = PROJECTS.findIndex(p => p.id === mapped.id);
-        if (idx >= 0) PROJECTS[idx] = mapped;
-        else PROJECTS.push(mapped);
-      });
-      renderSelectProject();
-    }
-  }).catch(e => console.warn('Project listing sync note:', e));
+    (remoteProjects || []).forEach(rp => {
+      const mapped = mapProjectRecord(rp);
+      const idx = PROJECTS.findIndex(p => p.id === mapped.id);
+      if (idx >= 0) PROJECTS[idx] = { ...mapped, rank: PROJECTS[idx].rank };
+      else PROJECTS.push(mapped);
+    });
+    PROJECTS.forEach((p, i) => { if (!p.rank) p.rank = i + 1; });
+    ui.listState = 'ready';
+    renderSelectProject();
+  }).catch(e => {
+    console.warn('Project listing sync note:', e);
+    ui.listState = 'error';
+    ui.listError = e?.message || 'the workspace list could not be reached';
+    renderSelectProject();
+  });
 
   renderSelectProject();
   const page = document.getElementById('select-project-page');
@@ -586,8 +1036,16 @@ function backFromSelectProject() {
 function enterAppAsIs() {
   hideProjectPages();
   if (typeof window.hideIngestionPages === 'function') window.hideIngestionPages();
+  // Both, as everywhere else that puts the landing page away. `.hidden` is
+  // what the rest of the application reads to tell whether the landing page
+  // is up — including the rule in landing.css that pins the document to the
+  // viewport while it is, which would otherwise keep the app shell from
+  // scrolling on this path.
   const landing = document.getElementById('landing-page');
-  if (landing) landing.style.display = 'none';
+  if (landing) {
+    landing.classList.add('hidden');
+    landing.style.display = 'none';
+  }
   const shell = document.querySelector('.app-shell');
   if (shell) shell.style.display = 'flex';
   const fab = document.getElementById('floating-chatbot-fab');

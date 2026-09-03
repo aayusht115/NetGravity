@@ -27,6 +27,12 @@ import {
   beginAnalysisLoading, endAnalysisLoading, reportAnalysisStage,
 } from './analysis-loading.js';
 import { ingestionService } from './integration/services/ingestion-service.js';
+import {
+  bindWorkspaceTopbar, recordActivity, showInfoPanel, workspaceTopbarHtml,
+} from './workspace-chrome.js';
+import {
+  buildTemplateWorkbook, saveBlob, templateFilename,
+} from './template-download.js';
 
 /* The "mapped to" dropdown's options.
    Served by the parser (`schemaFields`) so the list is exactly the set of
@@ -100,7 +106,6 @@ const I = {
   chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>`,
   chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>`,
   arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
-  help: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
   uploadCloud: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.5a4 4 0 0 0-1-7.87 6 6 0 0 0-11.6 1.5A3.5 3.5 0 0 0 6 17"/><polyline points="9 13 12 10 15 13"/><line x1="12" y1="10" x2="12" y2="19"/></svg>`,
   paperclip: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
@@ -123,6 +128,9 @@ const I = {
   fileGeneric: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
   filesStack: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h9l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M4 7v13a1 1 0 0 0 1 1h1"/></svg>`,
   rupee: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="4" x2="18" y2="4"/><line x1="6" y1="8" x2="18" y2="8"/><path d="M6 8c5 0 8 1.5 8 4.5S11 17 6 17"/><line x1="6" y1="17" x2="15" y2="21"/></svg>`,
+  download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.4"/><line x1="12" y1="11" x2="12" y2="16.5"/><line x1="12" y1="7.8" x2="12" y2="7.81"/></svg>`,
+  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
 };
 
 /* ─── Flow flow ─────────────────────────────────────────────── */
@@ -146,6 +154,15 @@ const flow = {
   //: Files (0)" and there was no route to the file, the mapping, the quality
   //: findings or the ingestion time behind its own numbers.
   dataset: null,
+  //: How many uploads are still being read by the server.
+  //:
+  //: The file appears in the list the moment it is chosen, but the parse that
+  //: produces the columns, the row counts and the mapping takes several
+  //: seconds for a real workbook. "Continue to AI Analysis" used to be enabled
+  //: on the first of those and not the second, so continuing promptly opened
+  //: the mapping-review screen — whose whole purpose is to show what was
+  //: parsed — with nothing parsed: no columns, no rows, "Not read".
+  parsing: 0,
 };
 
 let uidCounter = 0;
@@ -165,45 +182,30 @@ function classifyExt(filename) {
   return { ext, kind: null };
 }
 
-const LOGO_SVG = `<svg class="ing-brand-logo" viewBox="0 0 48 48" fill="none">
-      <line x1="10" y1="10" x2="10" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
-      <line x1="38" y1="10" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
-      <line x1="12" y1="12" x2="36" y2="36" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
-      <circle cx="10" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-      <circle cx="38" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-      <circle cx="10" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-      <circle cx="38" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-    </svg>`;
-
 /* ─── Shared chrome ──────────────────────────────────────────── */
 /**
- * The ingestion screens' own top bar.
+ * The mapping-review screens' header: the shared top bar, then a Back pill.
  *
- * The avatar chip is left empty and filled by `applyIdentity()` — these
+ * These screens had a fourth, narrower bar of their own, carrying a help
+ * button with no handler on it. The bar now comes from
+ * `js/workspace-chrome.js`, so the account control, the activity feed and the
+ * help panel are the same three the project screens have — and all three do
+ * something. `.ing-back-home-btn` keeps its class, because these screens' own
+ * bindings look it up by that name.
+ *
+ * The avatar chip is still left empty and filled by `applyIdentity()`: the
  * screens re-render several times during an upload, and each render used to
- * restore the hard-coded "AK" for "Amit Kumar" over whoever was signed in.
+ * restore a hard-coded "AK" for "Amit Kumar" over whoever was signed in.
  */
 function topbar() {
-  // Re-apply after this markup lands in the DOM.
   setTimeout(() => {
     if (typeof window.applyIdentity === 'function') window.applyIdentity();
   }, 0);
-  return topbarHtml();
-}
-
-function topbarHtml() {
-  return `<div class="ing-topbar">
-      <div class="ing-topbar-left">
-        <div class="ing-brand">
-          ${LOGO_SVG}
-          <span class="ing-brand-name">Netgravity</span>
-        </div>
-      </div>
-      <div class="ing-topbar-right">
-        <button class="ing-back-home-btn" type="button">${I.chevronLeft}<span>Back</span></button>
-        <button class="topbar-icon-btn" type="button" title="Help & Documentation">${I.help}</button>
-        <div class="user-avatar-ak"></div>
-      </div>
+  return `${workspaceTopbarHtml()}
+    <div class="ing-subbar">
+      <button class="proj-back-pill ing-back-home-btn" type="button">
+        ${I.chevronLeft}<span>Back</span>
+      </button>
     </div>`;
 }
 
@@ -214,8 +216,14 @@ function topbarHtml() {
 function goBack() {
   if (flow.cameFromApp) {
     hideIngestionPages();
+    // `.hidden` as well as the inline style: it is what the rest of the
+    // application reads to tell whether the landing page is up, including
+    // the rule that pins the document to the viewport while it is.
     const landing = document.getElementById('landing-page');
-    if (landing) landing.style.display = 'none';
+    if (landing) {
+      landing.classList.add('hidden');
+      landing.style.display = 'none';
+    }
     const shell = document.querySelector('.app-shell');
     if (shell) shell.style.display = 'flex';
     const fab = document.getElementById('floating-chatbot-fab');
@@ -231,93 +239,137 @@ function goBack() {
 /* ═══════════════════════════════════════════════════════════════
    UPLOAD DATA
    ═══════════════════════════════════════════════════════════════ */
-function fileRowHtml(f) {
+/**
+ * One attached file, as a card.
+ *
+ * The six-column table this replaces did not fit the mock's right-hand
+ * column, and half of it repeated the same value on every row ("Uploaded",
+ * "Just now"). The card keeps every fact the table carried — name, kind,
+ * size, when, status — and reads at 380px.
+ */
+function fileCardHtml(f) {
   const label = f.kind === 'pdf' ? 'PDF' : f.kind.toUpperCase();
   const sub = f.kind === 'pdf' ? 'Contract or rate document' : 'Tabular network dataset';
-  return `<tr data-file-id="${f.id}">
-      <td>
-        <div class="ing-file-name-cell">
-          <span class="ing-file-icon type-${f.kind}">${f.ext.toUpperCase()}</span>
-          <div>
-            <div class="ing-file-meta-name">${ingEsc(f.name)}</div>
-            <div class="ing-file-meta-sub">${sub}</div>
-          </div>
-        </div>
-      </td>
-      <td><span class="ing-type-chip type-${f.kind}">${label}</span></td>
-      <td>${formatFileSize(f.sizeBytes)}</td>
-      <td>${ingEsc(f.uploadedAt)}</td>
-      <td><span class="ing-status-chip">${I.checkCircle}Uploaded</span></td>
-      <td><button class="ing-row-delete" type="button" data-remove="${f.id}" title="Remove file">${I.trash}</button></td>
-    </tr>`;
+  const failed = (flow.parseErrors || {})[f.id];
+  // Three states, and they are different facts: still being read, read, or not
+  // readable. "Uploaded" on all three is what let the review screen be opened
+  // for a file the server had not finished with.
+  const state = failed
+    ? `<div class="ing-file-failed">${I.warning}<span>Not parsed — ${ingEsc(failed)}</span></div>`
+    : f.status === 'parsing'
+      ? `<div class="ing-file-ok"><span class="ing-type-chip type-${f.kind}">${label}</span><span class="ing-status-chip reading"><span class="ing-spinner"></span>Reading…</span></div>`
+      : `<div class="ing-file-ok"><span class="ing-type-chip type-${f.kind}">${label}</span><span class="ing-status-chip">${I.checkCircle}Uploaded</span></div>`;
+  return `<div class="ing-file-card${failed ? ' failed' : ''}" data-file-id="${f.id}">
+      <span class="ing-file-icon type-${f.kind}">${ingEsc(f.ext.toUpperCase())}</span>
+      <div class="ing-file-card-main">
+        <div class="ing-file-meta-name" title="${ingEsc(f.name)}">${ingEsc(f.name)}</div>
+        <div class="ing-file-meta-sub">${sub} &middot; ${formatFileSize(f.sizeBytes)} &middot; ${ingEsc(f.uploadedAt)}</div>
+        ${state}
+      </div>
+      <button class="ing-row-delete" type="button" data-remove="${f.id}"
+              title="Remove ${ingEsc(f.name)}" aria-label="Remove ${ingEsc(f.name)}">${I.trash}</button>
+    </div>`;
+}
+
+/** The right-hand column: the files attached in this visit, or why there are none. */
+function uploadedPanelHtml() {
+  if (!flow.files.length) {
+    return `<div class="ing-empty-files">
+        <span class="ing-empty-tile">${I.folder}</span>
+        <div class="ing-empty-title">No files uploaded yet</div>
+        <div class="ing-empty-sub">Add at least one file to continue.</div>
+      </div>`;
+  }
+  return `<div class="ing-file-list">${flow.files.map(fileCardHtml).join('')}</div>`;
 }
 
 function renderUploadData() {
   const page = document.getElementById('upload-data-page');
   if (!page) return;
 
-  const rows = flow.files.map(fileRowHtml).join('');
-  const tableOrEmpty = flow.files.length
-    ? `<table class="ing-file-table">
-        <thead><tr><th>File name</th><th>Type</th><th>Size</th><th>Uploaded on</th><th>Status</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`
-    : `<div class="ing-empty-files">No files uploaded yet — add at least one to continue.</div>`;
-
   page.innerHTML = `
-    <div class="ing-body">
-      ${topbar()}
-      <h1 class="ing-title">Upload &amp; Align Network Datasets</h1>
-      <p class="ing-subtitle">Upload CSVs, Excel order books, or Rate Card PDFs. NetGravity's AI will automatically align and prepare your data.</p>
-
-      ${currentDatasetHtml()}
-
-      <div class="ing-card">
-        <div class="ing-card-title">1. Upload Datasets</div>
-        <div class="ing-card-sub">Supported formats: Excel (.xlsx, .xls), CSV (.csv), PDF (.pdf) &middot; up to 25MB each</div>
-        <div class="ing-dropzone" id="ing-dropzone" tabindex="0" role="button">
-          <span class="ing-dropzone-icon">${I.uploadCloud}</span>
-          <div class="ing-dropzone-main">Drag &amp; drop your files here</div>
-          <div class="ing-dropzone-or">or</div>
-          <button type="button" class="ing-attach-btn" id="ing-attach-btn">${I.paperclip}<span>Attach files</span></button>
+    ${workspaceTopbarHtml()}
+    <div class="proj-scroll">
+      <div class="ing-body">
+        <div class="ing-head-row">
+          <div>
+            <h1 class="ing-title">Upload &amp; Align Network Datasets</h1>
+            <p class="ing-subtitle">Upload your network data files. Netgravity's AI will automatically align and prepare your data for analysis.</p>
+          </div>
+          <button type="button" class="proj-back-pill ing-back-home-btn">
+            ${I.chevronLeft}<span>Back</span>
+          </button>
         </div>
-        <input type="file" id="ing-file-input" accept=".xlsx,.xls,.csv,.pdf" multiple hidden />
-        <div class="ing-error" id="ing-upload-error"></div>
-      </div>
 
-      <div class="ing-card">
-        <div class="ing-card-head-row">
-          <div class="ing-card-title">2. Uploaded Files <span class="ing-count-badge">(${flow.files.length})</span></div>
-          <button type="button" class="ing-add-more" id="ing-add-more">${I.paperclip}<span>Add more files</span></button>
+        ${currentDatasetHtml()}
+
+        <div class="ing-split">
+          <div class="ing-card">
+            <div class="ing-card-title">
+              <span class="ing-card-icon">${I.folder}</span>
+              <span>1. Upload Datasets</span>
+            </div>
+            <div class="ing-card-sub">Supported formats: Excel (.xlsx, .xls), CSV (.csv), PDF (.pdf)</div>
+            <ul class="ing-card-bullets"><li>Up to 25MB per file</li></ul>
+            <div class="ing-dropzone" id="ing-dropzone" tabindex="0" role="button"
+                 aria-label="Drag and drop your files here, or press to choose files">
+              <span class="ing-dropzone-icon">${I.uploadCloud}</span>
+              <div class="ing-dropzone-main">Drag &amp; drop your files here</div>
+              <div class="ing-dropzone-or">or</div>
+              <button type="button" class="ing-attach-btn" id="ing-attach-btn">${I.paperclip}<span>Attach files</span></button>
+            </div>
+            <input type="file" id="ing-file-input" accept=".xlsx,.xls,.csv,.pdf" multiple hidden />
+            <div class="ing-error" id="ing-upload-error"></div>
+            <div class="ing-card-foot">
+              <button type="button" class="ing-foot-link" id="ing-template-btn">
+                ${I.download}<span>Download template</span>
+              </button>
+              <button type="button" class="ing-foot-link" id="ing-help-btn">
+                ${I.info}<span>Need help?</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="ing-card">
+            <div class="ing-card-head-row">
+              <div class="ing-card-title">
+                <span class="ing-card-icon">${I.fileGeneric}</span>
+                <span>2. Uploaded Files <span class="ing-count-badge">(${flow.files.length})</span></span>
+              </div>
+              <button type="button" class="ing-add-more" id="ing-add-more">${I.plus}<span>Add more files</span></button>
+            </div>
+            <div id="ing-file-table-slot">${uploadedPanelHtml()}</div>
+          </div>
         </div>
-        <div id="ing-file-table-slot">${tableOrEmpty}</div>
-      </div>
 
-      <div class="ing-footer-bar">
-        <button type="button" class="ing-skip-link" id="ing-skip-btn">Skip for now, I'll upload data later</button>
-        <button type="button" class="proj-btn-primary" id="ing-continue-btn" ${flow.files.length ? '' : 'disabled'}>
-          <span>Continue to AI Analysis</span>${I.arrowRight}
-        </button>
+        <div class="ing-footer-bar">
+          <button type="button" class="ing-skip-link" id="ing-skip-btn">Skip for now</button>
+          <button type="button" class="proj-btn-primary" id="ing-continue-btn" ${flow.files.length ? '' : 'disabled'}>
+            <span>Continue to AI Analysis</span>${I.arrowRight}
+          </button>
+        </div>
       </div>
     </div>`;
 
+  bindWorkspaceTopbar(page, { help: 'upload' });
   bindUploadData();
 }
 
 function refreshFileTable() {
   const slot = document.getElementById('ing-file-table-slot');
-  if (slot) {
-    slot.innerHTML = flow.files.length
-      ? `<table class="ing-file-table">
-          <thead><tr><th>File name</th><th>Type</th><th>Size</th><th>Uploaded on</th><th>Status</th><th></th></tr></thead>
-          <tbody>${flow.files.map(fileRowHtml).join('')}</tbody>
-        </table>`
-      : `<div class="ing-empty-files">No files uploaded yet — add at least one to continue.</div>`;
-  }
+  if (slot) slot.innerHTML = uploadedPanelHtml();
   const badge = document.querySelector('#upload-data-page .ing-count-badge');
   if (badge) badge.textContent = `(${flow.files.length})`;
   const continueBtn = document.getElementById('ing-continue-btn');
-  if (continueBtn) continueBtn.disabled = flow.files.length === 0;
+  if (continueBtn) {
+    // Not while a file is still being read. The next screen exists to show
+    // what the parse found, and opening it mid-parse showed an empty mapping
+    // for a workbook that was about to arrive with 147 columns in it.
+    const busy = flow.parsing > 0;
+    continueBtn.disabled = flow.files.length === 0 || busy;
+    const label = continueBtn.querySelector('span');
+    if (label) label.textContent = busy ? 'Reading your file…' : 'Continue to AI Analysis';
+  }
 }
 
 async function addFiles(fileList) {
@@ -341,7 +393,7 @@ async function addFiles(fileList) {
       kind,
       sizeBytes: file.size,
       uploadedAt: 'Just now',
-      status: 'uploaded',
+      status: 'parsing',
     });
     validRawFiles.push({ id, file, name: file.name });
   });
@@ -349,6 +401,7 @@ async function addFiles(fileList) {
   if (rejected.length && errorEl) {
     errorEl.textContent = `Couldn't add: ${rejected.join(', ')}.`;
   }
+  if (validRawFiles.length) flow.parsing += 1;
   refreshFileTable();
 
   // Send real files to backend parser
@@ -408,6 +461,19 @@ async function addFiles(fileList) {
       // mapping for a file nobody read.
       flow.parseError = (err && err.message) || 'the file could not be parsed';
       console.warn('Backend extraction notice:', err);
+      validRawFiles.forEach((item) => {
+        flow.parseErrors = {
+          ...(flow.parseErrors || {}), [item.id]: flow.parseError,
+        };
+      });
+    } finally {
+      // In `finally`, so a failed parse re-enables the button rather than
+      // leaving the screen permanently stuck on "Reading your file…".
+      flow.parsing = Math.max(0, flow.parsing - 1);
+      validRawFiles.forEach((item) => {
+        const f = flow.files.find(x => x.id === item.id);
+        if (f && f.status === 'parsing') f.status = 'uploaded';
+      });
     }
     refreshFileTable();
   }
@@ -433,12 +499,18 @@ function bindUploadData() {
   dropzone?.addEventListener('drop', e => addFiles(e.dataTransfer?.files));
   fileInput?.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
 
-  document.getElementById('upload-data-page')?.addEventListener('click', e => {
-    const btn = e.target.closest('[data-remove]');
-    if (!btn) return;
-    flow.files = flow.files.filter(f => f.id !== btn.dataset.remove);
-    refreshFileTable();
-  });
+  // Once, not once per render: this element survives `renderUploadData`, which
+  // replaces its innerHTML, so re-binding here stacked a listener each time.
+  const page = document.getElementById('upload-data-page');
+  if (page && page.dataset.delegated !== '1') {
+    page.dataset.delegated = '1';
+    page.addEventListener('click', e => {
+      const btn = e.target.closest('[data-remove]');
+      if (!btn) return;
+      flow.files = flow.files.filter(f => f.id !== btn.dataset.remove);
+      refreshFileTable();
+    });
+  }
 
   document.getElementById('ing-skip-btn')?.addEventListener('click', () => {
     if (typeof window.enterApp === 'function') window.enterApp();
@@ -448,6 +520,86 @@ function bindUploadData() {
     if (!flow.files.length) return;
     startAiAnalysis();
   });
+
+  document.getElementById('ing-template-btn')?.addEventListener('click', downloadTemplate);
+  document.getElementById('ing-help-btn')?.addEventListener('click', showUploadHelp);
+}
+
+/**
+ * Hand the user a workbook with the parser's own sheet names and headers.
+ *
+ * The schema is fetched rather than assumed: `GET /api/ingestions/preview/schema`
+ * generates it from the extractor's column table, so the template can never
+ * offer a column the parser does not read. A failure says so and offers the
+ * field reference instead of downloading a file that would be a guess.
+ */
+async function downloadTemplate() {
+  const btn = document.getElementById('ing-template-btn');
+  const errorEl = document.getElementById('ing-upload-error');
+  if (btn) { btn.disabled = true; btn.classList.add('busy'); }
+  if (errorEl) errorEl.textContent = '';
+  try {
+    const res = await ingestionService.getUploadSchema();
+    const blob = buildTemplateWorkbook(res && res.sheets);
+    saveBlob(blob, templateFilename());
+    recordActivity('Upload template downloaded.', 'success');
+  } catch (err) {
+    if (errorEl) {
+      errorEl.textContent = `The template could not be built: `
+        + `${err?.message || 'the field list could not be fetched'}.`;
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.classList.remove('busy'); }
+  }
+}
+
+/**
+ * What this screen expects, and what happens next.
+ *
+ * The sheet and column list comes from the server so the help text and the
+ * template describe the same parser; if it cannot be reached the guidance that
+ * does not depend on it is still shown.
+ */
+async function showUploadHelp() {
+  const close = showInfoPanel('Uploading your network data', `
+    <p>Upload the workbook or CSVs describing your network. Every column is read,
+      shown back to you and mapped to a field this build understands before
+      anything is committed — nothing reaches the optimiser until you confirm
+      the mapping.</p>
+    <ul>
+      <li><strong>Excel (.xlsx, .xls)</strong> — one sheet per table. Sheets are
+        identified by their columns, not their names, so an unfamiliar sheet
+        name is fine.</li>
+      <li><strong>CSV (.csv)</strong> — one table per file.</li>
+      <li><strong>PDF (.pdf)</strong> — rate cards and contracts.</li>
+      <li>Up to 25 MB per file.</li>
+    </ul>
+    <div id="ing-help-schema"><p class="ing-help-loading">Loading the field list…</p></div>`);
+
+  try {
+    const res = await ingestionService.getUploadSchema();
+    const host = document.getElementById('ing-help-schema');
+    if (!host) return;
+    host.innerHTML = `
+      <p><strong>Tables this build reads</strong> — a column not listed here is
+        kept with the upload and marked as not used by the model.</p>
+      <div class="ing-help-tables">
+        ${(res.sheets || []).map((s) => `
+          <div class="ing-help-table">
+            <div class="ing-help-table-name">${ingEsc(s.sheet)}</div>
+            <div class="ing-help-cols">${(s.columns || [])
+    .map((c) => `<code>${ingEsc(c.header)}</code>`).join(' ')}</div>
+          </div>`).join('')}
+      </div>`;
+  } catch (err) {
+    const host = document.getElementById('ing-help-schema');
+    if (host) {
+      host.innerHTML = '<p>The field list could not be loaded just now. '
+        + 'Upload anything you have — every column is shown back to you for '
+        + 'review before it is used.</p>';
+    }
+  }
+  return close;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -964,8 +1116,9 @@ function renderExcelIngestion(file) {
   const r = 26, c = 2 * Math.PI * r;
 
   page.innerHTML = `
-    <div class="ing-body">
-      ${topbar()}
+    ${topbar()}
+    <div class="proj-scroll">
+      <div class="ing-body">
 
       <div class="ing-mapping-head">
         <div>
@@ -1034,6 +1187,7 @@ function renderExcelIngestion(file) {
         <button type="button" class="ing-footer-link" id="ing-review-flagged-btn">Review flagged only</button>
         <button type="button" class="proj-btn-primary" id="ing-confirm-mapping-btn"><span>Confirm mapping &amp; continue</span>${I.arrowRight}</button>
       </div>
+      </div>
     </div>`;
 
   bindExcelIngestion(file);
@@ -1085,6 +1239,7 @@ function bindExcelIngestion(file) {
     document.getElementById('ing-map-table-slot').innerHTML = mappingTableHtml(flow.mapping[file.id], reviewOnly);
   });
 
+  bindWorkspaceTopbar(document.getElementById('ingestion-page'), { help: 'upload' });
   document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', goBackInFlow);
   document.getElementById('ing-confirm-mapping-btn')?.addEventListener('click', () => {
     file.status = 'mapped';
@@ -1186,8 +1341,9 @@ function renderPdfIngestion(file) {
   const highConfidence = CONTRACT_VENDOR.extractedTerms.filter((t) => t.confidence === 'HIGH').length;
 
   page.innerHTML = `
-    <div class="ing-body">
-      ${topbar()}
+    ${topbar()}
+    <div class="proj-scroll">
+      <div class="ing-body">
 
       <div class="ing-pdf-layout">
         <h1 class="ing-title" style="font-size:calc(26*var(--u))">Contract terms</h1>
@@ -1231,6 +1387,7 @@ function renderPdfIngestion(file) {
           </div>
         </div>
       </div>
+      </div>
     </div>`;
 
   bindPdfIngestion(file);
@@ -1239,6 +1396,7 @@ function renderPdfIngestion(file) {
 function bindPdfIngestion(file) {
   const review = flow.pdfReview[file.id];
 
+  bindWorkspaceTopbar(document.getElementById('ingestion-page'), { help: 'upload' });
   document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', goBackInFlow);
 
   function refreshFindings() {

@@ -21,6 +21,15 @@
 
 import { authService } from './integration/services/auth-service.js';
 import { getCurrentUser } from './identity.js';
+import {
+  bindPasswordRequirements,
+  passwordMeetsPolicy,
+  passwordRejection,
+  renderRequirementItems,
+} from './auth.js';
+
+/** Repaints the checklist after the fields are cleared; set by render(). */
+let repaintRequirements = () => {};
 
 const MODAL_ID = 'account-security-overlay';
 
@@ -92,7 +101,7 @@ async function render() {
         <div class="ing-loading-row-left" style="flex-direction:column;align-items:flex-start">
           <div class="ing-loading-row-title">Change password</div>
           <div class="ing-loading-row-sub">
-            At least 12 characters. Every other session is signed out.
+            Every other session is signed out.
           </div>
           <input type="password" id="acct-current" class="auth-input"
                  style="margin-top:8px" placeholder="Current password"
@@ -100,6 +109,21 @@ async function render() {
           <input type="password" id="acct-new" class="auth-input"
                  style="margin-top:6px" placeholder="New password"
                  autocomplete="new-password">
+          <input type="password" id="acct-new-confirm" class="auth-input"
+                 style="margin-top:6px" placeholder="Confirm new password"
+                 autocomplete="new-password">
+          <!-- The same checklist the sign-up panel shows, driven by the same
+               rules from js/auth.js. One password policy, stated one way
+               wherever a password is chosen; the bare "At least 12
+               characters" line this replaces said a third of it. -->
+          <div class="auth-requirements-box" style="margin-top:8px;width:100%">
+            <div class="auth-requirements-header">
+              <span>Password must contain:</span>
+            </div>
+            <ul class="auth-requirements-list" id="acct-requirements-list">
+              ${renderRequirementItems()}
+            </ul>
+          </div>
           <button type="button" class="btn btn-secondary btn-sm"
                   id="acct-change-password" style="margin-top:8px">
             Change password
@@ -159,6 +183,7 @@ async function render() {
 
   document.getElementById('acct-close')?.addEventListener('click', close);
   document.getElementById('acct-change-password')?.addEventListener('click', changePassword);
+  repaintRequirements = bindPasswordRequirements('acct-new', 'acct-requirements-list');
   document.getElementById('acct-mfa-enrol')?.addEventListener('click', beginEnrolment);
   document.getElementById('acct-mfa-disable')?.addEventListener('click', disableMfa);
   document.getElementById('acct-revoke')?.addEventListener('click', revokeOthers);
@@ -168,11 +193,27 @@ async function render() {
 async function changePassword() {
   const current = document.getElementById('acct-current')?.value || '';
   const next = document.getElementById('acct-new')?.value || '';
+  const confirm = document.getElementById('acct-new-confirm')?.value || '';
+  // The same two checks the sign-up panel makes, in the same words. This
+  // screen used to send whatever was typed and relay the server's refusal,
+  // so a typo in a password nobody can read came back as a failed request.
+  if (!passwordMeetsPolicy(next)) {
+    // "below": on this screen the checklist sits under the fields, and the
+    // notice is at the top of the card.
+    notice(passwordRejection('listed below'), 'error');
+    return;
+  }
+  if (confirm !== next) {
+    notice('The two passwords do not match. Re-enter them to continue.', 'error');
+    return;
+  }
   try {
     await authService.changePassword(current, next);
     notice('Password changed. Other sessions have been signed out.', 'success');
     document.getElementById('acct-current').value = '';
     document.getElementById('acct-new').value = '';
+    document.getElementById('acct-new-confirm').value = '';
+    repaintRequirements();
   } catch (err) {
     notice(err?.message || 'Could not change the password.', 'error');
   }
