@@ -26,6 +26,17 @@ export const PLANTS = [];
 
 export const DCS = [];
 
+/**
+ * The regions and product categories THIS network states — not a fixed list.
+ *
+ * Demand growth is something a client gives you in their own words ("chilled is
+ * up 20% in the South"), so a form that asks for it can only offer the labels
+ * their own upload carries. Both stay empty when the upload states none, and a
+ * form reading them must then say so rather than offering an invented list.
+ */
+export const NETWORK_REGIONS = [];
+export const PRODUCT_CATEGORIES = [];
+
 export const MARKETS = [];
 
 // ─── S2: de-overlap co-located nodes ──────────────────────────
@@ -465,6 +476,11 @@ export function clearNetworkModel() {
   LANES.length = 0;
   SCENARIOS.length = 0;
   EXTERNAL_SIGNALS.length = 0;
+  // Region and category labels belong to the network that stated them. Left
+  // behind, the previous client's regions would populate the next client's
+  // growth form.
+  NETWORK_REGIONS.length = 0;
+  PRODUCT_CATEGORIES.length = 0;
 
   Object.keys(FACILITY_KPIS).forEach((k) => delete FACILITY_KPIS[k]);
 
@@ -1097,6 +1113,25 @@ export function loadNetworkData(networkData) {
     ...PLANTS.map(p => ({ ...p, type: 'Plant' })),
     ...DCS.map(d => ({ ...d, type: 'DC' }))
   );
+
+  // Distinct region and category labels, in the upload's own spelling. Sorted
+  // for a stable dropdown; de-duplicated case-insensitively because "North" and
+  // "north" in two sheets are one region, not two.
+  const seenRegion = new Map();
+  [...PLANTS, ...DCS, ...MARKETS].forEach((n) => {
+    const r = (n && n.region ? String(n.region) : '').trim();
+    if (r && !seenRegion.has(r.toLowerCase())) seenRegion.set(r.toLowerCase(), r);
+  });
+  NETWORK_REGIONS.length = 0;
+  NETWORK_REGIONS.push(...[...seenRegion.values()].sort());
+
+  const seenCategory = new Map();
+  (networkData.products || []).forEach((p) => {
+    const c = (p && p.category ? String(p.category) : '').trim();
+    if (c && !seenCategory.has(c.toLowerCase())) seenCategory.set(c.toLowerCase(), c);
+  });
+  PRODUCT_CATEGORIES.length = 0;
+  PRODUCT_CATEGORIES.push(...[...seenCategory.values()].sort());
 
   if (networkData.lanes && networkData.lanes.length > 0) {
     LANES.length = 0;

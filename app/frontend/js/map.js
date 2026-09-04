@@ -777,7 +777,16 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
   if (isClosed) border = '3px dashed #94a3b8';
   if (isNew) border = '3px solid #6B2FA0';
 
-  const glyph = isClosed ? '⛔' : iconMap[type];
+  // A site the client PROPOSED and the solver did not take is drawn as an
+  // outline, not as a closure. Both arrive with `isOpen === false`; without
+  // this the map put a ⛔ on a warehouse that was never built and the tooltip
+  // said it had been "closed in this scenario".
+  const isCandidate = String(node.status || '').toUpperCase() === 'CANDIDATE';
+  const isUnbuiltCandidate = isCandidate && !isNew
+    && !(overrideStats && overrideStats.isOpen === true);
+  if (isUnbuiltCandidate) border = '3px dashed #6B2FA0';
+
+  const glyph = (isClosed && !isCandidate) ? '⛔' : iconMap[type];
   const badge = isNew
     ? '<span style="position:absolute;top:-6px;right:-8px;background:#6B2FA0;color:#fff;'
       + 'font-size:8px;font-weight:800;padding:1px 4px;border-radius:6px;letter-spacing:.04em">NEW</span>'
@@ -806,7 +815,9 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
 
   let tooltipContent = `<div style="font-size:12px;line-height:1.4"><strong>${node.name}</strong>`;
   if (isNew) tooltipContent += ' <span style="color:#6B2FA0;font-weight:700">(new in this scenario)</span>';
-  if (isClosed) tooltipContent += ' <span style="color:#dc2626;font-weight:700">(closed in this scenario)</span>';
+  if (isUnbuiltCandidate) tooltipContent += ' <span style="color:#6B2FA0;font-weight:700">(proposed site — not opened)</span>';
+  else if (isCandidate) tooltipContent += ' <span style="color:#6B2FA0;font-weight:700">(proposed site — opened by the optimiser)</span>';
+  if (isClosed && !isCandidate) tooltipContent += ' <span style="color:#dc2626;font-weight:700">(closed in this scenario)</span>';
   tooltipContent += '<br>';
   if (type === 'plant') {
     tooltipContent += `Capacity: ${formatNumber(node.capacity)} ${perPeriodLabel()}<br>Throughput: ${formatNumber(throughput)} ${perPeriodLabel()}`;

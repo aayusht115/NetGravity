@@ -328,6 +328,30 @@ def assemble_network_from_structure(
                 unknown_status.append(f"{fid} ({raw_status})")
             else:
                 missing_status.append(fid)
+        # One-time cost of opening a CANDIDATE site. `FacilityRecord.opening_cost`
+        # has always existed and `milp.py` has always charged it, but nothing
+        # ever set it from an upload, so it stayed at its 0.0 default: a
+        # proposed site with a stated ₹18 crore build cost was handed to the
+        # optimiser as free. Recorded only where the upload states it; a
+        # facility the client already operates is not charged an opening cost
+        # for staying open, which is what `is_candidate` guards in the MILP.
+        opening = _as_float(raw.get("openingCost"))
+        if opening is not None and opening > 0:
+            record.opening_cost = opening
+        elif role != NodeRole.MARKET and record.status == FacilityStatus.CANDIDATE:
+            assumptions.append(
+                f"{fid}: proposed site with no opening cost in the upload; "
+                f"the optimiser is told it costs nothing to build. Add an "
+                f"'opening_cost' column to price it."
+            )
+
+        # The region the facility sits in, as the extractor resolved it. Carried
+        # so demand and capacity can be reasoned about by region — the schema
+        # field existed and was never filled.
+        region = raw.get("region")
+        if region:
+            record.region = str(region)
+
         if capacity is not None and capacity > 0:
             if role == NodeRole.PLANT:
                 record.production_capacity_units_per_period = capacity
@@ -395,7 +419,12 @@ def assemble_network_from_structure(
             pid = str(p.get("id") or "").strip()
             if not pid:
                 continue
-            record = ProductRecord(id=pid, name=str(p.get("name") or pid))
+            category = str(p.get("category") or "").strip()
+            record = ProductRecord(
+                id=pid,
+                name=str(p.get("name") or pid),
+                category=category or None,
+            )
             # Unit weight drives the carbon calculation, which works in
             # tonne-kilometres. Leaving the 1.0 kg default in place while the
             # workbook says 0.42 kg overstated this product's emissions by more

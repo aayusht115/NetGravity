@@ -123,6 +123,10 @@ const THEME_COLORS = {
   dcHealthy:   0x047857, // Emerald (deep)
   dcWarning:   0xb45309, // Amber (deep)
   dcCritical:  0xb91c1c, // Red (deep)
+  // A site with no solved utilisation, and a site the client has only
+  // proposed. Neither is "healthy" — see the band selection below.
+  dcUnsolved:  0x94a3b8, // Slate 400
+  dcCandidate: 0x6b2fa0, // Kearney Purple — the same hue the map uses
   market:      0x075985, // Sky Blue (deep)
   marketGlow:  0x0ea5e9,
   flowActual:  0x334155, // Slate 700
@@ -863,10 +867,21 @@ function createDC3D(data, pos) {
   // Utilization Color Coding — same Healthy/Stress/Critical band data.js's
   // getUtilLabel owns everywhere else (85%/95%), just re-expressed in the
   // 3D theme's own color set.
-  let dcColor = THEME_COLORS.dcHealthy;
+  // Utilisation bands decide the colour ONLY when there is a utilisation.
+  //
+  // `getUtilLabel(null)` returns 'Not solved', which matched neither branch
+  // below and left `dcColor` on its healthy-emerald default — so an unsolved
+  // DC, and a site the client had merely proposed, both rendered as a solid
+  // green tower reading "comfortable". Same failure the facility panel had:
+  // absence of evidence drawn as evidence of health.
+  const isCandidateSite = String(data.status || '').toUpperCase() === 'CANDIDATE';
   const utilBand = getUtilLabel(data.utilPct);
-  if (utilBand === 'Critical') dcColor = THEME_COLORS.dcCritical;
+  let dcColor;
+  if (isCandidateSite && data.isOpen !== true) dcColor = THEME_COLORS.dcCandidate;
+  else if (utilBand === 'Critical') dcColor = THEME_COLORS.dcCritical;
   else if (utilBand === 'Stress') dcColor = THEME_COLORS.dcWarning;
+  else if (utilBand === 'Healthy') dcColor = THEME_COLORS.dcHealthy;
+  else dcColor = THEME_COLORS.dcUnsolved;
 
   // A DC's radius scales with utilisation, which is a solver output. With no
   // solve (or an infeasible one) it is null, and `null / 100` produced NaN —
@@ -1389,7 +1404,11 @@ function renderHUDTooltip(data, type, x, y) {
   } else if (type === 'dc') {
     const hasUtil = typeof data.utilPct === 'number' && Number.isFinite(data.utilPct);
     const utilColor = hasUtil ? getUtilColor(data.utilPct) : 'var(--text-3)';
-    typeBadge = `<span class="hud-badge dc">Distribution Centre</span>`;
+    // "Distribution Centre" is what the client RUNS. A proposal is not one yet.
+    const proposed = String(data.status || '').toUpperCase() === 'CANDIDATE';
+    typeBadge = proposed
+      ? `<span class="hud-badge dc">Distribution Centre</span> <span class="hud-badge dc">${data.isOpen === true ? 'proposed — opened by the optimiser' : 'proposed site — not opened'}</span>`
+      : `<span class="hud-badge dc">Distribution Centre</span>`;
     metricLine = `
       <div class="hud-row"><span>Utilisation:</span><strong style="color:${utilColor}">${hasUtil ? data.utilPct + '%' : '—'}</strong></div>
       <div class="hud-row"><span>Capacity / Flow:</span><strong>${formatNumber(data.throughput)} / ${formatNumber(data.capacity)} ${perPeriodLabel()}</strong></div>

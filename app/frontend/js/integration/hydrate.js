@@ -195,6 +195,8 @@ async function loadStructure(projectId) {
     plants: res.plants || [],
     dcs: res.dcs || [],
     markets: res.markets || [],
+    // Carried for their `category`, which is what demand growth is scoped by.
+    products: res.products || [],
     lanes: (res.lanes || []).map((l) => ({
       from: l.from,
       to: l.to,
@@ -436,6 +438,16 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
     // twin and the facility tables all show the same utilisation.
     if (node) {
       if (util !== null) node.utilPct = util;
+      // Utilisation in the busiest single period of the solved horizon, from
+      // the same solve as the average above. `utilPct` has always carried the
+      // horizon MEAN, and a mean is the one number that cannot answer what a
+      // multi-period model was built to answer: a site at 43% for the year can
+      // still be out of room in March. Left unset when the solve reported no
+      // peak, so a consumer can tell "no peak available" from "peak equals
+      // average" rather than inferring a seasonal profile the data never
+      // stated.
+      const peak = val(metrics.peak_utilization_pct);
+      if (peak !== null) node.peakUtilPct = peak;
       if (throughput !== null) node.throughput = throughput;
       // Whether the solver kept this site open. The facility tables printed a
       // green "Active" tag on every row unconditionally, including sites the

@@ -9,7 +9,8 @@
  * - Multi-Scenario Trade-off Analysis (Scenario Comparison)
  */
 
-import { SCENARIOS, DCS, PLANTS, MARKETS, formatNumber, formatCurrency,
+import { SCENARIOS, DCS, PLANTS, MARKETS, NETWORK_REGIONS, PRODUCT_CATEGORIES,
+         formatNumber, formatCurrency,
          SOLVE_HORIZON, currencyLabel, withCurrency } from './data.js';
 import { initMap, renderScenarioDigitalTwin, invalidateMapSize,
          revealMap } from './map.js';
@@ -1412,9 +1413,19 @@ function facilityOptionsHtml({ includePlants = false, includeAll = false } = {})
   }
   const all = includeAll
     ? '<option value="" selected>Every lane in the network</option>' : '';
+  // A candidate is a site the client gave us as a PROPOSAL. It belongs in this
+  // list — "pin it open" is exactly how you ask the model to commit to one, and
+  // it is the only way to test a site the client has actually screened rather
+  // than a point invented on the map. But it must be labelled: unlabelled, a
+  // proposed DC sat in a dropdown headed "one of my existing sites" and read as
+  // somewhere the client already operates.
   return all + source
-    .map((f, i) => `<option value="${f.id}"${(i === 0 && !includeAll) ? ' selected' : ''}>`
-      + `${f.name || f.id}</option>`)
+    .map((f, i) => {
+      const isCandidate = String(f.status || '').toUpperCase() === 'CANDIDATE';
+      const label = `${f.name || f.id}${isCandidate ? ' — proposed site' : ''}`;
+      return `<option value="${f.id}"${(i === 0 && !includeAll) ? ' selected' : ''}>`
+        + `${label}</option>`;
+    })
     .join('');
 }
 
@@ -1557,8 +1568,8 @@ function renderToolboxDynamicFields(type) {
     // keep open — so choosing one asked a question with a known answer. There
     // was no way to ask about a site that does not exist yet.
     setHeader('Open a Facility',
-      'Commit to keeping an existing site open, or propose a new one anywhere '
-      + 'in India.');
+      'Commit to a site already in your data — including one you supplied as a '
+      + 'proposal — or put a new one anywhere in India.');
     const handling = medianOf(DCS.map((d) => d.handlingCost));
     const fixed = medianOf(DCS.map((d) => d.fixedCostPerYear));
     const capacity = medianOf(DCS.map((d) => d.capacity));
@@ -1572,7 +1583,7 @@ function renderToolboxDynamicFields(type) {
         <label class="form-label">What kind of site?</label>
         <select class="form-select" id="toolbox-open-mode">
           <option value="NEW" selected>A new site — anywhere in India</option>
-          <option value="EXISTING">One of my existing sites, pinned open</option>
+          <option value="EXISTING">One of the sites already in my data</option>
         </select>
       </div>
 
@@ -1585,7 +1596,8 @@ function renderToolboxDynamicFields(type) {
           <div class="text-xs text-muted" style="margin-top:4px">
             Pins this site open for the whole solve. Useful when a contract or a
             commitment means it cannot be closed, even if closing it would be
-            cheaper.
+            cheaper — and the way to test a site marked "proposed site", which
+            the client supplied as a candidate but the optimiser has not taken.
           </div>
         </div>
       </div>
@@ -1672,23 +1684,55 @@ function renderToolboxDynamicFields(type) {
     // form must not ask for one. It used to fall into a generic branch that
     // rendered no facility field at all, while the submit path refused to run
     // without one. The scenario was unreachable from this modal.
+    // Growth arrives from a client as a figure for a part of their business —
+    // "chilled is up 20% in the South" — and the scope field here used to be a
+    // disabled box reading "Every market and product". A single network-wide
+    // multiplier is the wrong question: it loads every warehouse in the country
+    // with growth that is happening in one region, which overstates the case
+    // for expanding the ones that are not.
+    //
+    // The two selects offer only labels THIS upload states. Where it states
+    // none the select is not rendered at all, and the note says why, rather
+    // than offering a list of regions the data cannot be filtered by.
     setHeader('Change Demand',
-      'Scale every demand row up or down and re-solve. Useful for a peak-season '
-      + 'or a downturn case.');
+      'Scale demand up or down and re-solve — for the whole network, or for one '
+      + 'region or product category the client says is growing.');
+    const regionOpts = NETWORK_REGIONS.map((r) => `<option value="${r}">${r}</option>`).join('');
+    const categoryOpts = PRODUCT_CATEGORIES.map((c) => `<option value="${c}">${c}</option>`).join('');
+    const scopeNotes = [];
+    if (!NETWORK_REGIONS.length) {
+      scopeNotes.push('This upload states no region for its markets, so growth cannot be scoped by region.');
+    }
+    if (!PRODUCT_CATEGORIES.length) {
+      scopeNotes.push('This upload states no product category, so growth cannot be scoped by category.');
+    }
     container.innerHTML = `
-      <div class="grid-2" style="gap:var(--space-sm)">
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
         <div class="form-group">
           <label class="form-label">Demand change (%)</label>
           <input type="number" class="form-input" id="toolbox-amount" value="15" min="-90" max="200" step="5">
         </div>
+        ${NETWORK_REGIONS.length ? `
         <div class="form-group">
-          <label class="form-label">Scope</label>
-          <input type="text" class="form-input" value="Every market and product" disabled>
-        </div>
+          <label class="form-label">Region</label>
+          <select class="form-select" id="toolbox-demand-region">
+            <option value="" selected>Every region</option>
+            ${regionOpts}
+          </select>
+        </div>` : ''}
       </div>
+      ${PRODUCT_CATEGORIES.length ? `
+      <div class="form-group">
+        <label class="form-label">Product category</label>
+        <select class="form-select" id="toolbox-demand-category">
+          <option value="" selected>Every product</option>
+          ${categoryOpts}
+        </select>
+      </div>` : ''}
       <div class="text-xs text-muted" style="margin-top:6px">
-        Applies to all demand rows in the network. Per-market demand changes are
-        not exposed here.
+        Rows outside the chosen scope are left exactly as they are, not scaled by
+        zero. Naming both a region and a category narrows to their overlap.
+        ${scopeNotes.join(' ')}
       </div>
     `;
   } else if (type === 'CHANGE_TRANSPORT_COST') {
@@ -1959,6 +2003,12 @@ function readScenarioForm() {
     }
     // The form captures a percentage; the engine takes a multiplier.
     body.demand_multiplier = 1 + (amount / 100);
+    // Empty means "every one of them", which is what this form always did.
+    // Sent only when set, so an unscoped run is byte-identical to before.
+    const demandRegion = (document.getElementById('toolbox-demand-region')?.value || '').trim();
+    const demandCategory = (document.getElementById('toolbox-demand-category')?.value || '').trim();
+    if (demandRegion) body.demand_region = demandRegion;
+    if (demandCategory) body.demand_product_category = demandCategory;
 
   } else if (type === 'CHANGE_TRANSPORT_COST') {
     if (amount <= -100) {

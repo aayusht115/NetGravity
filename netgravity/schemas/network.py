@@ -493,6 +493,12 @@ class ProductRecord(BaseModel):
     """
     id:            str
     name:          str
+    #: The client's own grouping for this SKU ("Ambient", "Chilled", "Category
+    #: A"). Read from the upload, never inferred. Demand growth is stated by
+    #: category far more often than by SKU, so a scenario needs to be able to
+    #: name one; without this field the extractor's `category` value was parsed
+    #: and discarded before the network was built.
+    category:      Optional[str] = None
     unit:          str   = "units"       # base unit of measure
     weight_kg:     float = 1.0           # kg per base unit
     volume_m3:     float = 0.001         # m³ per base unit

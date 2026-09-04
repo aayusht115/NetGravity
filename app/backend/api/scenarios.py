@@ -437,6 +437,15 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             facility_ids=list(facility_ids),
             capacity_delta_units=cap_delta if action == ScenarioActionType.CHANGE_CAPACITY else None,
             demand_multiplier=demand_scale if action == ScenarioActionType.CHANGE_DEMAND else None,
+            # Growth the client states for one region and/or one product
+            # category. Empty string and missing are the same thing — no scope,
+            # i.e. the whole network, which is what this endpoint did before.
+            demand_region=(
+                (str(body.get("demand_region") or "").strip() or None)
+                if action == ScenarioActionType.CHANGE_DEMAND else None),
+            demand_product_category=(
+                (str(body.get("demand_product_category") or "").strip() or None)
+                if action == ScenarioActionType.CHANGE_DEMAND else None),
             transport_cost_multiplier=(
                 transport_mult if action == ScenarioActionType.CHANGE_TRANSPORT_COST else None),
             sla_days_delta=sla_delta if action == ScenarioActionType.CHANGE_SLA else None,

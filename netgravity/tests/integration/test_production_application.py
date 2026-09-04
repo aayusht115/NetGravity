@@ -406,6 +406,36 @@ class TestTheNetworkStatesItsOwnCurrencyAndGeography:
         assert body["currency"] == "INR"
         assert body["geography"].get("region") == "India"
 
+    def test_the_structure_endpoint_says_which_sites_are_only_proposed(self, client):
+        """
+        A proposed site and an operating one used to leave this endpoint
+        identical, so every screen downstream drew them the same way — the map,
+        the DC table, and the scenario builder's "sites already in my data"
+        dropdown all presented a warehouse the client has not built as one they
+        run today. The solver's own open/closed decision cannot substitute: it
+        answers a different question and comes from a different endpoint.
+        """
+        token = _signup(client, "struct-status@example.com")
+        res = client.get("/api/network/structure?project_id=pr-demo-case16",
+                         headers=_auth(token))
+        body = res.get_json()
+
+        sites = body["plants"] + body["dcs"]
+        assert sites, "the demo network must publish facilities"
+        assert all("status" in s for s in sites)
+
+        statuses = {s["id"]: s["status"] for s in sites}
+        assert "EXISTING" in statuses.values()
+        candidates = [fid for fid, st in statuses.items() if st == "CANDIDATE"]
+        assert candidates, f"case16 carries two candidate DCs; got {statuses}"
+
+        # A market is demand, not capacity, and carries no meaningful status.
+        assert all(m["status"] is None for m in body["markets"])
+
+        # Region and category are what demand growth is scoped by.
+        assert any(n.get("region") for n in sites + body["markets"])
+        assert all("category" in p for p in body["products"])
+
     def test_evidence_amounts_carry_the_networks_symbol(self, client):
         token = _signup(client, "ccy-evidence@example.com")
         res = client.get("/api/insights?project_id=pr-demo-case16",

@@ -2275,9 +2275,26 @@ function renderTwinStats() {
 
 /** The solver's open/closed decision for a facility, or "not solved". */
 function openStatusTag(node) {
-  if (node.isOpen === true) return '<span class="tag tag-success">Open</span>';
-  if (node.isOpen === false) return '<span class="tag tag-muted">Closed by solver</span>';
-  return '<span class="tag tag-muted">Not solved</span>';
+  // A site the client PROPOSED is not a site the solver CLOSED.
+  //
+  // Both arrive here with `isOpen === false` and, until this branch existed,
+  // both printed "Closed by solver" — which reads, for a candidate, as though
+  // the optimiser had shut down a working warehouse the client never built.
+  // The wording for an existing facility is unchanged, byte for byte.
+  const isCandidate = String(node.status || '').toUpperCase() === 'CANDIDATE';
+  if (node.isOpen === true) {
+    return isCandidate
+      ? '<span class="tag tag-success">Open</span> <span class="tag tag-info">newly opened</span>'
+      : '<span class="tag tag-success">Open</span>';
+  }
+  if (node.isOpen === false) {
+    return isCandidate
+      ? '<span class="tag tag-muted">Proposed — not opened</span>'
+      : '<span class="tag tag-muted">Closed by solver</span>';
+  }
+  return isCandidate
+    ? '<span class="tag tag-info">Proposed site</span>'
+    : '<span class="tag tag-muted">Not solved</span>';
 }
 
 function renderTwinTables() {
@@ -2315,8 +2332,15 @@ function renderTwinTables() {
       // tag saying a facility performs well on a facility that is not
       // operating. Operating status and utilisation health are different
       // facts and get different answers.
-      const label = hasUtil ? getUtilLabel(d.utilPct, d.isOpen) : 'Not solved';
-      const tagClass = hasUtil ? getUtilTagClass(d.utilPct, d.isOpen) : 'tag-muted';
+      // A proposed site the optimiser declined is not "Not selected" in the
+      // sense an existing DC is — it does not exist yet. Same distinction the
+      // map and the facility panel now make.
+      const isCand = String(d.status || '').toUpperCase() === 'CANDIDATE';
+      const notTaken = d.isOpen === false || !hasUtil;
+      const label = (isCand && notTaken) ? 'Proposed — not opened'
+        : hasUtil ? getUtilLabel(d.utilPct, d.isOpen) : 'Not solved';
+      const tagClass = (isCand && notTaken) ? 'tag-info'
+        : hasUtil ? getUtilTagClass(d.utilPct, d.isOpen) : 'tag-muted';
       return `
         <tr class="clickable-row" data-id="${d.id}">
           <td>${d.name}</td>
@@ -2361,13 +2385,100 @@ window.openFacilityPanel = function (facilityId) {
   const utilColor = getUtilColor(utilPct);
   const utilLabel = getUtilLabel(utilPct);
 
-  // S2 P0 #5: every facility needs a risk/bottleneck status, not just
-  // Delhi — derived from the same utilLabel already computed above (no new
-  // calculation), so the band can never drift from what the map/DC table
-  // already show for this facility.
-  const riskStatus = utilLabel === 'Critical' ? 'HIGH — Capacity Breach'
-    : utilLabel === 'Stress' ? 'MEDIUM — Approaching Capacity'
-      : 'LOW — Healthy Headroom';
+  // What the CLIENT said this site is — not what the solver decided to do with
+  // it. `openStatusTag` answers only the second question, so a proposed site
+  // the optimiser declined and a real DC it shut both read "Closed by solver",
+  // which is right for one of them and badly wrong for the other.
+  const isCandidate = String(fac.status || '').toUpperCase() === 'CANDIDATE';
+
+  // Utilisation in the busiest single period of the solved horizon, set by
+  // hydration from the solver's own `peak_utilization_pct`. Not a second
+  // calculation of the same thing: the average shown beside it and this peak
+  // are two readings the MILP already published together.
+  const peakPct = (fac.peakUtilPct === null || fac.peakUtilPct === undefined)
+    ? null : fac.peakUtilPct;
+
+  // A single-period solve has no busiest month to report — peak and average
+  // are arithmetically the same number. Printing it twice would imply a
+  // seasonal profile the upload never stated, so the panel says what is
+  // actually known instead (see the peak row below).
+  const solvedAvg = (fac.utilPct === null || fac.utilPct === undefined)
+    ? null : fac.utilPct;
+  const hasSeasonalProfile = peakPct !== null && solvedAvg !== null
+    && Math.abs(peakPct - solvedAvg) > 0.05;
+
+  // S2 P0 #5: every facility needs a risk/bottleneck status, not just Delhi.
+  //
+  // The band now reads from the PEAK where the solve reported one, not from
+  // the horizon average. Capacity is sized for the busiest period, so a site
+  // reporting "Healthy Headroom" on a yearly mean while breaching in one month
+  // is exactly the failure this row exists to prevent. Where no peak was
+  // reported the average still drives it, so a single-period solve behaves
+  // precisely as it did before.
+  //
+  // Note this is deliberately allowed to differ from the map and DC-table
+  // colouring, which remain on the average: those surfaces answer "how loaded
+  // is this network typically", this row answers "will this site hold".
+  const riskBasisPct = hasSeasonalProfile ? peakPct : utilPct;
+  const riskLabel = getUtilLabel(riskBasisPct);
+
+  // Whether there is a load to assess at all.
+  //
+  // This ternary used to have no such branch: anything that was not 'Critical'
+  // or 'Stress' fell through to "LOW — Healthy Headroom", and `getUtilLabel`
+  // returns 'Not solved' for a null utilisation. So a site the solver never
+  // ran, and a proposed site it declined to open, both announced healthy spare
+  // capacity — the most reassuring message on the panel, on the one facility
+  // that had produced no evidence whatsoever.
+  const riskKnown = riskBasisPct !== null && riskBasisPct !== undefined
+    && !Number.isNaN(Number(riskBasisPct));
+  const riskStatus = !riskKnown
+    ? (isCandidate ? 'Not opened — no load to assess' : 'Not solved')
+    : riskLabel === 'Critical' ? 'HIGH — Capacity Breach'
+      : riskLabel === 'Stress' ? 'MEDIUM — Approaching Capacity'
+        : 'LOW — Healthy Headroom';
+
+  // ---- Headroom, and the growth that would consume it ------------------
+  //
+  // The second half of the mentor feedback: not "how full is this site" but
+  // "what happens to it when demand grows". Both figures below are arithmetic
+  // on numbers already on the panel — capacity, and the solved utilisation at
+  // the busiest period — so they need no scenario run, no forecast and no
+  // model of their own.
+  //
+  // The growth figure is stated against THIS SITE'S OWN volume, not against
+  // network demand, and the wording says so. They are not the same number: a
+  // 10% national uplift does not land as 10% here, and the solver may re-route
+  // around this site entirely. Claiming otherwise would be inventing an
+  // allocation the model never produced.
+  const CRITICAL_PCT = 95;
+  const headroomBasis = riskKnown ? Number(riskBasisPct) : null;
+  const capacityUnits = Number(fac.capacity);
+  const headroomUnits = (headroomBasis !== null && Number.isFinite(capacityUnits)
+    && capacityUnits > 0)
+    ? capacityUnits * (1 - headroomBasis / 100)
+    : null;
+  const growthToBreachPct = (headroomBasis !== null && headroomBasis > 0)
+    ? (CRITICAL_PCT / headroomBasis - 1) * 100
+    : null;
+
+  const headroomRow = headroomUnits === null ? '' : `
+    <div class="fp-stat"><span class="fp-stat-label">Headroom${hasSeasonalProfile ? ' at peak' : ''}</span><span class="fp-stat-value">${formatNumber(Math.max(0, Math.round(headroomUnits)))} ${perPeriodLabel()}</span></div>`;
+
+  const growthRow = growthToBreachPct === null ? '' : (growthToBreachPct <= 0
+    ? `
+    <div class="fp-stat"><span class="fp-stat-label">Growth before breach</span><span class="fp-stat-value" style="color:var(--red)">already at or past ${CRITICAL_PCT}% — no room for growth</span></div>`
+    : `
+    <div class="fp-stat"><span class="fp-stat-label">Growth before breach</span><span class="fp-stat-value">+${growthToBreachPct.toFixed(0)}% <span style="color:var(--text-3);font-weight:400">on this site's own volume${hasSeasonalProfile ? ', at peak' : ''}</span></span></div>`);
+
+  // The peak row: the solved busiest-period reading where one exists, and an
+  // explicit statement of its absence where it does not. Never a repeat of the
+  // average dressed up as a second finding.
+  const peakRow = hasSeasonalProfile
+    ? `<div class="fp-stat"><span class="fp-stat-label">Utilisation (peak)</span><span class="fp-stat-value" style="color:${getUtilColor(peakPct)}">${peakPct}% <span class="tag ${getUtilTagClass(peakPct)}">${getUtilLabel(peakPct)}</span></span></div>`
+    : (peakPct !== null
+      ? `<div class="fp-stat"><span class="fp-stat-label">Utilisation (peak)</span><span class="fp-stat-value" style="color:var(--text-3);font-weight:400">single period modelled — no seasonal profile in this data</span></div>`
+      : '');
 
   // Was `facilityId === 'DC_DELHI'`, which pinned a hardcoded "Forecast Dec
   // 2026 — 10,800 units/day" panel to one prototype facility and showed it for
@@ -2392,11 +2503,19 @@ window.openFacilityPanel = function (facilityId) {
     <div class="fp-stat"><span class="fp-stat-label">Status</span><span class="fp-stat-value">${openStatusTag(fac)}</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Capacity</span><span class="fp-stat-value">${formatNumber(fac.capacity)} ${perPeriodLabel()}</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Current Throughput</span><span class="fp-stat-value">${formatNumber(fac.throughput)} ${perPeriodLabel()}</span></div>
-    <div class="fp-stat"><span class="fp-stat-label">Utilisation</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${getUtilTagClass(utilPct)}">${utilLabel}</span></span></div>
+    ${(utilPct === null || utilPct === undefined)
+      ? `<div class="fp-stat"><span class="fp-stat-label">Utilisation (avg)</span><span class="fp-stat-value" style="color:var(--text-3);font-weight:400">${isCandidate ? 'not opened in this solve' : 'not solved'}</span></div>`
+      : `<div class="fp-stat"><span class="fp-stat-label">Utilisation (avg)</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${getUtilTagClass(utilPct)}">${utilLabel}</span></span></div>`}
+    ${peakRow}
+    ${headroomRow}
+    ${growthRow}
+    ${isCandidate ? (fac.openingCost != null
+      ? `<div class="fp-stat"><span class="fp-stat-label">Cost to open</span><span class="fp-stat-value">${formatCurrency(fac.openingCost)} <span style="color:var(--text-3);font-weight:400">one-time</span></span></div>`
+      : `<div class="fp-stat"><span class="fp-stat-label">Cost to open</span><span class="fp-stat-value" style="color:var(--text-3);font-weight:400">not priced in the upload — the optimiser is treating this site as free to build</span></div>`) : ''}
     ${isDC && fac.fixedCostPerYear != null ? `<div class="fp-stat"><span class="fp-stat-label">Fixed Cost</span><span class="fp-stat-value">${formatCurrency(fac.fixedCostPerYear)}/year</span></div>` : ''}
     ${isDC && fac.handlingCost != null ? `<div class="fp-stat"><span class="fp-stat-label">Handling Cost</span><span class="fp-stat-value">${formatCurrencyExact(fac.handlingCost)}/unit</span></div>` : ''}
     ${forecastSection}
-    <div class="fp-stat"><span class="fp-stat-label">Risk / Bottleneck</span><span class="fp-stat-value"><span class="tag ${getUtilTagClass(utilPct)}">${riskStatus}</span></span></div>
+    <div class="fp-stat"><span class="fp-stat-label">Risk / Bottleneck${hasSeasonalProfile ? ' <span style="color:var(--text-3);font-weight:400">at peak</span>' : ''}</span><span class="fp-stat-value"><span class="tag ${riskKnown ? getUtilTagClass(riskBasisPct) : 'tag-muted'}">${riskStatus}</span></span></div>
     <div style="margin-top:var(--space-lg)">
       <div class="card-title mb-md">Connected Lanes</div>
       ${LANES.filter(l => l.from === facilityId || l.to === facilityId).map(l => `

@@ -348,6 +348,16 @@ _COLUMN_ROLES: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
         ("City", ("city", "location", "town")),
         ("State", ("state", "province")),
         ("Status", ("status", "active")),
+        # What it costs, once, to open a site that is not open yet.
+        #
+        # The MILP has always priced this — `opening_cost_term` in milp.py
+        # charges it on any CANDIDATE the solver switches on — but no column
+        # fed it, so every proposed site was offered to the optimiser as free
+        # to build. A candidate that costs nothing to open and saves anything
+        # at all is always worth opening, which is why "should we open a new
+        # DC?" could only ever come back yes.
+        ("Opening cost", ("opening_cost", "cost_to_open", "one_time_opening_cost",
+                          "setup_cost", "capex", "capital_cost")),
     ),
     "markets": (
         ("Market ID", MARKET_ID_COLS),
@@ -657,6 +667,8 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                           "annual_fixed_cost", "fixed_cost_per_year")
         handling_col = _pick(cl, *HANDLING_COLS)
         status_col = _pick(cl, "status", "active")
+        opening_col = _pick(cl, "opening_cost", "cost_to_open", "one_time_opening_cost",
+                            "setup_cost", "capex", "capital_cost")
 
         for idx, row in df.iterrows():
             fac_id = _text(row, id_col)
@@ -702,6 +714,10 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 # network reported. Both stay None when the column is absent.
                 "fixedCost": _num(row, fixed_col),
                 "handlingCost": _num(row, handling_col),
+                # One-time cost to open, for a site that is not open yet. None
+                # when the sheet states none — NOT zero, which the solver would
+                # read as "free to build" and act on.
+                "openingCost": _num(row, opening_col),
             }
             # No "throughput"/"utilPct": a facility's flow is produced by the
             # solver, not read from a facility sheet.

@@ -171,6 +171,20 @@ class ScenarioIntentSpec(BaseModel):
     # exclusive with the other two — see ScenarioValidator.
     capacity_set_units: Optional[float] = None
     demand_multiplier: Optional[float] = None
+    #: CHANGE_DEMAND scope. Growth is something a client STATES, and they state
+    #: it the way their business is organised: "chilled is growing 20% in the
+    #: South", not "every demand row in the network moves by the same ratio".
+    #: A single network-wide multiplier could only ever ask the second
+    #: question, and answering the first with it overstates the load on every
+    #: warehouse outside the region that is actually growing.
+    #:
+    #: Both are optional and combine as AND. Neither names an id: a region and
+    #: a category are the client's own labels, matched case-insensitively
+    #: against `FacilityRecord.region` and `ProductRecord.category`. A value
+    #: that matches no demand row is rejected by the validator rather than
+    #: silently scaling nothing.
+    demand_region: Optional[str] = None
+    demand_product_category: Optional[str] = None
     #: CHANGE_TRANSPORT_COST. A ratio on `rate_per_unit`: 1.10 is "freight up
     #: 10%". Applied to lanes touching `facility_ids`, or to every lane when
     #: none are named.

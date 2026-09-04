@@ -86,6 +86,25 @@ def create_network_structure_blueprint(orchestrator: Optional[Any] = None,
                 "capacity": facility.capacity_units_per_period,
                 "handlingCost": facility.handling_cost_per_unit,
                 "fixedCostPerYear": facility.fixed_cost_per_year,
+                # What the client SAID about this site, which is not what the
+                # solver later decides about it.
+                #
+                # EXISTING is a site they operate today; CANDIDATE is one they
+                # could build. Both arrive through the same upload and, until
+                # now, left through this endpoint identical — so a proposed
+                # site was drawn on the map, listed in the DC table and offered
+                # in the scenario builder's "one of my existing sites" dropdown
+                # as though the client already ran it. The open/closed tag the
+                # screens show is `isOpen`, a SOLVER output from a different
+                # endpoint; it cannot answer this and never could.
+                "status": getattr(facility.status, "value", None),
+                # One-time cost to open, and only meaningful for a site that is
+                # not open yet. None rather than 0.0 when the upload priced
+                # none, so a screen can say "not priced" instead of "free".
+                "openingCost": (facility.opening_cost or None),
+                # The region the upload placed this facility in. Demand growth
+                # is stated by region, so the browser needs the list.
+                "region": facility.region,
                 # None when the upload carried no capacity history for this
                 # facility — never zero, which would read as "recorded idle".
                 "observed": observed.get(facility.id),
@@ -94,6 +113,13 @@ def create_network_structure_blueprint(orchestrator: Optional[Any] = None,
                 node["productionCapacity"] = facility.production_capacity_units_per_period
                 plants.append(node)
             elif role == "MARKET":
+                # A market is demand, not capacity. It carries the schema's
+                # default CANDIDATE status only because nothing ever sets a
+                # status on a market, and reporting that would put "proposed
+                # site" on a city the client already sells to. Its region is
+                # real and is kept — that is what demand growth is scoped by.
+                node["status"] = None
+                node["openingCost"] = None
                 markets.append(node)
             else:
                 dcs.append(node)
@@ -178,7 +204,10 @@ def create_network_structure_blueprint(orchestrator: Optional[Any] = None,
             "markets": markets,
             "lanes": lanes,
             "products": [
-                {"id": p.id, "name": p.name} for p in network.products
+                # `category` is the client's own SKU grouping, and demand
+                # growth is far more often stated per category than per SKU.
+                {"id": p.id, "name": p.name, "category": p.category}
+                for p in network.products
             ],
             # External signals that arrived with the upload. Context, not
             # structure — the screen used to show the prototype's own signals
