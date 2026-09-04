@@ -132,8 +132,14 @@ function logsFor(run, step, index) {
     }
   }
   if (step.message) out.push({ text: step.message });
+  // The layer's lines, but only for the step that owns the layer right now.
+  //
+  // The recorder keeps one set of lines per layer, so two steps on the same
+  // layer would both read whatever that layer last said and each of them
+  // would print the other's detail. Ownership is the last dispatch to go out
+  // on the layer, which is the one whose answer those lines describe.
   const agent = run.agents[step.layer];
-  if (agent && agent.lines) {
+  if (agent && agent.lines && ownsLayer(run, step)) {
     agent.lines.filter(Boolean).forEach((line) => out.push(splitLine(line)));
   }
   if (step.detail && step.status !== 'failed') out.push({ text: step.detail });
@@ -155,6 +161,16 @@ function logsFor(run, step, index) {
     seen.add(key);
     return true;
   });
+}
+
+/** Is this the step the layer's current lines belong to? */
+function ownsLayer(run, step) {
+  let owner = null;
+  run.steps.forEach((s) => {
+    if (s.layer !== step.layer || !s.startedAt) return;
+    if (!owner || s.startedAt >= owner.startedAt) owner = s;
+  });
+  return !owner || owner.id === step.id;
 }
 
 /**
@@ -262,6 +278,7 @@ let queue = [];
 let pumpTimer = null;
 let collapseTimers = {};
 let revealFloorUntil = 0;
+let drainBy = 0;
 let queuedFinale = false;
 /** The reader asked not to be paced. Everything is released at once. */
 let instant = false;
@@ -317,6 +334,7 @@ function resetPacing() {
   collapseTimers = {};
   queue = [];
   revealFloorUntil = 0;
+  drainBy = 0;
   queuedFinale = false;
   instant = false;
 }
@@ -373,8 +391,13 @@ function stepMs() {
   // failure is on screen.
   if (queue.some((item) => item.urgent)) return 0;
   const waiting = queue.length || 1;
-  return Math.max(FLOOR_STEP_MS,
-                  Math.min(BASE_STEP_MS, BACKLOG_BUDGET_MS / waiting));
+  // What is LEFT of the budget over what is left to show. Dividing the whole
+  // budget by the current backlog looks equivalent and is not: the backlog
+  // shrinks as it drains, so each remaining item would be given more time
+  // than the one before it and the total would run to several times the
+  // budget. Measured that way, 777ms of work held the dialog for 21 seconds.
+  const left = Math.max(0, drainBy - Date.now());
+  return Math.max(FLOOR_STEP_MS, Math.min(BASE_STEP_MS, left / waiting));
 }
 
 function pump() {
@@ -389,8 +412,19 @@ function pump() {
 
 function startPump() {
   updateSkip();
-  if (pumpTimer || !queue.length) return;
-  pumpTimer = setTimeout(pump, instant ? 0 : Math.max(0, revealFloorUntil - Date.now()));
+  if (!queue.length) return;
+  // A failure arriving while the next reveal is already scheduled has to
+  // re-arm it. Marking the item urgent sets the PACE to nothing, but the
+  // pump was timed off the previous reveal and would still sit out the rest
+  // of that wait first — measured, the reason reached the screen 1.3 seconds
+  // after it was recorded rather than immediately.
+  const urgent = instant || queue.some((item) => item.urgent);
+  if (pumpTimer) {
+    if (!urgent) return;
+    clearTimeout(pumpTimer);
+    pumpTimer = null;
+  }
+  pumpTimer = setTimeout(pump, urgent ? 0 : Math.max(0, revealFloorUntil - Date.now()));
 }
 
 /** Put one already-true fact on the screen. */
@@ -632,6 +666,12 @@ function update(run) {
       failed: Boolean(run.failure),
       sub: run.failure || (prog ? `${prog.done} of ${prog.total} steps completed` : ''),
     });
+  }
+  // The deadline opens when a backlog first forms and is not moved while
+  // it is being worked off, so a burst arriving in pieces still drains
+  // inside one budget rather than restarting it with every arrival.
+  if (queue.length && drainBy < Date.now()) {
+    drainBy = Date.now() + BACKLOG_BUDGET_MS;
   }
   startPump();
 }

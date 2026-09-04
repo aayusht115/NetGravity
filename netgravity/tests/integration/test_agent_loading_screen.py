@@ -132,6 +132,28 @@ class TestTheVisualisationIsWhatTheDesignApproved:
         for status in ("'active'", "'done'", "'failed'"):
             assert f"step.status === {status}" in fn, status
 
+    def test_a_phase_reports_its_own_dispatch_and_not_another(self):
+        """
+        The recorder keeps one set of lines per LAYER, and a phase folds its
+        layer's lines in. Two steps on the same layer therefore both read
+        whatever that layer last said, and each printed the other's detail —
+        measured, a five-step run on one layer put fifty items on the reveal
+        queue instead of twenty-two, the same line repeating once more with
+        every phase.
+
+        A layer's lines belong to the last dispatch that went out on it, which
+        is the one whose answer they describe. Every plan in the application
+        today puts one step on a layer, so a real run is unchanged; a plan
+        that shares one now reads correctly instead of repeating itself.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        logs = _fn(js, "function logsFor(run, step, index)")
+        assert "ownsLayer(run, step)" in logs, logs
+        owns = _fn(js, "function ownsLayer(run, step)")
+        assert "s.layer !== step.layer" in owns, owns
+        assert "s.startedAt" in owns, owns
+        assert "owner.id === step.id" in owns, owns
+
     def test_the_four_states_are_drawn_differently(self):
         css = _asset("css", "agent-loading.css")
         for state in ("active", "done", "failed", "blocked"):
@@ -718,10 +740,19 @@ class TestTheScreenIsPacedToBeRead:
         js = _without_comments(_asset("js", "agent-loading.js"))
         fn = _fn(js, "function stepMs()")
         assert "queue.length" in fn, fn
-        assert "BACKLOG_BUDGET_MS" in fn, fn
         assert "FLOOR_STEP_MS" in fn and "BASE_STEP_MS" in fn, fn
         budget = int(re.search(r"BACKLOG_BUDGET_MS = (\d+)", js).group(1))
         assert budget <= 12000, budget
+        # A budget needs a DEADLINE, not a ratio. Dividing the whole budget by
+        # the current backlog after every reveal gives each remaining item more
+        # time than the one before it — the queue shrinks, so the divisor does
+        # — and the total comes out as the budget times a harmonic sum.
+        # Measured that way, 777ms of work held the dialog for 21.4 seconds.
+        assert "drainBy - Date.now()" in fn, fn
+        assert "BACKLOG_BUDGET_MS" not in fn, fn
+        update = _fn(js, "function update(run)")
+        assert "drainBy = Date.now() + BACKLOG_BUDGET_MS" in update, update
+        assert "drainBy < Date.now()" in update, update
 
     def test_a_failure_does_not_queue_behind_its_own_preamble(self):
         """
@@ -745,6 +776,11 @@ class TestTheScreenIsPacedToBeRead:
         assert "return 0;" in pace, pace
         update = _fn(js, "function update(run)")
         assert "urgent: state === 'failed'" in update, update
+        # And the pump is re-armed rather than left sitting out the wait it
+        # was scheduled for before the failure arrived.
+        pump = _fn(js, "function startPump()")
+        assert "item.urgent" in pump, pump
+        assert "clearTimeout(pumpTimer)" in pump, pump
 
     def test_a_heading_finishes_before_its_own_detail_arrives(self):
         """
