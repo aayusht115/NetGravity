@@ -756,11 +756,17 @@
    gone (they sat on top of the twin and were the reason the twin only got
    the bottom half of the page), so the alert carries its own chrome and
    the twin takes the height they were using. */
+/* Deliberately compact.
+   Whatever this card takes, the attention card beside it does not get: they
+   are the two rows of one column with a fixed total. Every pixel trimmed here
+   is a pixel the recommended next step and the further findings gain, and
+   those are the parts a reader acts on. Nothing is removed — the figure is
+   still the biggest thing on the card. */
 .ov-alert {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  padding: 18px 20px;
+  gap: 11px;
+  padding: 12px 15px;
   background: var(--bg-card, #ffffff);
   border: 1px solid var(--border-light, #eceef2);
   border-radius: 14px;
@@ -775,12 +781,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
 }
 
-.ov-alert-icon svg { width: 34px; height: 34px; }
+.ov-alert-icon svg { width: 26px; height: 26px; }
 .ov-alert.tone-warn  .ov-alert-icon { color: #dc2626; }
 .ov-alert.tone-error .ov-alert-icon { color: #b91c1c; }
 .ov-alert.tone-ok    .ov-alert-icon { color: #157f3c; }
@@ -788,7 +794,7 @@
 .ov-alert-text { min-width: 0; }
 
 .ov-alert-title {
-  font-size: 14.5px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--text-1);
   line-height: 1.35;
@@ -796,8 +802,8 @@
 
 /* The figure a reader came for, at the size that says so. */
 .ov-alert-figure {
-  margin-top: 5px;
-  font-size: 30px;
+  margin-top: 2px;
+  font-size: 23px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.1;
@@ -813,9 +819,9 @@
 }
 
 .ov-alert-sub {
-  margin-top: 6px;
-  font-size: 12.5px;
-  line-height: 1.5;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--text-2);
 }
 
@@ -823,7 +829,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-top: 9px;
+  margin-top: 7px;
   padding: 0;
   border: none;
   background: none;

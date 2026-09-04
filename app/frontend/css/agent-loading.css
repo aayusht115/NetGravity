@@ -1,0 +1,691 @@
+/* ═══════════════════════════════════════════════════════════════
+   AGENT LOADING — the global loading state
+   Dump/loading page.png
+   ═══════════════════════════════════════════════════════════════
+
+   Tokens only: --primary, --text-1/2/3, --border-light, --bg-card and the
+   13px/12px/11.5px body sizes the rest of the application uses. Nothing here
+   invents a colour or a scale.
+
+   The rings and the particles are decoration and are marked `aria-hidden` in
+   the markup. They never change with state, so nothing about them can be read
+   as a status.
+
+   MOTION. Everything here is slow on purpose. An earlier pass gave every
+   particle its own orbit at its own rate, which was continuous, subtle by the
+   numbers, and read as a solar system: five circles revolving around a sun,
+   with the eye tracking planets instead of reading the layer that was
+   actually working. Rotation is now almost entirely gone. What moves is what
+   is HAPPENING — the signal crossing between two agents, the dashes drifting
+   along the link that is carrying it, the halo on the layer that is running —
+   and all of it runs at a pace a person can follow: roughly one signal
+   crossing per hand-off rather than three.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── the scrim ───────────────────────────────────────────────────
+   A dialog over the workspace, not a page that replaces it. The work is
+   happening TO the screen behind, and that screen stays visible — blurred, so
+   it reads as out of reach while it is being rebuilt rather than as gone. */
+.agl-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99995;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: rgba(24, 12, 38, 0.34);
+  /* The one place in the application that pays for a backdrop filter. It is
+     affordable exactly here: the overlay is up only while a request is in
+     flight, it is not scrolled, and nothing behind it is animating. */
+  -webkit-backdrop-filter: blur(7px) saturate(0.92);
+  backdrop-filter: blur(7px) saturate(0.92);
+  animation: agl-scrim-in 0.28s ease-out both;
+}
+
+.agl-overlay.active { display: flex; }
+
+@keyframes agl-scrim-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ─── the dialog ──────────────────────────────────────────────────
+   Deliberately smaller than the screens it covers, and bounded in both axes,
+   so it is a pop-up rather than a page. The type inside is the application's
+   own scale — 22px heading, 13px body — not a scale of its own. */
+.agl-shell {
+  position: relative;
+  width: min(940px, 100%);
+  max-height: min(730px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 22px 26px 18px;
+  box-sizing: border-box;
+  border-radius: 20px;
+  border: 1px solid rgba(107, 47, 160, 0.14);
+  /* The workspace's own vertical fade, quietened: the dialog should look like
+     the product it is loading. */
+  background: linear-gradient(180deg, #fdfbff 0%, #f8f2fd 100%);
+  box-shadow: 0 28px 80px rgba(24, 12, 38, 0.26),
+              0 2px 8px rgba(24, 12, 38, 0.10);
+  overflow-y: auto;
+  overflow-x: hidden;
+  animation: agl-dialog-in 0.32s cubic-bezier(.2, .8, .3, 1) both;
+}
+
+@keyframes agl-dialog-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ─── heading ─────────────────────────────────────────────────── */
+/* 22px/800/-0.025em is `.ov-title` — the Home Overview heading, which is the
+   application's source of truth for scale. The heading used to run to 30px on
+   a wide screen, which was right for a full page and is too loud for a card. */
+.agl-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text-1, #111827);
+  text-align: center;
+}
+
+.agl-title-verb { color: var(--primary, #6B2FA0); }
+
+.agl-sub {
+  margin: 6px 0 0;
+  max-width: 560px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-2, #4b5563);
+  text-align: center;
+}
+
+/* ─── the ring ────────────────────────────────────────────────── */
+/* SQUARE, and only as big as the circle. Everything on the diagram is a
+   percentage of this one box — radius 40%, nodes 25%, hub 30% — so the figure
+   is a true circle at any size and one number scales all of it.
+   The callouts are drawn OUTSIDE it and are not clipped: the stage is a
+   coordinate system, not a frame. */
+.agl-stage {
+  position: relative;
+  width: clamp(272px, 42vh, 408px);
+  aspect-ratio: 1 / 1;
+  /* The diagram sizes its own type off ITS width, not the window's. A 1366x768
+     laptop and a 1680x1050 monitor can end up with the same dialog and very
+     different stages, so a viewport media query hid the right things on one
+     and the wrong things on the other. */
+  container-type: inline-size;
+  container-name: agl-stage;
+  margin: clamp(8px, 1.6vh, 18px) 0;
+  flex: 0 0 auto;
+}
+
+.agl-rings {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 92%;
+  height: 92%;
+  pointer-events: none;
+}
+
+.agl-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border: 1px solid rgba(107, 47, 160, 0.13);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.agl-ring.r1 { width: 34%; height: 46%; }
+.agl-ring.r2 { width: 62%; height: 82%; }
+.agl-ring.r3 { width: 92%; height: 118%; border-style: dashed;
+               border-color: rgba(107, 47, 160, 0.09); }
+
+/* ONE ring turns, and it takes three minutes to come round — slow enough that
+   it is felt rather than watched. The inner rings are still, as they are in
+   the approved design. Two rings turning in opposite directions was what made
+   the figure read as orbits. */
+.agl-ring.r3 { animation: agl-spin 180s linear infinite; }
+
+@keyframes agl-spin {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.agl-particles {
+  position: absolute;
+  inset: 0;
+}
+
+/* Still, as they are in the approved design: dots ON the rings, not bodies
+   going round them. They used to each run their own orbit, which is precisely
+   what turned the figure into a solar system — the eye tracks anything that
+   travels in a circle. All that is left is a very slow, out-of-phase change
+   in brightness, so the field is alive without anything moving across it. */
+.agl-particles i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(107, 47, 160, 0.30);
+  --r: calc(26% + (var(--i) * 1.7%));
+  transform: rotate(calc(var(--i) * 25.7deg)) translateX(var(--r));
+  animation: agl-twinkle calc(11s + (var(--i) * 0.9s)) ease-in-out infinite;
+  opacity: 0.42;
+}
+
+@keyframes agl-twinkle {
+  0%, 100% { opacity: 0.16; }
+  50%      { opacity: 0.5; }
+}
+
+/* Links from the hub to each layer. Faint when the layer is not part of this
+   request, so the ring reads as a network without claiming five conversations
+   are happening. */
+.agl-links, .agl-signal {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.agl-link {
+  stroke: rgba(107, 47, 160, 0.10);
+  stroke-width: 0.25;
+  vector-effect: non-scaling-stroke;
+}
+
+/* A link that is part of this request drifts its dashes towards the layer.
+   Three and a half seconds for one dash cycle: a slow current, not a stream. */
+.agl-link.on {
+  stroke: rgba(107, 47, 160, 0.32);
+  stroke-dasharray: 3 2.4;
+  vector-effect: non-scaling-stroke;
+  animation: agl-dash 3.4s linear infinite;
+}
+
+@keyframes agl-dash { to { stroke-dashoffset: -10.8; } }
+
+.agl-signal-line {
+  stroke: var(--primary, #6B2FA0);
+  stroke-width: 1.6;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+  animation: agl-dash 2.2s linear infinite;
+}
+
+.agl-signal.tone-error .agl-signal-line { stroke: #c0392b; }
+
+.agl-signal-dot {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: var(--primary, #6B2FA0);
+  box-shadow: 0 0 0 4px rgba(107, 47, 160, 0.14);
+  pointer-events: none;
+  /* 1.9s, paired with the recorder's 1500ms dwell: roughly ONE crossing per
+     hand-off. At 1.15s against a 620ms dwell the dot crossed twice per
+     message and the eye read it as a stream of traffic rather than as one
+     agent passing one thing to another. */
+  animation: agl-travel 1.9s cubic-bezier(.45, 0, .55, 1) infinite;
+}
+
+.agl-signal-dot.tone-error {
+  background: #c0392b;
+  box-shadow: 0 0 0 4px rgba(192, 57, 43, 0.14);
+}
+
+/* Between the two ends, in the same percentages the line uses. It fades in
+   and out at the ends so the dot appears to leave one node and arrive at the
+   other rather than jumping back. */
+@keyframes agl-travel {
+  0%   { left: var(--x1); top: var(--y1); opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { left: var(--x2); top: var(--y2); opacity: 0; }
+}
+
+/* ─── the hub ─────────────────────────────────────────────────── */
+.agl-hub {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  /* A share of the stage, not a viewport clamp: the diagram then holds its
+     proportions at every size, and the gap between the hub's rim and a node's
+     rim stays the 10% of the square it was drawn as. */
+  width: 30%;
+  height: 30%;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  text-align: center;
+  padding: 0 10px;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1.5px solid rgba(107, 47, 160, 0.30);
+  box-shadow: 0 0 0 10px rgba(107, 47, 160, 0.05),
+              0 10px 30px rgba(107, 47, 160, 0.12);
+}
+
+/* Breathing, and only while it is actually coordinating. A glow that never
+   stops is decoration; one that runs while the orchestrator is working and
+   settles when it is done is the state, drawn. */
+.agl-hub.state-active,
+.agl-hub.state-retrying {
+  animation: agl-breathe 6.5s ease-in-out infinite;
+}
+
+@keyframes agl-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 10px rgba(107, 47, 160, 0.05),
+                0 10px 30px rgba(107, 47, 160, 0.12);
+  }
+  50% {
+    box-shadow: 0 0 0 17px rgba(107, 47, 160, 0.08),
+                0 10px 34px rgba(107, 47, 160, 0.18);
+  }
+}
+
+.agl-hub.state-waiting,
+.agl-hub.state-blocked { border-color: rgba(180, 83, 9, 0.45); }
+.agl-hub.state-waiting .agl-hub-state,
+.agl-hub.state-blocked .agl-hub-state { color: #b45309; }
+
+/* NOT DRAWN in the hub.
+   A fourth line of type — what the orchestrator is doing about a failure, or
+   which capabilities it has run — does not fit inside a 120px circle, and it
+   spilled over the rim onto the ring behind it. The circle holds an icon, a
+   name and a state, which is what the approved design puts there. The detail
+   itself is not lost: it is the message on the progress card, which is the
+   full width of the dialog and always on screen. */
+.agl-hub-line { display: none; }
+
+.agl-hub-icon { color: var(--primary, #6B2FA0); display: flex; }
+.agl-hub-icon svg { width: 24px; height: 24px; }
+
+.agl-hub-name {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-1, #111827);
+  line-height: 1.2;
+  max-width: 86%;
+}
+
+.agl-hub-state {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--primary, #6B2FA0);
+  line-height: 1.25;
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.agl-hub.state-failed { border-color: rgba(192, 57, 43, 0.4); }
+.agl-hub.state-failed .agl-hub-state { color: #c0392b; }
+
+/* ─── a layer ─────────────────────────────────────────────────── */
+.agl-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 26%;
+  height: 26%;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 9px;
+  text-align: center;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid var(--border-light, #eceef2);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  transition: opacity .3s ease, border-color .3s ease, box-shadow .3s ease;
+}
+
+/* Subdued, and unmistakably so: a layer nobody has asked to do anything is at
+   45% and grey. It is still legible — a reader should be able to see that the
+   layer exists and was not involved. */
+.agl-node.state-idle {
+  opacity: 0.45;
+  filter: grayscale(0.75);
+}
+
+.agl-node.state-waiting { opacity: 0.78; }
+
+/* The layer that is running breathes too, on a longer period than the hub so
+   the two never pulse together. This is the one thing on the diagram that
+   moves BECAUSE of state, which is what makes it worth watching. */
+.agl-node.state-active,
+.agl-node.state-retrying {
+  border-color: rgba(107, 47, 160, 0.45);
+  box-shadow: 0 0 0 7px rgba(107, 47, 160, 0.07),
+              0 8px 24px rgba(107, 47, 160, 0.16);
+  animation: agl-node-breathe 5.2s ease-in-out infinite;
+}
+
+@keyframes agl-node-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 6px rgba(107, 47, 160, 0.06),
+                0 8px 22px rgba(107, 47, 160, 0.14);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(107, 47, 160, 0.09),
+                0 8px 26px rgba(107, 47, 160, 0.20);
+  }
+}
+
+.agl-node.state-done { border-color: rgba(4, 120, 87, 0.35); }
+.agl-node.state-failed { border-color: rgba(192, 57, 43, 0.45); }
+
+/* Blocked: dimmed like a layer that is not working, but amber-edged, because
+   it is not the same news as idle. A blocked layer WAS part of this request
+   and never got to run — the reader has to be able to tell that from a layer
+   nobody asked for anything. */
+.agl-node.state-blocked {
+  opacity: 0.72;
+  border-color: rgba(180, 83, 9, 0.45);
+}
+
+.agl-node.state-blocked .agl-node-icon { color: #b45309; }
+
+.agl-node-icon { color: var(--primary, #6B2FA0); display: flex; }
+.agl-node-icon svg { width: 18px; height: 18px; }
+.agl-node.state-idle .agl-node-icon { color: var(--text-3, #6b7280); }
+
+.agl-node-name {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-1, #111827);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  max-width: 100%;
+}
+
+/* What the layer is FOR, under its name.
+   Two lines at most, and cut rather than allowed to grow: "Extracting &
+   structuring uploaded data" is four lines in a 100px circle, and it ran off
+   the bottom of the rim and over the ring behind it. Two lines is what the
+   circle holds; the rest of the sentence is not information the reader loses,
+   because the callout beside the layer says what it is doing right now. */
+.agl-node-desc {
+  font-size: 8.5px;
+  line-height: 1.22;
+  color: var(--text-3, #6b7280);
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* the status badge on the rim */
+.agl-badge {
+  position: absolute;
+  top: 2%;
+  right: 2%;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid var(--border-light, #eceef2);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+.agl-badge svg { width: 11px; height: 11px; }
+.agl-badge.done { color: #047857; border-color: rgba(4, 120, 87, 0.4); }
+.agl-badge.failed { color: #c0392b; border-color: rgba(192, 57, 43, 0.4); }
+.agl-badge.working { color: var(--primary, #6B2FA0); }
+.agl-badge.blocked { color: #b45309; border-color: rgba(180, 83, 9, 0.4); }
+
+.agl-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.8px solid rgba(107, 47, 160, 0.22);
+  border-top-color: var(--primary, #6B2FA0);
+  animation: agl-rotate 1.6s linear infinite;
+}
+
+@keyframes agl-rotate { to { transform: rotate(360deg); } }
+
+/* ─── the callout beside a layer ──────────────────────────────── */
+/* Beside its own node, in the band the square stage leaves either side of
+   it. The stage is at most 350px inside a 940px dialog, so there are ~200px
+   of clear space on each flank — which is what these are sized to. */
+.agl-callout {
+  position: absolute;
+  transform: translateY(-50%);
+  width: clamp(148px, 21vw, 196px);
+  padding: 8px 11px;
+  background: #ffffff;
+  border: 1px solid var(--border-light, #eceef2);
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+  font-size: 10.5px;
+  line-height: 1.45;
+  /* A layer with a lot to report must not grow a card taller than the gap to
+     the next node's card. At a 408px stage the closest pair of callouts are
+     about 126px apart vertically, so this leaves a clear lane between them. */
+  max-height: 96px;
+  overflow: hidden;
+}
+
+/* `left` / `right` are set per callout in agl's markup, from the node's own
+   position on the ring. */
+
+.agl-callout-head {
+  font-weight: 700;
+  color: var(--primary, #6B2FA0);
+  margin-bottom: 3px;
+  letter-spacing: -0.005em;
+}
+
+.agl-callout.state-waiting .agl-callout-head { color: #0f766e; }
+.agl-callout.state-blocked .agl-callout-head { color: #b45309; }
+.agl-callout.state-done    .agl-callout-head { color: #047857; }
+.agl-callout.state-failed  .agl-callout-head { color: #c0392b; }
+
+.agl-callout-line {
+  color: var(--text-2, #4b5563);
+  overflow-wrap: anywhere;
+}
+
+/* ─── the progress card ───────────────────────────────────────── */
+.agl-progress-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  margin-top: clamp(6px, 1.4vh, 16px);
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 1px solid var(--border-light, #eceef2);
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+}
+
+.agl-progress-card.failed { border-color: rgba(192, 57, 43, 0.4); }
+
+.agl-progress-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #f3ecfb;
+  color: var(--primary, #6B2FA0);
+}
+
+.agl-progress-icon svg { width: 18px; height: 18px; }
+
+.agl-progress-text { flex: 1 1 auto; min-width: 0; }
+
+.agl-progress-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1, #111827);
+}
+
+.agl-progress-msg {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--text-3, #6b7280);
+  overflow-wrap: anywhere;
+}
+
+.agl-progress-bar {
+  margin-top: 9px;
+  height: 6px;
+  border-radius: 3px;
+  background: #efe9f7;
+  overflow: hidden;
+}
+
+.agl-progress-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--primary, #6B2FA0);
+  transition: width .45s cubic-bezier(.4, 0, .2, 1);
+}
+
+/* No fraction to show — an unknown total, honestly drawn as a sweep rather
+   than as a number nothing supports. */
+.agl-progress-bar.indeterminate > span {
+  width: 34% !important;
+  animation: agl-sweep 2.8s ease-in-out infinite;
+}
+
+@keyframes agl-sweep {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(320%); }
+}
+
+.agl-progress-figs {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-shrink: 0;
+  padding-left: 16px;
+  border-left: 1px solid var(--border-light, #eceef2);
+}
+
+.agl-fig { text-align: center; }
+
+.agl-fig-value {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-1, #111827);
+  font-variant-numeric: tabular-nums;
+}
+
+.agl-fig:first-child .agl-fig-value { color: var(--primary, #6B2FA0); font-size: 19px; }
+
+.agl-fig-label {
+  display: block;
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3, #6b7280);
+}
+
+.agl-trace-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #c0392b;
+  text-align: center;
+}
+
+.agl-foot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--text-3, #6b7280);
+}
+
+.agl-foot svg { width: 14px; height: 14px; }
+
+/* ─── responsive ──────────────────────────────────────────────── */
+/* The dialog is 940px at most, so the flanks either side of the square stage
+   are what decide whether a callout fits — not the width of the screen. Below
+   this the card would be drawn over its own node, so the words move to the
+   progress card, which is always on screen, and the diagram keeps its states:
+   colour, badge, halo and the travelling signal. */
+@media (max-width: 760px) {
+  .agl-callout { display: none; }
+}
+
+@media (max-width: 560px) {
+  .agl-shell { padding: 18px 16px 14px; border-radius: 16px; }
+  .agl-title { font-size: 19px; }
+  .agl-progress-card { flex-wrap: wrap; }
+  .agl-progress-figs { gap: 14px; padding-left: 0; border-left: 0; }
+  .agl-node-desc { display: none; }
+}
+
+/* A short window — a laptop at 768, a browser with three toolbars — gets the
+   diagram scaled down rather than a dialog that scrolls. */
+@media (max-height: 800px) {
+  .agl-stage { width: clamp(264px, 46vh, 366px); }
+}
+
+/* Below this the circle cannot hold the description without cutting it.
+   At a 348px stage every layer read "Deriving insights &...", "Designing &
+   evaluating...", "Extracting & structuring..." - five ellipses round a ring,
+   which is clutter rather than information. The name and the badge stay, and
+   the callout beside the layer is saying what it is doing right now anyway. */
+@container agl-stage (max-width: 380px) {
+  .agl-node-desc { display: none; }
+}
+
+@media (max-height: 680px) {
+  .agl-sub { display: none; }
+  .agl-foot { display: none; }
+  .agl-node-desc { display: none; }
+}
+
+/* Someone who has asked for less motion gets the diagram, not the movement.
+   The signal still shows which two nodes are talking; it simply does not
+   travel. */
+@media (prefers-reduced-motion: reduce) {
+  .agl-overlay, .agl-shell,
+  .agl-ring, .agl-particles, .agl-particles i,
+  .agl-link.on, .agl-signal-line, .agl-spinner, .agl-hub, .agl-node,
+  .agl-progress-bar.indeterminate > span { animation: none !important; }
+  .agl-signal-dot { display: none; }
+  .agl-signal-line { stroke-dasharray: none; }
+}

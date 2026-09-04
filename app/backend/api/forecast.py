@@ -40,6 +40,7 @@ from app.backend.services.demand_history_store import (
     demand_history_store,
     uploaded_signal_store,
 )
+from app.backend.services.correlation import orchestrator_request_id
 from app.backend.services.project_registry import project_registry
 from app.backend.services.security import require_auth
 from netgravity.orchestrator.core.orchestrator import Orchestrator
@@ -190,6 +191,7 @@ def create_forecast_blueprint(orchestrator: Optional[Orchestrator] = None,
             network_snapshot_id=snapshot_id,
             market_signals=signals,
             disable_llm=True,
+            request_id=orchestrator_request_id("forecast"),
         )
 
         try:

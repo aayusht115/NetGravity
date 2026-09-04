@@ -262,9 +262,15 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
 
   // Report a stage only when it has genuinely started or finished. A caller
   // that passes no callback pays nothing.
-  const stage = (id, state, detail) => {
+  //
+  // `executionId` is the orchestrator's own id for the run that produced the
+  // response, when the route reports one. It is passed on rather than used
+  // here: the loading screen fetches that execution's trace and shows which
+  // capabilities actually ran, how many attempts each took and which failed —
+  // detail the client cannot know from the response body alone.
+  const stage = (id, state, detail, executionId) => {
     if (typeof onStage === 'function') {
-      try { onStage(id, state, detail); } catch (e) { /* never break hydration */ }
+      try { onStage(id, state, detail, executionId); } catch (e) { /* never break hydration */ }
     }
   };
 
@@ -288,7 +294,8 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
     kpiService.getFlowKPIs(pid).catch(() => null),
   ]);
   stage('solve', 'done', `${Object.values((networkRes && networkRes.kpis) || {})
-    .filter((r) => r && r.status === 'VALID').length} KPIs computed`);
+    .filter((r) => r && r.status === 'VALID').length} KPIs computed`,
+    networkRes && networkRes.execution_id);
 
   const k = (networkRes && networkRes.kpis) || {};
 
@@ -590,7 +597,8 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
   }
   stage('insights', 'done', insightCount
     ? `${insightCount} finding${insightCount === 1 ? '' : 's'}`
-    : 'no findings');
+    : 'no findings',
+    insightResponse && insightResponse.execution_id);
 
   // ---- Scenarios -------------------------------------------------------
   // Only scenarios actually solved for this project. The two fabricated
@@ -660,6 +668,9 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
         shown: chosen.seriesLabel,
         engine: chosen.engine,
         accuracy: chosen.accuracy || null,
+        // The orchestrator's id for the run that produced this forecast, so
+        // the loading screen can read its trace.
+        executionId: fc.execution_id || null,
       };
       publishForecastMeta(forecastReport);
       // Every forecastable series is handed to the screens; the largest is
@@ -684,7 +695,8 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
     setForecastSeries({});
   }
   stage('forecast', 'done', forecastReport.series
-    ? `${forecastReport.series} series` : String(forecastReport.status).toLowerCase());
+    ? `${forecastReport.series} series` : String(forecastReport.status).toLowerCase(),
+    forecastReport.executionId);
 
   // ---- Model governance metadata --------------------------------------
   // What the Settings screen reports. Written from the run that produced the

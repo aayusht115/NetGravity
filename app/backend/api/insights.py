@@ -53,6 +53,7 @@ from app.backend.services.errors import (
     NotFoundError,
     ValidationError,
 )
+from app.backend.services.correlation import orchestrator_request_id
 from app.backend.services.analysis_store import analysis_service
 from app.backend.services.project_registry import project_registry
 from app.backend.services.ratelimit import rate_limit
@@ -381,6 +382,7 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 actor=Actor(actor_id=user_id, role=ActorRole.PLANNER),
                 network_snapshot_id=snapshot_id,
                 disable_llm=True,
+                request_id=orchestrator_request_id("insights-twin-publish"),
             ))
             refs = orchestrator.twin.list_states(snapshot_id)
         if not refs:

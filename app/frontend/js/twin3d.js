@@ -175,6 +175,16 @@ export function initTwin3D(containerId) {
       containerEl.innerHTML = '';
       containerEl.appendChild(renderer.domElement);
     }
+    // The hover tooltip travels WITH the canvas.
+    //
+    // It was created once, inside whichever container happened to init first
+    // — Home's preview — and left there. Opening the Digital Twin tab moved
+    // the canvas and not the tooltip, so hovering a node computed a position
+    // and wrote the facility's figures into an element sitting in a hidden
+    // container on another page; going back to Home then cleared that
+    // container's innerHTML and detached the tooltip for good. Either way the
+    // symptom is the same: hovering a node showed nothing at all.
+    attachHudTooltip();
     resumeTwin3D();
     resizeTwin3D();
     return;
@@ -306,7 +316,7 @@ let cameraIsUsers = false;
  * as it stands, read how far the widest one falls outside the frame, and
  * scale the distance by that. Two or three passes converge, and it is exact
  * for any field of view, aspect or tilt, including one the user has dragged
- * to. `0.92` leaves a hair of margin so the plane's edge is not flush with
+ * to. `0.95` leaves a hair of margin so the plane's edge is not flush with
  * the canvas edge.
  */
 function frameCameraToPlane() {
@@ -316,39 +326,21 @@ function frameCameraToPlane() {
   if (!(halfW > 0) || !(halfH > 0)) return;
   const target = controls.target.clone();
 
-  // Fit the NODES, and let the ground sheet run off the edges.
+  // Fit the PLANE, because the plane is now the country.
   //
-  // Fitting the whole plane means fitting a rectangle shaped like the
-  // network's bounding box into a card shaped like nothing in particular. In
-  // a tall card and a wide network — the United States in a 895x850 panel —
-  // the width decides the zoom and the picture ends up a thin band of map
-  // with empty background above and below it. Framing on the sites instead
-  // crops the corners of the sheet, which carry no information, and puts the
-  // network across the middle of the card at a size worth reading.
+  // This fitted the node cluster for one round, and the reason it did no
+  // longer holds. The plane was then the network's bounding box padded 12%,
+  // so fitting it meant fitting a rectangle shaped like nothing in
+  // particular, and a wide network in a tall card came out as a thin band of
+  // map with empty background above and below. `networkWindow` now returns
+  // the whole country, so the plane is a shape the reader recognises and the
+  // thing they are meant to be looking at — framing on the sites inside it
+  // would crop the country back off the screen, which is exactly what the
+  // wider window was changed to stop doing.
   //
-  // The plane is the fallback for a scene with no nodes yet, so the very
-  // first frame after a cold init is still framed on something.
-  const pad = 4;
-  const points = nodeMeshes.length
-    ? nodeMeshes.map((n) => n.pos3D.clone())
-    : [];
-  const corners = points.length
-    ? (() => {
-      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-      points.forEach((v) => {
-        minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
-        minZ = Math.min(minZ, v.z); maxZ = Math.max(maxZ, v.z);
-      });
-      if (!Number.isFinite(minX) || !Number.isFinite(minZ)) return null;
-      return [
-        new THREE.Vector3(minX - pad, 0, minZ - pad),
-        new THREE.Vector3(maxX + pad, 0, minZ - pad),
-        new THREE.Vector3(minX - pad, 0, maxZ + pad),
-        new THREE.Vector3(maxX + pad, 0, maxZ + pad),
-      ];
-    })()
-    : null;
-  const box = corners || [
+  // The nodes are inside the plane by construction: the window is the union
+  // of the country outline and the sites, so nothing can be framed out.
+  const box = [
     new THREE.Vector3(-halfW, 0, -halfH), new THREE.Vector3(halfW, 0, -halfH),
     new THREE.Vector3(-halfW, 0, halfH), new THREE.Vector3(halfW, 0, halfH),
   ];
@@ -369,9 +361,9 @@ function frameCameraToPlane() {
       worst = Math.max(worst, Math.abs(ndc.x), Math.abs(ndc.y));
     }
     if (!(worst > 0)) return;
-    if (Math.abs(worst - 0.92) < 0.01) break;
+    if (Math.abs(worst - 0.95) < 0.01) break;
     dist = Math.min(controls.maxDistance,
-                    Math.max(controls.minDistance, dist * (worst / 0.92)));
+                    Math.max(controls.minDistance, dist * (worst / 0.95)));
   }
 
   camera.position.copy(target).addScaledVector(dir, dist);
@@ -1263,17 +1255,35 @@ function setupControls() {
 }
 
 // ─── Interaction & HUD Tooltip ──────────────────────────────
-function setupInteraction() {
-  const canvas = renderer.domElement;
-
-  // Create clean Light-Theme HUD Tooltip
-  hudTooltipEl = document.getElementById('twin3d-node-tooltip');
+/**
+ * Put the hover tooltip inside the container the canvas is currently in.
+ *
+ * It is positioned absolutely against that container (both
+ * `.twin3d-container` and `.home-twin-map-container` are `position:
+ * relative`), so it has to be a child of the one being looked at. Created on
+ * first use and moved thereafter — never duplicated, or two of them would
+ * fight over the same id.
+ */
+function attachHudTooltip() {
+  if (!containerEl) return;
+  if (!hudTooltipEl || !hudTooltipEl.isConnected) {
+    hudTooltipEl = document.getElementById('twin3d-node-tooltip');
+  }
   if (!hudTooltipEl) {
     hudTooltipEl = document.createElement('div');
     hudTooltipEl.id = 'twin3d-node-tooltip';
     hudTooltipEl.className = 'twin3d-node-tooltip hidden';
+  }
+  if (hudTooltipEl.parentElement !== containerEl) {
+    hudTooltipEl.classList.add('hidden');
     containerEl.appendChild(hudTooltipEl);
   }
+}
+
+function setupInteraction() {
+  const canvas = renderer.domElement;
+
+  attachHudTooltip();
 
   const updateMouseCoords = (e) => {
     const rect = canvas.getBoundingClientRect();

@@ -15,6 +15,10 @@ import { initMap, renderScenarioDigitalTwin, invalidateMapSize,
          revealMap } from './map.js';
 import { scenarioService } from './integration/services/scenario-service.js';
 import {
+  startRun, stepStart, stepDone, stepFail, finishRun,
+} from './agent-activity.js';
+import { mountAgentLoading, dismissAgentLoading } from './agent-loading.js';
+import {
   mapScenarioRecord, baselineFromScenarioRecord, BASELINE_SCENARIO_ID,
 } from './integration/mappers/scenario-mapper.js';
 
@@ -1768,6 +1772,18 @@ const CREATION_STEPS = [
   'Reading authoritative KPIs',
 ];
 
+/**
+ * The change this scenario makes, in the words the form used.
+ *
+ * Read off the request body that is about to be sent, so the message on the
+ * signal describes the thing actually travelling to the planner.
+ */
+function scenarioActionLabel(body) {
+  const action = String((body && (body.action || body.action_type)) || '')
+    .replace(/_/g, ' ').toLowerCase();
+  return action || 'this change';
+}
+
 function renderCreationProgress(activeIndex, failed = false) {
   for (let i = 1; i <= CREATION_STEPS.length; i++) {
     const el = document.getElementById(`step-phase-${i}`);
@@ -1988,28 +2004,71 @@ async function runScenarioCreation() {
 
   renderCreationProgress(2);
 
+  // The agent view of this run.
+  //
+  // TWO dispatches, because that is what this function makes: one request to
+  // /api/scenarios/simulate, and the local read of the solved result against
+  // the baseline. So the ring lights the Scenario Planner and the hub, and
+  // leaves Extraction, Forecasting and Reasoning dark — none of them is asked
+  // to do anything by a scenario run, and a lit layer that did no work is the
+  // one thing this visualisation must never show.
+  //
+  // If the orchestrator's plan for SCENARIO_ANALYSIS does reach further, the
+  // execution trace passed to `stepDone` says so and those layers light from
+  // the server's own record rather than from a guess made here.
+  mountAgentLoading();
+  startRun({
+    title: 'Running your scenario',
+    verb: 'running your scenario',
+    subtitle: 'The orchestrator hands the change to the scenario planner, '
+      + 'which re-solves the network and measures it against your baseline.',
+    plan: [
+      { id: 'simulate', layer: 'scenario',
+        label: 'Solving the scenario',
+        message: `Passing "${scenarioActionLabel(body)}" to the scenario planner` },
+      { id: 'compare', layer: 'orchestrator',
+        label: 'Comparing against the baseline',
+        message: 'Reading the solved KPIs back against the baseline solve' },
+    ],
+  });
+
   let solved;
   try {
+    stepStart('simulate');
     solved = await scenarioService.simulateScenario(body);
+    stepDone('simulate', {
+      detail: 'Scenario solved',
+      executionId: solved && solved.execution_id,
+    });
   } catch (err) {
     // Explicit failure. No scenario is added, and nothing is fabricated to
     // fill the gap.
+    const message = err && err.message
+      ? `The scenario could not be solved: ${err.message}`
+      : 'The scenario could not be solved.';
+    stepFail('simulate', { error: message });
+    finishRun({ error: message });
+    dismissAgentLoading(2600);
     renderCreationProgress(3, true);
-    showCreationError(
-      err && err.message
-        ? `The scenario could not be solved: ${err.message}`
-        : 'The scenario could not be solved.',
-    );
+    showCreationError(message);
     return;
   }
 
   renderCreationProgress(CREATION_STEPS.length + 1);
 
+  stepStart('compare');
   const mapped = mapScenarioRecord(solved);
   if (!mapped) {
-    showCreationError('The solver returned no usable result for this scenario.');
+    const message = 'The solver returned no usable result for this scenario.';
+    stepFail('compare', { error: message });
+    finishRun({ error: message });
+    dismissAgentLoading(2600);
+    showCreationError(message);
     return;
   }
+  stepDone('compare', { detail: 'Measured against the baseline' });
+  finishRun({});
+  dismissAgentLoading(500);
 
   // Install the baseline if this is the first scenario of the session.
   //

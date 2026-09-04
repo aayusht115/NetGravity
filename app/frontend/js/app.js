@@ -21,11 +21,13 @@ import {
 import { initMap, setNetworkState, invalidateMapSize, refreshAllMaps,
          revealMap, renderMapLegendCounts } from './map.js';
 import { initTwin3D, setTwin3DState, resizeTwin3D } from './twin3d.js';
+import { networkCountryLabel } from './world-basemap.js';
 import {
   renderForecastChart,
   renderFacilityThroughputChart, renderFacilityCostBreakdownChart, renderFacilityLaneFlowsChart
 } from './charts.js';
 import { initScenarios } from './scenarios.js';
+import { mountAgentLoading } from './agent-loading.js';
 import { initAgent } from './agent.js';
 import { initLandingPage } from './landing.js';
 import { initInsightDetail } from './insight-detail.js';
@@ -102,6 +104,9 @@ function bootApp() {
   try { initLandingPage(); } catch (e) { console.error('initLandingPage error:', e); }
   try { initTabs(); } catch (e) { console.error('initTabs error:', e); }
   try { initSidebarCollapse(); } catch (e) { console.error('initSidebarCollapse error:', e); }
+  // The agent loading overlay is a singleton on <body>; mounting it at boot
+  // means every entry point that raises a loading state finds it there.
+  try { mountAgentLoading(); } catch (e) { console.error('agent loading mount:', e); }
   try { initHomeSelectors(); } catch (e) { console.error('initHomeSelectors error:', e); }
   try { renderHome(); } catch (e) { console.error('renderHome error:', e); }
   try { renderTwinTables(); } catch (e) { console.error('renderTwinTables error:', e); }
@@ -2199,6 +2204,30 @@ export function closeActionDrawer() {
 function renderTwinStats() {
   const nodeCount = PLANTS.length + DCS.length + MARKETS.length;
   const laneCount = LANES.length;
+
+  // Which country the reader is looking at, in words.
+  //
+  // The map says it already — the countries with sites in them are painted
+  // white against the grey of everywhere else — but only to a reader who
+  // recognises the coastline, and a supply chain in Vietnam or Poland does
+  // not read at a glance the way one in India does. `networkCountryLabel`
+  // runs the same point-in-polygon pass that chooses the white land and the
+  // frame, so the caption is a label on the geometry rather than a second
+  // opinion about it. Empty (and hidden) when the sites fall in no outline,
+  // because there is then no country to name.
+  const countryLabel = networkCountryLabel([...PLANTS, ...DCS, ...MARKETS]);
+  [['twin3d-country', 'twin3d-country-name'],
+   ['map2d-country', 'map2d-country-name']].forEach(([wrapId, nameId]) => {
+    const wrap = document.getElementById(wrapId);
+    const name = document.getElementById(nameId);
+    if (!wrap || !name) return;
+    name.textContent = countryLabel;
+    wrap.hidden = !countryLabel;
+    wrap.title = countryLabel
+      ? `The network's sites fall inside ${countryLabel}. The whole of it is `
+        + 'in frame, and its land is drawn lighter than its neighbours.'
+      : '';
+  });
 
   // "How many plants / DCs / markets" is answered on the legend itself, at
   // the bottom-right corner of the map, rather than only by the three tables

@@ -325,17 +325,84 @@ class TestTheTwinStopsRenderingWhenNobodyIsLooking:
             "turning the scene moves the nodes under a stationary cursor"
         )
 
-    def test_the_camera_frames_the_network_not_the_sheet(self):
+    def test_the_camera_frames_the_country(self):
         """
-        Fitting the whole ground plane into a tall card left the network as a
-        thin band with empty background above and below it. The sites are
-        what the reader is looking at; the corners of the sheet carry nothing.
+        SUPERSEDED, deliberately.
+
+        This asserted the opposite — that the camera framed the node cluster
+        and let the ground sheet run off the edges — and it was right while
+        the sheet was the network's bounding box padded 12%: fitting a
+        rectangle shaped like nothing in particular into a card shaped like
+        nothing in particular left the network as a thin band.
+
+        `networkWindow` now returns the whole COUNTRY (the instruction was
+        that the twin must show the entire country, not the part the nodes are
+        in), so the sheet is a shape the reader recognises and is the thing
+        they are meant to be looking at. Framing on the sites inside it would
+        crop the country back off the screen — exactly what the wider window
+        exists to stop. The nodes cannot be framed out: the window is the
+        union of the country outline and the sites.
         """
         js = _without_comments(_asset("js", "twin3d.js"))
         fn = js[js.index("function frameCameraToPlane()"):]
         fn = fn[:fn.index("\n}\n")]
-        assert "nodeMeshes.length" in fn, fn
-        assert "PROJECTION.width" in fn, "the plane is still the fallback"
+        assert "PROJECTION.width" in fn, fn
+        assert "nodeMeshes.length" not in fn, (
+            "the camera is framing the sites again, which crops the country")
+
+    def test_the_window_covers_the_whole_country(self):
+        """
+        One window, and it is the country's.
+
+        Both views project onto `networkWindow`, so this is the single place
+        that decides whether the twin shows a country or a crop of one.
+        """
+        js = _asset("js", "world-basemap.js")
+        assert "export function countryWindow(" in js
+        assert "export function networkCountryLabel(" in js
+        fn = js[js.index("export function networkWindow("):]
+        fn = fn[:fn.index("\n}\n")]
+        # The country box is unioned in, never substituted: a site just off a
+        # coastline has to stay inside the frame.
+        assert "countryWindow(pts)" in fn, fn
+        for line in ("Math.min(latMin, country.latMin)",
+                     "Math.max(latMax, country.latMax)",
+                     "Math.min(lngMin, country.lngMin)",
+                     "Math.max(lngMax, country.lngMax)"):
+            assert line in fn, line
+
+    def test_the_country_is_named_under_the_stats(self):
+        """
+        The map paints the network's countries white; this says which they are
+        in words, for the reader who does not recognise the coastline.
+        """
+        html = _asset("index.html")
+        for stats, wrap, name in (("map2d-stats", "map2d-country", "map2d-country-name"),
+                                  ("twin3d-stats", "twin3d-country", "twin3d-country-name")):
+            assert f'id="{wrap}"' in html, wrap
+            assert f'id="{name}"' in html, name
+            # Inside the stats overlay and AFTER the last stat card, so it
+            # wraps onto the line under them rather than sitting at a
+            # hand-measured offset that the cards could grow past.
+            block = html[html.index(f'id="{stats}"'):]
+            block = block[:block.index(f'id="{wrap}"')]
+            assert "twin3d-stat-label" in block, (
+                f"{wrap} is not inside the {stats} overlay")
+            assert block.count("twin3d-stat-label") == 3, (
+                f"{wrap} does not follow all three stat cards")
+
+        css = _asset("css", "style.css")
+        assert "flex-wrap: wrap;" in _rule(css, ".twin3d-stats-overlay {")
+        assert "flex: 0 0 100%;" in _rule(css, ".twin3d-country {")
+        # `hidden` loses to a class rule with an explicit display, so the
+        # caption needs its own.
+        assert ".twin3d-country[hidden] { display: none; }" in css
+
+        js = _asset("js", "app.js")
+        assert "networkCountryLabel" in js
+        # Named from the geometry, never from a stored label that could
+        # disagree with the land drawn underneath it.
+        assert "networkCountryLabel([...PLANTS, ...DCS, ...MARKETS])" in js
 
 
 class TestTheForecastScreenIsTheMockup:

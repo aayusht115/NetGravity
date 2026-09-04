@@ -113,6 +113,93 @@ function pointInRing(x, y, ring) {
   return inside;
 }
 
+/** The bounding box of one ring, as a plain lat/lng rectangle. */
+function ringBox(ring) {
+  let latMin = Infinity, latMax = -Infinity, lngMin = Infinity, lngMax = -Infinity;
+  for (let i = 0; i < ring.length; i += 1) {
+    const lng = ring[i][0], lat = ring[i][1];
+    if (lat < latMin) latMin = lat;
+    if (lat > latMax) latMax = lat;
+    if (lng < lngMin) lngMin = lng;
+    if (lng > lngMax) lngMax = lng;
+  }
+  return { latMin, latMax, lngMin, lngMax };
+}
+
+/**
+ * The parts of a country worth framing: its principal landmass, plus any
+ * outlying part a site is actually on.
+ *
+ * Not every polygon, because "the whole country" and "every polygon filed
+ * under the country" are not the same rectangle. Natural Earth files Alaska
+ * and Hawaii under the United States, and the lobe east of the dateline under
+ * Russia — so a plain union of all rings frames a Chicago network on half the
+ * northern hemisphere and a Moscow network on the entire world. Both would be
+ * a worse answer than the crop this replaces.
+ *
+ * The rule is stated rather than tuned: keep the largest ring, and keep any
+ * ring with a site on it. A network in the lower 48 gets the lower 48; add an
+ * Anchorage site and Alaska joins the frame, because now it is part of the
+ * network. Nothing the network stands on is ever dropped.
+ */
+function principalRings(feature, pts) {
+  const outers = [];
+  for (const poly of feature.geometry.coordinates) {
+    if (poly[0] && poly[0].length >= 4) outers.push(poly[0]);
+  }
+  if (outers.length <= 1) return outers;
+  let bestIdx = 0;
+  let bestArea = -1;
+  outers.forEach((ring, i) => {
+    const b = ringBox(ring);
+    const area = (b.lngMax - b.lngMin) * (b.latMax - b.latMin);
+    if (area > bestArea) { bestArea = area; bestIdx = i; }
+  });
+  const keep = [outers[bestIdx]];
+  outers.forEach((ring, i) => {
+    if (i === bestIdx) return;
+    if (pts.some((p) => pointInRing(p.lng, p.lat, ring))) keep.push(ring);
+  });
+  return keep;
+}
+
+/* `countriesContaining` walks 177 features against every site, and both views
+   ask for the window on every rebuild and every reveal. One entry of cache,
+   keyed on the sites themselves, keeps that to once per network. */
+let _windowCache = { key: '', box: null };
+
+function siteKey(pts) {
+  return pts.map((p) => `${p.lat.toFixed(4)},${p.lng.toFixed(4)}`).sort().join('|');
+}
+
+/**
+ * The full extent of the countries a network has sites in.
+ *
+ * Returns null when the sites fall in no country outline at all — a network
+ * given as offshore points, or coordinates that are simply wrong. The caller
+ * then frames the sites, which is the only honest fallback: no country can be
+ * named, so none is drawn.
+ */
+export function countryWindow(points) {
+  const pts = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  if (!pts.length) return null;
+  const key = siteKey(pts);
+  if (_windowCache.key === key) return _windowCache.box;
+
+  let box = null;
+  for (const c of countriesContaining(pts)) {
+    for (const ring of principalRings(c.feature, pts)) {
+      const b = ringBox(ring);
+      box = box ? {
+        latMin: Math.min(box.latMin, b.latMin), latMax: Math.max(box.latMax, b.latMax),
+        lngMin: Math.min(box.lngMin, b.lngMin), lngMax: Math.max(box.lngMax, b.lngMax),
+      } : b;
+    }
+  }
+  _windowCache = { key, box };
+  return box;
+}
+
 /**
  * The lat/lng window a network should be framed in.
  *
@@ -122,22 +209,72 @@ function pointInRing(x, y, ring) {
  * projects its ground plane onto exactly the same box, and therefore shows the
  * same coastlines at the same scale.
  *
+ * The window is the COUNTRY, not the sites.
+ *
+ * Framing the sites drew a true map of a rectangle nobody recognises: twelve
+ * facilities across northern India produced a crop from Gujarat to Bengal —
+ * geographically correct, and unreadable as India. A reader orients on a
+ * coastline they know before they read a single node, so the frame is the
+ * country the network is in and the sites are shown inside it. Where the sites
+ * fall in no country outline, the sites are the frame: the previous behaviour,
+ * kept for the case where there is no country to draw.
+ *
  * `padFrac` of the span keeps sites off the edge; `minPad` stops a
  * single-city network from projecting onto a degenerate zero-width plane.
+ * Both shrink once a country is in the frame: 12% of a country is a wide band
+ * of neighbours, where 12% of a four-city cluster was breathing room.
  */
-export function networkWindow(points, { padFrac = 0.12, minPad = 1.2 } = {}) {
+export function networkWindow(points, { padFrac = 0.12, minPad = 1.2,
+                                        wholeCountry = true } = {}) {
   const pts = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
   if (!pts.length) return null;
   const lats = pts.map((p) => p.lat);
   const lngs = pts.map((p) => p.lng);
-  const padLat = Math.max((Math.max(...lats) - Math.min(...lats)) * padFrac, minPad);
-  const padLng = Math.max((Math.max(...lngs) - Math.min(...lngs)) * padFrac, minPad);
+  let latMin = Math.min(...lats);
+  let latMax = Math.max(...lats);
+  let lngMin = Math.min(...lngs);
+  let lngMax = Math.max(...lngs);
+  let frac = padFrac;
+  let floor = minPad;
+
+  const country = wholeCountry ? countryWindow(pts) : null;
+  if (country) {
+    // Union, never replacement. A site just off a coastline — a port, a
+    // rounded coordinate — has to stay inside the frame even where the
+    // country outline does not quite contain it.
+    latMin = Math.min(latMin, country.latMin);
+    latMax = Math.max(latMax, country.latMax);
+    lngMin = Math.min(lngMin, country.lngMin);
+    lngMax = Math.max(lngMax, country.lngMax);
+    frac = 0.035;
+    floor = 0.4;
+  }
+
+  const padLat = Math.max((latMax - latMin) * frac, floor);
+  const padLng = Math.max((lngMax - lngMin) * frac, floor);
   return {
-    latMin: Math.max(-84, Math.min(...lats) - padLat),
-    latMax: Math.min(84, Math.max(...lats) + padLat),
-    lngMin: Math.max(-179, Math.min(...lngs) - padLng),
-    lngMax: Math.min(179, Math.max(...lngs) + padLng),
+    latMin: Math.max(-84, latMin - padLat),
+    latMax: Math.min(84, latMax + padLat),
+    lngMin: Math.max(-179, lngMin - padLng),
+    lngMax: Math.min(179, lngMax + padLng),
   };
+}
+
+/**
+ * The countries a network is in, as a readable label.
+ *
+ * Named from the same point-in-polygon pass the frame and the land highlight
+ * use, so the caption, the white land and the window can never disagree.
+ * Ordered by how many sites are in each, so the country carrying the network
+ * is named first.
+ */
+export function networkCountryLabel(points, { max = 3 } = {}) {
+  const pts = points.filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+  if (!pts.length) return '';
+  const names = countriesContaining(pts).map((c) => c.name);
+  if (!names.length) return '';
+  if (names.length <= max) return names.join(' · ');
+  return `${names.slice(0, max).join(' · ')} +${names.length - max} more`;
 }
 
 /**

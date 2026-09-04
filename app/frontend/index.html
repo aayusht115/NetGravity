@@ -22,6 +22,7 @@
   <link rel="stylesheet" href="css/insights.css">
   <link rel="stylesheet" href="css/insight-detail.css">
   <link rel="stylesheet" href="css/agent-reasoning.css">
+  <link rel="stylesheet" href="css/agent-loading.css">
   <link rel="stylesheet" href="css/chatbot.css">
   <link rel="stylesheet" href="css/workspace-chrome.css">
   <link rel="stylesheet" href="css/projects.css">
@@ -739,6 +740,14 @@
                 <span class="twin3d-stat-value" id="map2d-risk-label">—</span>
                 <span class="twin3d-stat-label">Overall Risk</span>
               </div>
+              <div class="twin3d-country" id="map2d-country" hidden>
+                <span class="twin3d-country-pill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3.2 9h17.6M3.2 15h17.6"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg>
+                  <span class="twin3d-country-key">Country</span>
+                  <span class="twin3d-country-name" id="map2d-country-name"></span>
+                </span>
+              </div>
             </div>
           </div>
 
@@ -758,6 +767,14 @@
               <div class="twin3d-stat">
                 <span class="twin3d-stat-value" id="twin3d-risk-label">—</span>
                 <span class="twin3d-stat-label">Overall Risk</span>
+              </div>
+              <div class="twin3d-country" id="twin3d-country" hidden>
+                <span class="twin3d-country-pill">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3.2 9h17.6M3.2 15h17.6"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg>
+                  <span class="twin3d-country-key">Country</span>
+                  <span class="twin3d-country-name" id="twin3d-country-name"></span>
+                </span>
               </div>
             </div>
             <!-- Camera Controls Hint -->

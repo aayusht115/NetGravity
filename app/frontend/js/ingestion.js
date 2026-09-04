@@ -702,143 +702,44 @@ async function showUploadHelp() {
   return close;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   LOADING POP-UPS
-   ═══════════════════════════════════════════════════════════════ */
-function progressRingSvg(id, size, stroke) {
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  return `<svg class="${id}" viewBox="0 0 ${size} ${size}">
-      <circle class="track" cx="${size / 2}" cy="${size / 2}" r="${r}"/>
-      <circle class="fill" cx="${size / 2}" cy="${size / 2}" r="${r}"
-        stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${c.toFixed(2)}" data-circumference="${c.toFixed(2)}"/>
-    </svg>`;
-}
-
-function loadingOverlayHtml(cfg) {
-  return `<div class="ing-loading-card">
-      <div class="ing-loading-head">${I.sparkle}<div class="ing-loading-title">${ingEsc(cfg.title)}</div></div>
-      <div class="ing-loading-sub">${ingEsc(cfg.subtitle)}</div>
-
-      <div class="ing-loading-row">
-        <div class="ing-loading-row-left">
-          <span class="ing-loading-icon-stack">${I.filesStack}</span>
-          <div>
-            <div class="ing-loading-row-title">${ingEsc(cfg.summaryLabel)}</div>
-            <div class="ing-loading-row-sub">${ingEsc(cfg.summarySub)}</div>
-          </div>
-        </div>
-        <div class="ing-loading-row-right">
-          <div class="ing-loading-status">${I.checkCircle}${ingEsc(cfg.summaryStatus)}</div>
-          <div class="ing-loading-time">${ingEsc(cfg.summaryTime)}</div>
-        </div>
-      </div>
-
-      <div class="ing-loading-row highlight">
-        <div class="ing-loading-row-left">
-          <span class="ing-agent-avatar">${I.agent}</span>
-          <div>
-            <div class="ing-loading-row-title">${ingEsc(cfg.agentName)}<span class="ing-live-pill">${I.waveform}LIVE</span></div>
-            <div class="ing-loading-row-sub">${ingEsc(cfg.agentSub)}</div>
-          </div>
-        </div>
-        <div class="ing-loading-row-right">
-          <span class="ing-progress-pill"><span id="ing-loading-pct">0%</span> complete ${progressRingSvg('ing-progress-ring', 28, 3.5)}</span>
-        </div>
-      </div>
-
-      <div class="ing-loading-row highlight">
-        <div class="ing-loading-row-left">
-          <span class="ing-sparkle-icon">${I.sparkle}</span>
-          <div>
-            <div class="ing-loading-row-title pulse" id="ing-loading-step-title">${ingEsc(cfg.stepTitle[0])}</div>
-            <div class="ing-loading-row-sub" id="ing-loading-step-sub">${ingEsc(cfg.stepSub)}</div>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-/** Show the shared loading pop-up, animate it to 100%, then call onDone.
+/**
+ * Continue from the upload screen to the mapping review.
  *
- *  Driven by a fixed-step setInterval rather than requestAnimationFrame:
- *  rAF's frame time is tied to the compositor, and in a throttled or
- *  headless tab that clock can stop advancing between frames, which
- *  turns a "run until real time catches up" rAF loop into a busy loop
- *  that never yields. A bounded step count can't do that — it always
- *  reaches 100% in exactly STEPS ticks and clears its own interval. */
-function runLoadingOverlay(cfg, onDone) {
-  const overlay = document.getElementById('loading-modal-overlay');
-  if (!overlay) { onDone(); return; }
-
-  overlay.innerHTML = loadingOverlayHtml(cfg);
-  overlay.classList.add('active');
-
-  const ring = overlay.querySelector('.ing-progress-ring .fill');
-  const circumference = parseFloat(ring?.dataset.circumference || '0');
-  const pctEl = overlay.querySelector('#ing-loading-pct');
-  const stepTitleEl = overlay.querySelector('#ing-loading-step-title');
-
-  const STEPS = 40;
-  const STEP_MS = 55;
-  let step = 0;
-
-  const timer = setInterval(() => {
-    step += 1;
-    const pct = Math.min(100, Math.round((step / STEPS) * 100));
-    if (pctEl) pctEl.textContent = `${pct}%`;
-    if (ring) ring.style.strokeDashoffset = String(circumference * (1 - pct / 100));
-    if (pct > 55 && stepTitleEl && stepTitleEl.textContent !== cfg.stepTitle[1]) {
-      stepTitleEl.textContent = cfg.stepTitle[1];
-    }
-    if (step >= STEPS) {
-      clearInterval(timer);
-      setTimeout(() => {
-        overlay.classList.remove('active');
-        overlay.innerHTML = '';
-        onDone();
-      }, 350);
-    }
-  }, STEP_MS);
-}
-
+ * There is no wait here, so there is no loading screen.
+ *
+ * This used to open a 2.2-second pop-up titled "AI is setting up your data",
+ * with a percentage driven by a `setInterval` that ticked forty times and a
+ * step line that advanced at tick 22. Nothing was happening behind it: the
+ * files are parsed by `/api/ingestions/preview` as they are dropped, and the
+ * Continue button is disabled until that returns — so by the time this runs,
+ * `flow.extractedNetwork` is already in hand and `buildQueue()` is
+ * synchronous. The bar was a picture of an empty wait, and it named an agent
+ * ("Nexus Agent") that does not exist in this system.
+ *
+ * The parse that DOES take time already has its own honest state: the button
+ * itself reads "Reading your file…" and stays disabled while it runs.
+ */
 function startAiAnalysis() {
-  const n = flow.files.length;
-  runLoadingOverlay({
-    title: 'AI is setting up your data',
-    subtitle: 'Nexus Agent is analyzing your files, understanding columns and sampled values, and preparing smart mapping suggestions.',
-    summaryLabel: `${n} document${n === 1 ? '' : 's'}`,
-    summarySub: 'Upload successful',
-    summaryStatus: 'Upload successful',
-    summaryTime: 'Just now',
-    agentName: 'Nexus Agent',
-    agentSub: 'Working on your data in real time',
-    stepTitle: ['Reading uploaded files...', 'Preparing suggested mapping...'],
-    stepSub: 'Almost there!',
-  }, () => {
-    buildQueue();
-    if (flow.queue.length) {
-      showIngestionScreen(0);
-    } else if (typeof window.enterApp === 'function') {
-      window.enterApp();
-    }
-  });
+  buildQueue();
+  if (flow.queue.length) {
+    showIngestionScreen(0);
+  } else if (typeof window.enterApp === 'function') {
+    window.enterApp();
+  }
 }
 
+/**
+ * Confirmed mapping -> bound network -> analysed dashboard.
+ *
+ * This used to open with a 2.2-second pop-up whose progress ring was a
+ * `setInterval` counting its own forty ticks (see `runLoadingOverlay`), and
+ * only THEN start the real work behind the analysis screen. So a fabricated
+ * percentage reached 100% before anything had begun, and the user was handed
+ * a second loading screen for the actual wait. The fake beat is gone: the
+ * work starts immediately, behind the agent screen that reports it.
+ */
 function finishIngestion() {
-  const n = flow.files.length;
-  runLoadingOverlay({
-    title: 'Building your logistics network',
-    subtitle: 'Netgravity is assembling facilities, lanes, and constraints from your confirmed data into your digital twin.',
-    summaryLabel: `${n} file${n === 1 ? '' : 's'} processed`,
-    summarySub: 'Mapping confirmed',
-    summaryStatus: 'Mapping confirmed',
-    summaryTime: 'Just now',
-    agentName: 'Network Agent',
-    agentSub: 'Compiling your digital twin',
-    stepTitle: ['Assembling network graph...', 'Finalizing network topology...'],
-    stepSub: 'Almost there!',
-  }, () => {
+  {
     hideIngestionPages();
 
     // Render the parsed topology immediately so the twin and tables are
@@ -930,7 +831,7 @@ function finishIngestion() {
           'error',
         );
       });
-  });
+  }
 }
 
 /**

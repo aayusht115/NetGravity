@@ -2727,9 +2727,64 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   top: 16px;
   left: 16px;
   display: flex;
+  /* Wraps so the country caption can sit on a second line directly under the
+     stat cards without a hand-measured `top` that a change to the cards'
+     padding would silently break. */
+  flex-wrap: wrap;
   gap: 10px;
   z-index: 10;
   pointer-events: none;
+}
+
+/* ─── which country this network is in ────────────────────────────────
+   The map already answers this — it paints the countries the network has
+   sites in white against the grey of everywhere else — but only for a reader
+   who recognises the coastline. Naming it is the same fact in words. The
+   names come from the same point-in-polygon pass that chooses the white land
+   and the frame (`networkCountryLabel`), so the caption cannot disagree with
+   what is drawn beneath it. */
+.twin3d-country {
+  flex: 0 0 100%;
+  margin-top: -2px;
+}
+
+.twin3d-country[hidden] { display: none; }
+
+.twin3d-country-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 10px;
+  padding: 6px 12px;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+  max-width: 340px;
+}
+
+.twin3d-country-pill svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+  flex: 0 0 auto;
+}
+
+.twin3d-country-key {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.twin3d-country-name {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .twin3d-stat {
