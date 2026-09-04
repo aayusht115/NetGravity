@@ -28,6 +28,9 @@ import {
 } from './charts.js';
 import { initScenarios } from './scenarios.js';
 import { mountAgentLoading } from './agent-loading.js';
+import {
+  beginAnalysisLoading, endAnalysisLoading, reportAnalysisStage,
+} from './analysis-loading.js';
 import { initAgent } from './agent.js';
 import { initLandingPage } from './landing.js';
 import { initInsightDetail } from './insight-detail.js';
@@ -35,7 +38,6 @@ import { initAuth } from './auth.js';
 import { initProjects, loadProjects, openProjectById } from './projects.js';
 import { initIngestion } from './ingestion.js';
 import { initChatbot } from './chatbot.js';
-import { triggerAgentReasoning } from './agent-reasoning.js';
 import { apiClient } from './integration/api-client.js';
 import { initActions } from './actions.js';
 import { showInfoPanel, signOut } from './workspace-chrome.js';
@@ -899,9 +901,20 @@ function initTabs() {
       renderHome();
       return;
     }
+    // The SAME loading screen as opening a project, because it is the same
+    // work: `hydrateFromBackend` reloads the network, re-solves it, asks for a
+    // briefing, reads the scenarios and rebuilds the forecast. A spinning icon
+    // on a 24px button was the only sign of forty seconds of that, and the
+    // dashboard behind it went on showing the previous figures as though
+    // nothing were happening.
+    beginAnalysisLoading(project.name || 'this project', true);
     import('./integration/hydrate.js')
-      .then((m) => m.hydrateFromBackend(project.id))
-      .catch(() => null)
+      .then((m) => m.hydrateFromBackend(project.id, reportAnalysisStage))
+      .then(() => { endAnalysisLoading(); })
+      .catch((err) => {
+        endAnalysisLoading(`The analysis could not be refreshed: `
+          + `${(err && err.message) || 'unknown error'}`);
+      })
       .then(() => {
         btn.classList.remove('spinning');
         renderHome();
@@ -2818,5 +2831,4 @@ export function exportFacilityReport() {
 // Expose export on window
 if (typeof window !== 'undefined') {
   window.exportFacilityReport = exportFacilityReport;
-  window.triggerAgentReasoning = triggerAgentReasoning;
 }

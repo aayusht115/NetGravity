@@ -440,35 +440,110 @@ function renderChatMessages() {
   }
 }
 
+/* ─── waiting for a reply ─────────────────────────────────────────────
+   Three dots and nothing else, for however long the orchestrator took. On a
+   question that reaches a solve that is twenty seconds of a bubble that never
+   changes, and a reader with no way to tell a slow answer from a dead one.
+
+   These words make no claim about the system. They are deliberately whimsical
+   — nobody reads "Percolating" as a description of a capability — because the
+   alternative, inventing plausible-sounding stage names, is the exact failure
+   this codebase has twice had to undo. What IS true is stated: the dots keep
+   moving because a request is genuinely in flight, and past ten seconds the
+   elapsed count appears, which is a real number.
+
+   The loading DIALOG is not used here. A modal over the conversation would
+   hide the thing the reader is waiting on, and a chat turn is a message in a
+   thread rather than a screen being rebuilt. */
+const THINKING_WORDS = [
+  'Thinking', 'Pondering', 'Percolating', 'Mulling', 'Ruminating',
+  'Cogitating', 'Noodling', 'Simmering', 'Brewing', 'Distilling',
+  'Untangling', 'Puzzling', 'Deliberating', 'Considering', 'Musing',
+  'Sifting', 'Weighing', 'Tracing', 'Wondering', 'Marinating',
+  'Germinating', 'Whirring', 'Contemplating', 'Chewing it over',
+];
+
+/** How long each word is shown. Long enough to read, short enough to notice. */
+const THINKING_WORD_MS = 2400;
+
+/** After this, a wait is long enough that the reader wants a number. */
+const THINKING_ELAPSED_AFTER_MS = 10000;
+
+let thinkingTimer = null;
+
+/** A shuffled queue, so the words do not repeat until all have been shown. */
+function shuffledWords() {
+  const words = THINKING_WORDS.slice();
+  for (let i = words.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [words[i], words[j]] = [words[j], words[i]];
+  }
+  return words;
+}
+
 /**
- * Show animated typing dots indicator
+ * Show that a reply is being waited for.
+ *
+ * One timer, started here and cleared in `removeTypingIndicator`, which every
+ * exit path from `sendChatMessage` calls — including the failure path.
  */
 function showTypingIndicator() {
   const chatView = document.getElementById('chatbot-chat-view');
   if (!chatView) return;
+  removeTypingIndicator();
 
   const typingEl = document.createElement('div');
   typingEl.id = 'chatbot-typing-indicator';
   typingEl.className = 'chat-msg-row ai';
+  // One stable label for a screen reader. Announcing each word as it changed
+  // would read the whole list aloud to someone waiting for an answer.
   typingEl.innerHTML = `
-    <div class="chat-bubble-ai" style="padding: 10px 16px;">
-      <div class="typing-indicator">
+    <div class="chat-bubble-ai chat-thinking" role="status"
+         aria-label="Waiting for a reply">
+      <span class="chat-thinking-word" aria-hidden="true"></span>
+      <span class="typing-indicator" aria-hidden="true">
         <span class="typing-dot"></span>
         <span class="typing-dot"></span>
         <span class="typing-dot"></span>
-      </div>
+      </span>
+      <span class="chat-thinking-elapsed" aria-hidden="true"></span>
     </div>
   `;
   chatView.appendChild(typingEl);
+
+  const wordEl = typingEl.querySelector('.chat-thinking-word');
+  const elapsedEl = typingEl.querySelector('.chat-thinking-elapsed');
+  const startedAt = Date.now();
+  let queue = shuffledWords();
+
+  const nextWord = () => {
+    if (!queue.length) queue = shuffledWords();
+    const word = queue.shift();
+    wordEl.textContent = `${word}…`;
+    // Restarted deliberately: the fade belongs to the word, and each new word
+    // gets its own.
+    wordEl.classList.remove('is-in');
+    void wordEl.offsetWidth;
+    wordEl.classList.add('is-in');
+
+    const waited = Date.now() - startedAt;
+    elapsedEl.textContent = waited >= THINKING_ELAPSED_AFTER_MS
+      ? `${Math.round(waited / 1000)}s` : '';
+  };
+
+  nextWord();
+  thinkingTimer = setInterval(nextWord, THINKING_WORD_MS);
 
   const body = document.getElementById('chatbot-modal-body');
   if (body) body.scrollTop = body.scrollHeight;
 }
 
-/**
- * Remove animated typing indicator
- */
+/** Stop waiting: the reply arrived, or it failed. */
 function removeTypingIndicator() {
+  if (thinkingTimer) {
+    clearInterval(thinkingTimer);
+    thinkingTimer = null;
+  }
   const typingEl = document.getElementById('chatbot-typing-indicator');
   if (typingEl) typingEl.remove();
 }

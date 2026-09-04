@@ -58,10 +58,6 @@ const ACTIONS = {
   sendChatbotInput: () => callGlobal('sendChatbotInput'),
   askChatbotPrompt: (arg) => callGlobal('askChatbotPrompt', arg),
 
-  // Agent reasoning
-  closeAgentReasoningModal: () => callGlobal('closeAgentReasoningModal'),
-  completeReasoningSequence: () => callGlobal('completeReasoningSequence'),
-
   // Panels and drawers
   closeActionDrawer: () => callGlobal('closeActionDrawer'),
   closeFacilityPanel: () => {
@@ -72,21 +68,20 @@ const ACTIONS = {
   /**
    * The assistant's "Explore in Digital Twin" button.
    *
-   * Was a compound inline handler that closed the modal, then either started
-   * an agent-reasoning sequence or navigated — with the scenario topic
-   * interpolated straight into the attribute. That interpolation put chat
-   * content, which can carry text from an uploaded file, into an executable
-   * position; here it is data on a dataset attribute and cannot be anything
-   * else.
+   * It navigates. It used to spend two seconds first, in a modal that
+   * advanced four "reasoning stages" on 450ms timers, filled a progress bar
+   * to 100%, and printed lines like "NetGravity Agentic Kernel v2.4
+   * initialized" into a fake terminal — in front of no work whatsoever, since
+   * the only thing waiting at the end of it was a tab change. Removed with
+   * the rest of that modal.
+   *
+   * The topic is read from a dataset attribute rather than interpolated into
+   * an inline handler: chat content can carry text from an uploaded file, and
+   * that must never reach an executable position.
    */
-  exploreInTwin: (tab, el) => {
+  exploreInTwin: (tab) => {
     callGlobal('closeChatbotModal');
-    const topic = (el && el.dataset.topic) || 'Network Optimization';
-    if (typeof window.triggerAgentReasoning === 'function') {
-      window.triggerAgentReasoning(`Executing AI Recommended Action: ${topic}`, tab);
-    } else {
-      callGlobal('navigateToTab', tab);
-    }
+    callGlobal('navigateToTab', tab);
   },
 
   // Generic

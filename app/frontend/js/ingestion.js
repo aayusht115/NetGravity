@@ -2042,8 +2042,6 @@ export function hideIngestionPages() {
     const el = document.getElementById(id);
     if (el) el.classList.add('hidden');
   });
-  const overlay = document.getElementById('loading-modal-overlay');
-  if (overlay) { overlay.classList.remove('active'); overlay.innerHTML = ''; }
 }
 
 export function initIngestion() {

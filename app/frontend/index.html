@@ -21,7 +21,6 @@
   <link rel="stylesheet" href="css/home-overview.css">
   <link rel="stylesheet" href="css/insights.css">
   <link rel="stylesheet" href="css/insight-detail.css">
-  <link rel="stylesheet" href="css/agent-reasoning.css">
   <link rel="stylesheet" href="css/agent-loading.css">
   <link rel="stylesheet" href="css/chatbot.css">
   <link rel="stylesheet" href="css/workspace-chrome.css">
@@ -256,7 +255,6 @@
        the top of that module. -->
   <div id="upload-data-page" class="proj-page hidden"></div>
   <div id="ingestion-page" class="proj-page hidden"></div>
-  <div id="loading-modal-overlay" class="ing-loading-overlay"></div>
 
 
 <div class="app-shell">
@@ -1222,43 +1220,14 @@
               </div>
 
               <!-- Solver Execution State (Phased Execution) -->
-              <div class="agent-execution-view hidden" id="agent-execution-view">
-                <div class="agent-pulse-header">
-                  <div class="agent-pulse-icon">⚡</div>
-                  <div>
-                    <h4 style="font-size:15px;font-weight:800;color:var(--text-1);margin-bottom:2px">NetGravity Mathematical Engine</h4>
-                    <div class="text-xs text-muted" id="agent-live-status-text">Formulating constraints and invoking MILP solver...</div>
-                  </div>
-                </div>
-
-                <!-- Execution Step List -->
-                <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px;background:var(--bg-subtle);padding:14px;border-radius:var(--r-md);border:1px solid var(--border-light)" id="solver-phase-steps">
-                  <div class="flex items-center justify-between text-xs" id="step-phase-1">
-                    <span>Scenario validated</span>
-                    <span style="color:var(--green);font-weight:700">✓</span>
-                  </div>
-                  <div class="flex items-center justify-between text-xs" id="step-phase-2">
-                    <span>Preparing optimisation</span>
-                    <span style="color:var(--green);font-weight:700">✓</span>
-                  </div>
-                  <div class="flex items-center justify-between text-xs" id="step-phase-3">
-                    <span>Running network optimisation</span>
-                    <span class="telemetry-spinner"></span>
-                  </div>
-                  <div class="flex items-center justify-between text-xs text-muted" id="step-phase-4">
-                    <span>Evaluating scenario impact</span>
-                    <span>○</span>
-                  </div>
-                  <div class="flex items-center justify-between text-xs text-muted" id="step-phase-5">
-                    <span>Stress testing</span>
-                    <span>○</span>
-                  </div>
-                  <div class="flex items-center justify-between text-xs text-muted" id="step-phase-6">
-                    <span>Generating assessment</span>
-                    <span>○</span>
-                  </div>
-                </div>
-              </div>
+              <!-- Why a run stopped, and the way back to the form.
+                   This used to be an execution view: a "NetGravity
+                   Mathematical Engine" header and six phases with a spinner,
+                   drawn inside the modal while the agent dialog was already on
+                   screen in front of it reporting the same wait. Two loading
+                   states for one request. The dialog is the loading screen;
+                   this is only ever seen when something failed. -->
+              <div class="agent-execution-view hidden" id="agent-execution-view"></div>
             </div>
           </div>
         </section>
@@ -1454,106 +1423,6 @@
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- NETGRAVITY AUTONOMOUS AGENT REASONING ENGINE MODAL              -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <div class="agent-modal-overlay" id="agent-reasoning-modal-overlay" data-action="closeAgentReasoningModal" data-self-only="1">
-    <div class="agent-modal-dialog">
-      <!-- Modal Header -->
-      <div class="agent-modal-header">
-        <div class="agent-header-brand">
-          <div class="agent-header-icon-badge">✦</div>
-          <div class="agent-header-text">
-            <h3 class="agent-header-title">
-              <span id="agent-modal-task-title">Evaluating Multi-Echelon Network Rebalancing</span>
-              <span class="agent-live-tag">LIVE SOLVER</span>
-            </h3>
-            <p class="agent-header-subtitle">PuLP / HiGHS branch-and-cut solver · Validated capability pipeline</p>
-          </div>
-        </div>
-        <button class="agent-modal-close" data-action="closeAgentReasoningModal" title="Close">✕</button>
-      </div>
-
-      <!-- Modal Body -->
-      <div class="agent-modal-body">
-        <!-- 4 Pipeline Stages -->
-        <div class="agent-stages-list">
-          <!-- Stage 1 -->
-          <div class="agent-stage-card completed">
-            <div class="agent-stage-icon-box">1</div>
-            <div class="agent-stage-content">
-              <div class="agent-stage-top-meta">
-                <div class="agent-stage-name">Intent resolution &amp; planning</div>
-                <span class="agent-stage-status-badge badge-completed">Completed</span>
-              </div>
-              <p class="agent-stage-desc">Interpreting the request and selecting a workflow. The planner is deterministic; a language model may propose a plan, but the plan is validated before anything executes.</p>
-            </div>
-          </div>
-
-          <!-- Stage 2 -->
-          <div class="agent-stage-card active">
-            <div class="agent-stage-icon-box">2</div>
-            <div class="agent-stage-content">
-              <div class="agent-stage-top-meta">
-                <div class="agent-stage-name">Plan validation &amp; dependency check</div>
-                <span class="agent-stage-status-badge badge-running">Running...</span>
-              </div>
-              <p class="agent-stage-desc">Checking every step against the capability registry: that each capability exists, its inputs are satisfied, and its hard dependencies are met. An invalid plan is refused rather than partially run.</p>
-            </div>
-          </div>
-
-          <!-- Stage 3 -->
-          <div class="agent-stage-card">
-            <div class="agent-stage-icon-box">3</div>
-            <div class="agent-stage-content">
-              <div class="agent-stage-top-meta">
-                <div class="agent-stage-name">Capability execution (MILP)</div>
-                <span class="agent-stage-status-badge badge-pending">Queued</span>
-              </div>
-              <p class="agent-stage-desc">Running the specialist engines through the capability executor. Network optimisation is solved exactly by PuLP/HiGHS branch-and-cut; the language model cannot calculate, alter or override a solver result.</p>
-            </div>
-          </div>
-
-          <!-- Stage 4 -->
-          <div class="agent-stage-card">
-            <div class="agent-stage-icon-box">4</div>
-            <div class="agent-stage-content">
-              <div class="agent-stage-top-meta">
-                <div class="agent-stage-name">Observation, reasoning &amp; governance</div>
-                <span class="agent-stage-status-badge badge-pending">Queued</span>
-              </div>
-              <p class="agent-stage-desc">Observing each result, deciding whether to continue, and converting the authoritative evidence package into an explanation. Governance then classifies any recommended action before it can be acted on.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Terminal Execution Log -->
-        <div class="agent-terminal-box" id="agent-terminal-box">
-          <div id="agent-terminal-content">
-            <div class="agent-terminal-line">
-              <span class="timestamp">[00:00.01]</span> <span class="prefix-info">></span> NetGravity Agentic Kernel v2.4 initialized.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Modal Footer with Progress Bar & Action -->
-      <div class="agent-modal-footer">
-        <div class="agent-progress-wrap">
-          <div class="agent-progress-label-row">
-            <span id="agent-progress-text">Executing Multi-Agent Reasoning Pipeline...</span>
-            <span id="agent-progress-pct">45%</span>
-          </div>
-          <div class="agent-progress-track">
-            <div class="agent-progress-fill" id="agent-progress-fill" style="width: 45%;"></div>
-          </div>
-        </div>
-
-        <button class="agent-btn-complete" data-action="completeReasoningSequence">
-          <span>View Decision Results →</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-
 <!-- Facility Detail Panel Overlay (Hidden by default, slides in from right when active) -->
   <div class="facility-panel-overlay" id="facility-panel-overlay" style="display:none;" data-action="closeFacilityPanel" data-self-only="1">
     <div class="facility-panel" id="facility-panel">

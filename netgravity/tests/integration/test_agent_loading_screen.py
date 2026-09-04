@@ -7,12 +7,13 @@ talking. That picture is a claim about the system: it says these agents exist,
 that this one is working now, and that this one is waiting on it. A claim has
 to be true.
 
-This repository has already had to delete one animated agent pipeline that was
-not — the header of `js/agent-reasoning.js` records it: stages that advanced on
-a `setInterval`, a solver the product does not use named with a fabricated
-runtime, and a verdict no engine had produced. The replacement must not be able
-to drift back into that, so the tests here are about PROVENANCE rather than
-appearance:
+This repository has had to delete TWO animated agent pipelines that were not.
+The first named a solver the product does not use, with a fabricated runtime
+and a verdict no engine had produced. The second, `js/agent-reasoning.js`,
+advanced four stages on 450ms timers and filled a progress bar to 100% in front
+of a tab change — no request, no wait, no work. The replacement must not be
+able to drift back into either, so the tests here are about PROVENANCE rather
+than appearance:
 
   * the view holds no sequence of its own;
   * the recorder holds no sequence of its own either — every step comes from
@@ -268,7 +269,10 @@ class TestEveryCallerReportsItsOwnRealWork:
     def test_a_scenario_run_engages_only_what_a_scenario_run_uses(self):
         js = _without_comments(_asset("js", "scenarios.js"))
         fn = js[js.index("async function runScenarioCreation()"):]
-        fn = fn[:fn.index("renderCreationProgress(CREATION_STEPS.length + 1);")]
+        # Ends at the second dispatch. This used to slice on a call into the
+        # scenario page's own step list, which no longer exists: that list was
+        # a second loading state drawn behind the dialog for the same wait.
+        fn = fn[:fn.index("stepStart('compare');")]
         assert "startRun({" in fn
         assert "layer: 'scenario'" in fn
         # And nothing else is claimed.

@@ -487,6 +487,60 @@
 }
 
 /* Typing Indicator Animation */
+/* ─── waiting for a reply ─────────────────────────────────────────── */
+.chat-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 15px;
+}
+
+.chat-thinking-word {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-2, #4b5563);
+  /* A width that does not jump as the word changes: the dots beside it would
+     otherwise shuffle left and right every couple of seconds. */
+  min-width: 92px;
+}
+
+.chat-thinking-word.is-in {
+  animation: chat-thinking-in 420ms ease-out both;
+}
+
+@keyframes chat-thinking-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.chat-thinking-elapsed {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3, #6b7280);
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-thinking-elapsed:empty { display: none; }
+
+/* The dots were built as the entire contents of a bubble, with 14px of
+   padding either side. Beside a word that padding reads as a gap, and the
+   bounce keyframe starts at scale(0) — so two of the three are invisible at
+   any instant and what is left looks like empty space rather than motion. */
+.chat-thinking .typing-indicator {
+  padding: 0;
+  gap: 3px;
+}
+
+.chat-thinking .typing-dot {
+  width: 5px;
+  height: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-thinking-word.is-in { animation: none; }
+}
+
 .typing-indicator {
   display: flex;
   align-items: center;
