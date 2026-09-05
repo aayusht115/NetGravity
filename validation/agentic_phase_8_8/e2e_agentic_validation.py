@@ -5,6 +5,7 @@ Runs Scenarios A, B, C, D, E plus Secondary Direct Orchestrator runs & NLU edge 
 Generates scenario trace JSON files, summary_results.json, and report.md.
 """
 
+import dataclasses
 import os
 import sys
 import json
@@ -34,7 +35,9 @@ from netgravity.ingestion.schemas.signal import (
     SignalBucket, SignalConfidence, SignalDirection,
 )
 from netgravity.orchestrator.agents.llm_gateway import LLMGateway, LLMGatewayConfig
-from netgravity.orchestrator.planner.llm_planner import LiveLLMPlanner, MAX_LIVE_PLANNER_CALLS
+from netgravity.orchestrator.planner.llm_planner import (
+    ENRICHMENT_CAPABILITIES, LiveLLMPlanner, MAX_LIVE_PLANNER_CALLS,
+)
 from netgravity.orchestrator.schemas.adaptive import AdaptiveExecutionConfig, AdaptiveAction
 from netgravity.orchestrator.schemas.requests import Intent, OrchestratorRequest, ExternalSignal
 from netgravity.orchestrator.schemas.conversation import ChatRequest, ChatResponse
@@ -42,6 +45,137 @@ from netgravity.orchestrator.conversation.chat_service import ChatService
 from netgravity.orchestrator.registry import build_orchestrator
 from netgravity.tests.integration.conftest import build_delhi_network
 from netgravity.orchestrator.exceptions import EngineFailureError
+
+
+def dump(obj: Any) -> Any:
+    """
+    Serialise a trace object whatever kind it is.
+
+    `signal_routing` is a `@dataclass`, not a pydantic model, and this harness
+    called `.model_dump()` on it unconditionally. The line was never reached
+    because the LLM planner never returned a parseable plan, so every run fell
+    back to the deterministic planner and took a path that leaves
+    `ExecutionContext.signal_routing` unset. Fixing the planner reached it on
+    the first try and the harness crashed at Scenario A.
+    """
+    if obj is None:
+        return None
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump(mode="json")
+    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+        return json.loads(json.dumps(dataclasses.asdict(obj), default=str))
+    return json.loads(json.dumps(obj, default=str))
+
+
+def assess(chat_resp: Any, orch_resp: Any, ctx: Any,
+           expect_errors: bool = False, **extra: Any) -> Dict[str, Any]:
+    """
+    Judge a scenario from what actually happened.
+
+    Every field here was a hardcoded `True`, and `"classification"` was the
+    literal `"PASS"` — so this harness could not fail. It reported five PASSes
+    over a run in which three scenarios returned `status: FAILED` and every
+    live planner call came back truncated and unparseable. A check that always
+    passes is worse than no check: it is a standing claim that something works.
+
+    The criteria are deliberately modest, because this harness validates
+    AGENTIC BEHAVIOUR rather than answer quality:
+
+      * steps actually executed, in dependency order (`network.load_snapshot`
+        cannot come after something that needs it);
+      * the run reached a terminal state that is not FAILED;
+      * decisions were recorded, which is what makes the run inspectable.
+
+    `replanning_observed` stays reported-but-not-required: not every scenario
+    should need to replan, and demanding it would push the harness toward
+    provoking replans rather than observing them.
+    """
+    steps = [s["capability"] for s in (getattr(orch_resp, "steps", None) or [])]
+    status = getattr(chat_resp, "status", None) or (
+        chat_resp.get("status") if isinstance(chat_resp, dict) else None)
+
+    ordered = True
+    if "network.load_snapshot" in steps:
+        first_dependent = next(
+            (i for i, c in enumerate(steps)
+             if c in ("optimization.solve", "resilience.assess", "forecast.demand")),
+            None)
+        if first_dependent is not None:
+            ordered = steps.index("network.load_snapshot") < first_dependent
+
+    decisions = len(getattr(ctx, "decision_history", []) or []) if ctx else 0
+    errors = list(getattr(orch_resp, "errors", None) or [])
+
+    result = {
+        "sequential_behavior": bool(steps) and ordered,
+        "adaptive_behavior": decisions > 0,
+        "replanning_observed": (ctx.replan_count > 0) if ctx else False,
+        "steps_executed": len(steps),
+        "chat_status": status,
+        "step_errors": [e.get("code") if isinstance(e, dict) else str(e)
+                        for e in errors],
+    }
+    result.update(extra)
+
+    failed = [k for k, v in result.items()
+              if isinstance(v, bool) and k != "replanning_observed" and not v]
+    if status == "FAILED":
+        failed.append("chat_status=FAILED")
+
+    # `expect_errors` is for the scenario that INJECTS a failure — Scenario D
+    # replaces the REI service with one that raises, and the whole point is
+    # that the manager traps it. There, an error is the evidence; its ABSENCE
+    # would mean the injected failure never fired and the scenario proved
+    # nothing.
+    if expect_errors:
+        # Trapped means HANDLED, which includes handled by succeeding on retry.
+        # `TemporaryFailingREI` fails once and then works, so the run can end
+        # with no error at all — and that is the manager doing its job, not the
+        # injection failing to fire. The evidence is in the decision history:
+        # a retry or recovery was decided. Requiring a surviving error would
+        # have marked a clean recovery a failure.
+        history = [d for d in (getattr(ctx, "decision_history", None) or [])]
+        recovered = any(
+            "RETRY" in str(getattr(d, "action", "")).upper()
+            or "RECOVER" in str(getattr(d, "action", "")).upper()
+            for d in history
+        )
+        # The chat turn is what consumes the single injected failure, so its
+        # warnings are evidence too — the direct run afterwards sees a healthy
+        # service and would otherwise look like nothing was ever injected.
+        warned = any(
+            "unavailable" in str(w).lower() or "fail" in str(w).lower()
+            or "retry" in str(w).lower()
+            for w in (result.get("chat_warnings") or [])
+        )
+        result["failure_trapped"] = bool(errors) or recovered or warned
+        result["recovery_decisions"] = sum(
+            1 for d in history
+            if "RETRY" in str(getattr(d, "action", "")).upper())
+        if not result["failure_trapped"]:
+            failed.append("injected failure was neither recorded nor recovered")
+    else:
+        # An ENRICHMENT step failing is the degradation the design intends —
+        # "no observed demand history is available, so no forecast can be
+        # produced" is the system being honest, and the analysis around it
+        # still completed. Only a load-bearing step failing is a scenario
+        # failure. The set is imported rather than restated so this cannot
+        # drift from what the planner actually marks optional.
+        blocking = [
+            e for e in errors
+            if (e.get("capability") if isinstance(e, dict) else None)
+            not in ENRICHMENT_CAPABILITIES
+        ]
+        result["degraded_steps"] = len(errors) - len(blocking)
+        if blocking:
+            failed.append(
+                f"{len(blocking)} required-step error(s): "
+                + ", ".join(str(e.get("capability")) for e in blocking))
+
+    result["agentic_behavior_proven"] = not failed
+    result["classification"] = "PASS" if not failed else "FAIL"
+    result["failed_criteria"] = failed
+    return result
 
 
 def sanitize(text: Any) -> Any:
@@ -178,14 +312,8 @@ def main():
         "executed_steps": [s["capability"] for s in orch_resp_a_direct.steps],
         "decisions": [d.model_dump(mode="json") for d in ctx_a.decision_history] if ctx_a else [],
         "replan_count": ctx_a.replan_count if ctx_a else 0,
-        "signal_routing": ctx_a.signal_routing.model_dump(mode="json") if ctx_a and ctx_a.signal_routing else None,
-        "agentic_assessment": {
-            "sequential_behavior": True,
-            "adaptive_behavior": True,
-            "replanning_observed": (ctx_a.replan_count > 0) if ctx_a else False,
-            "agentic_behavior_proven": True,
-            "classification": "PASS",
-        }
+        "signal_routing": dump(ctx_a.signal_routing) if ctx_a else None,
+        "agentic_assessment": assess(chat_resp_a, orch_resp_a_direct, ctx_a)
     }
     with open(f"{out_dir}/scenario_a_trace.json", "w") as f:
         json.dump(sanitize(trace_data_a), f, indent=2)
@@ -235,14 +363,8 @@ def main():
         "executed_steps": [s["capability"] for s in orch_resp_b_direct.steps],
         "decisions": [d.model_dump(mode="json") for d in ctx_b.decision_history] if ctx_b else [],
         "risk_refused_from_forecast": risk_refused_b,
-        "agentic_assessment": {
-            "sequential_behavior": True,
-            "adaptive_behavior": True,
-            "replanning_observed": False,
-            "risk_isolated_from_demand": risk_refused_b,
-            "agentic_behavior_proven": True,
-            "classification": "PASS",
-        }
+        "agentic_assessment": assess(chat_resp_b, orch_resp_b_direct, ctx_b,
+                                     risk_isolated_from_demand=risk_refused_b)
     }
     with open(f"{out_dir}/scenario_b_trace.json", "w") as f:
         json.dump(sanitize(trace_data_b), f, indent=2)
@@ -281,13 +403,7 @@ def main():
         "executed_steps": [s["capability"] for s in orch_resp_c_direct.steps],
         "decisions": [d.model_dump(mode="json") for d in ctx_c.decision_history] if ctx_c else [],
         "replan_count": ctx_c.replan_count if ctx_c else 0,
-        "agentic_assessment": {
-            "sequential_behavior": True,
-            "adaptive_behavior": True,
-            "replanning_observed": True,
-            "agentic_behavior_proven": True,
-            "classification": "PASS",
-        }
+        "agentic_assessment": assess(chat_resp_c, orch_resp_c_direct, ctx_c)
     }
     with open(f"{out_dir}/scenario_c_trace.json", "w") as f:
         json.dump(sanitize(trace_data_c), f, indent=2)
@@ -340,13 +456,14 @@ def main():
         "executed_steps": [s["capability"] for s in orch_resp_d_direct.steps],
         "decisions": [d.model_dump(mode="json") for d in ctx_d.decision_history] if ctx_d else [],
         "errors": list(ctx_d.errors) if ctx_d else [],
-        "agentic_assessment": {
-            "sequential_behavior": True,
-            "adaptive_behavior": True,
-            "failure_trapped_by_manager": True,
-            "agentic_behavior_proven": True,
-            "classification": "PASS",
-        }
+        # Assessed against the CHAT run: `TemporaryFailingREI` fails once and
+        # then works, and the chat turn is what consumes that one failure. The
+        # direct run afterwards sees a healthy REI, so judging the injection by
+        # it reported "no failure was injected" on a scenario that had trapped
+        # one correctly a moment earlier.
+        "agentic_assessment": assess(chat_resp_d, orch_resp_d_direct, ctx_d,
+                                     expect_errors=True,
+                                     chat_warnings=list(chat_resp_d.warnings or []))
     }
     with open(f"{out_dir}/scenario_d_trace.json", "w") as f:
         json.dump(sanitize(trace_data_d), f, indent=2)
@@ -384,13 +501,14 @@ def main():
         "secondary_direct_response": orch_resp_e_direct.model_dump(mode="json"),
         "executed_steps": [s["capability"] for s in orch_resp_e_direct.steps],
         "decisions": [d.model_dump(mode="json") for d in ctx_e.decision_history] if ctx_e else [],
-        "agentic_assessment": {
-            "sequential_behavior": True,
-            "adaptive_behavior": True,
-            "multi_domain_orchestration": True,
-            "agentic_behavior_proven": True,
-            "classification": "PASS",
-        }
+        "agentic_assessment": assess(
+            chat_resp_e, orch_resp_e_direct, ctx_e,
+            # Derived: a genuinely multi-domain run touches more than one
+            # capability domain rather than being declared to have done so.
+            multi_domain_orchestration=len({
+                s["capability"].split(".")[0]
+                for s in (orch_resp_e_direct.steps or [])
+            }) >= 3)
     }
     with open(f"{out_dir}/scenario_e_trace.json", "w") as f:
         json.dump(sanitize(trace_data_e), f, indent=2)
@@ -429,6 +547,19 @@ def main():
     print(f"Total Planner Calls Attempted: {live_planner.calls_attempted} (Max: {live_planner.max_calls})")
     print(f"Calls Successful: {live_planner.calls_successful}")
     print(f"Calls Failed: {live_planner.calls_failed}")
+
+    # The verdict, derived. This block used to print nothing about the
+    # scenarios at all, while every one of them was recorded as a hardcoded
+    # PASS — so a run in which three scenarios FAILED reported total success.
+    print("")
+    verdicts = {k: v.get("classification") for k, v in summary_results.items()
+                if isinstance(v, dict) and "classification" in v}
+    for name, verdict in verdicts.items():
+        reasons = summary_results[name].get("failed_criteria") or []
+        print(f"  [{verdict:4}] {name}" + (f" — {'; '.join(map(str, reasons))}" if reasons else ""))
+    failed_n = sum(1 for v in verdicts.values() if v != "PASS")
+    print("")
+    print(f"SCENARIOS: {len(verdicts) - failed_n}/{len(verdicts)} passed")
     print("==================================================")
 
 

@@ -1,0 +1,553 @@
+/* ═══════════════════════════════════════════════════════════════
+   AGENT LOADING — the global loading state
+   Dump/avengersloading.html
+   ═══════════════════════════════════════════════════════════════
+
+   A small rectangular dialog over a blurred workspace, holding a vertical
+   phase tree: a node per phase on a connecting line, a spinner while it runs,
+   a green tick when it lands, its title typed out and its detail streaming
+   underneath. Finished phases collapse away, so what is on screen is what is
+   happening now.
+
+   The reference is a demo and its palette is its own (#7c3aed). Everything
+   here uses the application's tokens — --primary, --text-1/2/3,
+   --border-light — and the application's type scale, so the dialog looks like
+   the product it is loading rather than like a page from somewhere else.
+
+   MOTION. All of it is either a spinner on a phase that is genuinely running,
+   an entrance on a line that has genuinely arrived, or the progress bar
+   moving to a fraction that has genuinely changed. There is no ambient
+   animation: nothing here moves unless something happened.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── the scrim ───────────────────────────────────────────────────
+   The workspace stays visible and blurred behind the dialog: the work is
+   happening TO that screen, and it reads as out of reach while it is being
+   rebuilt rather than as gone. */
+.agl-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above everything, modals included (`.modal-overlay` is 999999).
+     A screen that blurs the whole workspace and takes every click IS the
+     topmost thing; at 99995 any modal still open when a run started drew
+     over it, which is how a scenario run put a blank card in front of its
+     own loading dialog. */
+  z-index: 1000000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: rgba(24, 12, 38, 0.34);
+  /* The one place in the application that pays for a backdrop filter. It is
+     affordable exactly here: the overlay is up only while a request is in
+     flight, it is not scrolled, and nothing behind it is animating. */
+  -webkit-backdrop-filter: blur(7px) saturate(0.92);
+  backdrop-filter: blur(7px) saturate(0.92);
+  animation: agl-scrim-in 0.36s ease-out both;
+}
+
+.agl-overlay.active { display: flex; }
+
+@keyframes agl-scrim-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ─── the dialog ──────────────────────────────────────────────────
+   Rectangular, and deliberately small: a pop-up, not a page. Bounded in both
+   axes so it can never grow past the window, and scrollable inside if a long
+   run puts more phases in it than the height allows. */
+.agl-shell {
+  position: relative;
+  width: min(560px, 100%);
+  /* A floor, because finished phases collapse away: without it the dialog
+     shrinks and grows by fifty or sixty pixels every time a phase lands, and
+     the reader is chasing a moving box. */
+  min-height: 196px;
+  max-height: min(524px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  padding: 20px 22px 18px;
+  box-sizing: border-box;
+  border-radius: 14px;
+  border: 1px solid rgba(107, 47, 160, 0.14);
+  background: linear-gradient(180deg, #ffffff 0%, #fdfbff 100%);
+  box-shadow: 0 26px 70px rgba(24, 12, 38, 0.28),
+              0 2px 8px rgba(24, 12, 38, 0.10);
+  overflow-y: auto;
+  overflow-x: hidden;
+  animation: agl-dialog-in 0.42s cubic-bezier(.2, .8, .3, 1) both;
+}
+
+@keyframes agl-dialog-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ─── header ──────────────────────────────────────────────────── */
+.agl-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex: 0 0 auto;
+}
+
+.agl-orb {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #ffffff;
+  background: linear-gradient(140deg, var(--primary, #6B2FA0), #4a1f70);
+  box-shadow: 0 6px 18px rgba(107, 47, 160, 0.32),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+/* A slow sweep across the mark, and the only thing on the dialog that moves
+   without a cause. It says the dialog is live, not that anything specific is
+   happening — which is why it carries no state class and never changes. */
+.agl-orb::after {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: conic-gradient(from 0deg, transparent 0deg,
+              rgba(255, 255, 255, 0.5) 60deg, transparent 130deg);
+  animation: agl-sweep-orb 4.8s linear infinite;
+}
+
+@keyframes agl-sweep-orb { to { transform: rotate(360deg); } }
+
+.agl-orb svg { position: relative; z-index: 1; width: 19px; height: 19px; }
+
+.agl-head-text { min-width: 0; }
+
+.agl-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-1, #111827);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agl-sub {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-3, #6b7280);
+  font-variant-numeric: tabular-nums;
+}
+
+.agl-elapsed {
+  color: var(--primary, #6B2FA0);
+  font-weight: 700;
+}
+
+/* The way out of the pacing.
+
+   Nielsen's third heuristic: the dialog holds a reader on purpose, and a hold
+   with no exit is a trap. It is offered only while something is genuinely
+   waiting to be shown — an always-present control that does nothing most of
+   the time is clutter, and this dialog has room for none. Its title says what
+   it does NOT do, because a button on a modal over running work reads as a
+   cancel until it is told otherwise. */
+.agl-skip {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-left: auto;
+  border: 1px solid var(--border-light, #eceef2);
+  background: #ffffff;
+  color: var(--text-3, #6b7280);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: -0.01em;
+  padding: 5px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .2s ease, border-color .2s ease, background .2s ease;
+}
+
+.agl-skip:hover {
+  color: var(--primary, #6B2FA0);
+  border-color: rgba(107, 47, 160, 0.42);
+  background: rgba(107, 47, 160, 0.05);
+}
+
+.agl-skip:focus-visible {
+  outline: 2px solid var(--primary, #6B2FA0);
+  outline-offset: 2px;
+}
+
+.agl-skip[hidden] { display: none !important; }
+
+/* ─── progress ────────────────────────────────────────────────── */
+.agl-bar {
+  height: 5px;
+  border-radius: 99px;
+  background: #efe9f7;
+  overflow: hidden;
+  margin-bottom: 18px;
+  flex: 0 0 auto;
+}
+
+.agl-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #8b5cf6, var(--primary, #6B2FA0));
+  transition: width .8s cubic-bezier(.4, 0, .2, 1);
+}
+
+/* No fraction to show — an unknown total, drawn as a sweep rather than as a
+   number nothing supports. */
+.agl-bar.indeterminate > span {
+  width: 34% !important;
+  animation: agl-sweep 3.6s ease-in-out infinite;
+}
+
+@keyframes agl-sweep {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(320%); }
+}
+
+/* ─── the phase tree ──────────────────────────────────────────── */
+.agl-tree {
+  display: flex;
+  flex-direction: column;
+  /* Centred in whatever room the floor leaves. With the tree pinned to the
+     top, a single short phase left a hollow band under it; the floor is there
+     so the dialog does not resize under the reader, not so it can be empty. */
+  justify-content: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.agl-phase {
+  position: relative;
+  padding-left: 30px;
+  opacity: 0.42;
+  max-height: 360px;
+  overflow: hidden;
+  transition: opacity .55s ease, max-height .7s cubic-bezier(.4, 0, .2, 1),
+              margin .7s cubic-bezier(.4, 0, .2, 1), transform .55s ease;
+}
+
+.agl-phase.active { opacity: 1; }
+
+/* A phase whose turn has not come is not shown at all. Listing what is about
+   to happen would be a promise about a run that has not made it yet. */
+.agl-phase.pending {
+  opacity: 0;
+  max-height: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+/* A finished phase is READ, and only then folded away.
+
+   It used to carry `max-height: 0` here, so it collapsed on the frame its
+   tick landed — the lines it had just written were drawn and removed inside
+   one animation frame, which is the fault this round exists to fix. It now
+   stays open, dimmed to say it is behind rather than current, until the view
+   adds `.collapsed` (`holdThenCollapse`, PHASE_HOLD_MS later).
+
+   The dialog is small and what a reader needs is what is happening NOW, so it
+   does still fold — just not before it has been read. */
+.agl-phase.done {
+  opacity: 0.72;
+  max-height: 360px;
+}
+
+.agl-phase.done.collapsed {
+  opacity: 0;
+  max-height: 0;
+  margin: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+}
+
+/* A FAILED phase does not collapse. The reason a run stopped is the one thing
+   this screen must not take away. */
+.agl-phase.failed {
+  opacity: 1;
+  max-height: 360px;
+}
+
+/* BLOCKED: planned, never run, because something upstream stopped first. It
+   stays on screen — amber rather than red, because it did not fail, it never
+   got its turn — and it is never drawn like `pending`, which would say it is
+   still coming. */
+.agl-phase.blocked {
+  opacity: 0.85;
+  max-height: 360px;
+}
+
+.agl-phase.blocked .agl-node {
+  border-color: #b45309;
+  background: #ffffff;
+  color: #b45309;
+}
+
+.agl-phase.blocked::before { background: #b45309; }
+.agl-phase.blocked .agl-phase-title { color: #b45309; }
+
+/* the node */
+.agl-node {
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid var(--border-light, #eceef2);
+  display: grid;
+  place-items: center;
+  z-index: 2;
+  transition: border-color .3s ease, background .3s ease, box-shadow .3s ease;
+}
+
+.agl-phase.active .agl-node {
+  border-color: var(--primary, #6B2FA0);
+  box-shadow: 0 0 0 4px rgba(107, 47, 160, 0.13);
+}
+
+.agl-phase.done .agl-node {
+  border-color: #047857;
+  background: #047857;
+  color: #ffffff;
+}
+
+.agl-phase.failed .agl-node {
+  border-color: #c0392b;
+  background: #c0392b;
+  color: #ffffff;
+}
+
+.agl-node-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--border-light, #eceef2);
+}
+
+.agl-node-spin {
+  display: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(107, 47, 160, 0.22);
+  border-top-color: var(--primary, #6B2FA0);
+  animation: agl-rotate 1.25s linear infinite;
+}
+
+@keyframes agl-rotate { to { transform: rotate(360deg); } }
+
+.agl-node-tick,
+.agl-node-cross { display: none; }
+.agl-node-tick svg,
+.agl-node-cross svg { width: 10px; height: 10px; display: block; }
+
+.agl-phase.active .agl-node-dot,
+.agl-phase.done .agl-node-dot,
+.agl-phase.failed .agl-node-dot { display: none; }
+.agl-phase.blocked .agl-node-dot { background: #b45309; }
+.agl-phase.active .agl-node-spin { display: block; }
+.agl-phase.done .agl-node-tick { display: block; }
+.agl-phase.failed .agl-node-cross { display: block; }
+
+/* the connecting line */
+.agl-phase::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 21px;
+  bottom: -2px;
+  width: 2px;
+  background: var(--border-light, #eceef2);
+  z-index: 1;
+}
+
+.agl-phase:last-child::before { display: none; }
+.agl-phase.done::before { background: #047857; }
+.agl-phase.failed::before { background: #c0392b; }
+.agl-phase.active::before {
+  background: linear-gradient(var(--primary, #6B2FA0), var(--border-light, #eceef2));
+}
+
+.agl-phase-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text-1, #111827);
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.35;
+}
+
+.agl-caret {
+  color: var(--primary, #6B2FA0);
+  font-weight: 700;
+  animation: agl-blink 1.1s steps(1) infinite;
+}
+
+@keyframes agl-blink { 50% { opacity: 0; } }
+
+/* ─── the lines a phase reports ───────────────────────────────── */
+.agl-logs {
+  margin: 6px 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.agl-phase.pending .agl-logs { display: none; }
+
+.agl-log {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-2, #4b5563);
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  opacity: 0;
+  transform: translateX(-7px);
+  animation: agl-log-in .5s cubic-bezier(.2, .7, .3, 1) forwards;
+  overflow-wrap: anywhere;
+}
+
+@keyframes agl-log-in {
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.agl-log-mark {
+  color: #a78bfa;
+  flex: 0 0 auto;
+}
+
+.agl-log-text { min-width: 0; }
+
+.agl-log-value {
+  color: var(--primary, #6B2FA0);
+  font-weight: 700;
+  margin-left: auto;
+  padding-left: 10px;
+  text-align: right;
+  flex: 0 1 auto;
+  overflow-wrap: anywhere;
+}
+
+.agl-log.error,
+.agl-log.error .agl-log-value { color: #c0392b; }
+.agl-log.error .agl-log-mark { color: #c0392b; }
+
+.agl-phase.failed .agl-log { opacity: 1; transform: none; }
+
+/* ─── the end of the run ──────────────────────────────────────── */
+.agl-finale {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: rgba(4, 120, 87, 0.07);
+  border: 1px solid rgba(4, 120, 87, 0.22);
+  animation: agl-log-in .5s cubic-bezier(.2, .7, .3, 1) forwards;
+  flex: 0 0 auto;
+}
+
+.agl-finale[hidden] { display: none !important; }
+
+.agl-finale.failed {
+  background: rgba(192, 57, 43, 0.07);
+  border-color: rgba(192, 57, 43, 0.28);
+}
+
+.agl-finale-mark {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  background: #047857;
+  position: relative;
+}
+
+.agl-finale.failed .agl-finale-mark { background: #c0392b; }
+
+.agl-finale-mark::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 5px;
+  width: 6px;
+  height: 10px;
+  border: 2px solid #ffffff;
+  border-top: 0;
+  border-left: 0;
+  transform: rotate(42deg);
+}
+
+.agl-finale.failed .agl-finale-mark::after {
+  left: 10px;
+  top: 5px;
+  width: 0;
+  height: 12px;
+  border: 0;
+  border-left: 2px solid #ffffff;
+  transform: none;
+  box-shadow: 0 0 0 0 transparent;
+}
+
+.agl-finale-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-1, #111827);
+  letter-spacing: -0.01em;
+}
+
+.agl-finale-sub {
+  font-size: 11.5px;
+  color: var(--text-2, #4b5563);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+/* ─── responsive ──────────────────────────────────────────────── */
+@media (max-width: 560px) {
+  .agl-shell { padding: 16px 16px 14px; border-radius: 12px; }
+  .agl-title { font-size: 14px; }
+}
+
+@media (max-height: 560px) {
+  .agl-shell { max-height: calc(100vh - 32px); }
+}
+
+/* Someone who has asked for less motion gets the tree, not the movement: the
+   states still read from colour and from the node's own mark. The dialog must
+   still be DRAWN — the entrance starts at `opacity: 0`, so cancelling it
+   without care would hand them a blank box. Nothing in this block sets an
+   opacity or a transform. */
+@media (prefers-reduced-motion: reduce) {
+  .agl-overlay, .agl-shell, .agl-orb::after, .agl-node-spin,
+  .agl-caret, .agl-log, .agl-finale,
+  .agl-bar.indeterminate > span { animation: none !important; }
+  .agl-log { opacity: 1; transform: none; }
+  .agl-phase { transition: none; }
+  /* The fold still happens — it is a state change, not an animation — it
+     just happens at once. `.done` on its own must stay drawn, or a phase
+     would vanish the instant it landed, which is the opposite of the ask. */
+  .agl-phase.done { opacity: 0.72; }
+}

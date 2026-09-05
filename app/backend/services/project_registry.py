@@ -56,7 +56,20 @@ class ProjectRecord:
     project_id: str
     name: str
     owner_id: str
-    region: str = "India"
+    #: Where this network is. Empty until the data says.
+    #:
+    #: This defaulted to "India" — on the dataclass, in `create()`, in the
+    #: loader and in the API — so a US workbook produced a project labelled
+    #: "India Network" on every screen that names the geography, priced in
+    #: rupees, drawn on an India basemap. The default was not a placeholder
+    #: a user could correct: the creation form offered no other option.
+    #:
+    #: `region_source` records how the value was arrived at — "user" when
+    #: chosen at creation, "inferred" when derived from the uploaded
+    #: coordinates, "" when still unknown — so a screen can show a derived
+    #: label as derived rather than as a stated fact.
+    region: str = ""
+    region_source: str = ""
     client: str = ""
     description: str = ""
     status: str = "Draft"
@@ -74,6 +87,7 @@ class ProjectRecord:
             "name": self.name,
             "owner_id": self.owner_id,
             "region": self.region,
+            "region_source": self.region_source,
             "client": self.client,
             "description": self.description,
             "status": self.status,
@@ -104,6 +118,7 @@ class ProjectRecord:
             "name": self.name,
             "owner_id": self.owner_id,
             "region": self.region,
+            "region_source": self.region_source,
             "client": self.client,
             "description": self.description,
             "status": self.status,
@@ -158,7 +173,8 @@ class ProjectRegistry:
                 project_id=doc["project_id"],
                 name=doc.get("name", "Untitled Project"),
                 owner_id=doc.get("owner_id", ""),
-                region=doc.get("region", "India"),
+                region=doc.get("region") or "",
+                region_source=doc.get("region_source") or "",
                 client=doc.get("client", ""),
                 description=doc.get("description", ""),
                 status=doc.get("status", "Draft"),
@@ -194,7 +210,7 @@ class ProjectRegistry:
         *,
         name: str,
         owner_id: str,
-        region: str = "India",
+        region: str = "",
         client: str = "",
         description: str = "",
     ) -> ProjectRecord:
@@ -208,7 +224,8 @@ class ProjectRegistry:
             project_id=f"pr-{uuid.uuid4().hex[:10]}",
             name=name,
             owner_id=owner_id,
-            region=(region or "India").strip(),
+            region=(region or "").strip(),
+            region_source=("user" if (region or "").strip() else ""),
             client=(client or "").strip(),
             description=(description or "").strip(),
             # A new project genuinely has no analysable network until data is
@@ -296,11 +313,25 @@ class ProjectRegistry:
             make_current=False,
         )
 
+        # Where the uploaded network actually is, from its own coordinates.
+        #
+        # Only fills a blank: a region the user chose at creation is their
+        # statement about their own business and is never overwritten by an
+        # inference. This is what stops a US workbook being labelled India —
+        # not by defaulting differently, but by reading the data.
+        inferred_region = ""
+        geography = getattr(network, "geography", None) or {}
+        if isinstance(geography, dict):
+            inferred_region = str(geography.get("region") or "").strip()
+
         with self._lock:
             record.snapshot_id = snapshot.snapshot_id
             record.snapshot_label = label or record.name
             record.status = "Analysis ready"
             record.updated_at = time.time()
+            if inferred_region and not record.region:
+                record.region = inferred_region
+                record.region_source = "inferred"
             if ingestion_run_id:
                 record.ingestion_run_ids.append(ingestion_run_id)
 
@@ -352,7 +383,10 @@ class ProjectRegistry:
             project_id="pr-demo-case16",
             name="Case-16 Demo Network (synthetic)",
             owner_id="__system__",
+            # The bundled fixture genuinely is an India network, so this one is
+            # a statement of fact about known data, not a default.
             region="India",
+            region_source="fixture",
             client="Demonstration",
             description=(
                 "Bundled synthetic demonstration network. The figures produced "

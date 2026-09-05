@@ -9,312 +9,318 @@
      existing user landing → sign in        → SELECT PROJECT → app
                                               └→ create new → CREATE PROJECT
 
-   Design references: Dump/Select Project.jpeg, Dump/Create Project.jpeg.
+   Design references: Dump/select project.png, Dump/create project.png.
 
-   Sizing reuses the landing page's --u reference-pixel unit so type
-   and spacing scale identically across all three screens, and the
-   brand lockup sits at the same 72 × 54 origin as on the landing.
-   Everything is scoped under the two page ids because style.css and
-   auth.css both define generic form and card classes.
+   Type scale
+   ----------
+   The authenticated app is the source of truth, not the mockup
+   image: style.css sets `html { font-size: 14px }`, .card-title
+   15px/700, .btn 13px, .ng-table 13px with 11px uppercase headers,
+   .tag 11px; home-overview.css puts a card's own headline at
+   19–20px/800 and its body at 12.5–13.5px. These screens were
+   first drawn at the pixel sizes of the mockup PNG — 34px titles,
+   17.5px card names, 54px inputs, 30px chips — roughly a third
+   larger than everything the user sees before and after them, so
+   the product changed size at the door. Every size below is the
+   app's, and the composition of the mockups is unchanged.
+
+   Layout
+   ------
+   A sticky top bar over a scrolling body, like the app shell.
+   The landing page's `--u` reference pixel is kept for the two
+   mapping-review screens in the ingestion flow, which still use
+   it; see the note on .proj-page.
    ═════════════════════════════════════════════════════════════ */
 
-.proj-page {
-  /* Same reference unit as #landing-page — see landing.css */
-  --u: clamp(0.5px, min(0.0598vw, 0.1063vh), 1.32px);
-
+/* On :root, not on .proj-page.
+   The filter, sort and row menus are appended to <body> so they can escape
+   the table's overflow and be positioned against the viewport — which puts
+   them OUTSIDE .proj-page, where a custom property declared on it does not
+   reach. Every `background: var(--proj-surface)` in those menus resolved to
+   nothing and they rendered transparent, with the table legible straight
+   through the filter panel. */
+:root {
   --proj-surface: #ffffff;
-  --proj-border: #ebe6f3;
-  --proj-border-soft: #f1eef7;
-  --proj-tint: #f5f1fb;
-  --proj-tint-deep: #efe8fa;
-  --proj-text-1: #111827;
-  --proj-text-2: #4b5563;
-  --proj-text-3: #6b7280;
-  --proj-text-4: #9ca3af;
+  --proj-border: #e8e8ef;
+  --proj-border-soft: #f0f0f5;
+  --proj-tint: #f5f0fa;
+  --proj-tint-deep: #ece0f8;
+  --proj-text-1: #1a1a2e;
+  --proj-text-2: #5a5a72;
+  --proj-text-3: #8e8ea0;
+  --proj-text-4: #a8a8bb;
+  --proj-purple: #9218EA;
+  --proj-purple-dark: #7c14c7;
+}
+
+.proj-page {
+  /* Still defined here, and still the landing page's reference pixel. The two
+     mapping-review screens in the ingestion flow are laid out in it from end
+     to end; only the three screens reworked against the mockups are in px.
+     Removing it would collapse every dimension on those two. */
+  --u: clamp(0.5px, min(0.0598vw, 0.1063vh), 1.32px);
 
   position: fixed;
   inset: 0;
   z-index: 9990;
-  overflow-y: auto;
-  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   box-sizing: border-box;
 
-  /* Lighter sibling of the landing gradient: same lavender bloom,
+  /* Lighter sibling of the landing gradient: the same lavender bloom,
      pulled back so the content cards carry the page. */
-  background-color: #fbfafd;
+  background-color: #f7f7fa;
   background-image:
     radial-gradient(80% 70% at 88% 92%,
-      rgba(206, 190, 246, 0.30) 0%,
-      rgba(232, 226, 248, 0.14) 45%,
-      rgba(251, 250, 253, 0) 78%),
-    linear-gradient(160deg, #fdfdfe 0%, #fbfafd 45%, #f6f3fb 100%);
+      rgba(206, 190, 246, 0.24) 0%,
+      rgba(232, 226, 248, 0.11) 45%,
+      rgba(247, 247, 250, 0) 78%),
+    linear-gradient(160deg, #fcfcfd 0%, #f7f7fa 45%, #f4f1fa 100%);
 
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: var(--proj-text-1);
 }
 
-.proj-page.hidden {
-  display: none !important;
+.proj-page.hidden { display: none !important; }
+
+.proj-page * { box-sizing: border-box; }
+
+/* The only scrolling surface on these screens: the top bar stays put. */
+.proj-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
 }
 
 /* Decorative flow-lines, bottom right — the mockups' network wash. */
 .proj-decor {
-  position: fixed;
+  position: absolute;
   right: 0;
   bottom: 0;
-  width: calc(760 * var(--u));
-  height: calc(520 * var(--u));
+  width: 620px;
+  height: 424px;
+  max-width: 52%;
   pointer-events: none;
-  opacity: 0.75;
+  opacity: 0.7;
   z-index: 0;
 }
 
-/* ─── Shared chrome ───────────────────────────────────────── */
-.proj-brand {
-  position: relative;
-  z-index: 2;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: calc(23 * var(--u));
-  width: fit-content;
-  cursor: pointer;
-}
-
-.proj-brand-static {
-  cursor: default;
-}
-
-.proj-logo-svg {
-  width: calc(54 * var(--u));
-  height: calc(54 * var(--u));
-  flex-shrink: 0;
-}
-
-.proj-brand-title {
-  font-size: calc(33 * var(--u));
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
-  color: var(--proj-text-1);
-}
-
-.proj-brand-sub {
-  font-size: calc(16 * var(--u));
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--brand-purple);
-  margin-top: calc(2 * var(--u));
-}
-
-.proj-help-btn {
-  position: absolute;
-  top: calc(58 * var(--u));
-  right: calc(72 * var(--u));
-  width: calc(34 * var(--u));
-  height: calc(34 * var(--u));
-  border-radius: 50%;
-  border: none;
-  background: none;
-  color: var(--proj-text-3);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 3;
-  transition: color 0.15s ease;
-}
-
-.proj-help-btn:hover { color: var(--brand-purple); }
-.proj-help-btn svg { width: 100%; height: 100%; }
-
-.proj-back-btn {
-  position: absolute;
-  top: calc(52 * var(--u));
-  right: calc(122 * var(--u));
-  display: flex;
-  align-items: center;
-  gap: calc(3 * var(--u));
-  height: calc(34 * var(--u));
-  padding: 0 calc(13 * var(--u)) 0 calc(7 * var(--u));
-  border: 1px solid var(--proj-border);
-  border-radius: calc(17 * var(--u));
-  background: #ffffff;
-  color: var(--proj-text-2);
-  font-family: inherit;
-  font-size: calc(14 * var(--u));
-  font-weight: 600;
-  cursor: pointer;
-  z-index: 3;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.proj-back-btn svg { width: calc(17 * var(--u)); height: calc(17 * var(--u)); }
-.proj-back-btn:hover { border-color: var(--brand-purple); color: var(--brand-purple); }
-
-/* Primary / secondary actions, matched to the landing buttons. */
+/* ─── Shared controls ─────────────────────────────────────── */
+/* .btn / .btn-primary in style.css: 13px, 8px 18px, --r-md. */
 .proj-btn-primary {
-  height: calc(50 * var(--u));
-  padding: 0 calc(26 * var(--u));
-  background: linear-gradient(100deg, #7b0fd0 0%, #9218EA 46%, #a63bf2 100%);
-  color: #ffffff;
-  border: none;
-  border-radius: calc(12 * var(--u));
-  font-family: inherit;
-  font-size: calc(16 * var(--u));
-  font-weight: 600;
-  letter-spacing: -0.01em;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: calc(11 * var(--u));
+  gap: 7px;
+  height: 38px;
+  padding: 0 18px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(100deg, #8410db 0%, #9218EA 52%, #a234f2 100%);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
   cursor: pointer;
-  box-shadow: 0 calc(8 * var(--u)) calc(22 * var(--u)) rgba(146, 24, 234, 0.28);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(146, 24, 234, 0.22);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
 .proj-btn-primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 calc(11 * var(--u)) calc(28 * var(--u)) rgba(146, 24, 234, 0.38);
+  box-shadow: 0 7px 18px rgba(146, 24, 234, 0.3);
 }
 
 .proj-btn-primary:active { transform: translateY(0); }
 
 .proj-btn-primary:disabled {
-  opacity: 0.45;
+  filter: grayscale(0.2);
+  opacity: 0.55;
   cursor: not-allowed;
-  transform: none;
   box-shadow: none;
+  transform: none;
 }
 
-.proj-btn-primary svg {
-  width: calc(19 * var(--u));
-  height: calc(19 * var(--u));
-}
+.proj-btn-primary svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+.proj-btn-lg { height: 44px; padding: 0 26px; font-size: 14px; border-radius: 10px; }
 
 .proj-link-btn {
   background: none;
   border: none;
+  color: var(--proj-purple);
   font-family: inherit;
-  font-size: calc(15 * var(--u));
+  font-size: 12.5px;
   font-weight: 600;
-  color: var(--brand-purple);
   cursor: pointer;
-  padding: calc(6 * var(--u));
+  padding: 6px 4px;
 }
 
 .proj-link-btn:hover { text-decoration: underline; }
 
-/* ═══════════════════════════════════════════════════════════
-   CREATE PROJECT
-   ═══════════════════════════════════════════════════════════ */
-/* Column flex + `margin: auto` on the body centres the content in
-   whatever space is left under the brand, and collapses back to
-   top-anchored (scrolling) the moment the content outgrows it. */
-#create-project-page {
-  display: flex;
-  flex-direction: column;
-  /* 50, not 54: the logo's own ink starts ~4u in, which lands the mark
-     on the landing page's y=54 origin. */
-  padding: calc(50 * var(--u)) calc(72 * var(--u)) calc(40 * var(--u));
+/* The pill "Back" of both mockups. */
+.proj-back-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 14px 0 9px;
+  border: 1px solid var(--proj-border);
+  border-radius: 8px;
+  background: var(--proj-surface);
+  color: var(--proj-text-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
+.proj-back-pill svg { width: 16px; height: 16px; }
+.proj-back-pill:hover {
+  border-color: var(--proj-purple);
+  color: var(--proj-purple);
+  background: #fdfbff;
+}
+
+/* Errors say what went wrong and what to do; the icon marks them as
+   errors for anyone scanning rather than reading. */
+.proj-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 8px;
+  line-height: 1.45;
+}
+
+.proj-error:empty { display: none; }
+.proj-error::before { content: '⚠'; font-size: 12px; line-height: 1.4; }
+
+/* ═════════════════════════════════════════════════════════════
+   CREATE PROJECT
+   ═════════════════════════════════════════════════════════════ */
 .proj-create-body {
   position: relative;
-  z-index: 2;
-  width: calc(1002 * var(--u));
-  max-width: 100%;
-  margin: auto;
-  padding-top: calc(20 * var(--u));
+  z-index: 1;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 18px 32px 48px;
 }
 
 .proj-create-head {
   text-align: center;
-  margin-bottom: calc(30 * var(--u));
+  margin: 30px 0 24px;
 }
 
 .proj-create-title {
-  font-size: calc(38 * var(--u));
+  font-size: 24px;
   font-weight: 800;
-  letter-spacing: -0.035em;
-  line-height: 1.15;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
   color: var(--proj-text-1);
+  margin: 0 0 7px;
 }
 
 .proj-create-sub {
-  margin-top: calc(12 * var(--u));
-  font-size: calc(16 * var(--u));
+  font-size: 13px;
+  line-height: 1.55;
   color: var(--proj-text-3);
-  line-height: 1.45;
+  margin: 0;
 }
 
-/* Detail form */
 .proj-form-card {
   background: var(--proj-surface);
-  border: 1px solid var(--proj-border-soft);
-  border-radius: calc(14 * var(--u));
-  padding: calc(22 * var(--u)) calc(28 * var(--u)) calc(24 * var(--u));
-  margin-bottom: calc(24 * var(--u));
+  border: 1px solid var(--proj-border);
+  border-radius: 14px;
+  padding: 24px 26px 26px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-/* Each row is [leading icon] [field(s)] so the icon column stays
-   aligned whether the row holds one field or two. */
 .proj-form-row {
-  display: grid;
-  grid-template-columns: calc(38 * var(--u)) 1fr;
-  column-gap: calc(20 * var(--u));
-  align-items: start;
-  margin-bottom: calc(14 * var(--u));
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 18px;
 }
 
 .proj-form-row:last-child { margin-bottom: 0; }
 
+.proj-form-row > div { flex: 1; min-width: 0; }
+
+/* `align-items: start`, not `end`.
+   Bottom-aligned, a cell that carries a hint under its input made the cell
+   beside it float upward, so "Project name" and "Region / Scope" no longer
+   sat on the same line. Top alignment keeps the two labels level whatever is
+   underneath them; the icons are offset by the label's own height instead. */
 .proj-form-row.split > .proj-field-pair {
   display: grid;
-  grid-template-columns: 1fr calc(38 * var(--u)) 1fr;
-  column-gap: calc(20 * var(--u));
+  grid-template-columns: 1fr auto 1fr;
   align-items: start;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
 }
 
 .proj-row-icon {
-  width: calc(38 * var(--u));
-  height: calc(38 * var(--u));
-  border-radius: calc(10 * var(--u));
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
   background: var(--proj-tint);
-  color: var(--brand-purple);
+  color: var(--proj-purple);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: calc(21 * var(--u));
+  /* Label line (12px × 1.4) + its 5px margin, less half the 4px the icon is
+     shorter than the input — so the tile is centred on the field, not the row. */
+  margin-top: 21px;
 }
 
-.proj-row-icon svg {
-  width: calc(19 * var(--u));
-  height: calc(19 * var(--u));
-}
+.proj-row-icon svg { width: 17px; height: 17px; }
 
+/* .form-label in style.css. */
 .proj-field-label {
   display: block;
-  font-size: calc(15 * var(--u));
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   color: var(--proj-text-2);
-  margin-bottom: calc(8 * var(--u));
-  letter-spacing: -0.01em;
+  margin-bottom: 5px;
+}
+
+.proj-field-optional {
+  font-weight: 500;
+  color: var(--proj-text-4);
+  font-size: 11.5px;
+}
+
+/* A quiet line under a field, for the one thing a user cannot guess. */
+.proj-field-hint {
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--proj-text-3);
 }
 
 .proj-input,
 .proj-select {
   width: 100%;
-  height: calc(44 * var(--u));
-  padding: 0 calc(15 * var(--u));
-  background: #ffffff;
+  height: 38px;
+  padding: 0 12px;
+  background: var(--proj-surface);
   border: 1px solid var(--proj-border);
-  border-radius: calc(10 * var(--u));
+  border-radius: 8px;
   font-family: inherit;
-  font-size: calc(15 * var(--u));
+  font-size: 13px;
   color: var(--proj-text-1);
   outline: none;
-  box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -322,300 +328,335 @@
 
 .proj-input:focus,
 .proj-select:focus {
-  border-color: var(--brand-purple);
-  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(146, 24, 234, 0.12);
+  border-color: var(--proj-purple);
+  box-shadow: 0 0 0 3px rgba(146, 24, 234, 0.11);
 }
 
-/* Native arrow replaced so the control matches the mock in both engines. */
+.proj-input[aria-invalid="true"] { border-color: #dc2626; }
+
 .proj-select {
   appearance: none;
   -webkit-appearance: none;
-  padding-right: calc(38 * var(--u));
-  color: var(--proj-text-1);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right calc(13 * var(--u)) center;
-  background-size: calc(17 * var(--u));
   cursor: pointer;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24' fill='none' stroke='%238e8ea0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
 }
 
-.proj-select:invalid,
 .proj-select.placeholder { color: var(--proj-text-4); }
 
 .proj-create-actions {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: calc(14 * var(--u));
+  margin-top: 26px;
 }
 
-.proj-create-actions .proj-btn-primary { width: calc(325 * var(--u)); }
+.proj-create-actions .proj-btn-primary { min-width: 260px; }
+.proj-create-actions .proj-error { align-self: center; }
+.proj-create-actions .proj-link-btn { margin-top: 12px; }
 
-.proj-error {
-  font-size: calc(13.5 * var(--u));
-  color: #dc2626;
-}
-
-.proj-error:empty { display: none; }
-
-/* ═══════════════════════════════════════════════════════════
-   SELECT PROJECT
-   ═══════════════════════════════════════════════════════════ */
-#select-project-page {
+/* The rename dialog reuses the form controls inside the shared modal. */
+.proj-modal-actions {
   display: flex;
-  flex-direction: column;
-  /* 50, not 54: the logo's own ink starts ~4u in, which lands the mark
-     on the landing page's y=54 origin. */
-  padding: calc(50 * var(--u)) calc(72 * var(--u)) calc(40 * var(--u));
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 14px;
 }
 
+.proj-modal-actions .proj-btn-primary { height: 34px; font-size: 12.5px; padding: 0 16px; }
+
+/* ═════════════════════════════════════════════════════════════
+   SELECT PROJECT
+   ═════════════════════════════════════════════════════════════ */
 .proj-select-body {
   position: relative;
-  z-index: 2;
-  width: calc(1274 * var(--u));
-  max-width: 100%;
-  margin: auto;
-  padding-top: calc(24 * var(--u));
+  z-index: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 18px 32px 48px;
 }
+
+.proj-select-body .proj-back-pill { margin-bottom: 16px; }
 
 .proj-select-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: calc(40 * var(--u));
-  margin-bottom: calc(24 * var(--u));
+  gap: 24px;
+  margin: 16px 0 28px;
 }
 
+/* The biggest type on the screen, and the same as the app's own biggest
+   in-page headline (.rec-title, 22px/800). */
 .proj-select-title {
-  font-size: calc(36 * var(--u));
+  font-size: 22px;
   font-weight: 800;
-  letter-spacing: -0.035em;
-  line-height: 1.15;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
   color: var(--proj-text-1);
+  margin: 0 0 5px;
 }
+
+.proj-wave { -webkit-text-fill-color: initial; }
 
 .proj-select-sub {
-  margin-top: calc(12 * var(--u));
-  font-size: calc(16 * var(--u));
-  line-height: 1.5;
-  color: var(--proj-text-2);
-  max-width: calc(460 * var(--u));
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--proj-text-3);
+  margin: 0;
+  max-width: 640px;
 }
 
+.proj-section-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+/* .card-title in style.css. */
 .proj-section-title {
-  font-size: calc(18 * var(--u));
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--proj-text-1);
-  margin-bottom: calc(14 * var(--u));
 }
 
-/* Recent projects */
+.proj-viewall {
+  background: none;
+  border: none;
+  color: var(--proj-purple);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 2px;
+}
+
+.proj-viewall:hover { text-decoration: underline; }
+
+/* ─── Recent project cards ────────────────────────────────── */
 .proj-recent-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: calc(17 * var(--u));
-  margin-bottom: calc(26 * var(--u));
+  grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
 }
 
-.proj-recent-card {
+.proj-recent-card,
+.proj-grid-card {
   background: var(--proj-surface);
-  border: 1px solid var(--proj-border-soft);
-  border-radius: calc(14 * var(--u));
-  padding: calc(20 * var(--u)) calc(22 * var(--u)) calc(16 * var(--u));
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  border: 1px solid var(--proj-border);
+  border-radius: 14px;
+  padding: 16px 18px 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.proj-recent-card:hover {
-  border-color: #ddd0f0;
-  transform: translateY(calc(-2 * var(--u)));
-  box-shadow: 0 calc(10 * var(--u)) calc(26 * var(--u)) rgba(87, 24, 195, 0.09);
+.proj-recent-card:hover,
+.proj-grid-card:hover {
+  border-color: #d9c4f2;
+  box-shadow: 0 6px 18px -10px rgba(97, 41, 168, 0.28);
 }
 
 .proj-recent-top {
   display: flex;
   align-items: flex-start;
-  gap: calc(16 * var(--u));
-  margin-bottom: calc(16 * var(--u));
+  gap: 12px;
+  margin-bottom: 14px;
 }
 
 .proj-folder-tile {
-  width: calc(52 * var(--u));
-  height: calc(52 * var(--u));
-  border-radius: 50%;
-  background: var(--proj-tint);
-  color: var(--brand-purple);
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: var(--proj-tint-deep);
+  color: var(--proj-purple);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
 
-.proj-folder-tile svg {
-  width: calc(24 * var(--u));
-  height: calc(24 * var(--u));
-}
+.proj-folder-tile svg { width: 20px; height: 20px; }
 
-.proj-recent-meta { flex: 1; min-width: 0; }
+.proj-recent-meta { flex: 1; min-width: 0; padding-top: 2px; }
 
+/* .insight-title in style.css. */
 .proj-recent-name {
-  font-size: calc(19 * var(--u));
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: var(--proj-text-1);
-  white-space: nowrap;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.proj-recent-when {
-  margin-top: calc(6 * var(--u));
-  font-size: calc(14 * var(--u));
-  color: var(--proj-text-3);
+.proj-recent-region {
+  font-size: 12.5px;
+  color: var(--proj-text-2);
+  margin-top: 4px;
 }
 
-.proj-kebab {
-  background: none;
-  border: none;
-  color: var(--proj-text-3);
-  cursor: pointer;
-  padding: calc(4 * var(--u));
-  border-radius: calc(6 * var(--u));
-  display: flex;
-  flex-shrink: 0;
-  transition: background 0.15s ease, color 0.15s ease;
-}
+.proj-region { display: inline-flex; align-items: center; gap: 5px; }
+.proj-flag { display: flex; color: var(--proj-purple); }
+.proj-flag svg { width: 14px; height: 14px; }
 
-.proj-kebab:hover {
-  background: var(--proj-tint);
-  color: var(--brand-purple);
-}
-
-.proj-kebab svg {
-  width: calc(18 * var(--u));
-  height: calc(18 * var(--u));
-}
-
-.proj-open-btn {
-  width: 100%;
-  height: calc(44 * var(--u));
-  border: none;
-  border-radius: calc(10 * var(--u));
-  background: var(--proj-tint);
-  color: var(--brand-purple);
-  font-family: inherit;
-  font-size: calc(15 * var(--u));
-  font-weight: 600;
+.proj-recent-foot {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: calc(10 * var(--u));
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.proj-grid-chips { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.proj-grid-when { font-size: 11.5px; color: var(--proj-text-3); }
+
+/* ─── Row actions (Open + kebab) ──────────────────────────── */
+.proj-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.proj-open-outline {
+  height: 32px;
+  min-width: 68px;
+  padding: 0 14px;
+  border: 1px solid var(--proj-border);
+  border-radius: 8px;
+  background: var(--proj-surface);
+  color: var(--proj-purple);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.proj-open-btn:hover { background: var(--proj-tint-deep); }
+.proj-open-outline:hover { border-color: var(--proj-purple); background: #fdfbff; }
 
-.proj-open-btn svg {
-  width: calc(17 * var(--u));
-  height: calc(17 * var(--u));
+.proj-kebab {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--proj-border);
+  border-radius: 8px;
+  background: var(--proj-surface);
+  color: var(--proj-text-3);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
 
-/* All projects toolbar */
+.proj-kebab svg { width: 15px; height: 15px; }
+.proj-kebab:hover { border-color: var(--proj-purple); color: var(--proj-purple); background: #fdfbff; }
+.proj-kebab[aria-expanded="true"] { border-color: var(--proj-purple); color: var(--proj-purple); }
+
+/* ─── Toolbar ─────────────────────────────────────────────── */
 .proj-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: calc(20 * var(--u));
-  margin-bottom: calc(16 * var(--u));
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
 }
 
-.proj-search-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: calc(323 * var(--u));
-  max-width: 100%;
-}
+.proj-search-wrap { position: relative; flex: 0 1 320px; min-width: 200px; }
 
 .proj-search-icon {
   position: absolute;
-  left: calc(14 * var(--u));
-  display: flex;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--proj-text-4);
   pointer-events: none;
+  display: flex;
 }
 
-.proj-search-icon svg {
-  width: calc(17 * var(--u));
-  height: calc(17 * var(--u));
-}
+.proj-search-icon svg { width: 16px; height: 16px; }
 
 .proj-search {
   width: 100%;
-  height: calc(44 * var(--u));
-  padding: 0 calc(14 * var(--u)) 0 calc(42 * var(--u));
-  background: #ffffff;
+  height: 38px;
+  padding: 0 12px 0 36px;
   border: 1px solid var(--proj-border);
-  border-radius: calc(10 * var(--u));
+  border-radius: 10px;
+  background: var(--proj-surface);
   font-family: inherit;
-  font-size: calc(15 * var(--u));
+  font-size: 13px;
   color: var(--proj-text-1);
   outline: none;
-  box-sizing: border-box;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .proj-search::placeholder { color: var(--proj-text-4); }
 
 .proj-search:focus {
-  border-color: var(--brand-purple);
-  box-shadow: 0 0 0 calc(3 * var(--u)) rgba(146, 24, 234, 0.12);
+  border-color: var(--proj-purple);
+  box-shadow: 0 0 0 3px rgba(146, 24, 234, 0.11);
 }
 
-.proj-toolbar-right {
-  display: flex;
+.proj-toolbar-right { display: flex; align-items: center; gap: 8px; }
+
+.proj-tool-btn {
+  display: inline-flex;
   align-items: center;
-  gap: calc(18 * var(--u));
-}
-
-.proj-sort {
-  display: flex;
-  align-items: center;
-  gap: calc(7 * var(--u));
-  font-size: calc(15 * var(--u));
-  color: var(--proj-text-2);
-}
-
-.proj-sort select {
-  appearance: none;
-  -webkit-appearance: none;
-  background: none;
-  border: none;
-  font-family: inherit;
-  font-size: calc(15 * var(--u));
-  font-weight: 600;
+  gap: 7px;
+  height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--proj-border);
+  border-radius: 10px;
+  background: var(--proj-surface);
   color: var(--proj-text-1);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
-  outline: none;
-  padding-right: calc(20 * var(--u));
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23111827' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right center;
-  background-size: calc(15 * var(--u));
+  white-space: nowrap;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.proj-tool-btn svg { width: 15px; height: 15px; color: var(--proj-text-3); }
+.proj-tool-btn:hover { border-color: var(--proj-purple); }
+.proj-tool-btn:hover svg { color: var(--proj-purple); }
+.proj-tool-btn.active { border-color: var(--proj-purple); color: var(--proj-purple); }
+.proj-tool-btn.active svg { color: var(--proj-purple); }
+.proj-tool-muted { color: var(--proj-text-3); font-weight: 500; }
+
+.proj-tool-count {
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--proj-purple);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .proj-view-toggle {
   display: flex;
   border: 1px solid var(--proj-border);
-  border-radius: calc(10 * var(--u));
+  border-radius: 10px;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--proj-surface);
+  height: 38px;
 }
 
 .proj-view-btn {
-  width: calc(44 * var(--u));
-  height: calc(42 * var(--u));
+  width: 38px;
   border: none;
   background: none;
   color: var(--proj-text-3);
@@ -627,148 +668,291 @@
 }
 
 .proj-view-btn + .proj-view-btn { border-left: 1px solid var(--proj-border); }
+.proj-view-btn.active { background: var(--proj-tint); color: var(--proj-purple); }
+.proj-view-btn svg { width: 17px; height: 17px; }
 
-.proj-view-btn.active {
-  background: var(--proj-tint);
-  color: var(--brand-purple);
-}
-
-.proj-view-btn svg {
-  width: calc(18 * var(--u));
-  height: calc(18 * var(--u));
-}
-
-/* Table view */
+/* ─── Table ───────────────────────────────────────────────── */
+/* `overflow: hidden` alone rounds the corners and clips a table too wide for
+   the screen — at 390px the Status and Actions columns were simply cut off
+   with no way to reach them. The table scrolls inside its own container
+   instead, so the page never scrolls sideways and nothing is unreachable. */
 .proj-table-wrap {
   background: var(--proj-surface);
-  border: 1px solid var(--proj-border-soft);
-  border-radius: calc(14 * var(--u));
-  overflow: hidden;
+  border: 1px solid var(--proj-border);
+  border-radius: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.proj-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: calc(14.5 * var(--u));
-}
+.proj-table { width: 100%; border-collapse: collapse; min-width: 640px; }
 
+/* .ng-table th in style.css: 11px, uppercase, wide tracking. */
 .proj-table th {
-  background: var(--proj-tint);
   text-align: left;
-  font-size: calc(14 * var(--u));
+  font-size: 11px;
   font-weight: 600;
-  color: var(--proj-text-2);
-  padding: calc(12 * var(--u)) calc(18 * var(--u));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--proj-text-3);
+  background: #fafafc;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--proj-border);
   white-space: nowrap;
 }
 
-.proj-table th:first-child { padding-left: calc(24 * var(--u)); }
-.proj-table th:last-child { width: calc(56 * var(--u)); }
+.proj-table th:first-child,
+.proj-table td:first-child { padding-left: 20px; }
+
+.proj-table th:last-child,
+.proj-table td:last-child { padding-right: 20px; }
+
+.proj-th-actions { width: 150px; }
 
 .proj-table td {
-  padding: calc(12 * var(--u)) calc(18 * var(--u));
-  border-top: 1px solid #f0eef4;
+  padding: 11px 14px;
+  font-size: 13px;
   color: var(--proj-text-2);
+  border-bottom: 1px solid var(--proj-border-soft);
   vertical-align: middle;
 }
 
-.proj-table td:first-child { padding-left: calc(24 * var(--u)); }
-
-.proj-table tbody tr {
-  cursor: pointer;
-  transition: background 0.12s ease;
-}
-
-.proj-table tbody tr:hover { background: #fbf9fe; }
+.proj-table tbody tr:last-child td { border-bottom: none; }
+.proj-table tbody tr:hover { background: #fbfaff; }
 
 .proj-row-name {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: calc(14 * var(--u));
-  font-weight: 600;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 650;
   color: var(--proj-text-1);
 }
 
-.proj-row-name svg {
-  width: calc(20 * var(--u));
-  height: calc(20 * var(--u));
-  color: #b794e8;
-  flex-shrink: 0;
-}
+.proj-row-folder { display: flex; color: var(--proj-purple); }
+.proj-row-folder svg { width: 17px; height: 17px; }
 
+/* ─── Chips ───────────────────────────────────────────────── */
+/* .tag in style.css: 11px/600, 3px 10px, 20px radius. */
 .proj-chip {
   display: inline-flex;
   align-items: center;
-  padding: calc(5 * var(--u)) calc(12 * var(--u));
-  border-radius: calc(20 * var(--u));
-  font-size: calc(13 * var(--u));
-  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
   white-space: nowrap;
 }
 
-.proj-chip-owner { background: #f3f4f6; color: var(--proj-text-2); }
-.proj-chip-progress { background: #e7f7ec; color: #157f3c; }
-.proj-chip-draft { background: #f1f1f4; color: #61616e; }
+.proj-chip-ready { background: #f0fdf4; color: #16a34a; }
+.proj-chip-waiting { background: #fffbeb; color: #d97706; }
+.proj-chip-draft { background: #f7f7fa; color: var(--proj-text-3); }
 
-/* Grid view of the same list */
+.proj-type-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.proj-type-chip.tone-design { background: #f5f0fa; color: #6B2FA0; }
+.proj-type-chip.tone-sample { background: #eff6ff; color: #2563eb; }
+.proj-type-chip.tone-setup { background: #f7f7fa; color: var(--proj-text-3); }
+
+/* ─── Grid view ───────────────────────────────────────────── */
 .proj-card-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: calc(17 * var(--u));
+  grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+  gap: 14px;
 }
 
-.proj-grid-card {
+/* ─── Empty and loading states ────────────────────────────── */
+.proj-empty {
+  padding: 40px 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--proj-text-3);
+  line-height: 1.6;
+}
+
+.proj-empty strong { display: block; font-size: 14px; color: var(--proj-text-1); margin-bottom: 4px; }
+.proj-empty .proj-btn-primary { margin-top: 14px; }
+
+/* Announced, not drawn: the shimmer says "loading" to anyone looking at it
+   and nothing at all to anyone listening. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skeleton rows while the list is being fetched, so the screen says "still
+   loading" rather than showing an empty table that reads as "no projects". */
+.proj-skeleton { padding: 8px 20px 16px; }
+
+.proj-skeleton-row {
+  height: 42px;
+  border-radius: 8px;
+  margin-top: 8px;
+  background: linear-gradient(90deg, #f4f3f8 25%, #eceaf4 37%, #f4f3f8 63%);
+  background-size: 400% 100%;
+  animation: projShimmer 1.3s ease-in-out infinite;
+}
+
+@keyframes projShimmer {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proj-skeleton-row { animation: none; }
+}
+
+/* ─── Popovers (filters, sort, row menu) ──────────────────── */
+/* Appended to <body>, so they must clear .proj-page's own 9990 — see the
+   note beside .wc-menu in workspace-chrome.css. */
+.proj-pop {
+  position: fixed;
+  z-index: 10050;
+  min-width: 200px;
   background: var(--proj-surface);
-  border: 1px solid var(--proj-border-soft);
-  border-radius: calc(14 * var(--u));
-  padding: calc(20 * var(--u));
+  border: 1px solid var(--proj-border);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px -10px rgba(23, 12, 43, 0.24),
+              0 2px 6px rgba(23, 12, 43, 0.05);
+  padding: 5px;
+  animation: projPopIn 0.13s ease;
+}
+
+@keyframes projPopIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.proj-pop-filter { width: 274px; padding: 10px 12px 8px; }
+
+.proj-pop-head {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--proj-text-4);
+  margin-bottom: 9px;
+}
+
+.proj-pop-group { margin-bottom: 11px; }
+
+.proj-pop-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--proj-text-3);
+  margin-bottom: 6px;
+}
+
+.proj-pop-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.proj-pop-chip {
+  height: 25px;
+  padding: 0 10px;
+  border: 1px solid var(--proj-border);
+  border-radius: 13px;
+  background: var(--proj-surface);
+  color: var(--proj-text-2);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: all 0.13s ease;
 }
 
-.proj-grid-card:hover {
-  border-color: #ddd0f0;
-  transform: translateY(calc(-2 * var(--u)));
-  box-shadow: 0 calc(10 * var(--u)) calc(26 * var(--u)) rgba(87, 24, 195, 0.09);
+.proj-pop-chip:hover { border-color: var(--proj-purple); color: var(--proj-purple); }
+.proj-pop-chip.on {
+  background: var(--proj-purple);
+  border-color: var(--proj-purple);
+  color: #fff;
 }
 
-.proj-grid-card .proj-recent-top { margin-bottom: calc(14 * var(--u)); }
+.proj-pop-foot {
+  border-top: 1px solid var(--proj-border);
+  padding-top: 7px;
+  display: flex;
+  justify-content: flex-end;
+}
 
-.proj-grid-foot {
+.proj-pop-clear {
+  background: none;
+  border: none;
+  color: var(--proj-purple);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 4px;
+}
+
+.proj-pop-clear:hover { text-decoration: underline; }
+
+.proj-pop-item {
+  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: calc(10 * var(--u));
-  font-size: calc(13.5 * var(--u));
-  color: var(--proj-text-3);
+  gap: 9px;
+  padding: 8px 9px;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--proj-text-1);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.13s ease, color 0.13s ease;
 }
 
-.proj-empty {
-  padding: calc(48 * var(--u)) calc(20 * var(--u));
-  text-align: center;
-  color: var(--proj-text-3);
-  font-size: calc(15 * var(--u));
+.proj-pop-item svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--proj-text-3); }
+.proj-pop-item:hover { background: var(--proj-tint); color: var(--proj-purple); }
+.proj-pop-item:hover svg { color: var(--proj-purple); }
+.proj-pop-item.on { color: var(--proj-purple); }
+.proj-pop-item[disabled] { opacity: 0.45; cursor: not-allowed; }
+.proj-pop-item[disabled]:hover { background: none; color: var(--proj-text-1); }
+.proj-pop-tick { margin-left: auto; color: var(--proj-purple); }
+.proj-pop-sep { height: 1px; background: var(--proj-border); margin: 4px 4px; }
+
+/* ─── Responsive ──────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .proj-select-head { flex-direction: column; align-items: stretch; }
+  .proj-select-head .proj-btn-primary { align-self: flex-start; }
 }
 
-/* ─── Narrow viewports ────────────────────────────────────── */
-@media (max-width: 1080px) {
-  .proj-recent-grid,
-  .proj-card-grid { grid-template-columns: 1fr 1fr; }
-
-  .proj-select-head { flex-direction: column; }
-
-  .proj-form-row.split > .proj-field-pair {
-    grid-template-columns: 1fr;
-    row-gap: calc(20 * var(--u));
-  }
-
-  .proj-form-row.split > .proj-field-pair > .proj-row-icon { display: none; }
+@media (max-width: 640px) {
+  .proj-recent-foot { flex-wrap: wrap; row-gap: 10px; }
+  .proj-recent-name { white-space: normal; }
+  .proj-toolbar-right { display: grid; grid-template-columns: 1fr 1fr; }
+  .proj-view-toggle { grid-column: 1 / -1; }
+  .proj-view-btn { flex: 1; }
 }
 
-@media (max-width: 760px) {
-  .proj-recent-grid,
-  .proj-card-grid { grid-template-columns: 1fr; }
-
+@media (max-width: 860px) {
+  .proj-select-body,
+  .proj-create-body { padding: 14px 16px 40px; }
+  .proj-select-title { font-size: 19px; }
+  .proj-create-title { font-size: 21px; }
+  .proj-form-card { padding: 18px 16px; }
+  .proj-form-row { flex-direction: column; gap: 10px; }
+  .proj-form-row.split > .proj-field-pair { grid-template-columns: 1fr; }
+  .proj-row-icon { margin-top: 0; }
+  .proj-create-actions .proj-btn-primary { min-width: 0; width: 100%; }
   .proj-toolbar { flex-direction: column; align-items: stretch; }
-  .proj-search-wrap { width: 100%; }
+  .proj-search-wrap { flex: 1 1 auto; }
+  .proj-toolbar-right { flex-wrap: wrap; }
 }

@@ -455,9 +455,24 @@ def flatten_network_state(state: Any) -> Dict[str, Any]:
         "total_carbon_kg": state.total_carbon_kg,
         "pct_demand_in_sla": (state.service.pct_demand_in_sla if state.service else None),
         "sla_mode": (state.service.sla_mode if state.service else None),
+        # HOW service was enforced. Without it a reader of `pct_demand_in_sla`
+        # cannot tell what the remaining percent is: under
+        # TRANSIT_TIME_SLA_FEASIBILITY an SLA-infeasible lane is removed before
+        # the solve, so nothing can be served late and the remainder is
+        # UNSERVED. The narrative layer said the opposite — "the remainder is
+        # served, but not inside the lead time" — describing an outcome this
+        # engine cannot produce, on a figure presented as authoritative
+        # evidence.
+        "service_methodology": (state.service.methodology if state.service else None),
+        "demand_within_sla": (state.service.demand_within_sla if state.service else None),
         "service_unsupported_features": (
             list(state.service.unsupported_features) if state.service else []
         ),
+        # What the cost and volume figures above COVER, carried alongside them
+        # so no consumer has to infer the span or the money unit.
+        "periods_modelled": getattr(state, "periods_modelled", None),
+        "cost_per_period": getattr(state, "cost_per_period", None),
+        "currency": getattr(state, "currency", None),
         "run_id": state.metadata.run_id,
     }
 

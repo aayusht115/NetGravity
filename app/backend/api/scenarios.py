@@ -36,6 +36,7 @@ from app.backend.services.errors import (
     NotFoundError,
     ValidationError,
 )
+from app.backend.services.correlation import orchestrator_request_id
 from app.backend.services.project_registry import project_registry
 from app.backend.services.ratelimit import rate_limit
 from app.backend.services.security import require_auth
@@ -261,6 +262,7 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             actor=Actor(actor_id=user_id, role=ActorRole.PLANNER),
             network_snapshot_id=snapshot_id,
             disable_llm=True,
+            request_id=orchestrator_request_id("scenario-reference"),
         )
         try:
             response = engine.run_sync(req)
@@ -327,6 +329,7 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             actor=Actor(actor_id=g.current_user.user_id, role=ActorRole.PLANNER),
             network_snapshot_id=snapshot_id,
             disable_llm=True,
+            request_id=orchestrator_request_id("scenario-baseline"),
         )
         response = engine.run_sync(req)
         ctx = engine.get_execution_state(response.execution_id)
@@ -448,6 +451,7 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             actor=Actor(actor_id=g.current_user.user_id, role=ActorRole.PLANNER),
             network_snapshot_id=snapshot_id,
             disable_llm=True,
+            request_id=orchestrator_request_id("scenario-simulate"),
         )
 
         try:

@@ -11,17 +11,19 @@
    composition therefore keeps the reference proportions at any
    viewport instead of only at 1672 × 941.
 
-   Artwork blending
+   The hero artwork
    ----------------
-   The India illustration is an opaque 952 × 941 raster with its
-   own lavender ambient field (~#e8e4f5 at the rim). Previously it
-   was inset (94vh tall, 20px from the right) and carried a
-   rectangular drop-shadow, so it read as a white card floating on
-   the page. It is now bled to full viewport height and flush to
-   the right edge — top / right / bottom land off-canvas — and its
-   left edge is dissolved with a mask across the empty part of the
-   canvas. The page gradient is tuned to the artwork's own ambient
-   field so the dissolve has nothing to reveal.
+   Drawn, not shipped. `renderNetworkVisualization()` builds a
+   1200 × 625 SVG world from the Natural Earth outlines in
+   world-basemap.js — see the projection note there. It replaced a
+   156 KB base64 raster of India that was inlined twice, in this
+   page and again in landing.js.
+
+   Being vector, it is BOUNDED rather than bled: the left column is
+   720 reference units of the 1672 frame, so the artwork is given
+   the 952 that remain and is anchored right inside them. It cannot
+   reach the sign-in form at any viewport. Its left edge is still
+   dissolved into the page so the frame has no visible border.
 
    Auth form rules are scoped under #landing-page because auth.css
    is cascaded after this file and would otherwise win.
@@ -82,6 +84,20 @@
   display: none !important;
 }
 
+/* The app shell stays in normal flow behind the landing page, and at a
+   short viewport its own minimum height gave the document a few pixels
+   of scroll — a scrollbar on a screen with nothing below the fold, on a
+   page that is a fixed 100vh and cannot usefully be scrolled at all.
+   The document is pinned to the viewport while the landing page is up,
+   and released the moment it is hidden and the shell becomes the page.
+   Both elements, and the height with it: `overflow` on one of them
+   alone still left the shell's own minimum height sticking out. */
+html:has(#landing-page:not(.hidden)),
+body:has(#landing-page:not(.hidden)) {
+  height: 100%;
+  overflow: hidden;
+}
+
 /* ─── Left Hero Column (Auth & Headline) ──────────────────── */
 #landing-page .landing-hero-left {
   position: relative;
@@ -95,20 +111,38 @@
   /* The column is centred, so its total flow height must not depend on
      which panel is showing — otherwise the brand and headline drift as
      the user switches. .landing-auth-panel reserves a constant slot for
-     that; this top padding then lands the centred result on the
-     reference position (brand ink at y=54 of the 941 frame). */
-  padding: calc(28 * var(--u)) 0 0 calc(72 * var(--u));
+     that; this top padding then lands the centred result.
+
+     Measured budget, in reference units, at the binding aspect ratio
+     (anything at or wider than 1672/941, where the column is exactly
+     941u tall — see --u):
+
+       12  padding-top
+       54  brand            +  56  gap
+      132  headline (2 lines) + 48  gap
+      592  reserved panel slot
+      ---
+      894  content, leaving 47u of free height, centred 23.5u top and
+           bottom. Sign-up with its failure message showing measures
+           ~584u, which is what sets the reserve. */
+  padding: calc(12 * var(--u)) 0 0 calc(72 * var(--u));
   box-sizing: border-box;
   z-index: 5;
   user-select: text;
 }
 
 /* Brand Lockup */
+/* The two gaps below (brand → headline, headline → panel) are the column's
+   only slack. The panel slot grew when sign-up gained a confirmation field,
+   a five-line requirement checklist and a reserved failure message; the
+   slack was spent on that rather than letting the column run past the
+   bottom of a viewport that cannot scroll. Both gaps are shared by all
+   three panels, so the brand and headline still sit in one fixed place. */
 #landing-page .landing-brand {
   display: flex;
   align-items: center;
   gap: calc(23 * var(--u));
-  margin-bottom: calc(96 * var(--u));
+  margin-bottom: calc(56 * var(--u));
   cursor: pointer;
   width: fit-content;
 }
@@ -147,7 +181,7 @@
   line-height: 1.18;
   letter-spacing: -0.035em;
   color: var(--landing-text-main);
-  margin: 0 0 calc(72 * var(--u)) 0;
+  margin: 0 0 calc(48 * var(--u)) 0;
   width: calc(640 * var(--u));
   max-width: 100%;
 }
@@ -158,15 +192,22 @@
 
 /* ─── In-Place Auth Panels ────────────────────────────────── */
 /* Reserved panel slot. Every panel occupies the same vertical space
-   whatever its content height (sign-in ~436, sign-up ~505, reset ~303,
-   reset-confirmation ~354 ref-px), so the brand and headline above it
-   never move when switching. Panels fill from the top of the slot, and
-   the reserve is set by the tallest of them. */
+   whatever its content height, so the brand and headline above it never
+   move when switching. Panels fill from the top of the slot, and the
+   reserve is set by the tallest state any of them can reach — which is
+   sign-up with its failure message showing, not sign-up at rest. Sizing
+   the reserve to the resting state would have meant the composition
+   shifted the moment a password was rejected, which is precisely when a
+   moving target is least welcome.
+
+   The reserve is the whole reason the panel never scrolls: #landing-page
+   is a fixed 100vh with overflow hidden, so anything past the slot is
+   simply not on the screen. If a panel gains a field, re-measure. */
 #landing-page .landing-auth-panel {
   display: none;
   width: calc(398 * var(--u));
   max-width: 100%;
-  min-height: calc(506 * var(--u));
+  min-height: calc(592 * var(--u));
 }
 
 #landing-page .landing-auth-panel.active {
@@ -386,7 +427,7 @@
   background: #ffffff;
   border: 1px solid #e8e4f2;
   border-radius: calc(10 * var(--u));
-  padding: calc(10 * var(--u)) calc(14 * var(--u));
+  padding: calc(8 * var(--u)) calc(13 * var(--u));
   margin-bottom: calc(12 * var(--u));
 }
 
@@ -397,49 +438,108 @@
   font-size: calc(13 * var(--u));
   font-weight: 600;
   color: var(--brand-purple);
-  margin-bottom: calc(5 * var(--u));
+  margin-bottom: calc(4 * var(--u));
 }
 
 #landing-page .auth-requirements-list {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: calc(4 * var(--u));
+  gap: calc(4 * var(--u)) calc(10 * var(--u));
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
+/* Unmet is the resting state. The list previously rendered every item in
+   the "satisfied" green whatever was in the field — including an empty
+   one — so it read as a claim about the password rather than a rule about
+   passwords, and it was wrong every time until the last keystroke. */
 #landing-page .auth-req-item {
   display: flex;
   align-items: center;
-  gap: calc(5 * var(--u));
+  gap: calc(6 * var(--u));
   font-size: calc(12 * var(--u));
-  color: #16a34a;
-  font-weight: 500;
-}
-
-#landing-page .auth-checkbox-row {
-  display: flex;
-  align-items: flex-start;
-  gap: calc(9 * var(--u));
-  margin-bottom: calc(16 * var(--u));
-  font-size: calc(13.5 * var(--u));
-  color: var(--landing-text-sub);
   line-height: 1.35;
-  cursor: pointer;
-}
-
-#landing-page .auth-checkbox-row input {
-  margin-top: calc(2 * var(--u));
-  accent-color: var(--brand-purple);
-  width: calc(16 * var(--u));
-  height: calc(16 * var(--u));
-}
-
-#landing-page .auth-checkbox-row a {
-  color: var(--brand-purple);
+  color: var(--landing-text-muted);
   font-weight: 500;
-  text-decoration: underline;
+  transition: color 0.15s ease;
+}
+
+#landing-page .auth-req-item.is-met {
+  color: #16a34a;
+}
+
+#landing-page .auth-req-mark {
+  flex: 0 0 auto;
+  width: calc(13 * var(--u));
+  height: calc(13 * var(--u));
+  border-radius: 50%;
+  border: max(1px, calc(1.5 * var(--u))) solid #c8c2d6;
+  background: #ffffff;
+  position: relative;
+  box-sizing: border-box;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+#landing-page .auth-req-item.is-met .auth-req-mark {
+  background: #16a34a;
+  border-color: #16a34a;
+}
+
+#landing-page .auth-req-item.is-met .auth-req-mark::after {
+  content: '';
+  position: absolute;
+  left: calc(4.2 * var(--u));
+  top: calc(1.4 * var(--u));
+  width: calc(2.6 * var(--u));
+  height: calc(5.6 * var(--u));
+  border: solid #ffffff;
+  border-width: 0 max(1px, calc(1.6 * var(--u))) max(1px, calc(1.6 * var(--u))) 0;
+  transform: rotate(45deg);
+}
+
+/* The tick is decorative, so the state is carried in text for anyone
+   reading the list through a screen reader rather than looking at it. */
+#landing-page .auth-req-state {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ─── Failure message ─────────────────────────────────────────
+   One slot per panel, in the markup rather than created on demand, so
+   the reserved panel height above can account for it. */
+#landing-page .auth-error-box {
+  margin: calc(10 * var(--u)) 0;
+  padding: calc(8 * var(--u)) calc(12 * var(--u));
+  border-radius: calc(10 * var(--u));
+  background: #fef2f2;
+  border: 1px solid #f7cccc;
+  color: #b91c1c;
+  font-size: calc(12 * var(--u));
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* The requirements box supplies the gap above it. */
+#landing-page .auth-requirements-box + .auth-error-box {
+  margin-top: 0;
 }
 
 /* Confirmation Box */
+/* The confirmation carries its own heading, so the panel's — "Reset
+   password / Enter your email and we'll send you a recovery link" —
+   is both redundant and, once the address has been sent, wrong. */
+#landing-page #panel-reset.is-confirmed .auth-panel-header {
+  display: none;
+}
+
 #landing-page .auth-confirmation-box {
   display: flex;
   flex-direction: column;
@@ -479,47 +579,60 @@
   color: var(--brand-purple);
 }
 
-/* The signup panel carries three fields plus the requirements box and
-   consent row, so it is the tallest of the three. Only its own interior
-   is tightened — never the brand or headline above it, which must not
-   move between panels (see the reserved panel height above). */
-#landing-page:has(#panel-signup.active) .auth-panel-header { margin-bottom: calc(18 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-field-group { margin-bottom: calc(8 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-label { margin-bottom: calc(6 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-input { height: calc(42 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-requirements-box { margin-bottom: calc(7 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-checkbox-row { margin-bottom: calc(9 * var(--u)); }
-#landing-page:has(#panel-signup.active) .auth-panel-footer { margin-top: calc(21 * var(--u)); }
+/* The signup panel carries four fields plus a five-line requirements box,
+   so it is by some distance the tallest of the three. Only its own
+   interior is tightened — never the brand or headline above it, which
+   must not move between panels (see the reserved panel height above). */
+#landing-page:has(#panel-signup.active) .auth-panel-header { margin-bottom: calc(12 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-panel-title { margin-bottom: calc(6 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-field-group { margin-bottom: calc(7 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-label { margin-bottom: calc(4 * var(--u)); font-size: calc(13.5 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-input { height: calc(38 * var(--u)); font-size: calc(14.5 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-requirements-box { margin-bottom: calc(8 * var(--u)); }
+#landing-page:has(#panel-signup.active) .btn-landing-primary { height: calc(50 * var(--u)); }
+#landing-page:has(#panel-signup.active) .auth-panel-footer { margin-top: calc(12 * var(--u)); }
 
-/* ─── Right Hero Column (Full-bleed Map Artwork) ───────────── */
-/* Anchored to the viewport edges so the raster's own top, right
-   and bottom borders sit off-canvas — there is no rectangle left
-   to see. Only the left edge meets the page, and it is dissolved
-   below. Absolute rather than a flex sibling so a tall/narrow
-   viewport lets the artwork slide under the text column instead
-   of being clipped against it. */
+/* ─── Right Hero Column (World Map) ────────────────────────── */
+/* Bounded, not bled — which is the whole of "it must not overflow
+   onto the sign-up form". The old box was the India raster's own
+   near-square proportions run off three edges of the viewport; a
+   world is 1200 × 625 and sits inside the space the text column
+   leaves, centred in the height.
+
+   Absolute rather than a flex sibling so the vertical centring is
+   independent of the text column's own layout. */
 #landing-page .landing-hero-right {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  height: 100%;
-  aspect-ratio: 952 / 941;
+  top: 50%;
+  right: calc(55 * var(--u));
+  transform: translateY(-50%);
+
+  /* Everything to the right of the text column, and never more.
+     845u is that column's 720, a 70u gutter and this box's own 55u
+     right margin — so whatever the viewport, the left edge lands at
+     790u and the artwork cannot reach the form. That subtraction is
+     the guarantee; the 58vw cap only stops it dominating an
+     ultrawide screen.
+
+     Written against the free space rather than as a multiple of
+     `--u` because `--u` follows the SHORTER viewport ratio: at the
+     design's own wide, short frame that shrank the map to half the
+     height it has in the mock-up, with four hundred pixels of empty
+     page beside it. */
+  width: min(58vw, calc(100vw - 845 * var(--u)));
+  aspect-ratio: 1200 / 625;
   display: block;
   z-index: 1;
   pointer-events: none;
 
-  /* Dissolve the left edge across the artwork's empty margin. The
-     India outline starts at ~18% of the raster, so the mask is
-     fully opaque by 18.5% and never eats into the subject. */
+  /* Dissolve the left edge into the page. The Americas begin at
+     about 12% of the frame, so the mask is fully opaque well before
+     any coastline and never eats into the subject. */
   --map-edge-fade: linear-gradient(to right,
     rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.06) 3%,
-    rgba(0, 0, 0, 0.22) 6.5%,
-    rgba(0, 0, 0, 0.48) 10%,
-    rgba(0, 0, 0, 0.74) 13%,
-    rgba(0, 0, 0, 0.92) 15.5%,
-    rgba(0, 0, 0, 1) 18.5%);
+    rgba(0, 0, 0, 0.35) 4%,
+    rgba(0, 0, 0, 0.78) 8%,
+    rgba(0, 0, 0, 1) 12%);
   -webkit-mask-image: var(--map-edge-fade);
   mask-image: var(--map-edge-fade);
 }
@@ -531,13 +644,145 @@
   display: block;
 }
 
-#landing-page .landing-map-art {
+#landing-page .landing-world-svg {
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  object-position: center center;
   display: block;
+  overflow: visible;
   pointer-events: none;
+}
+
+/* ─── The landmass ─────────────────────────────────────────────
+   Three passes over one geometry: a blurred copy for the bloom the
+   design has coming off the continents, the filled body, and a lit
+   coastline over the top. Every colour is the existing brand purple
+   family — nothing new is introduced. */
+/* The wide, soft field the continents sit in. */
+#landing-page .lw-land-haze {
+  fill: rgba(146, 24, 234, 0.30);
+  stroke: rgba(168, 60, 245, 0.30);
+  stroke-width: 16;
+  stroke-linejoin: round;
+}
+
+/* The bloom coming off the coasts. */
+#landing-page .lw-land-bloom {
+  fill: rgba(168, 60, 245, 0.62);
+  stroke: rgba(214, 160, 255, 0.85);
+  stroke-width: 5;
+  stroke-linejoin: round;
+}
+
+#landing-page .lw-land {
+  fill: url(#lw-land-fill);
+}
+
+/* The lit coastline, and the country divisions inside it — the design keeps
+   both, the second much fainter than the first. One geometry carries them,
+   so this is the outer edge and the internal borders at once; the weight is
+   chosen for the borders, and the bloom beneath supplies the coast. */
+#landing-page .lw-coast {
+  fill: none;
+  stroke: rgba(246, 232, 255, 0.55);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+}
+
+/* The dot fields the design sets behind the map. Each rect fades in and
+   out on its own delay — slow enough (9s) that it is peripheral, which is
+   the only speed at which decoration behind a sign-in form is welcome. */
+#landing-page .lw-dotfields {
+  fill: rgba(146, 24, 234, 0.28);
+}
+
+#landing-page .lw-dotfields rect {
+  animation: lwFieldBreathe 9s ease-in-out infinite alternate;
+}
+
+@keyframes lwFieldBreathe {
+  from { opacity: 0.45; }
+  to   { opacity: 1; }
+}
+
+/* ─── The scattered field ─────────────────────────────────────
+   Points, not a grid: positions come from a fixed seed in
+   landing.js, so they are the same on every render. */
+/* The brand purple at full strength, not the pale tint the map is drawn
+   in: these sit on a near-white page, where a light purple at 30% opacity
+   is measurably present and visually absent — which is what the first cut
+   of this was. The floor is 0.18 rather than 0.05 for the same reason: a
+   dot that fades to nothing reads as a rendering fault, not as a pulse. */
+#landing-page .lw-star {
+  fill: rgba(146, 24, 234, 0.95);
+  opacity: 0;
+  animation: lwStarTwinkle var(--lw-star-dur, 4s) ease-in-out infinite alternate;
+}
+
+@keyframes lwStarTwinkle {
+  from { opacity: 0.18; }
+  to   { opacity: var(--lw-star-peak, 0.5); }
+}
+
+/* ─── Freight on the lanes ────────────────────────────────────
+   Positioned entirely by <animateMotion> in the markup; these
+   rules are the look, not the path. */
+/* A white bead on a white lane is nothing. The core stays white — it is
+   the light — and the halo carries the contrast, in the accent purple, so
+   the packet reads against both the corridor it runs on and the pale page
+   behind it. */
+#landing-page .lw-packet-core {
+  fill: #ffffff;
+}
+
+#landing-page .lw-packet-glow {
+  fill: rgba(146, 24, 234, 0.55);
+}
+
+/* ─── Corridors ───────────────────────────────────────────────
+   The line is always there; the pulse runs along it. Two strokes
+   on the same geometry, which is why they cannot drift apart. */
+#landing-page .lw-corridor-glow {
+  fill: none;
+  stroke: rgba(232, 172, 255, 0.55);
+  stroke-width: 4.5;
+  stroke-linecap: round;
+}
+
+#landing-page .lw-corridor {
+  fill: none;
+  stroke: rgba(255, 244, 255, 0.9);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+#landing-page .lw-corridor-beam {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+
+/* ─── Hubs ────────────────────────────────────────────────────── */
+#landing-page .lw-hub-glow {
+  fill: rgba(197, 106, 255, 0.55);
+}
+
+#landing-page .lw-hub-halo {
+  fill: rgba(226, 176, 255, 0.5);
+}
+
+#landing-page .lw-hub-disc {
+  fill: url(#lw-hub-fill);
+  stroke: rgba(255, 255, 255, 0.95);
+  stroke-width: 1.6;
+}
+
+#landing-page .lw-hub-glyph {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.7;
+  stroke-linejoin: round;
+  stroke-linecap: round;
 }
 
 /* Ambient bloom. Replaces the former drop-shadow animation, which
@@ -545,10 +790,10 @@
 #landing-page .landing-map-container::after {
   content: '';
   position: absolute;
-  left: 6%;
-  top: 8%;
-  width: 88%;
-  height: 84%;
+  left: 4%;
+  top: -14%;
+  width: 92%;
+  height: 128%;
   border-radius: 50%;
   background: radial-gradient(closest-side,
     rgba(168, 60, 245, 0.16) 0%,
@@ -576,6 +821,30 @@
   transform-box: fill-box;
   transform-origin: center;
   animation: hubPulseRing 3.2s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+}
+
+/* The second ring: wider and half again as slow, so the two never land
+   together and the hub reads as transmitting rather than blinking. */
+#landing-page .lw-hub-pulse-slow {
+  animation-name: hubPulseRingWide;
+  animation-duration: 5.4s;
+}
+
+@keyframes hubPulseRingWide {
+  0%   { r: 20px; opacity: 0.5; stroke-width: 1.6px; }
+  100% { r: 62px; opacity: 0; stroke-width: 0.4px; }
+}
+
+/* The hub's own bloom, breathing under the rings. */
+#landing-page .lw-hub-glow {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: hubGlowBreathe 4.6s ease-in-out infinite alternate;
+}
+
+@keyframes hubGlowBreathe {
+  from { opacity: 0.55; transform: scale(0.86); }
+  to   { opacity: 1; transform: scale(1.12); }
 }
 
 @keyframes hubPulseRing {
@@ -611,22 +880,55 @@
   }
 }
 
+/* ─── Motion, for people who have asked for less of it ───────
+   Everything above this line is decoration: a starfield, six fading
+   panels, two rings per hub and fourteen packets in flight. Someone who
+   has set "reduce motion" at the OS level has said that is not welcome,
+   and none of it carries information — so it all stops, and the hero is
+   the same picture without the movement. The corridors, hubs and dots
+   stay exactly where they are. */
+@media (prefers-reduced-motion: reduce) {
+  #landing-page .lw-dotfields rect,
+  #landing-page .lw-star,
+  #landing-page .minimal-hub-pulse,
+  #landing-page .lw-hub-glow,
+  #landing-page .minimal-route-beam,
+  #landing-page .landing-map-container::after {
+    animation: none !important;
+  }
+  #landing-page .lw-star { opacity: var(--lw-star-peak, 0.5); }
+  #landing-page .minimal-hub-pulse { opacity: 0; }
+  /* SMIL is not a CSS animation and does not stop with one; the packets
+     are hidden instead, which leaves the lanes they run on untouched. */
+  #landing-page .lw-packets { display: none; }
+}
+
 /* ─── Narrow / squat viewports ─────────────────────────────── */
 /* Below the reference's 16:9-ish frame the artwork is wide enough
    to reach under the copy. Trim the type scale and slide the map
    right so the subject stays clear of the headline. */
+/* The old rules slid the artwork RIGHT here, to get a near-square
+   raster out from under the copy. A bounded box does not need that
+   — it already ends at 720u — so what is left to do on a squat
+   viewport is let it lose height gracefully and step back a little
+   so the headline stays the loudest thing on the page.
+
+   `translateY(-50%)` is repeated in each block because it carries
+   the vertical centring: a `transform` here would otherwise replace
+   it and drop the map to the middle-bottom of the page. */
 @media (max-aspect-ratio: 8/5) {
   #landing-page {
     --u: clamp(0.5px, min(0.0525vw, 0.1063vh), 1.32px);
   }
   #landing-page .landing-hero-right {
-    transform: translateX(7%);
+    width: calc(860 * var(--u));
+    opacity: 0.94;
   }
 }
 
 @media (max-aspect-ratio: 5/4) {
   #landing-page .landing-hero-right {
-    transform: translateX(14%);
-    opacity: 0.85;
+    width: calc(820 * var(--u));
+    opacity: 0.82;
   }
 }

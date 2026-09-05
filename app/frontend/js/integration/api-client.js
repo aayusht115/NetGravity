@@ -25,6 +25,33 @@ const CSRF_HEADER = 'X-CSRF-Token';
 const LEGACY_TOKEN_KEY = 'ngt_auth_token';
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/**
+ * Who wants to know when a request starts and finishes.
+ *
+ * One consumer today: the agent loading screen. It needs the correlation id
+ * of a request WHILE that request is in flight, because that is the id the
+ * orchestrator files the resulting execution under, and asking the control
+ * plane what that execution is doing is the only way for a loading screen to
+ * report a twenty-second solve as anything other than a spinner.
+ *
+ * Notification only. An observer cannot alter the request, cancel it, read
+ * its body, or change what is returned — `notify` swallows whatever an
+ * observer throws, so a broken observer cannot break an HTTP call.
+ */
+const requestObservers = new Set();
+
+/** Watch every request this client makes. Returns an unsubscribe function. */
+export function observeRequests(fn) {
+  requestObservers.add(fn);
+  return () => requestObservers.delete(fn);
+}
+
+function notifyObservers(event) {
+  requestObservers.forEach((fn) => {
+    try { fn(event); } catch (e) { /* an observer must never break a request */ }
+  });
+}
+
 class ApiClient {
   /**
    * The session no longer lives in `localStorage`.
@@ -127,6 +154,12 @@ class ApiClient {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), options.timeout || CONFIG.REQUEST_TIMEOUT_MS);
 
+    // The id the server will file any resulting execution under. Announced
+    // BEFORE the fetch, which is the only moment it is useful: after the
+    // response there is an execution id and nothing left to watch.
+    const correlationId = headers.get('X-Request-ID') || '';
+    notifyObservers({ phase: 'start', correlationId, endpoint, method });
+
     try {
       const response = await fetch(url, {
         ...options,
@@ -149,15 +182,21 @@ class ApiClient {
       }
 
       if (!response.ok) {
+        notifyObservers({ phase: 'end', correlationId, endpoint, method,
+                          ok: false, status: response.status });
         throw ApplicationError.fromHttp(response.status, data || {});
       }
 
+      notifyObservers({ phase: 'end', correlationId, endpoint, method,
+                        ok: true, status: response.status });
       return data;
     } catch (err) {
       clearTimeout(timeout);
       if (err instanceof ApplicationError) {
         throw err;
       }
+      notifyObservers({ phase: 'end', correlationId, endpoint, method,
+                        ok: false, status: 0 });
       if (err.name === 'AbortError') {
         throw new ApplicationError(ErrorCode.TIMEOUT, `Request to '${endpoint}' timed out.`);
       }

@@ -292,7 +292,21 @@ class TestExternalSignal:
         assert response.governance["classification"] == "HUMAN_ONLY"
         assert "R6_RISK_FACTOR_HUMAN" in response.governance["triggered_rules"]
         assert response.governance["blocked_by_missing_evidence"] is False
-        assert "requires a human decision" in response.reply
+
+        # The escalation must reach the USER, not just the governance block —
+        # a verdict nobody reads governs nothing.
+        #
+        # Phrased for a run that proposed no change. Reporting a hazard is an
+        # ActionType.REPORT: the assessment happened, nothing was altered, and
+        # the constraint is on acting afterwards. The wording used to be "this
+        # requires a human decision and cannot be actioned automatically" for
+        # every verdict alike, which read as though the user's own message were
+        # being held for sign-off — most visibly on plain questions, where
+        # "which DC is most utilised?" came back awaiting a human.
+        assert "human decision" in response.reply
+        assert "Acting on it would need a human decision" in response.reply
+        assert "nothing has been changed" in response.reply
+        assert response.governance["reason"] in response.reply
 
     def test_the_user_asserted_probability_is_labelled_as_such(self, orch):
         """Provenance: the P came from a person, not from a data feed."""

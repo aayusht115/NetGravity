@@ -763,7 +763,9 @@ export function showInsightDetail(kind, id) {
   if (btnUpload) btnUpload.style.display = 'none';
 
   renderDeepDive();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  // The page area is the scroll container, not the window.
+  if (typeof window.scrollPageToTop === 'function') window.scrollPageToTop();
+  else window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function backToHome() {

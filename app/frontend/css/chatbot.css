@@ -217,12 +217,19 @@
   flex-direction: column;
 }
 
-/* ─── Welcome Banner ──────────────────────────────────────────────── */
+/* ─── Welcome Banner ──────────────────────────────────────────────
+   The right padding is the artwork's. `.chatbot-welcome-bg-art` is a
+   170px decorative mesh pinned to this card's top-right corner, and the
+   content box used to run 138px underneath it — the greeting cleared it,
+   the sentence below did not, and its first line broke on top of the
+   pattern. Reserving the column is what stops that; there is no z-index
+   fight to win, because the text was never actually behind the mesh, it
+   was on it. */
 .chatbot-welcome-banner {
   background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
   border: 1px solid #ede9fe;
   border-radius: 16px;
-  padding: 20px 22px;
+  padding: 22px 150px 22px 22px;
   margin: 18px 24px 16px;
   position: relative;
   overflow: hidden;
@@ -252,26 +259,33 @@
 }
 
 .chatbot-welcome-greeting {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   color: #111827;
-  margin: 0 0 4px;
+  margin: 0 0 6px;
 }
 
+/* Darker and a shade larger than the 13.5px/#4b5563 it was. This sits on a
+   tinted, patterned ground rather than on white, which costs contrast that
+   the type has to make back. */
 .chatbot-welcome-text {
-  font-size: 13.5px;
-  color: #4b5563;
-  line-height: 1.55;
+  font-size: 14px;
+  color: #3f3552;
+  line-height: 1.6;
   margin: 0;
+  max-width: 46ch;
 }
 
 .chatbot-welcome-bg-art {
   position: absolute;
   right: -10px;
   top: -10px;
-  width: 170px;
-  height: 120px;
-  opacity: 0.35;
+  width: 150px;
+  height: 118px;
+  /* Was 0.35, when it had text on top of it. With the column reserved it
+     is decoration beside the words rather than behind them, and it does
+     not need to compete with them. */
+  opacity: 0.28;
   pointer-events: none;
   z-index: 1;
 }
@@ -487,6 +501,55 @@
 }
 
 /* Typing Indicator Animation */
+/* ─── waiting for a reply ─────────────────────────────────────────── */
+.chat-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 15px;
+}
+
+.chat-thinking-word {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-2, #4b5563);
+  /* A width that does not jump as the word changes: the dots beside it would
+     otherwise shuffle left and right every couple of seconds. */
+  min-width: 92px;
+}
+
+.chat-thinking-word.is-in {
+  animation: chat-thinking-in 420ms ease-out both;
+}
+
+@keyframes chat-thinking-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* `.chat-thinking-elapsed` was the second count beside the thinking words.
+   Removed with it: the dots say the request is alive, and a number
+   climbing next to them turns waiting into watching it climb. */
+
+/* The dots were built as the entire contents of a bubble, with 14px of
+   padding either side. Beside a word that padding reads as a gap, and the
+   bounce keyframe starts at scale(0) — so two of the three are invisible at
+   any instant and what is left looks like empty space rather than motion. */
+.chat-thinking .typing-indicator {
+  padding: 0;
+  gap: 3px;
+}
+
+.chat-thinking .typing-dot {
+  width: 5px;
+  height: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-thinking-word.is-in { animation: none; }
+}
+
 .typing-indicator {
   display: flex;
   align-items: center;

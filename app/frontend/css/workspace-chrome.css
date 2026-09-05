@@ -1,0 +1,477 @@
+/* ═══════════════════════════════════════════════════════════════
+   Netgravity — Workspace Chrome
+   The top bar, menus and modal shared by Select Project, Create
+   Project and the ingestion flow. See js/workspace-chrome.js.
+
+   Type scale
+   ----------
+   Taken from the authenticated app, which is the product's source
+   of truth: style.css sets `html { font-size: 14px }`, a 17px brand,
+   36px circular icon buttons and a 63px top bar, and
+   home-overview.css works in 11–15px with 19–20px for a card's own
+   headline. The first build of this bar was drawn at the size of the
+   mockup image — an 82px bar, a 23px brand, a 42px avatar — a third
+   larger than every other surface in the product, so moving from
+   Home to Select Project felt like changing application.
+
+   The colour is the brand purple (#9218EA) the landing and auth
+   screens use, not the app shell's --primary: these screens sit on
+   the marketing side of sign-in and the mockups specify it.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  --wc-purple: #9218EA;
+  --wc-purple-dark: #7c14c7;
+  --wc-purple-wash: #f5edfc;
+  --wc-ink: #1a1a2e;
+  --wc-ink-2: #5a5a72;
+  --wc-ink-3: #8e8ea0;
+  --wc-line: #e8e8ef;
+  --wc-surface: #ffffff;
+  /* The height of .app-global-topbar as it actually renders (14px + 12px
+     padding around a 37px row). The two bars are the same height so the brand
+     does not jump when the app shell replaces this screen. */
+  --wc-bar-h: 63px;
+}
+
+/* ─── Top bar ─────────────────────────────────────────────────── */
+.wc-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  width: 100%;
+  background: var(--wc-surface);
+  border-bottom: 1px solid var(--wc-line);
+  flex-shrink: 0;
+}
+
+.wc-topbar-inner {
+  height: var(--wc-bar-h);
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wc-topbar-wide .wc-topbar-inner { max-width: 1600px; }
+
+/* The bar spans the window on the ingestion screens, which have a rail of
+   their own on the left and no centred content column to line up with. */
+.wc-topbar-full .wc-topbar-inner { max-width: none; padding: 0 20px; }
+
+.wc-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* ─── Project pill ────────────────────────────────────────────── */
+/* Which project am I in? Sized against .btn (13px) rather than the brand, so
+   it reads as a control next to the lockup and not a second title. */
+.wc-project {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  max-width: 260px;
+  padding: 0 10px;
+  border: 1px solid var(--wc-line);
+  border-radius: 9px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wc-ink);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.wc-project:hover { border-color: var(--wc-purple); background: var(--wc-purple-wash); }
+.wc-project:focus-visible { outline: 2px solid var(--wc-purple); outline-offset: 1px; }
+.wc-project svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--wc-ink-3); }
+.wc-project:hover svg { color: var(--wc-purple); }
+
+.wc-project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.wc-project-caret { display: flex; }
+
+.wc-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 8px;
+  padding: 3px 6px;
+  margin-left: -6px;
+  transition: background 0.15s ease;
+}
+
+.wc-brand:hover { background: var(--wc-purple-wash); }
+.wc-brand:focus-visible { outline: 2px solid var(--wc-purple); outline-offset: 2px; }
+
+.wc-logo { width: 30px; height: 30px; flex-shrink: 0; }
+
+/* .logo-text / .logo-sub in style.css. */
+.wc-brand-title {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--wc-ink);
+  line-height: 1.15;
+}
+
+.wc-brand-sub {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--wc-purple);
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.wc-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* .topbar-icon-btn in style.css: a 36px circle with a hairline border,
+    and the same purple on hover. Identical, so the two bars are the same
+    control rather than two takes on it. */
+.wc-icon-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  border-radius: 50%;
+  color: #4b5563;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.wc-icon-btn svg { width: 17px; height: 17px; }
+.wc-icon-btn:hover {
+  border-color: var(--wc-purple);
+  color: var(--wc-purple);
+  background: rgba(146, 24, 234, 0.04);
+}
+.wc-icon-btn:focus-visible { outline: 2px solid var(--wc-purple); outline-offset: 1px; }
+
+/* .notif-badge-dot in style.css, to the pixel. A dot, not a count: the feed
+   is this session's own events, and a number would imply a server-side inbox
+   that does not exist. */
+.wc-bell.has-unseen::after {
+  content: '';
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 1.5px solid #ffffff;
+}
+
+.wc-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--wc-line);
+  margin: 0 6px;
+}
+
+.wc-account {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 3px 6px 3px 3px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  max-width: 230px;
+}
+
+.wc-account:hover { background: var(--wc-purple-wash); }
+.wc-account:focus-visible { outline: 2px solid var(--wc-purple); outline-offset: 1px; }
+
+/* Matches .user-avatar-ak in the app shell. */
+.wc-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--wc-purple);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.wc-account-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.wc-account-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--wc-ink);
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wc-account-role {
+  font-size: 11px;
+  color: var(--wc-ink-3);
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Nothing renders for a role the server never stated. */
+.wc-account-role:empty { display: none; }
+
+.wc-account-caret { display: flex; color: var(--wc-ink-3); }
+.wc-account-caret svg { width: 15px; height: 15px; }
+
+/* ─── Floating menus ──────────────────────────────────────────── */
+/* Above .proj-page (9990) and .app-shell, because both a menu and a modal
+   are appended to <body> and are therefore siblings of the screen that
+   opened them — at a lower z-index the page simply covers them, which is
+   not "hidden" but "there and unclickable". */
+.wc-menu {
+  position: fixed;
+  z-index: 10050;
+  min-width: 218px;
+  max-width: 320px;
+  background: var(--wc-surface);
+  border: 1px solid var(--wc-line);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px -10px rgba(23, 12, 43, 0.24),
+              0 2px 6px rgba(23, 12, 43, 0.05);
+  padding: 5px;
+  animation: wcMenuIn 0.13s ease;
+}
+
+@keyframes wcMenuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* The app's own eyebrow label: 10px, uppercase, wide tracking. */
+.wc-menu-head {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--wc-ink-3);
+  padding: 7px 9px 5px;
+}
+
+.wc-menu-scroll { max-height: 288px; overflow-y: auto; }
+
+.wc-menu-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border: none;
+  background: none;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--wc-ink);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+
+.wc-menu-item svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--wc-ink-3); }
+.wc-menu-item:hover { background: var(--wc-purple-wash); color: var(--wc-purple); }
+.wc-menu-item:hover svg { color: var(--wc-purple); }
+.wc-menu-item.danger:hover { background: #fef2f2; color: #dc2626; }
+.wc-menu-item.danger:hover svg { color: #dc2626; }
+
+.wc-menu-item[disabled] { opacity: 0.45; cursor: not-allowed; }
+.wc-menu-item[disabled]:hover { background: none; color: var(--wc-ink); }
+
+.wc-menu-sep { height: 1px; background: var(--wc-line); margin: 4px 4px; }
+
+.wc-menu-identity {
+  padding: 7px 9px 9px;
+  border-bottom: 1px solid var(--wc-line);
+  margin-bottom: 4px;
+}
+
+.wc-menu-identity-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--wc-ink);
+}
+
+.wc-menu-identity-mail {
+  font-size: 11px;
+  color: var(--wc-ink-3);
+  margin-top: 1px;
+  word-break: break-all;
+}
+
+.wc-menu-empty {
+  padding: 11px 10px 13px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--wc-ink-2);
+  line-height: 1.5;
+}
+
+.wc-menu-empty span {
+  display: block;
+  margin-top: 5px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--wc-ink-3);
+}
+
+.wc-activity-row {
+  display: flex;
+  gap: 9px;
+  padding: 8px 9px;
+  border-radius: 7px;
+}
+
+.wc-activity-row + .wc-activity-row { border-top: 1px solid #f4f1fa; }
+
+.wc-activity-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--wc-purple);
+  margin-top: 5px;
+  flex-shrink: 0;
+}
+
+.wc-activity-row.tone-success .wc-activity-dot { background: #16a34a; }
+.wc-activity-row.tone-error .wc-activity-dot { background: #dc2626; }
+
+.wc-activity-text {
+  font-size: 12.5px;
+  color: var(--wc-ink);
+  line-height: 1.45;
+}
+
+.wc-activity-when {
+  font-size: 11px;
+  color: var(--wc-ink-3);
+  margin-top: 1px;
+}
+
+/* ─── Modal ───────────────────────────────────────────────────── */
+.wc-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10100;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.wc-modal {
+  width: 100%;
+  max-width: 480px;
+  max-height: 82vh;
+  overflow: auto;
+  background: var(--wc-surface);
+  border-radius: 14px;
+  padding: 18px 20px 20px;
+  box-shadow: 0 20px 50px -16px rgba(23, 12, 43, 0.45);
+}
+
+.wc-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+/* .card-title in style.css. */
+.wc-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--wc-ink);
+  letter-spacing: -0.01em;
+}
+
+.wc-modal-close {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  color: var(--wc-ink-3);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.wc-modal-close:hover { background: #f3f0f8; color: var(--wc-ink); }
+
+.wc-modal-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--wc-ink-2);
+}
+
+.wc-modal-body p { margin: 0 0 9px; }
+.wc-modal-body ul { margin: 0 0 9px; padding-left: 18px; }
+.wc-modal-body li { margin-bottom: 4px; }
+.wc-modal-body strong { color: var(--wc-ink); font-weight: 650; }
+.wc-modal-body code {
+  background: #f3f0f8;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 11.5px;
+}
+
+/* ─── Responsive ──────────────────────────────────────────────── */
+@media (max-width: 1040px) {
+  /* The pill keeps its icon and caret so the control — and therefore the way
+     out of this project — is still reachable; only the name folds away. */
+  .wc-project { max-width: 150px; }
+}
+
+@media (max-width: 860px) {
+  .wc-topbar-inner { padding: 0 16px; }
+  .wc-topbar-full .wc-topbar-inner { padding: 0 14px; }
+  .wc-topbar-left { gap: 10px; }
+  .wc-account-text,
+  .wc-account-caret { display: none; }
+  .wc-project-name { display: none; }
+  .wc-project { max-width: none; padding: 0 8px; }
+}

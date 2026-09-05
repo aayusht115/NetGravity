@@ -604,3 +604,140 @@ class TestTransportSecurity:
         from app.backend.services.persistence import enforce_transport_security
         url = "postgresql://u:p@db.example.com/ng?sslmode=verify-full"
         assert enforce_transport_security(url, production=True) == url
+
+
+class TestTheAuthFormStatesThePolicyTheServerEnforces:
+    """
+    What the sign-up form tells a user about their password, and what
+    `validate_password_strength` will accept, have to be the same claim.
+
+    They were not. The form advertised "8+ characters", checked eight, and
+    sent the result to a server whose floor is twelve — so a password the
+    user had been told was fine came back rejected, and the rejection was
+    appended to the bottom of a fixed-height page where it could not be
+    read. These tests hold the two ends together.
+    """
+
+    @staticmethod
+    def _frontend():
+        import pathlib
+        return pathlib.Path(app.root_path).parent / "frontend"
+
+    @staticmethod
+    def _text(*parts):
+        path = TestTheAuthFormStatesThePolicyTheServerEnforces._frontend()
+        for part in parts:
+            path = path / part
+        return path.read_text(encoding="utf-8", errors="replace")
+
+    def test_no_auth_asset_advertises_a_floor_the_server_does_not_have(self):
+        from app.backend.services.security import _MIN_PASSWORD_LENGTH
+        assert _MIN_PASSWORD_LENGTH == 12
+        for parts in [("index.html",), ("js", "auth.js"), ("css", "auth.css"),
+                      ("css", "landing.css")]:
+            text = _without_comments(self._text(*parts))
+            for claim in ("8+ characters", "at least 8", "minimum 8",
+                          "8 characters"):
+                assert claim.lower() not in text.lower(), (parts, claim)
+
+    def test_the_form_checks_the_same_length_the_server_refuses_below(self):
+        from app.backend.services.security import _MIN_PASSWORD_LENGTH
+        source = self._text("js", "auth.js")
+        assert f"MIN_PASSWORD_LENGTH = {_MIN_PASSWORD_LENGTH}" in source
+
+    def test_every_requirement_the_checklist_shows_starts_unmet(self):
+        """
+        The list is a rule, not a verdict. It shipped with each item already
+        wearing the satisfied colour, so it agreed with an empty field.
+        """
+        import re
+        markup = self._text("index.html")
+        items = re.findall(r'<li class="auth-req-item"[^>]*>', markup)
+        assert len(items) == 5, items
+        assert not [i for i in items if "is-met" in i]
+        for key in ("length", "upper", "lower", "digit", "symbol"):
+            assert f'data-req="{key}"' in markup, key
+
+    def test_a_password_is_confirmed_before_it_is_sent(self):
+        markup = self._text("index.html")
+        assert 'id="signup-password-confirm"' in markup
+        assert "Confirm password" in markup
+
+    def test_the_form_does_not_ask_for_consent_to_documents_that_do_not_exist(self):
+        markup = _without_comments(self._text("index.html"))
+        assert "Terms of Service" not in markup
+        assert "Privacy Policy" not in markup
+
+    def test_every_panel_carries_its_failure_slot_in_the_markup(self):
+        """
+        Built on demand and appended to the form, the message landed below
+        the bottom of a page that is a fixed 100vh with `overflow: hidden`.
+        In the markup, the reserved panel height can account for it.
+        """
+        markup = self._text("index.html")
+        for slot in ("signin-error", "signup-error", "reset-error"):
+            assert f'id="{slot}"' in markup, slot
+            assert markup.count(f'id="{slot}"') == 1
+
+    def test_the_reset_confirmation_has_an_element_to_write_the_copy_into(self):
+        """
+        `confirmation.textContent = ...` replaced every child of the box —
+        the icon, the heading and the button back to sign-in went with it.
+        """
+        markup = self._text("index.html")
+        assert 'id="panel-reset-conf-desc"' in markup
+        source = self._text("js", "auth.js")
+        assert "confirmation.textContent" not in source
+
+    def test_the_reset_confirmation_claims_only_what_the_server_will_confirm(self):
+        """
+        An unknown address, a rate-limited one and a real one are
+        indistinguishable at the API by design. "We've sent a password reset
+        link to <address>" told the visitor which one they had.
+        """
+        markup = _without_comments(self._text("index.html"))
+        desc = markup.split('id="panel-reset-conf-desc"', 1)[1].split("</div>", 1)[0]
+        assert "If an account exists" in desc
+        assert "We've sent" not in desc
+        assert "panel-conf-email-target" not in markup
+
+    def test_the_reset_panel_offers_a_way_back_to_sign_in(self):
+        """Once on the form that asks for an address, and once on the screen
+        that confirms it was sent — which is where it used to be destroyed."""
+        markup = self._text("index.html")
+        panel = markup.split('id="panel-reset"', 1)[1].split('id="landing-map-stage"', 1)[0]
+        form, confirmation = panel.split('id="panel-reset-confirmation"', 1)
+        assert "Back to sign in" in form
+        assert "Back to sign in" in confirmation
+        for half in (form, confirmation):
+            assert 'data-arg="signin"' in half
+
+    def test_only_one_handler_answers_the_reset_form(self):
+        """
+        A second handler in landing.js hid the form and showed "Check your
+        email" before the request was made and without reading its result,
+        so a refused reset reported success — and the failure message was
+        written into the form it had just hidden.
+        """
+        source = self._text("js", "landing.js")
+        body = source.split("function bindLandingEvents", 1)[1]
+        body = _without_comments(body)
+        assert "panel-reset-confirmation" not in body
+
+    def test_accounts_are_offered_only_for_the_work_domain(self):
+        """
+        A guard on the form, not on the API — `POST /api/auth/signup` still
+        accepts any valid address, and this asserts only what the form does.
+        """
+        source = self._text("js", "auth.js")
+        assert "ALLOWED_EMAIL_DOMAIN = 'kearney.com'" in source
+        assert 'placeholder="you@kearney.com"' in self._text("index.html")
+
+    def test_the_form_never_accepts_what_the_server_would_refuse(self):
+        """
+        The form's composition rules are its own; what matters is the
+        direction. Anything it lets through must clear the server's floor.
+        """
+        from app.backend.services.security import validate_password_strength
+        for accepted in ("Netgravity@2026", "Abcdefghij1!", "Zx9!qwertyuiop"):
+            validate_password_strength(accepted)   # raises if it would not

@@ -176,6 +176,26 @@ Self-contained, and honest about which parts of an identity system it is:
 | Single sign-on | OpenID Connect, authorization code + PKCE |
 | **Not provided** | SAML, SCIM provisioning, directory sync (deprovisioning), password history, admin-initiated resets |
 
+### What the sign-up form adds, and what it does not
+
+The form is stricter than the server, and only in that direction. It shows a
+live checklist — 12 characters, an upper-case letter, a lower-case letter, a
+digit, a symbol — and refuses to submit until every item is met, so nothing it
+accepts can come back rejected for its shape. The server's own floor is
+unchanged and remains the authority: length, plus the common-password refusal.
+Composition rules are the form's advice, not a server policy; a password
+created through the API or by an administrator is held only to the floor.
+
+The form also accepts only `@kearney.com` addresses for **account creation**.
+This is a guard on the form. `POST /api/auth/signup` still accepts any
+syntactically valid address, so it stops a person filling in the wrong address,
+not a client calling the API directly. Sign-in and password reset are
+deliberately **not** restricted: an account can also arrive through single
+sign-on or an administrator, and refusing those a way in — or a way to
+recover — would lock out a user the server is willing to authenticate. If the
+restriction needs to be a rule rather than a prompt, it belongs in
+`SecurityService.signup` beside `validate_password_strength`.
+
 ### Single sign-on (OIDC)
 
 Off unless configured. `/api/auth/oidc/providers` reports whether it is on, and
@@ -270,7 +290,63 @@ the counter store must not become an open door.
 
 ---
 
-## 5. What the model does and does not do
+## 5. What an upload is checked against
+
+Everything on the mapping-review screen comes from one call,
+`POST /api/ingestions/preview/upload-and-parse`, and nothing on it is
+authored. The columns, the sample values, the row counts, the four totals and
+the per-sheet verdicts are all that call's response; the screen is a rendering
+of it, not a second opinion about it.
+
+**Sheets are identified by their columns, not their names.** A sheet called
+`Sheet1` is read correctly and one called `Facilities` whose headers are not
+recognised is not. The sheet's role then decides what each of its columns
+means — `Capacity_Units` is a facility's capacity on a facilities sheet and a
+lane's on a lanes sheet — which is why the review screen tabs by sheet and
+states the role it inferred for each.
+
+Three states, and they are different facts:
+
+| Status | What it means |
+|---|---|
+| **Used** | Recognised on an identified sheet; reaches a calculation |
+| **Needs review** | The sheet's role could not be determined, so the field is the best match across every role — a guess, and it is used as suggested unless changed |
+| **Not used** | Parsed, then read by nothing in this build |
+
+"Not used" is common and is not an error: a real workbook carries operational
+columns this build has no engine for. The summary states the share explicitly
+("67 of 147 columns reach a calculation in this build") rather than reporting a
+share of the ones it liked.
+
+**Only tabular files are parsed.** The uploader accepts `.pdf` because
+contracts and rate cards belong to the project record, but this build has no
+contract parser, the PDF review screen says so on its face, and no term shown
+there reaches the optimiser. PDFs are therefore not sent to the table parser at
+all. A file the parser cannot read is named in `parse_errors` and reported on
+its own card; it does not stop the other files in the same upload from being
+read. A request in which nothing is readable still fails, with 422.
+
+**Row-level quality is measured too, and is a separate question** from the
+mapping: that one asks whether the columns were read correctly, this one
+whether the rows can be trusted. The parser reports how many records it could
+not use, duplicate and empty rows, and columns that are mostly blank. On the
+review screen this is one chip on the file card — `10 records need attention ·
+3 issues` — which opens the full list. It was a full-width card until it was
+found to push the primary action off a 768px screen; the measurements are
+unchanged, only their place on the page. Nothing here is repaired for you:
+fixing a finding means editing your own file and uploading it again.
+
+The screen is deliberately **one screenful**. The mapping table scrolls inside
+its own box and the footer does not move, so `Confirm mapping & continue` is
+reachable without scrolling past 147 rows you have already decided not to
+change.
+
+Nothing an upload contains is committed by this screen. `Confirm mapping &
+continue` is what writes the network; until it is pressed, Back is lossless.
+
+---
+
+## 6. What the model does and does not do
 
 The MILP is **multi-period**. `multi_period_policy` decides what a demand table
 stating several periods is solved as:
@@ -333,7 +409,7 @@ diagnostic, the KPI layer carries it, and the assistant says it.
 
 ---
 
-## 6. Health
+## 7. Health
 
 `GET /api/status` is public and carries no customer data. It reports:
 

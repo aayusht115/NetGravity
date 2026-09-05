@@ -231,6 +231,112 @@ def create_orchestrator_blueprint(
         return jsonify(response.model_dump(mode="json")), 200
 
     # ------------------------------------------------------------------
+    @bp.route("/executions/live", methods=["GET"])
+    def live_executions():
+        """
+        What the caller's own in-flight request is doing, right now.
+
+        `GET /orchestrator/executions/live?correlation_id=req_ab12cd34`
+
+        Every other view of an execution is a view of a finished one:
+        `/executions/<id>` and `/trace` both need an execution id, and a
+        client only learns that id from the response — which arrives when the
+        work is over. So the twenty to forty seconds of a cold solve were,
+        from the client's side, silent, and a loading screen could say nothing
+        true about them beyond "still waiting".
+
+        The orchestrator has known all along. `ExecutionContext` carries
+        `current_state`, `capability_status`, and the completed, failed,
+        skipped and blocked step lists, and mutates them as the run proceeds.
+        This route reads them, keyed on the id the BROWSER generated for its
+        own HTTP request (`X-Request-ID`), which the API layer files each
+        execution under as `<correlation>:<purpose>` — see
+        `app.backend.services.correlation`.
+
+        Read-only, and derived entirely from the live context: it computes
+        nothing, stores nothing and starts nothing. An unknown correlation id
+        is an empty list, not an error — the execution may not have been
+        created yet, which is the ordinary state of affairs for the first poll
+        of a request.
+
+        Scoped to the caller. Executions are indexed process-wide, so without
+        this an authenticated user holding someone else's correlation id could
+        read the shape of their run. `/executions/<id>` predates this and does
+        not scope; that is worth closing separately rather than silently here.
+        """
+        correlation = (request.args.get("correlation_id") or "").strip()
+        if not correlation or len(correlation) > 96:
+            return jsonify({"error": {
+                "code": "VALIDATION_FAILURE",
+                "message": "A 'correlation_id' of up to 96 characters is required.",
+            }}), 400
+
+        caller = _actor_from_session()
+        caller_id = getattr(caller, "actor_id", "") or ""
+        store = orchestrator.state_store
+        out = []
+        for execution_id in list(store.list_execution_ids()):
+            context = store.get(execution_id)
+            if context is None:
+                continue
+            request_id = getattr(context, "request_id", "") or ""
+            # The prefix rule lives here rather than being imported from the
+            # application layer: the orchestrator is the lower layer and must
+            # not depend on the Flask app that happens to front it.
+            if not (request_id == correlation
+                    or request_id.startswith(correlation + ":")):
+                continue
+            owner = getattr(getattr(context, "actor", None), "actor_id", "") or ""
+            if caller_id and owner and owner != caller_id:
+                continue
+            out.append(_live_view(context))
+        return jsonify({"correlation_id": correlation, "executions": out}), 200
+
+    def _enum_value(value: Any) -> str:
+        return str(getattr(value, "value", value) or "")
+
+    def _live_view(context: Any) -> Dict[str, Any]:
+        """One execution as it stands this instant. Nothing derived."""
+        plan = getattr(context, "plan", None)
+        planned = []
+        if plan is not None:
+            for step in (getattr(plan, "steps", None) or []):
+                capability = getattr(step, "capability", None)
+                if capability:
+                    planned.append(_enum_value(capability))
+        # The planner may not have run yet; the required-capability list is
+        # what the workflow declared and is the honest stand-in until it has.
+        if not planned:
+            planned = [str(c) for c in (getattr(context, "required_capabilities", None) or [])]
+
+        status = {}
+        for capability, state in (getattr(context, "capability_status", None) or {}).items():
+            status[str(capability)] = _enum_value(state)
+
+        return {
+            "execution_id": getattr(context, "execution_id", ""),
+            "request_id": getattr(context, "request_id", ""),
+            "state": _enum_value(getattr(context, "current_state", "")),
+            "intent": _enum_value(getattr(context, "intent", "")),
+            "planned_capabilities": planned,
+            "capability_status": status,
+            "completed_steps": list(getattr(context, "completed_steps", None) or []),
+            "failed_steps": list(getattr(context, "failed_steps", None) or []),
+            "blocked_steps": list(getattr(context, "blocked_steps", None) or []),
+            "skipped_steps": list(getattr(context, "skipped_steps", None) or []),
+            "errors": [_error_line(e) for e in (getattr(context, "errors", None) or [])][-3:],
+        }
+
+    def _error_line(err: Any) -> str:
+        if isinstance(err, str):
+            return err
+        for key in ("message", "error", "detail", "code"):
+            value = err.get(key) if isinstance(err, dict) else getattr(err, key, None)
+            if value:
+                return str(value)
+        return str(err)
+
+    # ------------------------------------------------------------------
     @bp.route("/executions/<execution_id>", methods=["GET"])
     def get_execution(execution_id: str):
         context = orchestrator.state_store.get(execution_id)

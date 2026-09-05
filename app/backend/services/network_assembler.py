@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Tuple
 
 from app.backend.services.errors import ValidationError
 from netgravity.ingestion.builder import build_network
+from netgravity.orchestrator.reasoning.evidence import format_money
 from netgravity.schemas.network import (
     DemandRecord,
     FacilityRecord,
@@ -36,6 +37,7 @@ from netgravity.schemas.network import (
     NodeRole,
     OptimizationMode,
     ProductRecord,
+    TransportMode,
 )
 
 logger = logging.getLogger(__name__)
@@ -274,6 +276,12 @@ def assemble_network_from_structure(
         )
 
     # ---- Facilities --------------------------------------------------
+    #: Assumption text is read by a human deciding whether to trust the model,
+    #: so it states the client's own currency. It said "₹" unconditionally,
+    #: which told a US client their dollar costs had been read as rupees.
+    def _money(value: float) -> str:
+        return format_money(value, structure.get("currency"))
+
     facilities: List[FacilityRecord] = []
     seen: set[str] = set()
     missing_status: List[str] = []
@@ -344,8 +352,8 @@ def assemble_network_from_structure(
             # overstate fixed cost twelvefold.
             record.fixed_cost_per_year = fixed * 12.0
             assumptions.append(
-                f"{fid}: fixed cost read as ₹{fixed:,.0f}/month and annualised "
-                f"to ₹{record.fixed_cost_per_year:,.0f}/year."
+                f"{fid}: fixed cost read as {_money(fixed)}/month and annualised "
+                f"to {_money(record.fixed_cost_per_year)}/year."
             )
         facilities.append(record)
 
@@ -632,6 +640,11 @@ def assemble_network_from_structure(
     lanes_missing_rate = 0
     lanes_skipped_unknown_node = 0
     blended = 0
+    modes_applied: Dict[str, int] = {}
+    unsupported_modes: Dict[str, int] = {}
+    lanes_without_mode = 0
+    lanes_without_distance = 0
+    converted_from_miles = 0
 
     for lane in lanes_in:
         origin = str(lane.get("from") or "").strip()
@@ -659,9 +672,36 @@ def assemble_network_from_structure(
             continue
 
         record = LaneRecord(origin_id=origin, destination_id=dest, rate_per_unit=rate)
+
+        # The mode the client stated. `LaneRecord.mode` defaults to ROAD, and
+        # nothing ever overrode it, so a network of rail and intermodal
+        # corridors was modelled and displayed as pure road freight — which
+        # decides the emission factor CarbonModule applies to every lane.
+        raw_mode = str(lane.get("mode") or "").strip().upper()
+        if raw_mode:
+            try:
+                record.mode = TransportMode(raw_mode)
+                modes_applied[raw_mode] = modes_applied.get(raw_mode, 0) + 1
+            except ValueError:
+                # A mode this engine has no emission factor or cost model for.
+                # Left at the default rather than silently re-labelled, and
+                # counted so the assumption can name it.
+                unsupported_modes[raw_mode] = unsupported_modes.get(raw_mode, 0) + 1
+        else:
+            lanes_without_mode += 1
+
         dist = _as_float(lane.get("distance"))
         if dist is not None and dist > 0:
             record.distance_km = dist
+            # `distance_method` stays ESTIMATED — its documented meaning is
+            # "estimated / manually entered", which is exactly what a distance
+            # column in a client workbook is. We are not told how they measured
+            # it, and claiming NETWORK would assert road-network routing the
+            # upload never states.
+            if lane.get("distanceSource") == "miles":
+                converted_from_miles += 1
+        else:
+            lanes_without_distance += 1
         lead = _as_float(lane.get("leadTime"))
         if lead is not None and lead > 0:
             record.lead_time_days = lead
@@ -681,6 +721,37 @@ def assemble_network_from_structure(
             f"{blended} lane(s) are priced per product in the upload. The "
             f"optimiser carries one rate per lane, so each was set to the "
             f"demand-weighted average of its product rates."
+        )
+
+    if modes_applied:
+        assumptions.append(
+            "Transport mode taken from the upload for "
+            + ", ".join(f"{n} {m}" for m, n in sorted(modes_applied.items()))
+            + " lane(s). Mode sets the emission factor each lane is costed at."
+        )
+    if unsupported_modes:
+        assumptions.append(
+            "This engine models ROAD, RAIL, AIR, SEA and INTERMODAL. "
+            + ", ".join(f"{n} lane(s) stated '{m}'" for m, n in sorted(unsupported_modes.items()))
+            + " — those lanes are modelled as ROAD, and their emissions and "
+            "mode-specific costs should be read with that substitution in mind."
+        )
+    if lanes_without_mode:
+        assumptions.append(
+            f"{lanes_without_mode} lane(s) state no transport mode and are "
+            f"modelled as ROAD, this engine's default."
+        )
+    if converted_from_miles:
+        assumptions.append(
+            f"{converted_from_miles} lane distance(s) were stated in miles and "
+            f"converted to kilometres. Distance drives carbon and any "
+            f"distance-based rate; the source values are unchanged."
+        )
+    if lanes_without_distance:
+        assumptions.append(
+            f"{lanes_without_distance} lane(s) carry no distance. Their carbon "
+            f"is therefore zero and distance-weighted averages exclude them — "
+            f"this is missing data, not a zero-kilometre corridor."
         )
 
     if lanes_missing_rate:
@@ -707,6 +778,11 @@ def assemble_network_from_structure(
         description=description or "Assembled from user-uploaded files",
         # So every downstream surface can say "2024-03" rather than "period 7".
         period_labels=period_labels,
+        # The money unit and the geography the upload itself states. Carried on
+        # the network so every reporting layer reads one answer instead of
+        # each hardcoding its own.
+        currency=structure.get("currency"),
+        geography=structure.get("geography") or {},
     )
 
     # What a demand table stating several periods is solved as. Stated

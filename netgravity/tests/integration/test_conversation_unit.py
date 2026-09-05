@@ -515,3 +515,151 @@ class TestLLMClientAbstraction:
         stats = LLMGateway().stats()
         assert "token" not in {k.lower() for k in stats} - {"token_configured"}
         assert all("bearer" not in str(v).lower() for v in stats.values())
+
+
+# ===========================================================================
+# Out-of-domain questions must not be answered as follow-ups
+# ===========================================================================
+
+class TestAnOffTopicQuestionIsNotTreatedAsAFollowUp:
+    """
+    The worst failure this layer can produce is a confident, correct figure
+    about something nobody asked about.
+
+    A message the classifier cannot place is UNKNOWN, and mid-conversation an
+    UNKNOWN that "looks elliptical" is promoted to EXPLANATION and answered
+    from the previous turn's subject. The test for "looks elliptical" was a
+    whitelist of imperative verbs — it caught "tell me a joke" and could not,
+    even in principle, catch "who won the cricket world cup": six words, no
+    listed verb, therefore a bare fragment. Asked in a conversation about the
+    network, it was answered with the network's REI, unserved demand and
+    baseline cost.
+
+    A question that opens with an interrogative carries its own subject and
+    verb, so it depends on nothing and is not a follow-up.
+    """
+
+    OFF_TOPIC = [
+        "Who won the cricket world cup?",
+        "What is the capital of France?",
+        "When did India gain independence?",
+        "How do I bake bread?",
+        "Tell me a joke",
+        "Which airline flies to Tokyo?",
+    ]
+
+    FOLLOW_UPS = [
+        "and the cost?",
+        "what about Mumbai?",
+        "how much did that cost?",
+        "the cost impact?",
+        "what if we close it?",
+        "that one",
+    ]
+
+    @pytest.mark.parametrize("text", OFF_TOPIC)
+    def test_a_complete_off_topic_question_is_not_elliptical(self, text):
+        assert ConversationalNLU._is_elliptical(text) is False, (
+            f"{text!r} stands on its own; treating it as a follow-up answers "
+            f"the previous question instead of declining this one"
+        )
+
+    @pytest.mark.parametrize("text", FOLLOW_UPS)
+    def test_a_genuine_follow_up_still_is(self, text):
+        assert ConversationalNLU._is_elliptical(text) is True, (
+            f"{text!r} depends on the previous turn and must keep inheriting it"
+        )
+
+    @pytest.mark.parametrize("text", OFF_TOPIC)
+    def test_it_stays_unknown_mid_conversation(self, nlu, delhi_network, text):
+        """
+        With a prior intent on the conversation — the condition that made the
+        promotion reachable at all — the intent must still come back UNKNOWN so
+        the assistant says it did not understand.
+        """
+        intent = nlu.understand(
+            text, delhi_network, allow_llm=False,
+            prior_entity_ids=["DC_DELHI"], prior_intent=Intent.RESILIENCE_QUERY,
+        )
+        assert intent.intent == Intent.UNKNOWN, (
+            f"{text!r} was classified {intent.intent.value}: {intent.rationale}"
+        )
+
+    def test_a_bare_why_is_still_an_explanation(self, nlu, delhi_network):
+        """The interrogative rule must not swallow the genuine ellipsis."""
+        intent = nlu.understand(
+            "Why?", delhi_network, allow_llm=False,
+            prior_entity_ids=["DC_DELHI"], prior_intent=Intent.RESILIENCE_QUERY,
+        )
+        assert intent.intent == Intent.EXPLANATION
+
+
+# ===========================================================================
+# A scenario with no magnitude is a question, not a failure
+# ===========================================================================
+
+class TestAnIncompleteScenarioIsAskedAboutNotAttempted:
+    """
+    "A major customer is expanding in Delhi" resolves to CHANGE_DEMAND with
+    nothing to multiply by.
+
+    A spec existed, so the MISSING_PARAMETER check — which tested only for the
+    ABSENCE of a spec — passed it through. Three steps later `ScenarioBuilder`
+    refused it correctly ("CHANGE_DEMAND requires a demand_multiplier"), the
+    step failed NON_RETRYABLE, and the execution settled FAILED with "The
+    analysis produced no narrative result". The user needed one question — by
+    how much? — and got a dead run instead.
+    """
+
+    def test_a_spec_with_no_magnitude_is_not_runnable(self):
+        from netgravity.orchestrator.schemas.requests import (
+            ScenarioActionType, ScenarioIntentSpec,
+        )
+        bare = ScenarioIntentSpec(action=ScenarioActionType.CHANGE_DEMAND,
+                                  facility_ids=["DC_DELHI"])
+        assert bare.is_runnable is False
+        assert bare.missing_parameter == "demand_multiplier"
+
+        stated = ScenarioIntentSpec(action=ScenarioActionType.CHANGE_DEMAND,
+                                    demand_multiplier=1.2)
+        assert stated.is_runnable is True
+        assert stated.missing_parameter is None
+
+    def test_a_closure_needs_no_magnitude(self):
+        """The instruction is complete in the action and the facility."""
+        from netgravity.orchestrator.schemas.requests import (
+            ScenarioActionType, ScenarioIntentSpec,
+        )
+        spec = ScenarioIntentSpec(action=ScenarioActionType.CLOSE_FACILITY,
+                                  facility_ids=["DC_DELHI"])
+        assert spec.is_runnable is True
+
+    def test_every_capacity_form_counts_as_stated(self):
+        from netgravity.orchestrator.schemas.requests import (
+            ScenarioActionType, ScenarioIntentSpec,
+        )
+        A = ScenarioActionType.CHANGE_CAPACITY
+        assert ScenarioIntentSpec(action=A).is_runnable is False
+        for field, value in (("capacity_multiplier", 0.8),
+                             ("capacity_delta_units", -2000.0),
+                             ("capacity_set_units", 8000.0)):
+            assert ScenarioIntentSpec(action=A, **{field: value}).is_runnable, field
+
+    def test_the_nlu_asks_rather_than_planning_an_unbuildable_scenario(
+        self, nlu, delhi_network,
+    ):
+        intent = nlu.understand(
+            "Reduce DC_DELHI capacity.", delhi_network, allow_llm=False,
+        )
+        assert intent.ambiguity == AmbiguityKind.MISSING_PARAMETER
+        assert intent.needs_clarification
+
+    def test_a_complete_scenario_still_runs(self, nlu, delhi_network):
+        """The gate must not start refusing scenarios that are perfectly clear."""
+        intent = nlu.understand(
+            "What happens if we reduce DC_DELHI capacity by 2,000 units/day?",
+            delhi_network, allow_llm=False,
+        )
+        assert intent.ambiguity != AmbiguityKind.MISSING_PARAMETER
+        assert intent.scenario_overrides
+        assert all(s.is_runnable for s in intent.scenario_overrides)

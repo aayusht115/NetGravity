@@ -79,7 +79,10 @@ def create_project():
     record = project_registry.create(
         name=str(body.get("name") or ""),
         owner_id=g.current_user.user_id,
-        region=str(body.get("region") or "India"),
+        # No default. An unstated region stays unstated until the uploaded
+        # coordinates say what it is (see `ProjectRegistry.bind_network`) —
+        # rather than every project in the world being created as India.
+        region=str(body.get("region") or ""),
         client=str(body.get("client") or ""),
         description=str(body.get("description") or ""),
     )

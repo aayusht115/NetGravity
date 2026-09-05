@@ -27,6 +27,12 @@ import {
   beginAnalysisLoading, endAnalysisLoading, reportAnalysisStage,
 } from './analysis-loading.js';
 import { ingestionService } from './integration/services/ingestion-service.js';
+import {
+  bindWorkspaceTopbar, recordActivity, showInfoPanel, workspaceTopbarHtml,
+} from './workspace-chrome.js';
+import {
+  buildTemplateWorkbook, saveBlob, templateFilename,
+} from './template-download.js';
 
 /* The "mapped to" dropdown's options.
    Served by the parser (`schemaFields`) so the list is exactly the set of
@@ -100,7 +106,6 @@ const I = {
   chevronRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>`,
   chevronLeft: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>`,
   arrowRight: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>`,
-  help: `<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>`,
   uploadCloud: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 16.5a4 4 0 0 0-1-7.87 6 6 0 0 0-11.6 1.5A3.5 3.5 0 0 0 6 17"/><polyline points="9 13 12 10 15 13"/><line x1="12" y1="10" x2="12" y2="19"/></svg>`,
   paperclip: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`,
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`,
@@ -123,6 +128,11 @@ const I = {
   fileGeneric: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
   filesStack: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h9l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M4 7v13a1 1 0 0 0 1 1h1"/></svg>`,
   rupee: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="4" x2="18" y2="4"/><line x1="6" y1="8" x2="18" y2="8"/><path d="M6 8c5 0 8 1.5 8 4.5S11 17 6 17"/><line x1="6" y1="17" x2="15" y2="21"/></svg>`,
+  download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.4"/><line x1="12" y1="11" x2="12" y2="16.5"/><line x1="12" y1="7.8" x2="12" y2="7.81"/></svg>`,
+  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.2" y1="16.2" x2="21" y2="21"/></svg>`,
+  arrowNarrow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="12" x2="18" y2="12"/><polyline points="13 7 18 12 13 17"/></svg>`,
 };
 
 /* ─── Flow flow ─────────────────────────────────────────────── */
@@ -138,6 +148,23 @@ const flow = {
   parseError: null,    // why the parse failed, when it did
   pdfReview: {},       // fileId -> { expanded: bool, reviewed: Set<termId> }
   cameFromApp: false,  // true when entered mid-session (app shell was showing), so Back should return there rather than to Create Project
+  //: The project's CURRENT dataset, from the server, as an audit record.
+  //:
+  //: `files` above is what THIS visit has attached. It starts empty on every
+  //: entry, which is right for a new upload and was the only thing the screen
+  //: ever showed — so a solved project reopened its uploader to "Uploaded
+  //: Files (0)" and there was no route to the file, the mapping, the quality
+  //: findings or the ingestion time behind its own numbers.
+  dataset: null,
+  //: How many uploads are still being read by the server.
+  //:
+  //: The file appears in the list the moment it is chosen, but the parse that
+  //: produces the columns, the row counts and the mapping takes several
+  //: seconds for a real workbook. "Continue to AI Analysis" used to be enabled
+  //: on the first of those and not the second, so continuing promptly opened
+  //: the mapping-review screen — whose whole purpose is to show what was
+  //: parsed — with nothing parsed: no columns, no rows, "Not read".
+  parsing: 0,
 };
 
 let uidCounter = 0;
@@ -157,46 +184,109 @@ function classifyExt(filename) {
   return { ext, kind: null };
 }
 
-const LOGO_SVG = `<svg class="ing-brand-logo" viewBox="0 0 48 48" fill="none">
-      <line x1="10" y1="10" x2="10" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
-      <line x1="38" y1="10" x2="38" y2="38" stroke="#9218EA" stroke-width="4.5" stroke-linecap="round"/>
-      <line x1="12" y1="12" x2="36" y2="36" stroke="#9218EA" stroke-width="4" stroke-linecap="round"/>
-      <circle cx="10" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-      <circle cx="38" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-      <circle cx="10" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-      <circle cx="38" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
-    </svg>`;
-
 /* ─── Shared chrome ──────────────────────────────────────────── */
 /**
- * The ingestion screens' own top bar.
+ * The mapping-review screens' header: the shared top bar, then a Back pill.
  *
- * The avatar chip is left empty and filled by `applyIdentity()` — these
+ * These screens had a fourth, narrower bar of their own, carrying a help
+ * button with no handler on it. The bar now comes from
+ * `js/workspace-chrome.js`, so the account control, the activity feed and the
+ * help panel are the same three the project screens have — and all three do
+ * something. `.ing-back-home-btn` keeps its class, because these screens' own
+ * bindings look it up by that name.
+ *
+ * The avatar chip is still left empty and filled by `applyIdentity()`: the
  * screens re-render several times during an upload, and each render used to
- * restore the hard-coded "AK" for "Amit Kumar" over whoever was signed in.
+ * restore a hard-coded "AK" for "Amit Kumar" over whoever was signed in.
  */
 function topbar() {
-  // Re-apply after this markup lands in the DOM.
   setTimeout(() => {
     if (typeof window.applyIdentity === 'function') window.applyIdentity();
   }, 0);
-  return topbarHtml();
+  return workspaceTopbarHtml({ variant: 'full', project: flow.project });
 }
 
-function topbarHtml() {
-  return `<div class="ing-topbar">
-      <div class="ing-topbar-left">
-        <div class="ing-brand">
-          ${LOGO_SVG}
-          <span class="ing-brand-name">Netgravity</span>
-        </div>
-      </div>
-      <div class="ing-topbar-right">
-        <button class="ing-back-home-btn" type="button">${I.chevronLeft}<span>Back</span></button>
-        <button class="topbar-icon-btn" type="button" title="Help & Documentation">${I.help}</button>
-        <div class="user-avatar-ak"></div>
-      </div>
-    </div>`;
+/* Where "Back" goes from a review screen, said out loud.
+   `goBackInFlow` walks back one file at a time and only then leaves for the
+   uploader, so a bare "Back" meant two different destinations depending on how
+   many files were queued — and the user could not tell which from the button.
+   Nielsen #2 and #6: name the destination rather than the direction. */
+function backTargetLabel() {
+  if (flow.queueIndex > 0) {
+    const prev = flow.files.find(f => f.id === flow.queue[flow.queueIndex - 1]);
+    return prev ? `Back to ${prev.name}` : 'Back';
+  }
+  return 'Back to upload';
+}
+
+function backPillHtml() {
+  const label = backTargetLabel();
+  return `<button class="proj-back-pill ing-back-home-btn" type="button"
+            title="${ingEsc(label)}">${I.chevronLeft}<span>${ingEsc(label)}</span></button>`;
+}
+
+/* ─── Flow rail ───────────────────────────────────────────────── */
+/**
+ * The three steps this flow actually has, as the app's own collapsed sidebar.
+ *
+ * Every entry is either where you are, somewhere you can go, or explicitly
+ * out of reach with the reason attached — there is no item here that looks
+ * live and does nothing. The app's real destinations (Home, KPIs, Digital
+ * Twin, Scenarios) are deliberately absent: during a first ingestion no
+ * network exists behind them, and offering them would be offering a workspace
+ * that has not been built yet. When the flow was entered from the app instead,
+ * that workspace does exist, and the rail says so at the bottom.
+ *
+ * `current` is 'upload' | 'mapping'. Analysis is never "current" here: it is
+ * the loading overlay that follows Confirm.
+ */
+function flowRailHtml(current) {
+  const stepsDone = current === 'mapping';
+  const item = (key, icon, label, state, title) => `
+    <button type="button" class="ing-rail-item state-${state}"
+            data-rail="${key}"${state === 'blocked' ? ' disabled aria-disabled="true"' : ''}
+            ${state === 'current' ? 'aria-current="step"' : ''}
+            title="${ingEsc(title || label)}">
+      <span class="ing-rail-icon">${icon}</span>
+      <span class="ing-rail-label">${ingEsc(label)}</span>
+    </button>`;
+
+  return `<nav class="ing-rail" aria-label="Data setup steps">
+      <div class="ing-rail-eyebrow">Setup</div>
+      ${item('upload', I.uploadCloud, 'Upload',
+            stepsDone ? 'done' : 'current',
+            stepsDone ? 'Back to your files' : 'You are here')}
+      ${item('mapping', I.columns, 'Mapping',
+            current === 'mapping' ? 'current' : 'blocked',
+            current === 'mapping' ? 'You are here' : 'Upload a file first')}
+      ${item('analysis', I.sparkle, 'Analysis', 'blocked',
+            'Confirm your mapping to continue')}
+      <div class="ing-rail-spacer"></div>
+      ${flow.cameFromApp
+        ? item('workspace', I.folder, 'Workspace', 'live',
+               'Leave setup and return to the workspace')
+        : ''}
+    </nav>`;
+}
+
+function bindFlowRail(root) {
+  // Only when it is a place to go. On the uploader itself the same item is the
+  // current step, and re-rendering the screen under the user would look like a
+  // dropped click.
+  const up = root.querySelector('[data-rail="upload"].state-done');
+  up?.addEventListener('click', goToUploader);
+  root.querySelector('[data-rail="workspace"]')?.addEventListener('click', goBack);
+}
+
+/* Straight to the uploader, however many files are queued behind this one.
+   `goBackInFlow` steps back one file at a time, which is what the Back pill
+   means; the rail names a step, not a step backwards. */
+function goToUploader() {
+  const page = document.getElementById('ingestion-page');
+  if (page) page.classList.add('hidden');
+  renderUploadData();
+  const upload = document.getElementById('upload-data-page');
+  if (upload) upload.classList.remove('hidden');
 }
 
 /* Returns to whichever screen led into this flow: the app shell, exactly
@@ -206,8 +296,14 @@ function topbarHtml() {
 function goBack() {
   if (flow.cameFromApp) {
     hideIngestionPages();
+    // `.hidden` as well as the inline style: it is what the rest of the
+    // application reads to tell whether the landing page is up, including
+    // the rule that pins the document to the viewport while it is.
     const landing = document.getElementById('landing-page');
-    if (landing) landing.style.display = 'none';
+    if (landing) {
+      landing.classList.add('hidden');
+      landing.style.display = 'none';
+    }
     const shell = document.querySelector('.app-shell');
     if (shell) shell.style.display = 'flex';
     const fab = document.getElementById('floating-chatbot-fab');
@@ -223,91 +319,155 @@ function goBack() {
 /* ═══════════════════════════════════════════════════════════════
    UPLOAD DATA
    ═══════════════════════════════════════════════════════════════ */
-function fileRowHtml(f) {
+/**
+ * One attached file, as a card.
+ *
+ * The six-column table this replaces did not fit the mock's right-hand
+ * column, and half of it repeated the same value on every row ("Uploaded",
+ * "Just now"). The card keeps every fact the table carried — name, kind,
+ * size, when, status — and reads at 380px.
+ */
+function fileCardHtml(f) {
   const label = f.kind === 'pdf' ? 'PDF' : f.kind.toUpperCase();
   const sub = f.kind === 'pdf' ? 'Contract or rate document' : 'Tabular network dataset';
-  return `<tr data-file-id="${f.id}">
-      <td>
-        <div class="ing-file-name-cell">
-          <span class="ing-file-icon type-${f.kind}">${f.ext.toUpperCase()}</span>
-          <div>
-            <div class="ing-file-meta-name">${ingEsc(f.name)}</div>
-            <div class="ing-file-meta-sub">${sub}</div>
-          </div>
-        </div>
-      </td>
-      <td><span class="ing-type-chip type-${f.kind}">${label}</span></td>
-      <td>${formatFileSize(f.sizeBytes)}</td>
-      <td>${ingEsc(f.uploadedAt)}</td>
-      <td><span class="ing-status-chip">${I.checkCircle}Uploaded</span></td>
-      <td><button class="ing-row-delete" type="button" data-remove="${f.id}" title="Remove file">${I.trash}</button></td>
-    </tr>`;
+  const failed = (flow.parseErrors || {})[f.id];
+  // Three states, and they are different facts: still being read, read, or not
+  // readable. "Uploaded" on all three is what let the review screen be opened
+  // for a file the server had not finished with.
+  const state = failed
+    ? `<div class="ing-file-failed">${I.warning}<span>Not parsed — ${ingEsc(failed)}</span></div>`
+    : f.status === 'parsing'
+      ? `<div class="ing-file-ok"><span class="ing-type-chip type-${f.kind}">${label}</span><span class="ing-status-chip reading"><span class="ing-spinner"></span>Reading…</span></div>`
+      : `<div class="ing-file-ok"><span class="ing-type-chip type-${f.kind}">${label}</span><span class="ing-status-chip">${I.checkCircle}Uploaded</span></div>`;
+  return `<div class="ing-file-card${failed ? ' failed' : ''}" data-file-id="${f.id}">
+      <span class="ing-file-icon type-${f.kind}">${ingEsc(f.ext.toUpperCase())}</span>
+      <div class="ing-file-card-main">
+        <div class="ing-file-meta-name" title="${ingEsc(f.name)}">${ingEsc(f.name)}</div>
+        <div class="ing-file-meta-sub">${sub} &middot; ${formatFileSize(f.sizeBytes)} &middot; ${ingEsc(f.uploadedAt)}</div>
+        ${state}
+      </div>
+      <button class="ing-row-delete" type="button" data-remove="${f.id}"
+              title="Remove ${ingEsc(f.name)}" aria-label="Remove ${ingEsc(f.name)}">${I.trash}</button>
+    </div>`;
+}
+
+/** The right-hand column: the files attached in this visit, or why there are none. */
+function uploadedPanelHtml() {
+  if (!flow.files.length) {
+    return `<div class="ing-empty-files">
+        <span class="ing-empty-tile">${I.folder}</span>
+        <div class="ing-empty-title">No files uploaded yet</div>
+        <div class="ing-empty-sub">Add at least one file to continue.</div>
+      </div>`;
+  }
+  return `<div class="ing-file-list">${flow.files.map(fileCardHtml).join('')}</div>`;
 }
 
 function renderUploadData() {
   const page = document.getElementById('upload-data-page');
   if (!page) return;
 
-  const rows = flow.files.map(fileRowHtml).join('');
-  const tableOrEmpty = flow.files.length
-    ? `<table class="ing-file-table">
-        <thead><tr><th>File name</th><th>Type</th><th>Size</th><th>Uploaded on</th><th>Status</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`
-    : `<div class="ing-empty-files">No files uploaded yet — add at least one to continue.</div>`;
-
   page.innerHTML = `
-    <div class="ing-body">
-      ${topbar()}
-      <h1 class="ing-title">Upload &amp; Align Network Datasets</h1>
-      <p class="ing-subtitle">Upload CSVs, Excel order books, or Rate Card PDFs. NetGravity's AI will automatically align and prepare your data.</p>
-
-      <div class="ing-card">
-        <div class="ing-card-title">1. Upload Datasets</div>
-        <div class="ing-card-sub">Supported formats: Excel (.xlsx, .xls), CSV (.csv), PDF (.pdf) &middot; up to 25MB each</div>
-        <div class="ing-dropzone" id="ing-dropzone" tabindex="0" role="button">
-          <span class="ing-dropzone-icon">${I.uploadCloud}</span>
-          <div class="ing-dropzone-main">Drag &amp; drop your files here</div>
-          <div class="ing-dropzone-or">or</div>
-          <button type="button" class="ing-attach-btn" id="ing-attach-btn">${I.paperclip}<span>Attach files</span></button>
+    ${workspaceTopbarHtml({ variant: 'full', project: flow.project })}
+    <div class="ing-shell">
+      ${flowRailHtml('upload')}
+      <div class="proj-scroll ing-scroll">
+      <div class="ing-body">
+        <div class="ing-crumbs">
+          <button type="button" class="proj-back-pill ing-back-home-btn">
+            ${I.chevronLeft}<span>${flow.cameFromApp ? 'Back to workspace' : 'Back to project setup'}</span>
+          </button>
         </div>
-        <input type="file" id="ing-file-input" accept=".xlsx,.xls,.csv,.pdf" multiple hidden />
-        <div class="ing-error" id="ing-upload-error"></div>
-      </div>
-
-      <div class="ing-card">
-        <div class="ing-card-head-row">
-          <div class="ing-card-title">2. Uploaded Files <span class="ing-count-badge">(${flow.files.length})</span></div>
-          <button type="button" class="ing-add-more" id="ing-add-more">${I.paperclip}<span>Add more files</span></button>
+        <div class="ing-head-row">
+          <div>
+            <h1 class="ing-title">Upload &amp; Align Network Datasets</h1>
+            <p class="ing-subtitle">Upload your network data files. Netgravity's AI will automatically align and prepare your data for analysis.</p>
+          </div>
         </div>
-        <div id="ing-file-table-slot">${tableOrEmpty}</div>
-      </div>
 
-      <div class="ing-footer-bar">
-        <button type="button" class="ing-skip-link" id="ing-skip-btn">Skip for now, I'll upload data later</button>
-        <button type="button" class="proj-btn-primary" id="ing-continue-btn" ${flow.files.length ? '' : 'disabled'}>
-          <span>Continue to AI Analysis</span>${I.arrowRight}
-        </button>
+        ${currentDatasetHtml()}
+
+        <div class="ing-split">
+          <div class="ing-card">
+            <div class="ing-card-title">
+              <span class="ing-card-icon">${I.folder}</span>
+              <span>1. Upload Datasets</span>
+            </div>
+            <div class="ing-card-sub">Supported formats: Excel (.xlsx, .xls), CSV (.csv), PDF (.pdf)</div>
+            <ul class="ing-card-bullets"><li>Up to 25MB per file</li></ul>
+            <div class="ing-dropzone" id="ing-dropzone" tabindex="0" role="button"
+                 aria-label="Drag and drop your files here, or press to choose files">
+              <span class="ing-dropzone-icon">${I.uploadCloud}</span>
+              <div class="ing-dropzone-main">Drag &amp; drop your files here</div>
+              <div class="ing-dropzone-or">or</div>
+              <button type="button" class="ing-attach-btn" id="ing-attach-btn">${I.paperclip}<span>Attach files</span></button>
+            </div>
+            <input type="file" id="ing-file-input" accept=".xlsx,.xls,.csv,.pdf" multiple hidden />
+            <div class="ing-error" id="ing-upload-error"></div>
+            <div class="ing-card-foot">
+              <button type="button" class="ing-foot-link" id="ing-template-btn">
+                ${I.download}<span>Download template</span>
+              </button>
+              <button type="button" class="ing-foot-link" id="ing-help-btn">
+                ${I.info}<span>Need help?</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="ing-card">
+            <div class="ing-card-head-row">
+              <div class="ing-card-title">
+                <span class="ing-card-icon">${I.fileGeneric}</span>
+                <span>2. Uploaded Files <span class="ing-count-badge">(${flow.files.length})</span></span>
+              </div>
+              <button type="button" class="ing-add-more" id="ing-add-more">${I.plus}<span>Add more files</span></button>
+            </div>
+            <div id="ing-file-table-slot">${uploadedPanelHtml()}</div>
+          </div>
+        </div>
+
+        <div class="ing-footer-bar">
+          <button type="button" class="ing-skip-link" id="ing-skip-btn">Skip for now</button>
+          <button type="button" class="proj-btn-primary" id="ing-continue-btn" ${flow.files.length ? '' : 'disabled'}>
+            <span>Continue to AI Analysis</span>${I.arrowRight}
+          </button>
+        </div>
+      </div>
       </div>
     </div>`;
 
+  bindWorkspaceTopbar(page, { help: 'upload' });
+  bindFlowRail(page);
   bindUploadData();
 }
 
 function refreshFileTable() {
   const slot = document.getElementById('ing-file-table-slot');
-  if (slot) {
-    slot.innerHTML = flow.files.length
-      ? `<table class="ing-file-table">
-          <thead><tr><th>File name</th><th>Type</th><th>Size</th><th>Uploaded on</th><th>Status</th><th></th></tr></thead>
-          <tbody>${flow.files.map(fileRowHtml).join('')}</tbody>
-        </table>`
-      : `<div class="ing-empty-files">No files uploaded yet — add at least one to continue.</div>`;
-  }
+  if (slot) slot.innerHTML = uploadedPanelHtml();
   const badge = document.querySelector('#upload-data-page .ing-count-badge');
   if (badge) badge.textContent = `(${flow.files.length})`;
   const continueBtn = document.getElementById('ing-continue-btn');
-  if (continueBtn) continueBtn.disabled = flow.files.length === 0;
+  if (continueBtn) {
+    // Not while a file is still being read. The next screen exists to show
+    // what the parse found, and opening it mid-parse showed an empty mapping
+    // for a workbook that was about to arrive with 147 columns in it.
+    const busy = flow.parsing > 0;
+    // Nor when the parse produced nothing. The button used to unlock on the
+    // mere presence of a file, so a workbook the server could not read opened
+    // the mapping review anyway — a screen whose entire purpose is to show
+    // what the parse found, showing nothing, for a file that was refused.
+    // Only when NOTHING was parsed: a batch where one file of several failed
+    // still continues, with that file named.
+    const nothingParsed = Boolean(flow.parseError)
+      && Object.keys(flow.mapping || {}).length === 0;
+    continueBtn.disabled = flow.files.length === 0 || busy || nothingParsed;
+    const label = continueBtn.querySelector('span');
+    if (label) {
+      label.textContent = busy ? 'Reading your file…'
+        : nothingParsed ? 'Nothing to review yet'
+        : 'Continue to AI Analysis';
+    }
+  }
 }
 
 async function addFiles(fileList) {
@@ -331,7 +491,7 @@ async function addFiles(fileList) {
       kind,
       sizeBytes: file.size,
       uploadedAt: 'Just now',
-      status: 'uploaded',
+      status: 'parsing',
     });
     validRawFiles.push({ id, file, name: file.name });
   });
@@ -339,67 +499,128 @@ async function addFiles(fileList) {
   if (rejected.length && errorEl) {
     errorEl.textContent = `Couldn't add: ${rejected.join(', ')}.`;
   }
+  // Only the files this endpoint reads. It parses tables; a PDF has none, and
+  // this build has no contract parser, so a PDF was being posted to a
+  // spreadsheet reader purely to be refused by it — and the refusal used to
+  // take the workbook uploaded alongside down with it.
+  const parseable = validRawFiles.filter(item => {
+    const f = flow.files.find(x => x.id === item.id);
+    return f && f.kind !== 'pdf';
+  });
+  // A PDF is stored and reviewed on its own screen, and is not "parsing".
+  validRawFiles.forEach(item => {
+    if (parseable.some(x => x.id === item.id)) return;
+    const f = flow.files.find(x => x.id === item.id);
+    if (f) f.status = 'uploaded';
+  });
+  if (parseable.length) flow.parsing += 1;
   refreshFileTable();
 
   // Send real files to backend parser
-  if (validRawFiles.length > 0) {
+  if (parseable.length > 0) {
+    // Scoped to the active project and authenticated. The parse endpoint
+    // moved under /preview in Phase 10.0 to separate "read the file" from
+    // "commit a network the solver may run on".
+    const projectId = (window.getCurrentProject && window.getCurrentProject()?.id)
+      || getActiveProjectId();
     try {
       const formData = new FormData();
-      validRawFiles.forEach(item => {
+      parseable.forEach(item => {
         formData.append('files', item.file);
       });
-      // Scoped to the active project and authenticated. The parse endpoint
-      // moved under /preview in Phase 10.0 to separate "read the file" from
-      // "commit a network the solver may run on".
-      const projectId = (window.getCurrentProject && window.getCurrentProject()?.id)
-        || getActiveProjectId();
-      const data = await ingestionService.uploadAndParse(formData, projectId);
-      flow.parseError = null;
-      if (data) {
-        flow.extractedNetwork = data.structure;
-        flow.projectId = projectId;
-        flow.schemaFields = data.schemaFields || flow.schemaFields;
-
-        (data.files || []).forEach(summary => {
-          if (summary && summary.name) flow.fileSummaries[summary.name] = summary;
-        });
-
-        if (data.mapping) {
-          validRawFiles.forEach(item => {
-            // Keyed by file name. Never fall back to "whatever the first key
-            // is": with two uploads that showed one file's columns under the
-            // other file's name.
-            const mappedRows = Array.isArray(data.mapping)
-              ? data.mapping : data.mapping[item.name];
-            if (mappedRows && mappedRows.length) flow.mapping[item.id] = mappedRows;
-            if (data.mapStats) flow.mapStats[item.id] = data.mapStats;
-          });
-        }
-        // A file the parser could not read is named, not silently dropped.
-        (data.parse_errors || []).forEach(pe => {
-          const match = validRawFiles.find(v => v.name === pe.file);
-          if (match) flow.parseErrors = { ...(flow.parseErrors || {}), [match.id]: pe.error };
-        });
-        if (data.dataQuality) {
-          DATA_QUALITY.totalRecords = data.dataQuality.totalRecords ?? DATA_QUALITY.totalRecords;
-          DATA_QUALITY.validRecords = data.dataQuality.validRecords ?? DATA_QUALITY.validRecords;
-          DATA_QUALITY.validPct = data.dataQuality.validPct ?? DATA_QUALITY.validPct;
-          DATA_QUALITY.nullCellPct = data.dataQuality.nullCellPct ?? null;
-          DATA_QUALITY.duplicateRows = data.dataQuality.duplicateRows ?? null;
-          DATA_QUALITY.emptyRows = data.dataQuality.emptyRows ?? null;
-          // Replace, never merge: the demo issues describe the prototype's own
-          // facilities and would sit alongside the real ones as if measured.
-          DATA_QUALITY.issues = data.dataQuality.issues || [];
-        }
-      }
+      applyParsedPreview(
+        await ingestionService.uploadAndParse(formData, projectId),
+        parseable, projectId);
     } catch (err) {
-      // The review screen's entire purpose is to show what was parsed. With no
-      // parse there is nothing to review, and continuing would present a
-      // mapping for a file nobody read.
-      flow.parseError = (err && err.message) || 'the file could not be parsed';
-      console.warn('Backend extraction notice:', err);
+      // A TIMEOUT is a statement about how long this page waited. It is not a
+      // statement about the parse, which does not stop when the fetch is
+      // aborted: the server finishes reading the workbook, stores the preview
+      // and answers 200 into a connection nobody is listening on. Reported as
+      // "Not parsed — ... timed out" for a file that had in fact been read.
+      let recovered = null;
+      if (err && err.code === 'TIMEOUT') {
+        recovered = await ingestionService.findParsedPreview(projectId);
+      }
+
+      if (recovered) {
+        applyParsedPreview(recovered, parseable, projectId);
+      } else {
+        // The review screen's entire purpose is to show what was parsed. With
+        // no parse there is nothing to review, and continuing would present a
+        // mapping for a file nobody read.
+        //
+        // What is said depends on what is known. A refusal names the reason; a
+        // timeout with no preview behind it cannot tell a slow read from a
+        // failed one, so it does not pretend to.
+        flow.parseError = (err && err.code === 'TIMEOUT')
+          ? 'Still being read — this page stopped waiting. Reopen this project '
+            + 'in a moment and the file will be ready for mapping if it was read.'
+          : ((err && err.message) || 'the file could not be parsed');
+        console.warn('Backend extraction notice:', err);
+        parseable.forEach((item) => {
+          flow.parseErrors = {
+            ...(flow.parseErrors || {}), [item.id]: flow.parseError,
+          };
+        });
+      }
+    } finally {
+      // In `finally`, so a failed parse re-enables the button rather than
+      // leaving the screen permanently stuck on "Reading your file…".
+      flow.parsing = Math.max(0, flow.parsing - 1);
+      parseable.forEach((item) => {
+        const f = flow.files.find(x => x.id === item.id);
+        if (f && f.status === 'parsing') f.status = 'uploaded';
+      });
     }
     refreshFileTable();
+  }
+}
+
+/**
+ * Read a parsing preview into the upload flow.
+ *
+ * Lifted out of the upload handler unchanged so the recovery path — a parse
+ * this page stopped waiting for, collected afterwards from
+ * `/preview/active` — lands in exactly the same state as one that answered in
+ * time, rather than through a second copy of this that is free to drift.
+ */
+function applyParsedPreview(data, parseable, projectId) {
+  flow.parseError = null;
+  if (!data) return;
+  flow.extractedNetwork = data.structure;
+  flow.projectId = projectId;
+  flow.schemaFields = data.schemaFields || flow.schemaFields;
+
+  (data.files || []).forEach(summary => {
+    if (summary && summary.name) flow.fileSummaries[summary.name] = summary;
+  });
+
+  if (data.mapping) {
+    parseable.forEach(item => {
+      // Keyed by file name. Never fall back to "whatever the first key
+      // is": with two uploads that showed one file's columns under the
+      // other file's name.
+      const mappedRows = Array.isArray(data.mapping)
+        ? data.mapping : data.mapping[item.name];
+      if (mappedRows && mappedRows.length) flow.mapping[item.id] = mappedRows;
+      if (data.mapStats) flow.mapStats[item.id] = data.mapStats;
+    });
+  }
+  // A file the parser could not read is named, not silently dropped.
+  (data.parse_errors || []).forEach(pe => {
+    const match = parseable.find(v => v.name === pe.file);
+    if (match) flow.parseErrors = { ...(flow.parseErrors || {}), [match.id]: pe.error };
+  });
+  if (data.dataQuality) {
+    DATA_QUALITY.totalRecords = data.dataQuality.totalRecords ?? DATA_QUALITY.totalRecords;
+    DATA_QUALITY.validRecords = data.dataQuality.validRecords ?? DATA_QUALITY.validRecords;
+    DATA_QUALITY.validPct = data.dataQuality.validPct ?? DATA_QUALITY.validPct;
+    DATA_QUALITY.nullCellPct = data.dataQuality.nullCellPct ?? null;
+    DATA_QUALITY.duplicateRows = data.dataQuality.duplicateRows ?? null;
+    DATA_QUALITY.emptyRows = data.dataQuality.emptyRows ?? null;
+    // Replace, never merge: the demo issues describe the prototype's own
+    // facilities and would sit alongside the real ones as if measured.
+    DATA_QUALITY.issues = data.dataQuality.issues || [];
   }
 }
 
@@ -423,12 +644,18 @@ function bindUploadData() {
   dropzone?.addEventListener('drop', e => addFiles(e.dataTransfer?.files));
   fileInput?.addEventListener('change', () => { addFiles(fileInput.files); fileInput.value = ''; });
 
-  document.getElementById('upload-data-page')?.addEventListener('click', e => {
-    const btn = e.target.closest('[data-remove]');
-    if (!btn) return;
-    flow.files = flow.files.filter(f => f.id !== btn.dataset.remove);
-    refreshFileTable();
-  });
+  // Once, not once per render: this element survives `renderUploadData`, which
+  // replaces its innerHTML, so re-binding here stacked a listener each time.
+  const page = document.getElementById('upload-data-page');
+  if (page && page.dataset.delegated !== '1') {
+    page.dataset.delegated = '1';
+    page.addEventListener('click', e => {
+      const btn = e.target.closest('[data-remove]');
+      if (!btn) return;
+      flow.files = flow.files.filter(f => f.id !== btn.dataset.remove);
+      refreshFileTable();
+    });
+  }
 
   document.getElementById('ing-skip-btn')?.addEventListener('click', () => {
     if (typeof window.enterApp === 'function') window.enterApp();
@@ -438,145 +665,126 @@ function bindUploadData() {
     if (!flow.files.length) return;
     startAiAnalysis();
   });
+
+  document.getElementById('ing-template-btn')?.addEventListener('click', downloadTemplate);
+  document.getElementById('ing-help-btn')?.addEventListener('click', showUploadHelp);
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   LOADING POP-UPS
-   ═══════════════════════════════════════════════════════════════ */
-function progressRingSvg(id, size, stroke) {
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  return `<svg class="${id}" viewBox="0 0 ${size} ${size}">
-      <circle class="track" cx="${size / 2}" cy="${size / 2}" r="${r}"/>
-      <circle class="fill" cx="${size / 2}" cy="${size / 2}" r="${r}"
-        stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${c.toFixed(2)}" data-circumference="${c.toFixed(2)}"/>
-    </svg>`;
-}
-
-function loadingOverlayHtml(cfg) {
-  return `<div class="ing-loading-card">
-      <div class="ing-loading-head">${I.sparkle}<div class="ing-loading-title">${ingEsc(cfg.title)}</div></div>
-      <div class="ing-loading-sub">${ingEsc(cfg.subtitle)}</div>
-
-      <div class="ing-loading-row">
-        <div class="ing-loading-row-left">
-          <span class="ing-loading-icon-stack">${I.filesStack}</span>
-          <div>
-            <div class="ing-loading-row-title">${ingEsc(cfg.summaryLabel)}</div>
-            <div class="ing-loading-row-sub">${ingEsc(cfg.summarySub)}</div>
-          </div>
-        </div>
-        <div class="ing-loading-row-right">
-          <div class="ing-loading-status">${I.checkCircle}${ingEsc(cfg.summaryStatus)}</div>
-          <div class="ing-loading-time">${ingEsc(cfg.summaryTime)}</div>
-        </div>
-      </div>
-
-      <div class="ing-loading-row highlight">
-        <div class="ing-loading-row-left">
-          <span class="ing-agent-avatar">${I.agent}</span>
-          <div>
-            <div class="ing-loading-row-title">${ingEsc(cfg.agentName)}<span class="ing-live-pill">${I.waveform}LIVE</span></div>
-            <div class="ing-loading-row-sub">${ingEsc(cfg.agentSub)}</div>
-          </div>
-        </div>
-        <div class="ing-loading-row-right">
-          <span class="ing-progress-pill"><span id="ing-loading-pct">0%</span> complete ${progressRingSvg('ing-progress-ring', 28, 3.5)}</span>
-        </div>
-      </div>
-
-      <div class="ing-loading-row highlight">
-        <div class="ing-loading-row-left">
-          <span class="ing-sparkle-icon">${I.sparkle}</span>
-          <div>
-            <div class="ing-loading-row-title pulse" id="ing-loading-step-title">${ingEsc(cfg.stepTitle[0])}</div>
-            <div class="ing-loading-row-sub" id="ing-loading-step-sub">${ingEsc(cfg.stepSub)}</div>
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
-
-/** Show the shared loading pop-up, animate it to 100%, then call onDone.
+/**
+ * Hand the user a workbook with the parser's own sheet names and headers.
  *
- *  Driven by a fixed-step setInterval rather than requestAnimationFrame:
- *  rAF's frame time is tied to the compositor, and in a throttled or
- *  headless tab that clock can stop advancing between frames, which
- *  turns a "run until real time catches up" rAF loop into a busy loop
- *  that never yields. A bounded step count can't do that — it always
- *  reaches 100% in exactly STEPS ticks and clears its own interval. */
-function runLoadingOverlay(cfg, onDone) {
-  const overlay = document.getElementById('loading-modal-overlay');
-  if (!overlay) { onDone(); return; }
-
-  overlay.innerHTML = loadingOverlayHtml(cfg);
-  overlay.classList.add('active');
-
-  const ring = overlay.querySelector('.ing-progress-ring .fill');
-  const circumference = parseFloat(ring?.dataset.circumference || '0');
-  const pctEl = overlay.querySelector('#ing-loading-pct');
-  const stepTitleEl = overlay.querySelector('#ing-loading-step-title');
-
-  const STEPS = 40;
-  const STEP_MS = 55;
-  let step = 0;
-
-  const timer = setInterval(() => {
-    step += 1;
-    const pct = Math.min(100, Math.round((step / STEPS) * 100));
-    if (pctEl) pctEl.textContent = `${pct}%`;
-    if (ring) ring.style.strokeDashoffset = String(circumference * (1 - pct / 100));
-    if (pct > 55 && stepTitleEl && stepTitleEl.textContent !== cfg.stepTitle[1]) {
-      stepTitleEl.textContent = cfg.stepTitle[1];
+ * The schema is fetched rather than assumed: `GET /api/ingestions/preview/schema`
+ * generates it from the extractor's column table, so the template can never
+ * offer a column the parser does not read. A failure says so and offers the
+ * field reference instead of downloading a file that would be a guess.
+ */
+async function downloadTemplate() {
+  const btn = document.getElementById('ing-template-btn');
+  const errorEl = document.getElementById('ing-upload-error');
+  if (btn) { btn.disabled = true; btn.classList.add('busy'); }
+  if (errorEl) errorEl.textContent = '';
+  try {
+    const res = await ingestionService.getUploadSchema();
+    const blob = buildTemplateWorkbook(res && res.sheets);
+    saveBlob(blob, templateFilename());
+    recordActivity('Upload template downloaded.', 'success');
+  } catch (err) {
+    if (errorEl) {
+      errorEl.textContent = `The template could not be built: `
+        + `${err?.message || 'the field list could not be fetched'}.`;
     }
-    if (step >= STEPS) {
-      clearInterval(timer);
-      setTimeout(() => {
-        overlay.classList.remove('active');
-        overlay.innerHTML = '';
-        onDone();
-      }, 350);
-    }
-  }, STEP_MS);
+  } finally {
+    if (btn) { btn.disabled = false; btn.classList.remove('busy'); }
+  }
 }
 
+/**
+ * What this screen expects, and what happens next.
+ *
+ * The sheet and column list comes from the server so the help text and the
+ * template describe the same parser; if it cannot be reached the guidance that
+ * does not depend on it is still shown.
+ */
+async function showUploadHelp() {
+  const close = showInfoPanel('Uploading your network data', `
+    <p>Upload the workbook or CSVs describing your network. Every column is read,
+      shown back to you and mapped to a field this build understands before
+      anything is committed — nothing reaches the optimiser until you confirm
+      the mapping.</p>
+    <ul>
+      <li><strong>Excel (.xlsx, .xls)</strong> — one sheet per table. Sheets are
+        identified by their columns, not their names, so an unfamiliar sheet
+        name is fine.</li>
+      <li><strong>CSV (.csv)</strong> — one table per file.</li>
+      <li><strong>PDF (.pdf)</strong> — rate cards and contracts.</li>
+      <li>Up to 25 MB per file.</li>
+    </ul>
+    <div id="ing-help-schema"><p class="ing-help-loading">Loading the field list…</p></div>`);
+
+  try {
+    const res = await ingestionService.getUploadSchema();
+    const host = document.getElementById('ing-help-schema');
+    if (!host) return;
+    host.innerHTML = `
+      <p><strong>Tables this build reads</strong> — a column not listed here is
+        kept with the upload and marked as not used by the model.</p>
+      <div class="ing-help-tables">
+        ${(res.sheets || []).map((s) => `
+          <div class="ing-help-table">
+            <div class="ing-help-table-name">${ingEsc(s.sheet)}</div>
+            <div class="ing-help-cols">${(s.columns || [])
+    .map((c) => `<code>${ingEsc(c.header)}</code>`).join(' ')}</div>
+          </div>`).join('')}
+      </div>`;
+  } catch (err) {
+    const host = document.getElementById('ing-help-schema');
+    if (host) {
+      host.innerHTML = '<p>The field list could not be loaded just now. '
+        + 'Upload anything you have — every column is shown back to you for '
+        + 'review before it is used.</p>';
+    }
+  }
+  return close;
+}
+
+/**
+ * Continue from the upload screen to the mapping review.
+ *
+ * There is no wait here, so there is no loading screen.
+ *
+ * This used to open a 2.2-second pop-up titled "AI is setting up your data",
+ * with a percentage driven by a `setInterval` that ticked forty times and a
+ * step line that advanced at tick 22. Nothing was happening behind it: the
+ * files are parsed by `/api/ingestions/preview` as they are dropped, and the
+ * Continue button is disabled until that returns — so by the time this runs,
+ * `flow.extractedNetwork` is already in hand and `buildQueue()` is
+ * synchronous. The bar was a picture of an empty wait, and it named an agent
+ * ("Nexus Agent") that does not exist in this system.
+ *
+ * The parse that DOES take time already has its own honest state: the button
+ * itself reads "Reading your file…" and stays disabled while it runs.
+ */
 function startAiAnalysis() {
-  const n = flow.files.length;
-  runLoadingOverlay({
-    title: 'AI is setting up your data',
-    subtitle: 'Nexus Agent is analyzing your files, understanding columns and sampled values, and preparing smart mapping suggestions.',
-    summaryLabel: `${n} document${n === 1 ? '' : 's'}`,
-    summarySub: 'Upload successful',
-    summaryStatus: 'Upload successful',
-    summaryTime: 'Just now',
-    agentName: 'Nexus Agent',
-    agentSub: 'Working on your data in real time',
-    stepTitle: ['Reading uploaded files...', 'Preparing suggested mapping...'],
-    stepSub: 'Almost there!',
-  }, () => {
-    buildQueue();
-    if (flow.queue.length) {
-      showIngestionScreen(0);
-    } else if (typeof window.enterApp === 'function') {
-      window.enterApp();
-    }
-  });
+  buildQueue();
+  if (flow.queue.length) {
+    showIngestionScreen(0);
+  } else if (typeof window.enterApp === 'function') {
+    window.enterApp();
+  }
 }
 
+/**
+ * Confirmed mapping -> bound network -> analysed dashboard.
+ *
+ * This used to open with a 2.2-second pop-up whose progress ring was a
+ * `setInterval` counting its own forty ticks (see `runLoadingOverlay`), and
+ * only THEN start the real work behind the analysis screen. So a fabricated
+ * percentage reached 100% before anything had begun, and the user was handed
+ * a second loading screen for the actual wait. The fake beat is gone: the
+ * work starts immediately, behind the agent screen that reports it.
+ */
 function finishIngestion() {
-  const n = flow.files.length;
-  runLoadingOverlay({
-    title: 'Building your logistics network',
-    subtitle: 'Netgravity is assembling facilities, lanes, and constraints from your confirmed data into your digital twin.',
-    summaryLabel: `${n} file${n === 1 ? '' : 's'} processed`,
-    summarySub: 'Mapping confirmed',
-    summaryStatus: 'Mapping confirmed',
-    summaryTime: 'Just now',
-    agentName: 'Network Agent',
-    agentSub: 'Compiling your digital twin',
-    stepTitle: ['Assembling network graph...', 'Finalizing network topology...'],
-    stepSub: 'Almost there!',
-  }, () => {
+  {
     hideIngestionPages();
 
     // Render the parsed topology immediately so the twin and tables are
@@ -641,14 +849,15 @@ function finishIngestion() {
           const total = report.relaxed.totalDemand;
           const pct = (short != null && total)
             ? ` (${((short / total) * 100).toFixed(1)}% of demand)` : '';
-          const why = (res.issues && res.issues.length) ? ` ${res.issues.join('  ')}` : '';
           showNetworkNotice(
-            `Analysis complete, but your network cannot serve all of its demand `
-            + `within its own service levels. The figures below are the best `
-            + `achievable plan; `
+            `Your network cannot serve all of its demand within its own service `
+            + `levels. The figures below are the best achievable plan; `
             + `${short != null ? Number(short).toLocaleString() : 'some'} units`
-            + `${pct} are left unserved.${why}`,
+            + `${pct} are left unserved.`,
             'warning',
+            // Every market's own shortfall, kept whole — it is the evidence
+            // behind the headline, and belongs where a reader asks for it.
+            (res.issues || []).join('  '),
           );
         } else {
           showNetworkNotice(
@@ -667,29 +876,31 @@ function finishIngestion() {
           'error',
         );
       });
-  });
+  }
 }
 
-/** A dismissible banner on Home reporting the true state of the analysis. */
-function showNetworkNotice(message, tone = 'info') {
-  const host = document.getElementById('tab-home') || document.body;
-  let el = document.getElementById('ng-network-notice');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'ng-network-notice';
-    host.prepend(el);
+/**
+ * Record the true state of the analysis for Home's status card.
+ *
+ * This used to prepend a full-width banner to `#tab-home` whose text was one
+ * paragraph containing every market's shortfall in prose. On the test network
+ * that was six lines and ~900 characters of run-on sentence above the fold,
+ * and the figure a reader needed — 452,610 — sat in the middle of it.
+ *
+ * The message is now data, not markup: `renderOverviewAlert()` in app.js
+ * renders the headline figure and one sentence, and the per-market detail
+ * stays here on `detail` for whatever wants to show it. Nothing is lost; it
+ * is no longer all shouted at once.
+ */
+function showNetworkNotice(message, tone = 'info', detail = '') {
+  if (typeof window !== 'undefined') {
+    window.__ngNetworkNotice = { message, tone, detail, at: Date.now() };
   }
-  const colour = tone === 'error' ? 'var(--red)'
-    : tone === 'success' ? 'var(--green)'
-    : tone === 'warning' ? 'var(--amber)' : 'var(--blue)';
-  const bg = tone === 'error' ? 'var(--red-bg)'
-    : tone === 'success' ? 'var(--green-bg)'
-    : tone === 'warning' ? 'var(--amber-bg)' : 'var(--blue-bg)';
-  el.setAttribute('role', 'status');
-  el.style.cssText = `margin:0 0 var(--space-md);padding:10px 14px;border-radius:var(--r-md);`
-    + `background:${bg};color:${colour};border:1px solid ${colour}33;`
-    + `font-size:12.5px;font-weight:600`;
-  el.textContent = message;
+  // Home may not be mounted yet (the loading overlay is still up on the first
+  // run), so the card is drawn when it next renders as well as now.
+  try {
+    if (typeof window.renderOverviewAlert === 'function') window.renderOverviewAlert();
+  } catch (e) { /* the card renders on the next renderHome() */ }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -721,6 +932,10 @@ function showIngestionScreen(index) {
   const fileId = flow.queue[index];
   const file = flow.files.find(f => f.id === fileId);
   if (!file) { finishIngestion(); return; }
+
+  // Each file has its own sheets, so a tab or filter carried over from the
+  // previous one would select nothing and read as an empty parse.
+  resetMapView();
 
   if (typeof window.hideProjectPages === 'function') window.hideProjectPages();
   const upload = document.getElementById('upload-data-page');
@@ -764,7 +979,6 @@ function actionPillHtml(row) {
 }
 
 function mapRowHtml(row, idx) {
-  const hidden = row.__filtered ? ' row-hidden' : '';
   const fields = schemaFields();
   // A server-suggested field that is somehow absent from the option list is
   // added rather than silently swapped for the list's first entry.
@@ -772,7 +986,7 @@ function mapRowHtml(row, idx) {
   const opts = options.map(f =>
     `<option value="${ingEsc(f)}"${f === row.mapped ? ' selected' : ''}>${ingEsc(f)}</option>`).join('');
   const unused = row.status === 'ignored';
-  return `<tr class="${hidden.trim()}" data-row="${idx}">
+  return `<tr data-row="${idx}" data-status="${ingEsc(row.status)}">
       <td><span class="ing-map-source">${confidenceIcon(row.confidence).replace('<svg ', `<svg class="${confidenceIconTone(row.confidence)}" `)}${ingEsc(row.source)}</span></td>
       <td><span class="ing-map-sample" title="${ingEsc(row.sample)}">${ingEsc(row.sample)}</span></td>
       <td><select class="ing-map-select${unused ? ' no-match' : ''}" data-row-select="${idx}">${opts}</select></td>
@@ -781,36 +995,53 @@ function mapRowHtml(row, idx) {
     </tr>`;
 }
 
-/* One table per sheet.
-   A real workbook is 51 columns across 8 sheets; a single flat list of 51 rows
+/* One table per sheet, filtered by the current tab / search / filter menu.
+   A real workbook is 51-147 columns across many sheets; a single flat list
    gives no way to tell which "Capacity_Units" is which, which is exactly what
    this screen is for. Rows keep their index in the original array so the
-   change handler and the stats still address the right row. */
-function mappingTableHtml(rows, reviewOnly) {
+   change handler and the stats still address the right row.
+
+   Filtering hides rows rather than dropping them, so a row's index — and the
+   `<select>` bound to it — survives every view change. */
+function mappingTableHtml(rows) {
   const indexed = rows.map((r, i) => ({ row: r, idx: i }));
-  const bySheet = new Map();
-  indexed.forEach(({ row, idx }) => {
-    const key = row.sheet || '';
-    if (!bySheet.has(key)) bySheet.set(key, []);
-    bySheet.get(key).push({ row, idx });
-  });
+  const visible = indexed.filter(({ row }) => rowPasses(row));
+
+  if (!visible.length) {
+    return `<div class="ing-map-empty" id="ing-map-empty">
+        <div class="ing-map-empty-title">No columns match this view</div>
+        <div class="ing-map-empty-sub">${rows.length} column(s) were read from
+          your file. ${activeFilterCount()
+            ? 'Your search or filters exclude all of them.'
+            : 'This sheet has none in the selected state.'}</div>
+        <button type="button" class="ing-btn-secondary" id="ing-map-clear-view">
+          Show all columns</button>
+      </div>`;
+  }
 
   const head = `<colgroup>
         <col class="c-source"><col class="c-sample"><col class="c-mapped">
         <col class="c-conf"><col class="c-status">
       </colgroup>
       <thead><tr>
-        <th>Source column</th><th>Sample values</th><th>Mapped to field</th>
-        <th>Confidence</th><th>Status</th>
+        <th scope="col">Source column</th><th scope="col">Sample values</th>
+        <th scope="col">Mapped to field</th>
+        <th scope="col">Confidence</th><th scope="col">Status</th>
       </tr></thead>`;
 
   const table = (entries) => `<table class="ing-map-table">${head}
-      <tbody>${entries.map(({ row, idx }) =>
-        mapRowHtml({ ...row, __filtered: reviewOnly && row.status === 'auto' }, idx)
-      ).join('')}</tbody>
+      <tbody>${entries.map(({ row, idx }) => mapRowHtml(row, idx)).join('')}</tbody>
     </table>`;
 
-  if (bySheet.size <= 1) return table(indexed);
+  // Grouped only when more than one sheet is on screen; inside a single
+  // sheet's tab the group header would repeat the tab that is already lit.
+  const bySheet = new Map();
+  visible.forEach((entry) => {
+    const key = entry.row.sheet || '';
+    if (!bySheet.has(key)) bySheet.set(key, []);
+    bySheet.get(key).push(entry);
+  });
+  if (bySheet.size <= 1) return table(visible);
 
   return [...bySheet.entries()].map(([sheet, entries]) => {
     const role = entries[0].row.sheetRole;
@@ -824,6 +1055,167 @@ function mappingTableHtml(rows, reviewOnly) {
         ${table(entries)}
       </div>`;
   }).join('');
+}
+
+/* ─── The card's toolbar: tabs, search, filters ───────────────── */
+function mapTabsHtml(rows) {
+  const reviewCount = rows.filter(r => r.status === 'review').length;
+  const tabs = [
+    { key: 'all', label: 'All fields', count: rows.length, tone: '' },
+  ];
+  // The tab survives its own count reaching zero while it is the open tab, so
+  // resolving the last flagged row does not yank the view out from under it.
+  if (reviewCount || mapView.tab === 'review') {
+    tabs.push({ key: 'review', label: 'Needs review', count: reviewCount, tone: 'flag' });
+  }
+  sheetTabs(rows).forEach((sheet) => {
+    tabs.push({
+      key: sheet.name,
+      label: sheet.name || 'Sheet',
+      count: null,
+      meta: `${sheet.used}/${sheet.total}`,
+      tone: sheet.used ? '' : 'muted',
+      title: `${SHEET_ROLE_LABELS[sheet.role] || 'Not recognised'} · ${sheet.used} of ${sheet.total} columns used`,
+    });
+  });
+
+  return `<div class="ing-map-tabs" role="tablist" aria-label="Mapped columns">
+      ${tabs.map(t => `
+        <button type="button" role="tab" class="ing-map-tab tone-${t.tone || 'plain'}"
+                data-map-tab="${ingEsc(t.key)}"
+                aria-selected="${mapView.tab === t.key ? 'true' : 'false'}"
+                ${t.title ? `title="${ingEsc(t.title)}"` : ''}>
+          <span>${ingEsc(t.label)}</span>
+          ${t.count !== null && t.count !== undefined
+            ? `<span class="ing-map-tab-count">${t.count}</span>`
+            : `<span class="ing-map-tab-meta">${ingEsc(t.meta)}</span>`}
+        </button>`).join('')}
+    </div>`;
+}
+
+/* The active tab, restated in words under the strip.
+   A sheet tab shows a name; what matters is what the parser decided that sheet
+   IS, because every column below is classified by that decision. */
+function mapContextHtml(rows) {
+  if (mapView.tab === 'all') {
+    return `Every column read from this file, grouped by the sheet it came from.`;
+  }
+  if (mapView.tab === 'review') {
+    return `Columns whose sheet could not be identified, so the field below is a
+      guess across every sheet type rather than a decision.`;
+  }
+  const sheet = sheetTabs(rows).find(x => x.name === mapView.tab);
+  if (!sheet) return '';
+  return `${SHEET_ROLE_LABELS[sheet.role] || 'Not recognised — no column from this sheet is used'}
+    &middot; ${sheet.used} of ${sheet.total} columns reach the model.`;
+}
+
+/* Whether there are tabs off either edge, as a class the stylesheet can
+   fade against. Without it a strip of 18 sheets simply ended at the card
+   border and the 13 tabs past it were invisible and unguessable. */
+function paintTabOverflow() {
+  const strip = document.querySelector('#ing-map-tabs-slot .ing-map-tabs');
+  if (!strip) return;
+  const max = strip.scrollWidth - strip.clientWidth;
+  strip.classList.toggle('ing-tabs-more-right', max > 1 && strip.scrollLeft < max - 1);
+  strip.classList.toggle('ing-tabs-more-left', max > 1 && strip.scrollLeft > 1);
+}
+
+/* The selected tab, scrolled into view. Selecting one at the far right and
+   having the strip snap back to the left on the next repaint loses the place
+   the user just chose. */
+function revealSelectedTab() {
+  const strip = document.querySelector('#ing-map-tabs-slot .ing-map-tabs');
+  const sel = strip?.querySelector('[aria-selected="true"]');
+  if (!strip || !sel) return;
+  const left = sel.offsetLeft - strip.clientWidth / 2 + sel.offsetWidth / 2;
+  strip.scrollLeft = Math.max(0, left);
+  paintTabOverflow();
+}
+
+function mapToolbarHtml(rows) {
+  const n = activeFilterCount();
+  return `<div class="ing-map-toolbar">
+      <div class="ing-map-search">
+        ${I.search}
+        <input type="search" id="ing-map-search" class="ing-map-search-input"
+               placeholder="Search columns"
+               aria-label="Search the ${rows.length} columns read from this file"
+               value="${ingEsc(mapView.search)}">
+      </div>
+      <button type="button" class="ing-map-filter-btn${n ? ' active' : ''}"
+              id="ing-map-filter-btn" aria-haspopup="dialog" aria-expanded="false">
+        ${I.filter}<span>Filters${n ? ` (${n})` : ''}</span>
+      </button>
+    </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MAPPING REVIEW — view state
+   ═══════════════════════════════════════════════════════════════ */
+/**
+ * What the review table is currently showing.
+ *
+ * A real workbook is 147 columns across 17 sheets. One flat list of 147 rows
+ * is a scroll, not a review: there is no way to see that Facilities is
+ * complete and Supplier_Master is half-ignored, and no way to get to the three
+ * rows that actually need a decision.
+ *
+ * `tab` is 'all', 'review', or a sheet name. It starts at 'all' deliberately.
+ * A table that opens pre-filtered shows a subset while looking like the whole
+ * — Nielsen #1 — so the default is everything, and the rows that need a
+ * decision are advertised by a callout and a tab rather than by hiding the
+ * rest.
+ */
+const mapView = {
+  tab: 'all',
+  search: '',
+  confidence: new Set(),   // 'high' | 'medium' | 'low'
+  status: new Set(),       // 'auto' | 'review' | 'ignored'
+};
+
+function resetMapView() {
+  mapView.tab = 'all';
+  mapView.search = '';
+  mapView.confidence.clear();
+  mapView.status.clear();
+}
+
+function activeFilterCount() {
+  return mapView.confidence.size + mapView.status.size + (mapView.search ? 1 : 0);
+}
+
+/** Sheets in the order the parser returned them, with their used/total counts. */
+function sheetTabs(rows) {
+  const out = [];
+  const byName = new Map();
+  rows.forEach((r) => {
+    const name = r.sheet || '';
+    if (!byName.has(name)) {
+      const entry = { name, role: r.sheetRole, total: 0, used: 0 };
+      byName.set(name, entry);
+      out.push(entry);
+    }
+    const entry = byName.get(name);
+    entry.total += 1;
+    if (r.status !== 'ignored') entry.used += 1;
+  });
+  return out;
+}
+
+/** True when this row survives the tab, the search box and the filter menu. */
+function rowPasses(row) {
+  if (mapView.tab === 'review' && row.status !== 'review' && !row.__resolvedHere) return false;
+  if (mapView.tab !== 'all' && mapView.tab !== 'review'
+      && (row.sheet || '') !== mapView.tab) return false;
+  if (mapView.confidence.size && !mapView.confidence.has(row.confidence)) return false;
+  if (mapView.status.size && !mapView.status.has(row.status)) return false;
+  if (mapView.search) {
+    const q = mapView.search.toLowerCase();
+    const hay = `${row.source} ${row.sample} ${row.mapped} ${row.sheet || ''}`.toLowerCase();
+    if (!hay.includes(q)) return false;
+  }
+  return true;
 }
 
 /* What the parser decided each sheet IS. Shown so the user can catch a
@@ -840,6 +1232,108 @@ const SHEET_ROLE_LABELS = {
   unknown: 'Not recognised — no columns from this sheet are used',
 };
 
+/* ═══════════════════════════════════════════════════════════════
+   AI MAPPING SUMMARY  (the right-hand column)
+   ═══════════════════════════════════════════════════════════════ */
+/**
+ * What the parser concluded, in sentences, from the rows it returned.
+ *
+ * Every line is computed from `flow.mapping[file.id]` — the same array the
+ * table renders — so the summary and the table cannot disagree. Nothing here
+ * is authored copy about a hypothetical file.
+ *
+ * This replaces a panel that listed the four *techniques* the mapper uses
+ * ("Column names", "Random sampled values", "Pattern recognition", "Schema
+ * context") and a ring showing one percentage. None of that told the user
+ * which of their columns needed a decision, which is the only question this
+ * screen exists to answer; the techniques are now one line of footnote.
+ */
+const ROLE_NOUNS = {
+  facilities: 'facilities',
+  markets: 'demand markets',
+  lanes: 'lanes',
+  products: 'products',
+  demand_history: 'demand history',
+  capacity_history: 'capacity history',
+  lane_rates: 'freight rates',
+  signals: 'external signals',
+};
+
+const SUMMARY_LIST_CAP = 6;
+
+function summaryListHtml(items, cap = SUMMARY_LIST_CAP) {
+  const shown = items.slice(0, cap);
+  const rest = items.length - shown.length;
+  return `<ul class="ing-sum-list">
+      ${shown.map(t => `<li>${t}</li>`).join('')}
+      ${rest > 0 ? `<li class="more">and ${rest} more &mdash; see the table</li>` : ''}
+    </ul>`;
+}
+
+function mappingSummaryHtml(rows, stats) {
+  const identified = [];
+  const byRole = new Map();
+  rows.forEach((r) => {
+    if (r.status === 'ignored') return;
+    const noun = ROLE_NOUNS[r.sheetRole];
+    if (!noun) return;
+    if (!byRole.has(noun)) byRole.set(noun, { fields: 0, sheets: new Set() });
+    const entry = byRole.get(noun);
+    entry.fields += 1;
+    entry.sheets.add(r.sheet || '');
+  });
+  byRole.forEach((entry, noun) => {
+    identified.push(`<strong>${entry.fields}</strong> field${entry.fields === 1 ? '' : 's'}`
+      + ` read as <em>${ingEsc(noun)}</em>`
+      + ` (${entry.sheets.size} sheet${entry.sheets.size === 1 ? '' : 's'})`);
+  });
+
+  const needsReview = rows.filter(r => r.status === 'review').map(r =>
+    `<code>${ingEsc(r.source)}</code> ${I.arrowNarrow} likely ${ingEsc(r.mapped)}`);
+
+  const notUsed = rows.filter(r => r.status === 'ignored').map(r =>
+    `<code>${ingEsc(r.source)}</code> ${I.arrowNarrow} no field in this build reads it`);
+
+  const decisions = stats.review;
+  const usedPct = stats.detected ? Math.round((stats.auto / stats.detected) * 100) : 0;
+
+  return `<aside class="ing-sidebar-card" aria-label="AI mapping summary">
+      <div class="ing-sidebar-title">${I.sparkle}AI mapping summary</div>
+
+      <div class="ing-sum-headline">
+        <strong>${stats.auto}</strong> field${stats.auto === 1 ? '' : 's'} mapped automatically
+      </div>
+      <div class="ing-sum-pill ${decisions ? 'tone-open' : 'tone-clear'}">${decisions
+        ? `${decisions} decision${decisions === 1 ? '' : 's'} needed from you`
+        : 'No decisions needed from you'}</div>
+
+      ${identified.length ? `
+        <div class="ing-sum-head tone-identified">What I identified</div>
+        ${summaryListHtml(identified, 8)}` : `
+        <div class="ing-sum-head tone-notused">Nothing recognised</div>
+        <div class="ing-sum-note">No sheet in this file matched a table this
+          build reads, so no column from it reaches a calculation.</div>`}
+
+      ${needsReview.length ? `
+        <div class="ing-sum-head tone-review">Needs your review</div>
+        ${summaryListHtml(needsReview)}` : ''}
+
+      ${notUsed.length ? `
+        <div class="ing-sum-head tone-notused">Not used</div>
+        ${summaryListHtml(notUsed)}` : ''}
+
+      <div class="ing-sum-foot">
+        <div class="ing-sum-foot-stat">
+          <strong>${stats.auto} of ${stats.detected}</strong> columns (${usedPct}%)
+          reach a calculation in this build.
+        </div>
+        Mapping inferred from column names, sampled values and the shape of each
+        sheet. A column marked <em>Not used</em> is parsed but reaches no
+        calculation here.
+      </div>
+    </aside>`;
+}
+
 function statsRowHtml(stats) {
   return `<div class="ing-stats-row">
       <div class="ing-stat-item">
@@ -851,89 +1345,91 @@ function statsRowHtml(stats) {
         <div><div class="ing-stat-value">${stats.auto}</div><div class="ing-stat-label">auto-mapped</div></div>
       </div>
       <div class="ing-stat-item">
-        <span class="ing-stat-icon tone-amber">${I.warning}</span>
+        <span class="ing-stat-icon ${stats.review ? 'tone-amber' : 'tone-green'}">${stats.review ? I.warning : I.checkCircle}</span>
         <div><div class="ing-stat-value">${stats.review}</div><div class="ing-stat-label">need review</div></div>
       </div>
       <div class="ing-stat-item">
         <span class="ing-stat-icon tone-gray">${I.ban}</span>
-        <div><div class="ing-stat-value">${stats.ignored}</div><div class="ing-stat-label">ignored</div></div>
+        <div><div class="ing-stat-value">${stats.ignored}</div><div class="ing-stat-label">not used</div></div>
       </div>
     </div>`;
 }
 
-// ─── S3 P0: Data Quality summary (record-level validity + issues) ───
-// Distinct from the column-mapping stats above it (that answers "did we
-// read the columns right?"; this answers "can I trust the data enough to
-// run the model?"). Sourced entirely from DATA_QUALITY (data.js) — a
-// fully-authored dataset that existed but was never surfaced anywhere in
-// the ingestion flow. Reuses the same .ing-stats-row / .ing-review-item /
-// .ing-confidence-pill classes already used elsewhere on this screen, so
-// no new visual language is introduced.
-function severityTone(sev) {
-  return sev === 'warning' ? 'medium' : sev === 'info' ? 'high' : 'low';
-}
-function severityLabel(sev) {
-  return sev === 'warning' ? 'Warning' : sev === 'info' ? 'Info' : 'Critical';
-}
+// ─── Data quality (record-level validity + issues) ───
+// A different question from the column mapping above it: that one answers
+// "did we read the columns right?", this one "can I trust the rows?". Both
+// come from the same parse response. `severityTone`/`severityLabel` went with
+// the card — the panel below states each issue in words rather than colouring
+// a pill, because a panel has room for the sentence.
 
 /* Data quality, as measured by the parser on the uploaded file.
    Every figure here is from `dataQuality` in the parse response. The demo
    dataset this once read described the prototype's own facilities ("Baddi
    Plant", "DC Delhi NCR") and was shown for any upload; its issue records also
    carried a `status` field the measured ones do not, so "need review" counted
-   whatever the demo happened to say. */
-function dataQualitySectionHtml() {
+   whatever the demo happened to say.
+
+   This used to be a full-width card between the mapping table and the footer.
+   It was removed from the page on request: at 768px it pushed
+   "Confirm mapping & continue" below the fold, and the review screen's job is
+   the mapping. The measurements themselves are kept — they are the only record
+   of how many rows the parser could not use — and are reached from one chip on
+   the file card. */
+function qualityFacts() {
   const dq = DATA_QUALITY;
   const total = Number(dq.totalRecords) || 0;
   const valid = Number(dq.validRecords) || 0;
-  const invalid = Math.max(0, total - valid);
   const issues = dq.issues || [];
-  const warnings = issues.filter((i) => i.severity === 'warning').length;
-  const critical = issues.filter((i) => i.severity === 'critical').length;
+  return {
+    total,
+    valid,
+    invalid: Math.max(0, total - valid),
+    validPct: dq.validPct,
+    issues,
+    critical: issues.filter((i) => i.severity === 'critical').length,
+    warnings: issues.filter((i) => i.severity === 'warning').length,
+  };
+}
 
-  const issueRows = issues.length ? issues.map((iss) => {
+/* The chip, and only when there is something to say.
+   With nothing measured, or nothing wrong, the "File processed successfully"
+   chip beside it already covers the case; a second chip reading "0 issues"
+   would be noise. */
+function qualityChipHtml() {
+  const q = qualityFacts();
+  if (!q.total) return '';
+  if (!q.invalid && !q.issues.length) return '';
+  const parts = [];
+  if (q.invalid) parts.push(`${q.invalid.toLocaleString()} record${q.invalid === 1 ? '' : 's'} need attention`);
+  if (q.issues.length) parts.push(`${q.issues.length} issue${q.issues.length === 1 ? '' : 's'}`);
+  return `<button type="button" class="ing-status-chip tone-warn" id="ing-dq-chip"
+            aria-haspopup="dialog">${I.warning}${ingEsc(parts.join(' · '))}</button>`;
+}
+
+/* The full measurement, in the panel the rest of these screens use. */
+function showQualityPanel() {
+  const q = qualityFacts();
+  const rows = q.issues.length ? q.issues.map((iss) => {
     // Measured issues are located by table and column; the demo ones used
     // facility/market/lane. Both are read so a mixed shape cannot blank the row.
     const location = iss.column || iss.table || iss.facility || iss.market
       || iss.lane || iss.source || '';
-    return `<div class="ing-review-item">
-        <div class="ing-review-item-text">
-          <div class="ing-review-item-name">${ingEsc(iss.type || 'Issue')}${location ? ` — ${ingEsc(location)}` : ''}</div>
-          <div class="ing-review-item-note">${ingEsc(iss.detail || '')}</div>
-        </div>
-        <span class="ing-confidence-pill tone-${severityTone(iss.severity)}">${severityLabel(iss.severity)}</span>
-      </div>`;
-  }).join('') : `<div class="ing-review-item"><div class="ing-review-item-text">
-        <div class="ing-review-item-name">No issues found</div>
-        <div class="ing-review-item-note">Every cell the parser read was usable.</div>
-      </div></div>`;
+    return `<li><strong>${ingEsc(iss.type || 'Issue')}</strong>${location
+      ? ` &mdash; <code>${ingEsc(location)}</code>` : ''}<br>${ingEsc(iss.detail || '')}</li>`;
+  }).join('') : '<li>No issue was raised against any cell the parser read.</li>';
 
-  return `
-    <div class="ing-card" id="ing-dq-section" style="margin-top:16px">
-      <div class="ing-card-title">Data quality</div>
-      <div class="ing-card-sub">Measured on your file. ${invalid
-        ? `${invalid.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')} records need attention.`
-        : `All ${total.toLocaleString('en-IN')} records read cleanly.`}</div>
-      <div class="ing-stats-row" style="margin-top:14px">
-        <div class="ing-stat-item">
-          <span class="ing-stat-icon tone-green">${I.checkCircle}</span>
-          <div><div class="ing-stat-value">${valid.toLocaleString('en-IN')} / ${total.toLocaleString('en-IN')}</div><div class="ing-stat-label">records valid (${dq.validPct ?? '—'}%)</div></div>
-        </div>
-        <div class="ing-stat-item">
-          <span class="ing-stat-icon ${invalid > 0 ? 'tone-amber' : 'tone-green'}">${I.warning}</span>
-          <div><div class="ing-stat-value">${invalid.toLocaleString('en-IN')}</div><div class="ing-stat-label">invalid records</div></div>
-        </div>
-        <div class="ing-stat-item">
-          <span class="ing-stat-icon ${issues.length ? 'tone-amber' : 'tone-green'}">${I.warning}</span>
-          <div><div class="ing-stat-value">${issues.length}</div><div class="ing-stat-label">issues found</div></div>
-        </div>
-        <div class="ing-stat-item">
-          <span class="ing-stat-icon ${critical ? 'tone-amber' : 'tone-gray'}">${I.ban}</span>
-          <div><div class="ing-stat-value">${critical || warnings}</div><div class="ing-stat-label">${critical ? 'critical' : 'warnings'}</div></div>
-        </div>
-      </div>
-      <div class="ing-dq-issue-list">${issueRows}</div>
-    </div>`;
+  showInfoPanel('Data quality', `
+    <p><strong>${q.valid.toLocaleString()} of ${q.total.toLocaleString()}</strong>
+      records read cleanly${q.validPct != null ? ` (${q.validPct}%)` : ''}.
+      ${q.invalid
+        ? `<strong>${q.invalid.toLocaleString()}</strong> could not be used as written.`
+        : 'None were rejected.'}</p>
+    <p>Measured on your file by the parser, not estimated. An invalid record is
+      one the network build will drop; an issue is a column or table worth
+      looking at before you commit.</p>
+    <ul>${rows}</ul>
+    <p>Fixing these means editing your own file and uploading it again &mdash;
+      nothing here is repaired for you.</p>`);
 }
 
 function renderExcelIngestion(file) {
@@ -943,86 +1439,90 @@ function renderExcelIngestion(file) {
   const rows = flow.mapping[file.id] || [];
   const stats = flow.mapStats[file.id] || { detected: 0, auto: 0, review: 0, ignored: 0 };
   const nRows = rowsAnalyzed(file);
-  const rowsText = nRows === null ? 'Not read' : nRows.toLocaleString('en-IN');
+  const rowsText = nRows === null ? 'Not read' : nRows.toLocaleString();
   const sheets = sheetsOf(file);
   const parseError = (flow.parseErrors || {})[file.id] || flow.parseError;
-  // Share of columns this build actually reads. Was a fixed 99% under the
-  // label "of fields are typically accepted as-is" — a statistic about no
-  // particular file.
-  const usedPct = stats.detected
-    ? Math.round((stats.auto / stats.detected) * 100) : 0;
-  const r = 26, c = 2 * Math.PI * r;
+  const multi = flow.queue.length > 1;
 
   page.innerHTML = `
-    <div class="ing-body">
-      ${topbar()}
+    ${topbar()}
+    <div class="ing-shell">
+      ${flowRailHtml('mapping')}
+      <div class="proj-scroll ing-scroll">
+        <div class="ing-body">
 
-      <div class="ing-mapping-head">
-        <div>
-          <h1 class="ing-title">We mapped your data for you</h1>
-          <p class="ing-subtitle">AI analyzed your Excel file using column names and sampled values. Review only the flagged fields, then continue.</p>
+        <div class="ing-crumbs">
+          ${backPillHtml()}
+          ${multi ? `<span class="ing-crumb-step">File ${flow.queueIndex + 1} of ${flow.queue.length}</span>` : ''}
         </div>
-        <div class="ing-file-summary-card">
-          <span class="ing-file-summary-icon type-${file.kind}" style="background:${file.kind === 'pdf' ? '#c62d1f' : '#16794a'}">${file.ext.toUpperCase()}</span>
-          <div>
-            <div class="ing-file-summary-name">File: ${ingEsc(file.name)}</div>
-            <div class="ing-file-summary-meta">
-              <div><div class="ing-file-summary-meta-label">Rows read</div><div class="ing-file-summary-meta-value">${rowsText}</div></div>
-              <div><div class="ing-file-summary-meta-label">Sheets</div><div class="ing-file-summary-meta-value">${sheets.length || '—'}</div></div>
-              <div><div class="ing-file-summary-meta-label">File size</div><div class="ing-file-summary-meta-value">${formatFileSize(file.sizeBytes)}</div></div>
-            </div>
-            ${sheets.length ? `<div class="ing-file-summary-sheets">${sheets.map(s => `<span class="ing-sheet-chip">${ingEsc(s)}</span>`).join('')}</div>` : ''}
-            <div class="ing-file-summary-badge">${parseError
-              ? `<span class="ing-status-chip tone-error">${I.warning}Could not read this file</span>`
-              : `<span class="ing-status-chip">${I.checkCircle}Read ${rowsText} rows across ${sheets.length} sheet(s)</span>`}</div>
+
+        <div class="ing-mapping-head">
+          <div class="ing-mapping-head-text">
+            <h1 class="ing-title">We mapped your data for you</h1>
+            <p class="ing-subtitle">Netgravity read your file's column names and
+              sampled values and matched them to the fields it models. Review the
+              flagged rows, then continue &mdash; nothing is committed until you do.</p>
           </div>
-        </div>
-      </div>
-
-      ${statsRowHtml(stats)}
-      ${dataQualitySectionHtml()}
-
-      <div class="ing-mapping-layout">
-        <div class="ing-mapping-main">
-          <div class="ing-mapping-main-head">
+          <div class="ing-file-summary-card">
+            <span class="ing-file-summary-icon type-${file.kind}">${ingEsc(file.ext.toUpperCase())}</span>
             <div>
-              <div class="ing-card-title">Field mapping</div>
-              <div class="ing-card-sub">${stats.detected} column(s) read from your file.
-                ${stats.ignored ? `${stats.ignored} are not used by the model.` : 'All are used by the model.'}
-                Change any row that is wrong before continuing.</div>
+              <div class="ing-file-summary-name" title="${ingEsc(file.name)}">${ingEsc(file.name)}</div>
+              <div class="ing-file-summary-meta">
+                <div><div class="ing-file-summary-meta-label">Rows read</div><div class="ing-file-summary-meta-value">${rowsText}</div></div>
+                <div><div class="ing-file-summary-meta-label">Sheets</div><div class="ing-file-summary-meta-value">${sheets.length || '&mdash;'}</div></div>
+                <div><div class="ing-file-summary-meta-label">File size</div><div class="ing-file-summary-meta-value">${formatFileSize(file.sizeBytes)}</div></div>
+              </div>
+              <div class="ing-file-summary-badge">${parseError
+                ? `<span class="ing-status-chip tone-error">${I.warning}Could not read this file</span>`
+                : `<span class="ing-status-chip">${I.checkCircle}File processed successfully</span>`}
+                ${parseError ? '' : qualityChipHtml()}</div>
             </div>
           </div>
-          <div id="ing-map-table-slot">${rows.length
-            ? mappingTableHtml(rows, false)
-            : `<div class="ing-empty-files">${parseError
-                ? `This file could not be parsed, so there is nothing to review: ${ingEsc(parseError)}`
-                : 'No columns were read from this file.'}</div>`}</div>
         </div>
 
-        <div class="ing-sidebar-card">
-          <div class="ing-sidebar-title">${I.sparkle}What the AI used</div>
-          <div class="ing-used-item">${I.columns}Column names</div>
-          <div class="ing-used-item">${I.shuffle}Random sampled values</div>
-          <div class="ing-used-item">${I.fingerprint}Pattern recognition</div>
-          <div class="ing-used-item">${I.folder}Schema context</div>
+        ${statsRowHtml(stats)}
 
-          <div class="ing-accept-ring-wrap">
-            <div class="ing-accept-ring">
-              <svg viewBox="0 0 64 64">
-                <circle class="track" cx="32" cy="32" r="${r}"/>
-                <circle class="fill" cx="32" cy="32" r="${r}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${(c * (1 - usedPct / 100)).toFixed(2)}"/>
-              </svg>
-              <div class="ing-accept-ring-pct">${usedPct}%</div>
+        <div class="ing-mapping-layout">
+          <div class="ing-mapping-main">
+            <div class="ing-mapping-main-head">
+              <div>
+                <div class="ing-card-title">Suggested field mapping</div>
+                <div class="ing-card-sub" id="ing-map-context">${rows.length
+                  ? mapContextHtml(rows)
+                  : 'Nothing was read from this file.'}</div>
+              </div>
+              ${rows.length ? mapToolbarHtml(rows) : ''}
             </div>
-            <div class="ing-accept-ring-label">of this file's columns are read by the model</div>
-          </div>
-          <div class="ing-sidebar-note">A column marked "Not used" is parsed but reaches no calculation in this build.</div>
-        </div>
-      </div>
 
-      <div class="ing-footer-row">
-        <button type="button" class="ing-footer-link" id="ing-review-flagged-btn">Review flagged only</button>
-        <button type="button" class="proj-btn-primary" id="ing-confirm-mapping-btn"><span>Confirm mapping &amp; continue</span>${I.arrowRight}</button>
+            ${stats.review ? `
+              <div class="ing-flag-callout" role="status">
+                ${I.warning}
+                <div><strong>${stats.review} column${stats.review === 1 ? '' : 's'} need${stats.review === 1 ? 's' : ''} a decision.</strong>
+                  The sheet they came from could not be identified, so the field
+                  below each one is a guess.</div>
+                <button type="button" class="ing-flag-callout-btn"
+                        id="ing-review-flagged-btn">Show only those</button>
+              </div>` : ''}
+
+            <div id="ing-map-tabs-slot">${rows.length ? mapTabsHtml(rows) : ''}</div>
+            <div id="ing-map-table-slot">${rows.length
+              ? mappingTableHtml(rows)
+              : `<div class="ing-empty-files">${parseError
+                  ? `This file could not be parsed, so there is nothing to review: ${ingEsc(parseError)}`
+                  : 'No columns were read from this file.'}</div>`}</div>
+          </div>
+
+          ${mappingSummaryHtml(rows, stats)}
+        </div>
+
+        <div class="ing-footer-row">
+          <div class="ing-footer-note" id="ing-footer-note">${stats.review
+            ? `${stats.review} column${stats.review === 1 ? '' : 's'} still flagged. You can continue anyway — flagged columns are used as suggested.`
+            : 'Nothing is flagged. You can continue.'}</div>
+          <button type="button" class="proj-btn-primary" id="ing-confirm-mapping-btn">
+            <span>Confirm mapping &amp; continue</span>${I.arrowRight}</button>
+        </div>
+        </div>
       </div>
     </div>`;
 
@@ -1036,17 +1536,37 @@ function refreshMapStats(file) {
 }
 
 function bindExcelIngestion(file) {
-  let reviewOnly = false;
+  const page = document.getElementById('ingestion-page');
+  const rows = () => flow.mapping[file.id] || [];
+
+  /* Repaint the parts of the card that depend on the view, and nothing else.
+     Re-rendering the whole screen would lose the search box's focus and caret
+     on every keystroke. */
+  function repaintTable() {
+    const slot = document.getElementById('ing-map-table-slot');
+    if (slot && rows().length) slot.innerHTML = mappingTableHtml(rows());
+    const tabs = document.getElementById('ing-map-tabs-slot');
+    if (tabs) { tabs.innerHTML = mapTabsHtml(rows()); revealSelectedTab(); }
+    const ctx = document.getElementById('ing-map-context');
+    if (ctx) ctx.innerHTML = mapContextHtml(rows());
+    const btn = document.getElementById('ing-map-filter-btn');
+    if (btn) {
+      const n = activeFilterCount();
+      btn.classList.toggle('active', n > 0);
+      const label = btn.querySelector('span');
+      if (label) label.textContent = n ? 'Filters (' + n + ')' : 'Filters';
+    }
+  }
 
   document.getElementById('ing-map-table-slot')?.addEventListener('change', e => {
     const sel = e.target.closest('[data-row-select]');
     if (!sel) return;
     const idx = Number(sel.dataset.rowSelect);
     const row = flow.mapping[file.id][idx];
-    const wasResolved = row.status === 'auto';
+    const before = row.status;
     row.mapped = sel.value;
 
-    if (sel.value === 'No match found') {
+    if (sel.value === NOT_USED_LABEL) {
       row.confidence = 'low';
       row.status = 'ignored';
     } else {
@@ -1054,28 +1574,89 @@ function bindExcelIngestion(file) {
       row.status = 'auto';
     }
 
-    if (!wasResolved) {
+    // Move the count from whatever bucket the row was in to the one it is in
+    // now. The previous version stashed the old state on the <select>, so a row
+    // edited twice moved the wrong counter the second time, and an edit that
+    // turned a used column into an unused one never decremented anything.
+    // Keep a row the user has just resolved on screen even when the current
+    // tab no longer selects it: seeing it flip to "Used" is the confirmation
+    // that the change landed.
+    if (before === 'review' && row.status !== 'review') row.__resolvedHere = true;
+
+    if (before !== row.status) {
       const stats = flow.mapStats[file.id];
-      if (row.status === 'auto') {
-        stats.auto += 1;
-        if (sel.dataset.prevStatus === 'ignored') stats.ignored -= 1; else stats.review -= 1;
+      if (stats) {
+        if (stats[before] !== undefined) stats[before] = Math.max(0, stats[before] - 1);
+        if (stats[row.status] !== undefined) stats[row.status] += 1;
       }
     }
-    sel.dataset.prevStatus = row.status;
 
-    // Re-render just this row's pills/select styling.
     const tr = sel.closest('tr');
-    if (tr) tr.outerHTML = mapRowHtml({ ...row, __filtered: reviewOnly && row.status === 'auto' }, idx);
+    if (tr) tr.outerHTML = mapRowHtml(row, idx);
     refreshMapStats(file);
+    repaintTable();
   });
 
-  document.getElementById('ing-review-flagged-btn')?.addEventListener('click', (e) => {
-    reviewOnly = !reviewOnly;
-    e.target.textContent = reviewOnly ? 'Show all fields' : 'Review flagged only';
-    document.getElementById('ing-map-table-slot').innerHTML = mappingTableHtml(flow.mapping[file.id], reviewOnly);
+  // Tabs. The listeners live on the slot, which survives every repaint; the
+  // strip inside it does not.
+  const tabSlot = document.getElementById('ing-map-tabs-slot');
+  tabSlot?.addEventListener('click', (e) => {
+    const tab = e.target.closest('[data-map-tab]');
+    if (!tab) return;
+    mapView.tab = tab.dataset.mapTab;
+    repaintTable();
+  });
+  tabSlot?.addEventListener('scroll', paintTabOverflow, { capture: true, passive: true });
+
+  // Not a bare call here: this binder runs while #ingestion-page is still
+  // hidden, and a hidden element reports scrollWidth === clientWidth === 0, so
+  // the first paint always concluded that every tab fit. An observer answers
+  // when the strip is actually given a box — and again on every resize, which
+  // a one-shot call would not.
+  if (window.__ingTabObserver) window.__ingTabObserver.disconnect();
+  if (tabSlot && typeof ResizeObserver === 'function') {
+    window.__ingTabObserver = new ResizeObserver(paintTabOverflow);
+    window.__ingTabObserver.observe(tabSlot);
+  } else {
+    requestAnimationFrame(paintTabOverflow);
+  }
+
+  // Search. Filters as you type; there is no button to press, and clearing it
+  // restores the full list.
+  document.getElementById('ing-map-search')?.addEventListener('input', (e) => {
+    mapView.search = e.target.value.trim();
+    repaintTable();
   });
 
-  document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', goBackInFlow);
+  // Filter menu.
+  document.getElementById('ing-map-filter-btn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (document.getElementById('ing-map-filter-pop')) { closeFilterPop(); return; }
+    openMapFilterPop(e.currentTarget, repaintTable);
+  });
+
+  // The empty view's own way out, and the flagged callout. Delegated from the
+  // page, because both live inside slots that are replaced by repaintTable().
+  page?.addEventListener('click', (e) => {
+    if (e.target.closest('#ing-map-clear-view')) {
+      resetMapView();
+      const box = document.getElementById('ing-map-search');
+      if (box) box.value = '';
+      repaintTable();
+      return;
+    }
+    if (e.target.closest('#ing-dq-chip')) { showQualityPanel(); return; }
+    if (e.target.closest('#ing-review-flagged-btn')) {
+      mapView.tab = mapView.tab === 'review' ? 'all' : 'review';
+      repaintTable();
+      document.getElementById('ing-map-tabs-slot')
+        ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+
+  bindWorkspaceTopbar(page, { help: 'mapping' });
+  bindFlowRail(page);
+  page?.querySelector('.ing-back-home-btn')?.addEventListener('click', goBackInFlow);
   document.getElementById('ing-confirm-mapping-btn')?.addEventListener('click', () => {
     file.status = 'mapped';
     advanceQueue();
@@ -1084,10 +1665,95 @@ function bindExcelIngestion(file) {
   // Confirming a mapping that does not exist would carry an unparsed file into
   // the network build, where it can only fail later and less clearly.
   const confirmBtn = document.getElementById('ing-confirm-mapping-btn');
-  if (confirmBtn && !(flow.mapping[file.id] || []).length) {
+  if (confirmBtn && !rows().length) {
     confirmBtn.disabled = true;
     confirmBtn.title = 'This file produced no readable columns.';
+    const note = document.getElementById('ing-footer-note');
+    if (note) note.textContent = 'There is nothing to confirm — no column was read from this file.';
   }
+}
+
+/* The label the parser uses for a column no engine here consumes. Kept in one
+   place: the change handler compares against it to decide whether an edited row
+   still counts as used, and a drifted copy mis-counted silently. */
+const NOT_USED_LABEL = 'Not used by the model';
+
+/* ─── Filter menu ─────────────────────────────────────────────── */
+function closeFilterPop() {
+  document.getElementById('ing-map-filter-pop')?.remove();
+  document.getElementById('ing-map-filter-btn')?.setAttribute('aria-expanded', 'false');
+  if (window.__ingFilterDismiss) {
+    document.removeEventListener('click', window.__ingFilterDismiss);
+    document.removeEventListener('keydown', window.__ingFilterKey);
+    window.__ingFilterDismiss = null;
+  }
+}
+
+const CONFIDENCE_OPTIONS = [['high', 'High'], ['medium', 'Medium'], ['low', 'Low']];
+const STATUS_OPTIONS = [
+  ['auto', 'Used by the model'],
+  ['review', 'Needs review'],
+  ['ignored', 'Not used'],
+];
+
+function openMapFilterPop(anchor, onChange) {
+  const pop = document.createElement('div');
+  pop.id = 'ing-map-filter-pop';
+  pop.className = 'wc-menu ing-filter-pop';
+  pop.setAttribute('role', 'dialog');
+  pop.setAttribute('aria-label', 'Filter columns');
+
+  const group = (title, options, set, name) => `
+    <div class="wc-menu-head">${title}</div>
+    ${options.map(([value, label]) => `
+      <label class="ing-filter-row">
+        <input type="checkbox" data-filter-group="${name}" value="${value}"
+               ${set.has(value) ? 'checked' : ''}>
+        <span>${label}</span>
+      </label>`).join('')}`;
+
+  pop.innerHTML = `
+    ${group('Confidence', CONFIDENCE_OPTIONS, mapView.confidence, 'confidence')}
+    <div class="wc-menu-sep"></div>
+    ${group('Status', STATUS_OPTIONS, mapView.status, 'status')}
+    <div class="wc-menu-sep"></div>
+    <button type="button" class="wc-menu-item" id="ing-filter-clear">Clear filters</button>`;
+
+  document.body.appendChild(pop);
+  const rect = anchor.getBoundingClientRect();
+  const width = pop.offsetWidth;
+  pop.style.top = `${Math.round(rect.bottom + 8)}px`;
+  pop.style.left = `${Math.round(Math.max(12,
+    Math.min(rect.right - width, window.innerWidth - width - 12)))}px`;
+  anchor.setAttribute('aria-expanded', 'true');
+
+  pop.addEventListener('change', (e) => {
+    const box = e.target.closest('[data-filter-group]');
+    if (!box) return;
+    const set = mapView[box.dataset.filterGroup];
+    if (box.checked) set.add(box.value); else set.delete(box.value);
+    onChange();
+  });
+
+  pop.querySelector('#ing-filter-clear')?.addEventListener('click', () => {
+    mapView.confidence.clear();
+    mapView.status.clear();
+    closeFilterPop();
+    onChange();
+  });
+
+  window.__ingFilterDismiss = (e) => {
+    if (e.target.closest('#ing-map-filter-pop')
+      || e.target.closest('#ing-map-filter-btn')) return;
+    closeFilterPop();
+  };
+  // Escape closes it and returns focus to the control that opened it: a menu
+  // you can reach with the keyboard and not leave is a trap.
+  window.__ingFilterKey = (e) => {
+    if (e.key === 'Escape') { closeFilterPop(); anchor.focus(); }
+  };
+  document.addEventListener('click', window.__ingFilterDismiss);
+  document.addEventListener('keydown', window.__ingFilterKey);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1175,12 +1841,22 @@ function renderPdfIngestion(file) {
   // number nobody counted.
   const highConfidence = CONTRACT_VENDOR.extractedTerms.filter((t) => t.confidence === 'HIGH').length;
 
+  const multi = flow.queue.length > 1;
+
   page.innerHTML = `
-    <div class="ing-body">
-      ${topbar()}
+    ${topbar()}
+    <div class="ing-shell">
+      ${flowRailHtml('mapping')}
+      <div class="proj-scroll ing-scroll">
+      <div class="ing-body">
+
+      <div class="ing-crumbs">
+        ${backPillHtml()}
+        ${multi ? `<span class="ing-crumb-step">File ${flow.queueIndex + 1} of ${flow.queue.length}</span>` : ''}
+      </div>
 
       <div class="ing-pdf-layout">
-        <h1 class="ing-title" style="font-size:calc(26*var(--u))">Contract terms</h1>
+        <h1 class="ing-title">Contract terms</h1>
         <p class="ing-subtitle">Your file has been uploaded and stored.</p>
 
         <!-- The Excel/CSV path parses the real file. This one does not: there
@@ -1197,7 +1873,7 @@ function renderPdfIngestion(file) {
         </div>
 
         <div class="ing-pdf-file-card">
-          <span class="ing-file-icon type-pdf" style="width:calc(40*var(--u));height:calc(40*var(--u))">PDF</span>
+          <span class="ing-file-icon type-pdf">PDF</span>
           <div class="ing-pdf-file-meta">
             <div class="ing-pdf-file-name">${ingEsc(file.name)}</div>
             <div class="ing-pdf-file-sub">${formatFileSize(file.sizeBytes)} &middot; stored, not parsed</div>
@@ -1210,7 +1886,7 @@ function renderPdfIngestion(file) {
       </div>
 
       <div class="ing-footer-row">
-        <div class="ing-pdf-actions" style="margin-top:0;flex:1;max-width:calc(560*var(--u));margin-left:auto">
+        <div class="ing-pdf-actions">
           <div class="ing-pdf-actions-col">
             <button type="button" class="proj-btn-primary" id="ing-pdf-continue-btn"><span>Continue &amp; confirm</span>${I.arrowRight}</button>
             <div class="ing-pdf-action-caption">Continue — no contract term is carried into the model</div>
@@ -1221,6 +1897,8 @@ function renderPdfIngestion(file) {
           </div>
         </div>
       </div>
+      </div>
+      </div>
     </div>`;
 
   bindPdfIngestion(file);
@@ -1229,7 +1907,10 @@ function renderPdfIngestion(file) {
 function bindPdfIngestion(file) {
   const review = flow.pdfReview[file.id];
 
-  document.querySelector('#ingestion-page .ing-back-home-btn')?.addEventListener('click', goBackInFlow);
+  const page = document.getElementById('ingestion-page');
+  bindWorkspaceTopbar(page, { help: 'mapping' });
+  bindFlowRail(page);
+  page?.querySelector('.ing-back-home-btn')?.addEventListener('click', goBackInFlow);
 
   function refreshFindings() {
     document.getElementById('ing-findings-slot').innerHTML = findingCardsHtml(file, review);
@@ -1268,6 +1949,7 @@ function bindPdfIngestion(file) {
    ═══════════════════════════════════════════════════════════════ */
 export function showUploadData(project) {
   flow.project = project || null;
+  flow.dataset = null;
   flow.files = [];
   flow.queue = [];
   flow.queueIndex = 0;
@@ -1292,6 +1974,112 @@ export function showUploadData(project) {
   renderUploadData();
   const page = document.getElementById('upload-data-page');
   if (page) { page.classList.remove('hidden'); page.scrollTop = 0; }
+
+  // Then fetch what this project is already running on, and re-render. Async
+  // so the uploader is usable immediately; a project with no dataset simply
+  // renders nothing extra.
+  loadCurrentDataset();
+}
+
+/**
+ * The dataset this project's analysis currently runs on, from the server.
+ *
+ * This is the audit trail: the file, the mapping decisions as confirmed, the
+ * measured quality, the cross-sheet integrity findings, every assumption the
+ * assembly had to make, and when it was committed.
+ */
+async function loadCurrentDataset() {
+  // `getActiveProjectId()` FIRST: it is the id every authoritative request is
+  // already scoped by, and it is set whether the project was opened from the
+  // picker or restored from storage on a reload. `flow.project` and
+  // `getCurrentProject()` are both null on a restored session, which is
+  // exactly the case this panel exists for.
+  const projectId = getActiveProjectId()
+    || flow.project?.id
+    || (window.getCurrentProject && window.getCurrentProject()?.id);
+  if (!projectId) return;
+  try {
+    const res = await ingestionService.getDataset(projectId);
+    flow.dataset = (res && res.status && res.status !== 'NO_DATA') ? res : null;
+  } catch (e) {
+    // A missing audit record is not an error worth blocking the uploader for,
+    // but it must not render as "nothing was uploaded" either.
+    flow.dataset = null;
+  }
+  if (flow.dataset) renderUploadData();
+}
+
+/** The read-only record of the dataset this project is analysing. */
+function currentDatasetHtml() {
+  const d = flow.dataset;
+  if (!d) return '';
+  const c = d.committed;
+  if (!c) {
+    if (!d.preview) return '';
+    return `
+      <div class="ing-card">
+        <div class="ing-card-title">Parsed, not yet analysed</div>
+        <div class="ing-card-sub">This upload has been read but not confirmed,
+          so no KPI runs against it yet.</div>
+      </div>`;
+  }
+
+  const q = c.dataQuality || {};
+  const stats = c.mapStats || {};
+  const when = c.committed_at
+    ? new Date(c.committed_at * 1000).toLocaleString() : 'Not recorded';
+  const files = (c.files || []).map(f =>
+    `<li>${ingEsc(f.name)} &mdash; ${Number(f.rows || 0).toLocaleString()} rows
+       across ${(f.sheets || []).length} sheet(s)</li>`).join('');
+  const integrity = (c.integrity || []).map(i =>
+    `<li style="color:var(--red)">${ingEsc(i.detail)}</li>`).join('');
+  const assumptions = (c.assumptions || []).map(a =>
+    `<li>${ingEsc(a)}</li>`).join('');
+  const issues = (c.issues || []).map(i => `<li>${ingEsc(i)}</li>`).join('');
+  const geo = (c.geography || {}).region;
+
+  return `
+    <div class="ing-card">
+      <div class="ing-card-head-row">
+        <div class="ing-card-title">Current dataset
+          <span class="ing-count-badge">(${(c.files || []).length} file)</span></div>
+        <span class="ing-status-chip">${I.checkCircle}Analysing</span>
+      </div>
+      <div class="ing-card-sub">Committed ${ingEsc(when)} &middot; snapshot
+        <code>${ingEsc(c.snapshot_id || '')}</code></div>
+
+      <ul class="text-sm" style="margin:10px 0 0 18px;line-height:1.8">${files}</ul>
+
+      <div class="ing-stats-row" style="margin-top:12px">
+        <div class="ing-stat-item"><div><div class="ing-stat-value">${stats.auto ?? '—'} / ${stats.detected ?? '—'}</div>
+             <div class="ing-stat-label">columns mapped</div></div></div>
+        <div class="ing-stat-item"><div><div class="ing-stat-value">${stats.ignored ?? '—'}</div>
+             <div class="ing-stat-label">not used by the model</div></div></div>
+        <div class="ing-stat-item"><div><div class="ing-stat-value">${q.validPct ?? '—'}%</div>
+             <div class="ing-stat-label">records valid</div></div></div>
+        <div class="ing-stat-item"><div><div class="ing-stat-value">${c.currency || '—'}</div>
+             <div class="ing-stat-label">currency${geo ? ' &middot; ' + ingEsc(geo) : ''}</div></div></div>
+      </div>
+
+      ${integrity ? `<div class="ing-card-title" style="font-size:13px;margin-top:16px">
+          Referential integrity</div>
+        <ul class="text-sm" style="margin:6px 0 0 18px;line-height:1.7">${integrity}</ul>` : ''}
+
+      ${issues ? `<div class="ing-card-title" style="font-size:13px;margin-top:16px">
+          What the network cannot serve</div>
+        <ul class="text-sm" style="margin:6px 0 0 18px;line-height:1.7">${issues}</ul>` : ''}
+
+      ${assumptions ? `<details style="margin-top:16px">
+          <summary class="ing-card-title" style="font-size:13px;cursor:pointer">
+            Assumptions this reading had to make (${(c.assumptions || []).length})</summary>
+          <ul class="text-sm" style="margin:8px 0 0 18px;line-height:1.7">${assumptions}</ul>
+        </details>` : ''}
+
+      <div class="text-xs" style="color:var(--text-2);margin-top:14px">
+        Uploading a new file below replaces this dataset once you confirm the
+        mapping. Nothing changes until you do.
+      </div>
+    </div>`;
 }
 
 export function hideIngestionPages() {
@@ -1299,8 +2087,6 @@ export function hideIngestionPages() {
     const el = document.getElementById(id);
     if (el) el.classList.add('hidden');
   });
-  const overlay = document.getElementById('loading-modal-overlay');
-  if (overlay) { overlay.classList.remove('active'); overlay.innerHTML = ''; }
 }
 
 export function initIngestion() {

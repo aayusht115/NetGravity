@@ -99,7 +99,9 @@ def main() -> int:
             external.append(url[:140])
         page.on("request", note_request)
 
-        email = f"priya-{uuid.uuid4().hex[:6]}@acme-logistics.in"
+        # Sign-up is restricted to the one work domain, so the address is a
+        # kearney.com one even though the network under test is a client's.
+        email = f"priya-{uuid.uuid4().hex[:6]}@kearney.com"
         page.goto(BASE, wait_until="networkidle", timeout=60000)
         page.wait_for_timeout(1500)
 
@@ -124,6 +126,7 @@ def main() -> int:
         page.fill("#signup-name", USER_NAME)
         page.fill("#signup-email", email)
         page.fill("#signup-password", "Netgravity@2026")
+        page.fill("#signup-password-confirm", "Netgravity@2026")
         page.evaluate("window.completeAuth('signup')")
         page.wait_for_selector("#create-project-page:not(.hidden)", timeout=30000)
         page.fill("#proj-name", "Acme Network")

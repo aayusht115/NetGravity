@@ -37,7 +37,8 @@ import {
   SOLVED_STATE_KEY, setNetworkPeriods, OBSERVED_UTILISATION,
   setAuthoritativeBaseline, clearDemoNarrative, loadNetworkData,
   setForecastSeries, getOptimizedBaseCase, applyInsightResponse,
-  applyHorizon, SOLVE_HORIZON,
+  applyHorizon, SOLVE_HORIZON, setActiveCurrency, setNetworkGeography,
+  applySystemStatus, MARKETS, setForecastCatalogue,
 } from '../data.js';
 
 /** Read a KPIResult; a non-VALID status yields null, never 0. */
@@ -67,30 +68,30 @@ function publishForecastMeta(meta) {
  * Returns null when nothing is forecastable, so the caller can render an
  * explicit empty state instead of a cone.
  */
-function pickForecastSeries(fc) {
-  const all = (fc && fc.series) || [];
-  const usable = all.filter((s) => (s.points || []).length && s.ok !== false);
-  if (!usable.length) return null;
-
-  const lastObserved = (s) => {
-    const h = s.history || s.observed || [];
-    return h.length ? Number(h[h.length - 1].quantity ?? h[h.length - 1]) || 0 : 0;
-  };
-  const biggest = usable.reduce((best, s) => {
-    const size = lastObserved(s) || (s.points[0]?.mean ?? 0);
-    return size > (best.size ?? -1) ? { s, size } : best;
-  }, {}).s;
-
-  const hist = biggest.history || biggest.observed || [];
-  const histLabels = hist.map((p, i) => p.timestamp || p.period || `T${i + 1}`);
-  const histValues = hist.map((p) => Number(p.quantity ?? p));
-
-  const pts = biggest.points || [];
+/** One engine series, reshaped for the chart. */
+function reshapeForecastSeries(series, names) {
+  const hist = series.history || series.observed || [];
+  const pts = series.points || [];
+  const marketName = names.markets[series.market_id];
+  const productName = names.products[series.product_id];
   return {
-    seriesLabel: `${biggest.market_id}/${biggest.product_id}`,
-    accuracy: biggest.accuracy || null,
-    engine: biggest.engine || '',
-    history: { labels: histLabels, values: histValues },
+    key: `${series.market_id}/${series.product_id}`,
+    // Names where the upload supplies them, ids as the secondary detail. The
+    // screen showed "M002/P001" and nothing else, which is an internal key a
+    // planner has no reason to recognise.
+    label: [marketName || series.market_id, productName || series.product_id]
+      .join(' · '),
+    marketId: series.market_id,
+    productId: series.product_id,
+    latestObserved: hist.length
+      ? Number(hist[hist.length - 1].quantity ?? hist[hist.length - 1]) || 0 : 0,
+    seriesLabel: `${series.market_id}/${series.product_id}`,
+    accuracy: series.accuracy || null,
+    engine: series.engine || '',
+    history: {
+      labels: hist.map((p, i) => p.timestamp || p.period || `T${i + 1}`),
+      values: hist.map((p) => Number(p.quantity ?? p)),
+    },
     forecast: {
       labels: pts.map((p) => `+${p.period}`),
       values: pts.map((p) => Math.round(p.mean)),
@@ -100,6 +101,25 @@ function pickForecastSeries(fc) {
       lower: pts.every((p) => p.p10 != null) ? pts.map((p) => Math.round(p.p10)) : [],
     },
   };
+}
+
+/**
+ * Reshape EVERY forecastable series, largest first.
+ *
+ * The engine forecasts every market-product pair — 60 of them on the US
+ * workbook — and this returned exactly one, the largest, with no way to reach
+ * the other 59. "59 series forecast" was reported beside a chart locked to
+ * M002/P001. The work was done and 98% of it was unreachable.
+ *
+ * Sorted by latest observed demand so the default selection is still the
+ * series that matters most.
+ */
+function reshapeAllForecastSeries(fc, names) {
+  const all = (fc && fc.series) || [];
+  const usable = all.filter((s) => (s.points || []).length && s.ok !== false);
+  return usable
+    .map((s) => reshapeForecastSeries(s, names))
+    .sort((a, b) => b.latestObserved - a.latestObserved);
 }
 
 /**
@@ -144,6 +164,16 @@ async function loadStructure(projectId) {
       color: '#6B2FA0',
     });
   });
+
+  // The money unit and the geographic extent this network states about itself.
+  //
+  // Set FIRST, before anything renders a figure or draws a map: every
+  // `formatCurrency` call downstream reads the active currency, and the map
+  // fits the bounds. Both used to be hardcoded — "₹" with lakh grouping, and
+  // an India basemap — so a US network was priced in rupees and drawn over
+  // the Deccan.
+  setActiveCurrency(res.currency || null);
+  setNetworkGeography(res.geography || null);
 
   // The periods the upload actually states, and the calendar length the
   // optimiser prices one at. Set BEFORE `loadNetworkData`, because the seed it
@@ -232,9 +262,15 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
 
   // Report a stage only when it has genuinely started or finished. A caller
   // that passes no callback pays nothing.
-  const stage = (id, state, detail) => {
+  //
+  // `executionId` is the orchestrator's own id for the run that produced the
+  // response, when the route reports one. It is passed on rather than used
+  // here: the loading screen fetches that execution's trace and shows which
+  // capabilities actually ran, how many attempts each took and which failed —
+  // detail the client cannot know from the response body alone.
+  const stage = (id, state, detail, executionId) => {
     if (typeof onStage === 'function') {
-      try { onStage(id, state, detail); } catch (e) { /* never break hydration */ }
+      try { onStage(id, state, detail, executionId); } catch (e) { /* never break hydration */ }
     }
   };
 
@@ -258,7 +294,8 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
     kpiService.getFlowKPIs(pid).catch(() => null),
   ]);
   stage('solve', 'done', `${Object.values((networkRes && networkRes.kpis) || {})
-    .filter((r) => r && r.status === 'VALID').length} KPIs computed`);
+    .filter((r) => r && r.status === 'VALID').length} KPIs computed`,
+    networkRes && networkRes.execution_id);
 
   const k = (networkRes && networkRes.kpis) || {};
 
@@ -560,7 +597,8 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
   }
   stage('insights', 'done', insightCount
     ? `${insightCount} finding${insightCount === 1 ? '' : 's'}`
-    : 'no findings');
+    : 'no findings',
+    insightResponse && insightResponse.execution_id);
 
   // ---- Scenarios -------------------------------------------------------
   // Only scenarios actually solved for this project. The two fabricated
@@ -613,7 +651,16 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
   stage('forecast', 'start');
   try {
     const fc = await forecastService.getForecast(pid, 6);
-    const chosen = pickForecastSeries(fc);
+    // Market and product NAMES, so a series reads as "New York Metro ·
+    // Sparkling Water" rather than "M002/P001".
+    const names = {
+      markets: Object.fromEntries(
+        ((structure && structure.markets) || []).map((m) => [m.id, m.name])),
+      products: Object.fromEntries(
+        ((structure && structure.products) || []).map((p2) => [p2.id, p2.name])),
+    };
+    const allSeries = reshapeAllForecastSeries(fc, names);
+    const chosen = allSeries[0] || null;
     if (chosen) {
       forecastReport = {
         status: fc.status || 'OK',
@@ -621,8 +668,14 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
         shown: chosen.seriesLabel,
         engine: chosen.engine,
         accuracy: chosen.accuracy || null,
+        // The orchestrator's id for the run that produced this forecast, so
+        // the loading screen can read its trace.
+        executionId: fc.execution_id || null,
       };
       publishForecastMeta(forecastReport);
+      // Every forecastable series is handed to the screens; the largest is
+      // selected. A selector can now reach the rest.
+      setForecastCatalogue(allSeries);
       setForecastSeries(chosen);
     } else {
       forecastReport = {
@@ -630,6 +683,7 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
         reason: fc.message || '',
       };
       publishForecastMeta(forecastReport);
+      setForecastCatalogue([]);
       setForecastSeries({});
     }
   } catch (e) {
@@ -637,10 +691,32 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
     // empty state and says why rather than drawing a fabricated cone.
     forecastReport = { status: 'UNAVAILABLE', series: 0, reason: e?.message || '' };
     publishForecastMeta(forecastReport);
+    setForecastCatalogue([]);
     setForecastSeries({});
   }
   stage('forecast', 'done', forecastReport.series
-    ? `${forecastReport.series} series` : String(forecastReport.status).toLowerCase());
+    ? `${forecastReport.series} series` : String(forecastReport.status).toLowerCase(),
+    forecastReport.executionId);
+
+  // ---- Model governance metadata --------------------------------------
+  // What the Settings screen reports. Written from the run that produced the
+  // figures above, replacing a hardcoded block that described 42 facilities,
+  // 380 lanes and an ARIMA forecast for every project ever opened.
+  //
+  // Last, because it summarises everything the stages before it loaded.
+  applySystemStatus({
+    network: {
+      observedPeriods: (structure && structure.observedPeriods) || [],
+      qualityPct: null,
+    },
+    analysis: networkRes || null,
+    forecast: {
+      model: forecastReport.engine || null,
+      horizon: forecastReport.series ? SOLVE_HORIZON.periodsModelled : null,
+      generatedAt: (networkRes && networkRes.computed_at)
+        ? new Date(networkRes.computed_at * 1000).toISOString() : null,
+    },
+  });
 
   if (typeof window !== 'undefined') {
     // A read-only snapshot of what hydration actually wrote, so a validation

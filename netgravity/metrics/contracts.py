@@ -275,6 +275,9 @@ def build_network_state_result(
         flows             = flows,
         periods_modelled  = periods_modelled,
         period_labels     = labels,
+        # Carried from the network, not assumed. Every money figure above is
+        # denominated in this.
+        currency          = getattr(network, "currency", None),
         cost_per_period   = round(costs.business_network_cost / periods_modelled, 4),
         avg_utilization_pct = round(kpis.avg_utilization_pct, 4) if kpis else 0.0,
         max_utilization_pct = round(kpis.max_utilization_pct, 4) if kpis else 0.0,

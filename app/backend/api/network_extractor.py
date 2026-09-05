@@ -139,6 +139,226 @@ RATE_COLS = ("rate_per_unit", "transport_cost_per_unit", "cost_per_unit", "freig
 LEAD_COLS = ("transit_time_days", "lead_time_days", "transit_days", "lead_time", "transit_time")
 DEMAND_COLS = ("demand_units", "demand_quantity", "quantity_units", "demand",
                "quantity", "units", "volume")
+DISTANCE_KM_COLS = ("distance_km", "distance_kms", "distance_kilometres",
+                    "distance_kilometers", "distance", "dist", "km")
+#: Distance stated in miles. A US workbook says `Distance_Miles`, which matched
+#: no alias at all, so every lane was read with no distance: 51 corridors at
+#: 0 km, zero carbon, and a distance-weighted average of zero. Miles are a unit
+#: of the same quantity, not a different field, so they are converted here and
+#: the conversion is stated in the notes rather than performed silently.
+DISTANCE_MI_COLS = ("distance_miles", "distance_mi", "distance_mile", "miles", "mi")
+#: One statute mile in kilometres, exactly.
+MILES_TO_KM = 1.609344
+MODE_COLS = ("transport_mode", "mode", "transportation_mode", "shipping_mode",
+             "service_mode", "freight_mode", "modal")
+HANDLING_COLS = ("handling_cost_per_unit", "handling_cost", "variable_cost_per_unit",
+                 "cost_per_unit_handled", "handling_rate")
+COST_TYPE_COLS = ("cost_type", "cost_category", "expense_type")
+EFFECTIVE_DATE_COLS = ("effective_date", "valid_from", "effective_from", "as_of")
+CURRENCY_COLS = ("currency", "ccy", "rate_currency", "currency_code")
+
+#: ISO 4217 codes this build recognises when a header names its unit, e.g.
+#: `Monthly_Cost_USD`. Deliberately a closed list: a three-letter suffix that
+#: is not a currency (`Facility_ID_XYZ`) must not be read as one.
+_ISO_CURRENCIES: frozenset = frozenset({
+    "INR", "USD", "EUR", "GBP", "JPY", "CNY", "AUD", "CAD", "CHF", "SGD",
+    "AED", "SAR", "ZAR", "BRL", "MXN", "SEK", "NOK", "DKK", "PLN", "TRY",
+    "THB", "IDR", "MYR", "PHP", "VND", "KRW", "HKD", "NZD", "ILS", "RUB",
+})
+
+#: Transport modes the telemetry layer can describe. An uploaded value is
+#: normalised onto one of these when it is recognised and kept verbatim
+#: otherwise — a mode this build has no opinion about is still the client's
+#: mode, and overwriting it with "ROAD" is what produced a US network whose
+#: rail and intermodal corridors all reported as road freight.
+_MODE_SYNONYMS: Dict[str, Tuple[str, ...]] = {
+    "ROAD": ("road", "truck", "trucking", "tl", "truckload", "ftl", "ltl",
+             "less_than_truckload", "less than truckload", "surface", "highway"),
+    "RAIL": ("rail", "train", "railway", "railroad"),
+    "INTERMODAL": ("intermodal", "multimodal", "imdl", "rail_road", "piggyback"),
+    "AIR": ("air", "airfreight", "air_freight", "aviation", "flight"),
+    "SEA": ("sea", "ocean", "vessel", "marine", "shipping", "fcl", "lcl", "barge"),
+    "PARCEL": ("parcel", "courier", "express", "small_parcel"),
+}
+
+
+def normalise_transport_mode(raw: str) -> Optional[str]:
+    """
+    Map an uploaded transport-mode value onto a known mode.
+
+    Returns the upper-cased original when the value is unrecognised, and None
+    when the cell is empty. It never returns a substitute for a missing value:
+    a lane with no stated mode has no mode, which is a different fact from a
+    lane that travels by road.
+    """
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    key = text.lower().replace("-", "_").replace(" ", "_")
+    for mode, aliases in _MODE_SYNONYMS.items():
+        if key in aliases or key.replace("_", " ") in aliases:
+            return mode
+    return text.upper()
+
+
+#: Coarse geographic extent, from coordinates the upload actually states.
+#:
+#: Every project was created as `region="India"` regardless of its data, so a
+#: US network was labelled an India network on every screen that names the
+#: geography. The bounding box of the uploaded nodes is evidence the file
+#: carries; this reads it rather than assuming. Anything that does not sit
+#: inside one of these boxes is reported as "Global", never as a guess.
+_REGION_BOXES: Tuple[Tuple[str, float, float, float, float], ...] = (
+    # (label, lat_min, lat_max, lng_min, lng_max)
+    ("India", 6.0, 37.5, 67.0, 98.0),
+    ("United States", 18.0, 72.0, -180.0, -66.0),
+    ("Europe", 34.0, 72.0, -12.0, 45.0),
+    ("Southeast Asia", -11.0, 29.0, 92.0, 142.0),
+    ("China", 17.0, 54.0, 73.0, 135.0),
+    ("Middle East", 12.0, 42.0, 34.0, 64.0),
+    ("Africa", -35.0, 38.0, -18.0, 52.0),
+    ("South America", -56.0, 13.0, -82.0, -34.0),
+    ("Oceania", -48.0, -9.0, 110.0, 180.0),
+)
+
+
+#: Which country an administrative region belongs to.
+#:
+#: Rectangles cannot separate the United States from Canada, and it is not a
+#: near miss: the box that holds Alaska (lat 72) and Hawaii (lat 18) holds the
+#: whole of Canada inside it, so a Canadian network was reported as "United
+#: States" with a confidence of 0.857 and a basis line that read "6 of 7 node
+#: coordinate(s) fall inside United States." Tightening the box does not help
+#: either — Toronto (43.65N) and Windsor (42.3N) sit SOUTH of Seattle,
+#: Minneapolis and half of Maine, so no horizontal line divides the two.
+#:
+#: What does divide them is what the upload says. The facilities and markets
+#: sheets carry a State/Province column, and "Ontario" is not ambiguous. This
+#: is evidence the file states rather than geometry inferred from it, so it is
+#: consulted first and the box is the fallback.
+#:
+#: Only this one pair is tabulated, because this is the one pair the boxes get
+#: wrong. Everywhere else the coordinates are decisive on their own.
+_CANADA_ADMIN: Tuple[str, ...] = (
+    "alberta", "british columbia", "manitoba", "new brunswick",
+    "newfoundland and labrador", "newfoundland", "northwest territories",
+    "nova scotia", "nunavut", "ontario", "prince edward island", "quebec",
+    "quebec (qc)", "saskatchewan", "yukon", "yukon territory",
+    # Canada Post abbreviations. None of these collide with a USPS code.
+    "ab", "bc", "mb", "nb", "nl", "nt", "ns", "nu", "on", "pe", "qc", "sk",
+    "yt",
+)
+
+_US_ADMIN: Tuple[str, ...] = (
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+    "connecticut", "delaware", "district of columbia", "florida", "georgia",
+    "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky",
+    "louisiana", "maine", "maryland", "massachusetts", "michigan",
+    "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada",
+    "new hampshire", "new jersey", "new mexico", "new york",
+    "north carolina", "north dakota", "ohio", "oklahoma", "oregon",
+    "pennsylvania", "rhode island", "south carolina", "south dakota",
+    "tennessee", "texas", "utah", "vermont", "virginia", "washington",
+    "west virginia", "wisconsin", "wyoming",
+    "al", "ak", "az", "ar", "ca", "co", "ct", "de", "dc", "fl", "ga", "hi",
+    "id", "il", "in", "ia", "ks", "ky", "la", "ma", "md", "me", "mi", "mn",
+    "mo", "ms", "mt", "nc", "nd", "ne", "nh", "nj", "nm", "nv", "ny", "oh",
+    "ok", "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "va", "vt", "wa",
+    "wi", "wv", "wy",
+)
+
+_ADMIN_TO_COUNTRY: Dict[str, str] = {}
+for _name in _CANADA_ADMIN:
+    _ADMIN_TO_COUNTRY[_name] = "Canada"
+for _name in _US_ADMIN:
+    # "Quebec" is a Canadian province and a small town in several US states;
+    # the abbreviations do not overlap at all. Nothing here overwrites a
+    # Canadian entry.
+    _ADMIN_TO_COUNTRY.setdefault(_name, "United States")
+
+
+def _stated_country(nodes: List[Dict[str, Any]]) -> Tuple[Optional[str], int, int]:
+    """
+    The country the upload's own State/Province column names, if it names one.
+
+    Returns (country, agreeing nodes, nodes that stated a recognised region).
+    `country` is None unless at least three quarters of the nodes that state a
+    recognised region agree — a single mislabelled row must not relabel a
+    network, and a network genuinely spanning the border is not either country.
+    """
+    votes: Dict[str, int] = {}
+    for node in nodes:
+        key = str(node.get("state") or "").strip().lower()
+        if not key:
+            continue
+        country = _ADMIN_TO_COUNTRY.get(key)
+        if country:
+            votes[country] = votes.get(country, 0) + 1
+    if not votes:
+        return None, 0, 0
+    stated = sum(votes.values())
+    best, count = max(votes.items(), key=lambda kv: kv[1])
+    if count / stated < 0.75:
+        return None, count, stated
+    return best, count, stated
+
+
+def infer_geography(nodes: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Where this network is, from what the upload states and what it implies.
+
+    Returns the inferred region label, the bounding box a map should fit to,
+    and the share of the evidence that supports the label — so a caller can
+    show the basis for the label instead of asserting it. `region` is None when
+    the upload carries no usable coordinates at all.
+
+    Two kinds of evidence, in order: the province/state the file NAMES (see
+    `_ADMIN_TO_COUNTRY`), and failing that the box the coordinates fall in.
+    The bounding box a map frames to always comes from the coordinates, and is
+    unaffected by which label was chosen.
+    """
+    points = [(n.get("latSource", n.get("lat")), n.get("lngSource", n.get("lng")))
+              for n in nodes]
+    points = [(la, ln) for la, ln in points
+              if isinstance(la, (int, float)) and isinstance(ln, (int, float))]
+    if not points:
+        return {"region": None, "bounds": None, "confidence": 0.0,
+                "basis": "The upload carries no latitude/longitude values."}
+
+    lats = [p[0] for p in points]
+    lngs = [p[1] for p in points]
+    bounds = {"latMin": min(lats), "latMax": max(lats),
+              "lngMin": min(lngs), "lngMax": max(lngs)}
+
+    # What the file says, before what its coordinates imply.
+    stated, agree, of_stated = _stated_country(nodes)
+    if stated:
+        return {
+            "region": stated, "bounds": bounds,
+            "confidence": round(agree / of_stated, 3),
+            "basis": (f"{agree} of {of_stated} node(s) name a state or province "
+                      f"in {stated}."),
+        }
+
+    best_label, best_share = None, 0.0
+    for label, la0, la1, ln0, ln1 in _REGION_BOXES:
+        inside = sum(1 for la, ln in points if la0 <= la <= la1 and ln0 <= ln <= ln1)
+        share = inside / len(points)
+        if share > best_share:
+            best_label, best_share = label, share
+
+    # A network spanning two continents is not "mostly" either of them.
+    if best_share < 0.6:
+        return {"region": "Global", "bounds": bounds, "confidence": round(best_share, 3),
+                "basis": (f"{len(points)} node coordinate(s) do not fall predominantly "
+                          f"inside any single region.")}
+    return {
+        "region": best_label,
+        "bounds": bounds,
+        "confidence": round(best_share, 3),
+        "basis": (f"{int(best_share * len(points))} of {len(points)} node "
+                  f"coordinate(s) fall inside {best_label}."),
+    }
 
 
 def classify_sheet(df: "pd.DataFrame") -> str:
@@ -168,6 +388,16 @@ def classify_sheet(df: "pd.DataFrame") -> str:
     # --- reference tables keyed by another table's id ---
     if has(*LANE_ID_COLS) and has(*RATE_COLS) and not has("origin_id", "from", "origin"):
         return "lane_rates"
+    # A warehouse cost table is keyed by facility and states a cost line per
+    # site, not a site. Checked before "facilities" for the same reason the
+    # time series are: it shares the facility id column with the master sheet.
+    #
+    # Until this existed the sheet fell to "unknown" and nothing was read from
+    # it, so `Cost_Per_Unit_Handled` — which every DC in the US workbook states
+    # — never reached the model. Handling cost was zero network-wide and the
+    # optimiser moved units between sites as if handling them were free.
+    if has(*FACILITY_ID_COLS) and (has(*COST_TYPE_COLS) or has("cost_per_unit_handled")):
+        return "warehouse_costs"
 
     # --- master tables ---
     if has("origin_id", "destination_id") or (has("from") and has("to")):
@@ -208,8 +438,7 @@ _COLUMN_ROLES: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
         ("Facility capacity", CAPACITY_COLS),
         ("Fixed cost", ("fixed_cost", "fixed_cost_monthly", "fixed_cost_per_month",
                         "annual_fixed_cost", "fixed_cost_per_year")),
-        ("Handling cost per unit", ("handling_cost_per_unit", "handling_cost",
-                                    "variable_cost_per_unit")),
+        ("Handling cost per unit", HANDLING_COLS),
         ("Latitude", ("latitude", "lat")),
         ("Longitude", ("longitude", "lng", "lon", "long")),
         ("City", ("city", "location", "town")),
@@ -231,7 +460,9 @@ _COLUMN_ROLES: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
         ("Lane ID", LANE_ID_COLS),
         ("Origin", ("origin_id", "from", "origin", "source_id")),
         ("Destination", ("destination_id", "to", "destination", "dest_id")),
-        ("Distance (km)", ("distance_km", "distance", "dist", "km")),
+        ("Distance (km)", DISTANCE_KM_COLS),
+        ("Distance (miles, converted to km)", DISTANCE_MI_COLS),
+        ("Transport mode", MODE_COLS),
         ("Transit time (days)", LEAD_COLS),
         ("Lane capacity", ("capacity_units", "lane_capacity", "max_units")),
         ("Freight rate", RATE_COLS),
@@ -262,7 +493,15 @@ _COLUMN_ROLES: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
         ("Lane ID", LANE_ID_COLS),
         ("Product ID", PRODUCT_ID_COLS),
         ("Freight rate", RATE_COLS),
-        ("Currency", ("currency", "ccy", "rate_currency")),
+        ("Currency", CURRENCY_COLS),
+    ),
+    "warehouse_costs": (
+        ("Facility ID", FACILITY_ID_COLS),
+        ("Cost type", COST_TYPE_COLS),
+        ("Handling cost per unit", HANDLING_COLS),
+        ("Monthly facility cost", ("monthly_cost", "monthly_cost_usd", "monthly_cost_inr",
+                                   "cost_per_month", "monthly_amount")),
+        ("Effective date", EFFECTIVE_DATE_COLS),
     ),
     "signals": (
         ("Signal ID", ("signal_id", "id")),
@@ -274,6 +513,51 @@ _COLUMN_ROLES: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
         ("Event probability", ("event_probability", "probability", "likelihood")),
     ),
 }
+
+#: The sheet name this application looks for, per role. Any of the aliases in
+#: `classify_sheet` still work — a sheet is identified by its columns, not its
+#: name — but these are the names the downloadable template uses, so a workbook
+#: built from it classifies without ambiguity.
+SHEET_TEMPLATE_NAMES: Dict[str, str] = {
+    "facilities": "Facilities",
+    "markets": "Markets",
+    "lanes": "Lanes",
+    "products": "Products",
+    "demand_history": "Demand_History",
+    "capacity_history": "Capacity_History",
+    "lane_rates": "Lane_Rates",
+    "warehouse_costs": "Warehouse_Costs",
+    "signals": "Signals",
+}
+
+
+def upload_schema() -> List[Dict[str, Any]]:
+    """
+    The sheets and columns this build reads, for the upload template.
+
+    Derived from `_COLUMN_ROLES` — the same table `classify_column_name` uses —
+    so a template can never describe a column the parser does not recognise, and
+    a column added to the parser appears in the template without anyone
+    remembering to add it. The first alias is the preferred header because it is
+    the one `classify_sheet` and `classify_column_name` were written around.
+    """
+    sheets: List[Dict[str, Any]] = []
+    for role, entries in _COLUMN_ROLES.items():
+        columns = []
+        for label, aliases in entries:
+            ordered = list(dict.fromkeys(aliases))
+            columns.append({
+                "label": label,
+                "header": ordered[0] if ordered else label,
+                "accepted": ordered,
+            })
+        sheets.append({
+            "role": role,
+            "sheet": SHEET_TEMPLATE_NAMES.get(role, role.title()),
+            "columns": columns,
+        })
+    return sheets
+
 
 #: What the UI offers in its "mapped to" dropdown, and the label for a column
 #: this build does not read.
@@ -467,7 +751,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         cap_col = _pick(cl, *CAPACITY_COLS)
         fixed_col = _pick(cl, "fixed_cost", "fixed_cost_monthly", "fixed_cost_per_month",
                           "annual_fixed_cost", "fixed_cost_per_year")
-        handling_col = _pick(cl, "handling_cost_per_unit", "handling_cost", "variable_cost_per_unit")
+        handling_col = _pick(cl, *HANDLING_COLS)
         status_col = _pick(cl, "status", "active")
 
         for idx, row in df.iterrows():
@@ -560,12 +844,23 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
             })
 
     # ---- Lanes -------------------------------------------------------
+    miles_converted = 0
+    modes_read: Dict[str, int] = {}
+    #: Every lane id the sheet DEFINES, including the inactive ones the model
+    #: does not carry. A rate priced against a lane the client has switched off
+    #: is unused, not dangling, and reporting it as a broken reference would
+    #: send someone hunting for a row that is exactly where it should be.
+    defined_lane_ids: set = set()
     for _, df in sheets("lanes"):
         cl = {str(c).strip().lower(): c for c in df.columns}
         lane_id_col = _pick(cl, *LANE_ID_COLS)
         from_col = _pick(cl, "origin_id", "from", "origin", "source_id")
         to_col = _pick(cl, "destination_id", "to", "destination", "dest_id")
-        dist_col = _pick(cl, "distance_km", "distance", "dist", "km")
+        dist_col = _pick(cl, *DISTANCE_KM_COLS)
+        # Only consulted when the sheet states no kilometre column, so a
+        # workbook carrying both is read in its canonical unit.
+        miles_col = _pick(cl, *DISTANCE_MI_COLS)
+        mode_col = _pick(cl, *MODE_COLS)
         rate_col = _pick(cl, *RATE_COLS)
         lead_col = _pick(cl, *LEAD_COLS)
         dest_type_col = _pick(cl, "destination_type", "dest_type", "to_type")
@@ -576,15 +871,35 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
             f_id, t_id = _text(row, from_col), _text(row, to_col)
             if not f_id or not t_id:
                 continue
+            lane_id = _text(row, lane_id_col)
+            if lane_id:
+                defined_lane_ids.add(lane_id)
             active = _text(row, active_col).upper()
             if active in ("FALSE", "0", "N", "NO", "INACTIVE"):
                 continue
+
+            distance_km = _num(row, dist_col)
+            distance_source = "km" if distance_km is not None else None
+            if distance_km is None and miles_col is not None:
+                miles = _num(row, miles_col)
+                if miles is not None:
+                    distance_km = round(miles * MILES_TO_KM, 3)
+                    distance_source = "miles"
+                    miles_converted += 1
+
+            mode = normalise_transport_mode(_text(row, mode_col))
+            if mode:
+                modes_read[mode] = modes_read.get(mode, 0) + 1
 
             lanes.append({
                 "laneId": _text(row, lane_id_col) or None,
                 "from": f_id,
                 "to": t_id,
-                "distance": _num(row, dist_col),
+                "distance": distance_km,
+                #: Which unit the distance was stated in, so a screen can say
+                #: "converted from miles" rather than presenting a derived
+                #: number as though it were the source's own.
+                "distanceSource": distance_source,
                 # None when the sheet carries no rate. Rates are joined from a
                 # Transportation_Rates table below when one exists.
                 "cost": _num(row, rate_col),
@@ -592,9 +907,33 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 "capacity": _num(row, cap_col),
                 # Flow is a solver OUTPUT, not an input.
                 "flow": None,
-                "mode": "ROAD",
+                # The uploaded mode, or None. This was the literal "ROAD" for
+                # every lane ever parsed, which reported a rail-and-intermodal
+                # US network as pure road freight — and made mode-sensitive
+                # cost, emissions and modal-shift analysis meaningless.
+                "mode": mode,
                 "destType": _text(row, dest_type_col).upper() or None,
             })
+
+    if miles_converted:
+        notes.append(
+            f"{miles_converted} lane(s) state distance in miles; converted to "
+            f"kilometres at {MILES_TO_KM} km/mile. The source values are "
+            f"unchanged."
+        )
+    if modes_read:
+        notes.append(
+            "Transport mode read from the upload for "
+            f"{sum(modes_read.values())} lane(s): "
+            + ", ".join(f"{m} ({n})" for m, n in sorted(modes_read.items()))
+            + "."
+        )
+    elif lanes:
+        notes.append(
+            "No transport-mode column was recognised on the lanes sheet, so no "
+            "lane carries a mode. Mode-sensitive cost and emissions figures are "
+            "reported as unavailable rather than assumed to be road freight."
+        )
 
     # ---- Lane rates (normalised freight table) -----------------------
     # Rate_Per_Unit lives per (Lane_ID, Product_ID). The lane carries the mean
@@ -603,12 +942,22 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
     # assembler, which builds one lane per product.
     rates_by_lane: Dict[str, Dict[str, float]] = {}
     currencies: set = set()
+    #: The money unit every cost in this network is stated in.
+    #:
+    #: The workbook says so — the US file's rates table carries `Currency=USD`
+    #: on all 268 rows — and this value was detected here and then thrown away.
+    #: Every downstream layer instead hardcoded INR: the metric registry's
+    #: `unit="INR"`, the evidence formatter's `₹`, and the browser's
+    #: `formatCurrency`. A USD network's ₹23,226,260 baseline was not a
+    #: formatting slip; it was the wrong unit on an authoritative figure.
+    currency: Optional[str] = None
+    currency_basis: str = ""
     for _, df in sheets("lane_rates"):
         cl = {str(c).strip().lower(): c for c in df.columns}
         lane_col = _pick(cl, *LANE_ID_COLS)
         prod_col = _pick(cl, *PRODUCT_ID_COLS)
         rate_col = _pick(cl, *RATE_COLS)
-        currency_col = _pick(cl, "currency", "ccy", "rate_currency")
+        currency_col = _pick(cl, *CURRENCY_COLS)
         for _, row in df.iterrows():
             lid, rate = _text(row, lane_col), _num(row, rate_col)
             if not lid or rate is None:
@@ -629,6 +978,38 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
             f"exchange rate was supplied, and guessing one would change the "
             f"optimal answer."
         )
+    elif len(currencies) == 1:
+        currency = next(iter(currencies))
+        currency_basis = "stated by the freight rates table"
+        notes.append(
+            f"Money in this network is {currency}, as stated by the freight "
+            f"rates table. Every cost figure is reported in {currency}."
+        )
+
+    if currency is None:
+        # Second-best evidence: a money column that names its unit in the
+        # header, as `Monthly_Cost_USD` and `Held_Units_Value_USD` do. Only
+        # accepted when every such header agrees; two disagreeing suffixes are
+        # no better than none.
+        suffixed: set = set()
+        for _label, df in tables.items():
+            for col in df.columns:
+                m = re.search(r"_([A-Z]{3})$", str(col).strip())
+                if m and m.group(1) in _ISO_CURRENCIES:
+                    suffixed.add(m.group(1))
+        if len(suffixed) == 1:
+            currency = next(iter(suffixed))
+            currency_basis = "named in a money column header"
+            notes.append(
+                f"Money in this network is {currency}, taken from column "
+                f"headers that name the unit. No rates table stated a currency."
+            )
+        else:
+            notes.append(
+                "No column in this upload states a currency, so cost figures "
+                "are reported as amounts without a currency symbol rather than "
+                "labelled with a unit the data does not support."
+            )
 
     if rates_by_lane:
         priced = 0
@@ -644,6 +1025,80 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
             f"Freight rates joined from a separate rates table for {priced} of "
             f"{len(lanes)} lane(s), keyed by lane id."
         )
+
+    # ---- Warehouse costs ---------------------------------------------
+    # A per-site cost table, one row per cost line (RENT, LABOR, UTILITIES…),
+    # each stating what that line costs per unit handled. The total handling
+    # cost of a unit is the sum of those lines.
+    #
+    # Two things this must get right on real client data, both of which the US
+    # workbook exercises deliberately:
+    #
+    #   * the same cost line restated at a later effective date supersedes the
+    #     earlier one — it is a rent review, not a second rent;
+    #   * identical rows repeated (F006's RENT appears ten times) are one fact
+    #     recorded ten times, not ten costs. Summing them gave F006 a handling
+    #     cost of 39.69/unit against a true 9.84 — four times its real cost, on
+    #     a figure the optimiser uses to choose which site handles a unit.
+    #
+    # So rows are reduced to one per (facility, cost type), keeping the latest
+    # effective date, before anything is added up.
+    handling_by_facility: Dict[str, Dict[str, Tuple[str, float]]] = {}
+    monthly_by_facility: Dict[str, Dict[str, Tuple[str, float]]] = {}
+    wc_rows = 0
+    for _, df in sheets("warehouse_costs"):
+        cl = {str(c).strip().lower(): c for c in df.columns}
+        fac_col = _pick(cl, *FACILITY_ID_COLS)
+        type_col = _pick(cl, *COST_TYPE_COLS)
+        unit_col = _pick(cl, *HANDLING_COLS)
+        monthly_col = _pick(cl, "monthly_cost", "monthly_cost_usd", "monthly_cost_inr",
+                            "cost_per_month", "monthly_amount")
+        date_col = _pick(cl, *EFFECTIVE_DATE_COLS)
+        for _, row in df.iterrows():
+            fid = _text(row, fac_col)
+            if not fid:
+                continue
+            wc_rows += 1
+            # A table with no cost-type column states one line per site.
+            line = _text(row, type_col).upper() or "TOTAL"
+            eff = _text(row, date_col)  # ISO dates sort lexicographically
+            per_unit = _num(row, unit_col)
+            monthly = _num(row, monthly_col)
+            if per_unit is not None:
+                prev = handling_by_facility.setdefault(fid, {}).get(line)
+                if prev is None or eff >= prev[0]:
+                    handling_by_facility[fid][line] = (eff, per_unit)
+            if monthly is not None:
+                prev_m = monthly_by_facility.setdefault(fid, {}).get(line)
+                if prev_m is None or eff >= prev_m[0]:
+                    monthly_by_facility[fid][line] = (eff, monthly)
+
+    if handling_by_facility:
+        applied = 0
+        for node in plants + dcs:
+            lines = handling_by_facility.get(node["id"])
+            if not lines:
+                continue
+            # Only fills a gap. A handling cost stated on the facilities sheet
+            # is the client's own consolidated figure and wins.
+            if node.get("handlingCost") is None:
+                node["handlingCost"] = round(sum(v for _d, v in lines.values()), 4)
+                node["handlingCostLines"] = {k: v for k, (_d, v) in lines.items()}
+                applied += 1
+        if applied:
+            notes.append(
+                f"Handling cost per unit for {applied} site(s) built from the "
+                f"warehouse cost table: the sum of its cost lines "
+                f"({', '.join(sorted({l for v in handling_by_facility.values() for l in v}))[:120]}), "
+                f"taking the latest effective date where a line is restated. "
+                f"{wc_rows} row(s) were read."
+            )
+    if monthly_by_facility:
+        for node in plants + dcs:
+            lines = monthly_by_facility.get(node["id"])
+            if lines:
+                node["operatingCostPerMonth"] = round(
+                    sum(v for _d, v in lines.values()), 2)
 
     # ---- Demand history ----------------------------------------------
     # The client's demand is a monthly series per market and product. The
@@ -806,6 +1261,16 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
     # Structural extraction stays (it is genuinely useful for mapping review);
     # optimisation does not happen here. KPIs come from the real engine, via
     # the orchestrator, once the network is bound to a project.
+    integrity = _check_referential_integrity(
+        tables, plants=plants, dcs=dcs, markets=markets,
+        lanes=lanes, products=products,
+        defined_lane_ids=defined_lane_ids,
+    )
+    for problem in integrity:
+        notes.append(problem["detail"])
+
+    geography = infer_geography(plants + dcs + markets)
+
     return {
         "plants": plants,
         "dcs": dcs,
@@ -816,7 +1281,93 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         "capacityHistory": capacity_history,
         "signals": signals,
         "notes": notes,
+        #: The money unit, from the upload. None when nothing states one.
+        "currency": currency,
+        "currencyBasis": currency_basis,
+        #: Where the network is, inferred from its own coordinates.
+        "geography": geography,
+        #: Cross-sheet foreign keys that point at nothing. Reported before
+        #: confirmation so a user can fix the file, rather than discovered as a
+        #: silently dropped row after the solve.
+        "integrity": integrity,
     }
+
+
+#: Which id column of which sheet role must exist in which collection.
+_FOREIGN_KEYS: Tuple[Tuple[str, Tuple[str, ...], str, str], ...] = (
+    ("lane_rates", LANE_ID_COLS, "lanes", "lane"),
+    ("lane_rates", PRODUCT_ID_COLS, "products", "product"),
+    ("demand_history", MARKET_ID_COLS, "markets", "market"),
+    ("demand_history", PRODUCT_ID_COLS, "products", "product"),
+    ("capacity_history", FACILITY_ID_COLS, "facilities", "facility"),
+    ("warehouse_costs", FACILITY_ID_COLS, "facilities", "facility"),
+    ("signals", MARKET_ID_COLS, "markets", "market"),
+    ("lanes", ("origin_id", "from", "origin", "source_id"), "nodes", "origin"),
+    ("lanes", ("destination_id", "to", "destination", "dest_id"), "nodes", "destination"),
+)
+
+
+def _check_referential_integrity(
+    tables: Dict[str, pd.DataFrame], *,
+    plants: List[Dict[str, Any]], dcs: List[Dict[str, Any]],
+    markets: List[Dict[str, Any]], lanes: List[Dict[str, Any]],
+    products: List[Dict[str, Any]],
+    defined_lane_ids: Optional[set] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Find ids that reference a record no sheet defines.
+
+    A workbook can be 99.9% "valid" by row-completeness and still be wrong in
+    the way that matters: the US test file carries two `Transportation_Rates`
+    rows priced against lane `L099`, which appears in no lanes sheet. Those
+    rows are silently dropped by the join — the freight they price never
+    reaches the model, and nothing said so. Row-level validity cannot see this;
+    only a cross-sheet key check can.
+
+    Returns one entry per (sheet, column, missing-id-set), each carrying the
+    offending ids so the user can find them in their own file.
+    """
+    known: Dict[str, set] = {
+        "lanes": (set(defined_lane_ids) if defined_lane_ids
+                  else {str(l.get("laneId")) for l in lanes if l.get("laneId")}),
+        "products": {str(p.get("id")) for p in products if p.get("id")},
+        "markets": {str(m.get("id")) for m in markets if m.get("id")},
+        "facilities": {str(f.get("id")) for f in (plants + dcs) if f.get("id")},
+    }
+    known["nodes"] = known["facilities"] | known["markets"]
+
+    problems: List[Dict[str, Any]] = []
+    for label, df in tables.items():
+        role = classify_sheet(df)
+        cl = {str(c).strip().lower(): c for c in df.columns}
+        for fk_role, id_cols, target, noun in _FOREIGN_KEYS:
+            if role != fk_role:
+                continue
+            col = _pick(cl, *id_cols)
+            if col is None or not known.get(target):
+                continue
+            referenced = {
+                str(v).strip() for v in df[col].dropna().unique() if str(v).strip()
+            }
+            missing = sorted(referenced - known[target])
+            if not missing:
+                continue
+            rows = int(df[col].astype(str).str.strip().isin(missing).sum())
+            shown = ", ".join(missing[:6]) + ("…" if len(missing) > 6 else "")
+            problems.append({
+                "type": "Orphan reference",
+                "severity": "error",
+                "table": label,
+                "column": str(col),
+                "count": rows,
+                "missingIds": missing[:50],
+                "detail": (
+                    f"{rows} row(s) in '{label}' reference a {noun} that no "
+                    f"sheet defines: {shown}. Those rows cannot be joined and "
+                    f"are not read by the model."
+                ),
+            })
+    return problems
 
 
 # ---------------------------------------------------------------------------

@@ -357,3 +357,95 @@ class TestAbsoluteDollarVerification:
         open_ids = {fd.facility_id for fd in res.facility_decisions if fd.is_open}
         assert {"DC_CENTRAL", "DC_EAST", "DC_WEST"} <= open_ids
 
+
+class TestTheServerIsRunnableFromEitherEntryPoint:
+    """
+    `python app/backend/app.py` has to produce the same application as
+    `python run.py`.
+
+    It did not. Neither `app/` nor `app/backend/` carries an `__init__.py`, so
+    `app` is a namespace package — and a namespace portion only wins when no
+    ordinary module of that name exists anywhere on `sys.path`. Running the
+    file directly puts `app/backend/` at `sys.path[0]`, and `app/backend/app.py`
+    is an ordinary module called `app`, so every `from app.backend... import`
+    raised `ModuleNotFoundError: 'app' is not a package`.
+
+    Each of those imports sits in a `try/except` that records the reason and
+    carries on, so the process started, printed its banner and served the
+    frontend with ZERO blueprints mounted. `POST /api/auth/login` fell through
+    to the static catch-all and answered `405 METHOD NOT ALLOWED, Allow: GET`.
+    Nobody could sign in, and the boot log looked healthy.
+    """
+
+    @staticmethod
+    def _run_as_script() -> dict:
+        """
+        Import the module the way running it as a script does — `app/backend/`
+        first on the path — and report what mounted.
+
+        `run_name` is deliberately not "__main__", so the `app.run()` block at
+        the bottom of the file does not execute and bind a port.
+        """
+        import json
+        import pathlib
+        import subprocess
+        import sys
+
+        root = pathlib.Path(__file__).resolve().parents[2]
+        script = root / "app" / "backend" / "app.py"
+        probe = (
+            "import sys, json, runpy\n"
+            f"sys.path.insert(0, {str(script.parent)!r})\n"
+            f"mod = runpy.run_path({str(script)!r}, run_name='ng_probe')\n"
+            "print('@@' + json.dumps({\n"
+            "    'api': mod['_APP_API_STATUS'],\n"
+            "    'orchestrator': mod['_ORCHESTRATOR_STATUS'],\n"
+            "    'rules': sorted(\n"
+            "        (str(r), sorted(r.methods - {'HEAD', 'OPTIONS'}))\n"
+            "        for r in mod['app'].url_map.iter_rules()\n"
+            "        if str(r).startswith('/api/auth/')),\n"
+            "}))\n"
+        )
+        out = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True, text=True, cwd=str(root), timeout=600,
+        )
+        marker = [ln for ln in out.stdout.splitlines() if ln.startswith("@@")]
+        assert marker, (
+            "probe produced no result.\n"
+            f"STDOUT:\n{out.stdout[-3000:]}\nSTDERR:\n{out.stderr[-3000:]}"
+        )
+        return json.loads(marker[-1][2:])
+
+    def test_running_the_file_directly_still_mounts_the_api(self):
+        state = self._run_as_script()
+        assert state["api"].get("mounted") is True, state["api"].get("reason")
+        assert state["orchestrator"].get("mounted") is True, \
+            state["orchestrator"].get("reason")
+
+    def test_login_accepts_post_however_the_server_was_started(self):
+        """The exact symptom: 405 with `Allow: GET` on the sign-in route."""
+        rules = dict((r, tuple(m)) for r, m in self._run_as_script()["rules"])
+        assert "/api/auth/login" in rules, sorted(rules)
+        assert "POST" in rules["/api/auth/login"], rules["/api/auth/login"]
+
+    def test_status_does_not_report_ok_when_the_api_failed_to_mount(self):
+        """
+        A health check that says "ok" while nobody can sign in is worse than
+        no health check: it is what an operator reads to decide whether to
+        look further. `status` is derived from what mounted, not stated.
+        """
+        from app.backend import app as app_module
+
+        real = app_module._APP_API_STATUS
+        try:
+            app_module._APP_API_STATUS = {"mounted": False, "reason": "simulated"}
+            body = app_module.app.test_client().get("/api/status").get_json()
+            assert body["status"] == "unavailable"
+            assert "application_api" in body["degraded"]
+        finally:
+            app_module._APP_API_STATUS = real
+
+        healthy = app_module.app.test_client().get("/api/status").get_json()
+        assert healthy["status"] == "ok"
+        assert healthy["degraded"] == []

@@ -2,11 +2,11 @@
   "scenario": "C",
   "name": "Forecast -> Optimization",
   "original_user_request": "Demand is expected to change materially in Delhi over the next planning horizon. Determine how the network allocation should change and quantify the impact.",
-  "duration_s": 43.29,
+  "duration_s": 2.01,
   "primary_chat_response": {
     "conversation_id": "conv_scen_c",
-    "turn_id": "4445c0dc-233",
-    "reply": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I see external evidence for UNKNOWN_EVENT affecting DC_DELHI, severity UNKNOWN, with NO defensible probability available (source: user_conversation). Suggested next step: I recommend reviewing the quantified impact above before moving to a formal option appraisal. No action is proposed; this is analysis only.",
+    "turn_id": "d8c21acc-df5",
+    "reply": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00). I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I see external evidence for UNKNOWN_EVENT affecting DC_DELHI, severity UNKNOWN, with NO defensible probability available (source: user_conversation). Suggested next step: I recommend no structural change on this evidence: demand is served, no site is at its capacity threshold, and nothing in the plan is stranded. The next useful step is a scenario that tests a specific change you are considering, rather than a change this network is asking for. No action is proposed; this is analysis only.",
     "intent": "EXTERNAL_EVENT",
     "clarity": "CLEAR",
     "intent_schema_version": "1.0",
@@ -17,18 +17,18 @@
     ],
     "clarification": null,
     "provenance": "OBSERVED",
-    "execution_id": "4ffd548e-3c0",
+    "execution_id": "f88b0c5b-6af",
     "workflow_id": "wf_external_event",
-    "network_snapshot_id": "snap_72a48e1a0664",
+    "network_snapshot_id": "snap_8dea7d8bc177",
     "scenario_id": null,
     "status": "COMPLETED",
     "results": {
       "resilience": {
         "network_id": "PHASE2_DELHI",
-        "data_version": "72a48e1a066440af",
-        "batch_id": "rei_47e6c661a8e2",
+        "data_version": "8dea7d8bc1775600",
+        "batch_id": "rei_0cc38d6b2d66",
         "batch_status": "COMPLETED_WITH_ERRORS",
-        "network_snapshot_id": "snap_72a48e1a0664",
+        "network_snapshot_id": "snap_8dea7d8bc177",
         "computed_for_snapshot_id": null,
         "material_fingerprint": "fp1_34ab4fd8199c2adc",
         "model_version": "1.2.0",
@@ -160,7 +160,7 @@
           "formula": "RF = P + REI - P*REI",
           "provenance": {
             "likelihood": "external_signal:user_conversation|basis=none",
-            "rei": "rei_registry:rei_47e6c661a8e2@snap_72a48e1a0664"
+            "rei": "rei_registry:rei_0cc38d6b2d66@snap_8dea7d8bc177"
           },
           "facility_id": "DC_DELHI",
           "notes": [
@@ -171,7 +171,7 @@
       "max_risk_factor": null,
       "highest_risk_entity": null,
       "network_id": "PHASE2_DELHI",
-      "data_version": "72a48e1a066440af",
+      "data_version": "8dea7d8bc1775600",
       "warnings": [
         "DC_DELHI: RF NOT_COMPUTABLE (NO_EVENT_PROBABILITY)"
       ]
@@ -212,11 +212,25 @@
       "entity_id": null,
       "opening": "I see the highest relative economic exposure at DC_MUMBAI (REI 1.00).",
       "context": "I see that a combined risk factor was NOT calculated (NO_EVENT_PROBABILITY). Severity and confidence are not probabilities and were not substituted. I see external evidence for UNKNOWN_EVENT affecting DC_DELHI, severity UNKNOWN, with NO defensible probability available (source: user_conversation).",
-      "kpi_insights": [],
+      "kpi_insights": [
+        {
+          "theme": "Resilience",
+          "headline": "I see the greatest single-site exposure at DC_MUMBAI",
+          "narrative": "I see DC_MUMBAI carrying the highest relative economic exposure in this network (REI 1.00). That is where losing one site costs the most, so it is where a contingency is worth the most.",
+          "severity": "RISK",
+          "metric_refs": [
+            "rei.max_rei"
+          ],
+          "comparison_refs": [],
+          "driver_refs": [
+            "rei.highest_exposure_facility"
+          ]
+        }
+      ],
       "key_drivers": [
         "DC_MUMBAI carries the greatest disruption exposure"
       ],
-      "recommendation": "I recommend reviewing the quantified impact above before moving to a formal option appraisal.",
+      "recommendation": "I recommend no structural change on this evidence: demand is served, no site is at its capacity threshold, and nothing in the plan is stranded. The next useful step is a scenario that tests a specific change you are considering, rather than a change this network is asking for.",
       "limitation": "Combined risk factor unavailable \u2014 see reason above.",
       "missing_information": [],
       "suggested_questions": [
@@ -226,49 +240,53 @@
       "evidence_completeness": "COMPLETE"
     },
     "warnings": [
-      "LLM planner failed (Live planner returned unparseable output: {\n  \"workflow_id\": \"wf_demand_delhi_001\",\n  \"steps\": [\n    {\n      \"step_id\": \"s1\",\n      \"capability\": \"network.load_snapshot\",\n      \"description\": \"Pin and verify current network snapshot for plann); fell back to deterministic workflow planner.",
+      "LLM planner failed (Live planner request failed: Text gateway returned 429 (daily_limit_exceeded): The shared daily request limit has been reached.); fell back to deterministic workflow planner.",
       "No defensible event probability could be established from the external evidence (severity=UNKNOWN, confidence=0.80). RF will report NOT_COMPUTABLE. Severity and confidence are not probabilities and are never substituted for one.",
       "carbon_cost excluded from business cost: enable_carbon_cost is False, so no monetary carbon price is part of the configured business objective.",
       "PLANT_N: INFEASIBLE - disruption produced solver status INFEASIBLE",
       "risk: DC_DELHI: RF NOT_COMPUTABLE (NO_EVENT_PROBABILITY)",
-      "reasoning: LLM reasoning output could not be parsed; deterministic template used. Cause: the response exhausted the gateway's 2000-token output budget (output_tokens=2000), so the JSON was truncated mid-structure. This is a response-length problem, not malformed model behaviour: a reasoning model spends part of that budget on internal reasoning before emitting text."
+      "reasoning: LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
     ],
     "errors": [],
-    "duration_seconds": 43.2875
+    "duration_seconds": 2.0095
   },
   "secondary_direct_response": {
-    "execution_id": "8fd22c8e-7a8",
-    "request_id": "2160d04f-0082-448e-83bc-68e20a8eac4b",
+    "execution_id": "bef84f87-6e7",
+    "request_id": "f5ad46bb-1cf9-4eae-976b-514628d33ca8",
     "status": "COMPLETED",
     "intent": "FORECAST",
-    "network_snapshot_id": "snap_72a48e1a0664",
+    "network_snapshot_id": "snap_8dea7d8bc177",
     "scenario_id": null,
     "scenario_version": null,
     "is_hypothetical": false,
-    "summary": "I cannot produce an analytic conclusion because the deterministic MILP, KPI, REI and risk outputs are not provided. Key performance indicators and optimizer results are not available, so I cannot state feasibility, cost, service or resilience outcomes.",
+    "summary": "I could not find a deterministic result to explain for this request.",
     "results": {},
     "risk": null,
     "reasoning": {
-      "summary": "I cannot produce an analytic conclusion because the deterministic MILP, KPI, REI and risk outputs are not provided. Key performance indicators and optimizer results are not available, so I cannot state feasibility, cost, service or resilience outcomes.",
-      "key_drivers": [
-        "MILP optimizer output not available",
-        "KPI/REI/risk metrics absent"
-      ],
-      "risks": [
-        "Decisions made without validated optimizer and KPI outputs",
-        "Unidentified cost or service exposures due to missing data"
-      ],
-      "recommendation": "I recommend re-running or supplying the deterministic outputs (MILP solution, KPI engine results, REI results, and risk calculator) and attaching them for a complete assessment.",
+      "summary": "I could not find a deterministic result to explain for this request.",
+      "key_drivers": [],
+      "risks": [],
+      "recommendation": "I recommend supplying more of the network's data before acting on this: I have no deterministic finding to base a recommendation on.",
       "confidence": "LOW",
-      "evidence": [
-        "MILP output: not available",
-        "KPI engine results: not available",
-        "REI engine results: not available",
-        "Risk calculator results: not available"
+      "evidence": [],
+      "briefing": {
+        "schema_version": "2.0",
+        "scope": "NETWORK",
+        "entity_id": null,
+        "opening": "I could not find a deterministic result to explain for this request.",
+        "context": "",
+        "kpi_insights": [],
+        "key_drivers": [],
+        "recommendation": "I recommend supplying more of the network's data before acting on this: I have no deterministic finding to base a recommendation on.",
+        "limitation": "",
+        "missing_information": [],
+        "suggested_questions": [],
+        "evidence_completeness": "COMPLETE"
+      },
+      "source": "template",
+      "validation_warnings": [
+        "LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
       ],
-      "briefing": null,
-      "source": "llm",
-      "validation_warnings": [],
       "grounding_status": "NO_CLAIMS",
       "grounded_claims": [],
       "unavailable_evidence": {}
@@ -305,25 +323,26 @@
     "approval": null,
     "twin_states": [
       {
-        "state_id": "tws_snap_72a48e1a0664_optimized",
-        "snapshot_id": "snap_72a48e1a0664",
+        "state_id": "tws_snap_8dea7d8bc177_optimized",
+        "snapshot_id": "snap_8dea7d8bc177",
         "scenario_id": null,
         "state_type": "OPTIMIZED",
         "calculation_status": "PARTIAL",
         "n_facilities": 0,
         "n_flows": 0,
-        "generated_at": "2026-08-26T06:06:41.201891+00:00"
+        "generated_at": "2026-09-02T06:48:06.616561+00:00"
       }
     ],
     "errors": [],
     "warnings": [
-      "LLM planner failed (Live planner returned unparseable output: {\n  \"workflow_id\": \"wf_forecast_delhi_001\",\n  \"steps\": [\n    {\n      \"step_id\": \"s1_load_snapshot\",\n      \"capability\": \"network.load_snapshot\",\n      \"description\": \"Pin and verify the observed netwo); fell back to deterministic workflow planner.",
+      "LLM planner failed (Live planner call quota exhausted: reached maximum of 5 calls.); fell back to deterministic workflow planner.",
       "Replan proposal generation failed (Phase 8.5/8.6 hard call limit of 5 reached (5 attempted).).",
-      "Replanner produced no usable proposal; continuing with active plan."
+      "Replanner produced no usable proposal; continuing with active plan.",
+      "reasoning: LLM reasoning unavailable (LLM_FAILURE); deterministic template used."
     ],
-    "duration_seconds": 31.6714,
-    "started_at": "2026-08-26T06:06:09.530593+00:00",
-    "completed_at": "2026-08-26T06:06:41.202000+00:00",
+    "duration_seconds": 0.9472,
+    "started_at": "2026-09-02T06:48:05.669831+00:00",
+    "completed_at": "2026-09-02T06:48:06.617090+00:00",
     "steps": [
       {
         "step_id": "load",
@@ -337,7 +356,7 @@
         "step_id": "forecast",
         "capability": "forecast.demand",
         "status": "COMPLETED",
-        "duration_seconds": 0.0533,
+        "duration_seconds": 0.0882,
         "attempts": 1,
         "error": null
       },
@@ -345,7 +364,7 @@
         "step_id": "reason",
         "capability": "reasoning.synthesise",
         "status": "COMPLETED",
-        "duration_seconds": 10.6507,
+        "duration_seconds": 0.8547,
         "attempts": 1,
         "error": null
       },
@@ -353,7 +372,7 @@
         "step_id": "govern",
         "capability": "governance.classify",
         "status": "COMPLETED",
-        "duration_seconds": 0.0001,
+        "duration_seconds": 0.0004,
         "attempts": 1,
         "error": null
       }
@@ -374,7 +393,7 @@
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:06:30.497046+00:00"
+      "timestamp": "2026-09-02T06:48:05.670733+00:00"
     },
     {
       "action": "REPLAN",
@@ -384,7 +403,7 @@
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:06:30.550585+00:00"
+      "timestamp": "2026-09-02T06:48:05.759260+00:00"
     },
     {
       "action": "CONTINUE",
@@ -394,7 +413,7 @@
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:06:41.201608+00:00"
+      "timestamp": "2026-09-02T06:48:06.614971+00:00"
     },
     {
       "action": "CONTINUE",
@@ -404,15 +423,19 @@
       "replan_proposal": null,
       "escalation": null,
       "metadata": {},
-      "timestamp": "2026-08-26T06:06:41.201836+00:00"
+      "timestamp": "2026-09-02T06:48:06.616255+00:00"
     }
   ],
   "replan_count": 0,
   "agentic_assessment": {
     "sequential_behavior": true,
     "adaptive_behavior": true,
-    "replanning_observed": true,
+    "replanning_observed": false,
+    "steps_executed": 4,
+    "chat_status": "COMPLETED",
+    "step_errors": [],
     "agentic_behavior_proven": true,
-    "classification": "PASS"
+    "classification": "PASS",
+    "failed_criteria": []
   }
 }

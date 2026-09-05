@@ -504,3 +504,155 @@ class TestStaticArchitectureAndZeroAPICalls:
         res = IntentResolution(intent=Intent.NETWORK_STATE_QUERY)
         with pytest.raises(LLMNonRetryableError, match="quota exhausted: reached maximum of 15 calls"):
             live_planner.propose_plan_sync(req, res)
+
+
+# ===========================================================================
+# The live planner's output budget, and what a plan is allowed to lose
+# ===========================================================================
+
+class TestTheLivePlannerSurvivesATruncatedReply:
+    """
+    The gateway caps output at 2,000 tokens and the backing model bills its own
+    internal reasoning to that allowance — the constraint `ReasoningAgent._llm`
+    documents and was rewritten for. The planner prompt was never given the same
+    treatment and sat just inside the limit: it parsed on a simple request and
+    truncated mid-string on every one of the five requests in the Phase 8.8
+    end-to-end run, always inside the `description` field:
+
+        "description": "Pin and verify the current obse
+
+    Truncated JSON does not parse, `propose_plan` raised, and every execution
+    fell back to the deterministic planner — so the LLM planner had never once
+    produced a plan, and nothing said so, because falling back is the designed
+    behaviour and it is silent.
+    """
+
+    def _salvage(self, text):
+        from netgravity.orchestrator.planner.llm_planner import _salvage_truncated_plan
+        return _salvage_truncated_plan(text)
+
+    def test_completed_steps_survive_a_cut_mid_object(self):
+        truncated = (
+            '{"workflow_id": "wf_1", "steps": ['
+            '{"step_id": "s1", "capability": "network.load_snapshot"},'
+            '{"step_id": "s2", "capability": "resilience.assess", "depends_on": ["s1"]},'
+            '{"step_id": "s3", "capability": "risk.compute_rf", "description": "Pin and ver'
+        )
+        recovered = self._salvage(truncated)
+        assert recovered is not None
+        assert recovered["workflow_id"] == "wf_1"
+        assert [s["capability"] for s in recovered["steps"]] == [
+            "network.load_snapshot", "resilience.assess",
+        ], "the incomplete trailing step must be dropped, not guessed at"
+
+    @pytest.mark.parametrize("text", [
+        "",
+        "I cannot help with that.",
+        '{"workflow_id": "x"}',                       # no steps array
+        '{"workflow_id": "x", "steps": [{"step_i',    # nothing whole
+        '{"steps": [{"step_id": "s1"}]}',             # a step with no capability
+    ])
+    def test_nothing_is_invented_when_nothing_survives(self, text):
+        assert self._salvage(text) is None
+
+    def test_the_prompt_does_not_ask_for_prose_it_never_reads(self):
+        """
+        `ProposedPlanStep.description` defaults to "" and no caller reads it, so
+        requesting it spent output budget on the one field truncation landed in.
+        """
+        from netgravity.orchestrator.planner.llm_planner import LiveLLMPlanner
+        from netgravity.orchestrator.registry import build_orchestrator
+        from netgravity.orchestrator.schemas.requests import (
+            Intent, IntentResolution, OrchestratorRequest,
+        )
+
+        orch = build_orchestrator()
+        planner = LiveLLMPlanner(registry=orch.registry, gateway=None)
+        prompt = planner._build_prompt(
+            OrchestratorRequest(input="Assess resilience.",
+                                explicit_intent=Intent.RESILIENCE_QUERY),
+            IntentResolution(intent=Intent.RESILIENCE_QUERY, confidence=0.9,
+                             source="rules", rationale="t"),
+        )
+        assert '"description"' not in prompt
+        assert "capability" in prompt
+
+    def test_scenario_capabilities_are_withheld_without_a_specification(self):
+        """
+        `scenario.create` builds a hypothetical network FROM a concrete
+        specification. Offered when the request names none, the model planned it
+        anyway — "A major disruption is affecting Mumbai. Assess the impact"
+        names no scenario — the step failed MISSING_DATA, and the run settled
+        FAILED, discarding the resilience and risk results beside it.
+        """
+        from netgravity.orchestrator.planner.llm_planner import LiveLLMPlanner
+        from netgravity.orchestrator.registry import build_orchestrator
+        from netgravity.orchestrator.schemas.requests import (
+            Intent, IntentResolution, OrchestratorRequest, ScenarioActionType,
+            ScenarioIntentSpec,
+        )
+
+        orch = build_orchestrator()
+        planner = LiveLLMPlanner(registry=orch.registry, gateway=None)
+        request = OrchestratorRequest(input="Assess the impact on Mumbai.")
+
+        without = planner._build_prompt(
+            request,
+            IntentResolution(intent=Intent.RESILIENCE_QUERY, confidence=0.9,
+                             source="rules", rationale="t"),
+        )
+        assert "scenario.create" not in without
+        assert "optimization.solve_scenario" not in without
+        assert "names no concrete scenario" in without
+
+        with_spec = planner._build_prompt(
+            request,
+            IntentResolution(
+                intent=Intent.SCENARIO_ANALYSIS, confidence=0.9, source="rules",
+                rationale="t",
+                scenarios=[ScenarioIntentSpec(
+                    action=ScenarioActionType.CLOSE_FACILITY,
+                    facility_ids=["DC_DELHI"])],
+            ),
+        )
+        assert "scenario.create" in with_spec
+
+    def test_enrichment_steps_are_optional_whatever_the_model_says(self):
+        """
+        `_settle` already treats an optional step's failure as degradation, but
+        a proposed step defaults to required and the model never set the flag.
+        One enrichment step failing honestly — "no observed demand history is
+        available, so no forecast can be produced" — therefore took the whole
+        execution to FAILED and returned "The analysis produced no narrative
+        result", discarding six successful steps.
+
+        Decided by the capability, in both directions: a model may not promote
+        enrichment to essential, nor demote a core step to optional.
+        """
+        from netgravity.orchestrator.planner.llm_planner import (
+            ENRICHMENT_CAPABILITIES, LiveLLMPlanner,
+        )
+        from netgravity.orchestrator.registry import build_orchestrator
+        from netgravity.orchestrator.schemas.requests import Intent, IntentResolution
+
+        orch = build_orchestrator()
+        planner = LiveLLMPlanner(registry=orch.registry, gateway=None)
+        raw = (
+            '{"workflow_id":"w","steps":['
+            '{"step_id":"s1","capability":"network.load_snapshot","optional":true},'
+            '{"step_id":"s2","capability":"forecast.demand","optional":false},'
+            '{"step_id":"s3","capability":"optimization.solve"}]}'
+        )
+        proposal = planner._parse_response(
+            raw, IntentResolution(intent=Intent.NETWORK_STATE_QUERY, confidence=0.9,
+                                  source="rules", rationale="t"))
+        by_id = {s.capability: s.optional for s in proposal.steps}
+
+        assert by_id["forecast.demand"] is True, (
+            "an enrichment capability must be optional even though the model "
+            "said otherwise")
+        assert by_id["network.load_snapshot"] is False, (
+            "a core capability must stay required even though the model tried "
+            "to make it optional")
+        assert by_id["optimization.solve"] is False
+        assert "forecast.demand" in ENRICHMENT_CAPABILITIES

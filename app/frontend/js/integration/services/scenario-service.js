@@ -47,6 +47,46 @@ export const scenarioService = {
   },
 
   /**
+   * The scenario this project stored for `name` since `sinceMs`, or null.
+   *
+   * Aborting a fetch does not stop a solve. When `simulateScenario` times out
+   * the server is still working, and it finishes into a connection nobody is
+   * listening on — it builds the record, persists it and answers 201 to no
+   * one. The record is the same object the 201 carried, and `GET /api/scenarios`
+   * returns it, so it can simply be collected.
+   *
+   * Polls until `timeoutMs` elapses. `sinceMs` guards against adopting an
+   * older scenario that happens to share a name.
+   */
+  async findScenarioCreatedSince(name, sinceMs, {
+    timeoutMs = 240000, intervalMs = 3000, projectId = null, onWait = null,
+  } = {}) {
+    const wanted = String(name || '').trim();
+    const deadline = Date.now() + timeoutMs;
+    // `created_at` is seconds on the record and milliseconds here.
+    const after = (sinceMs - 2000) / 1000;
+    while (Date.now() < deadline) {
+      if (onWait) onWait(Math.round((Date.now() - (deadline - timeoutMs)) / 1000));
+      let found = null;
+      try {
+        const all = await this.listScenarios(projectId);
+        found = all
+          .filter((r) => String(r.name || '').trim() === wanted
+                      && Number(r.created_at || 0) >= after)
+          .sort((x, y) => Number(y.created_at || 0) - Number(x.created_at || 0))[0]
+          || null;
+      } catch (e) {
+        // A failed poll says nothing about the solve. Keep waiting.
+        found = null;
+      }
+      if (found) return found;
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    return null;
+  },
+
+  /**
    * Discard a solved scenario.
    *
    * The comparison holds three at a time, so removing one is ordinary use.

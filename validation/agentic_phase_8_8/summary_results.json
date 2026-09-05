@@ -3,37 +3,72 @@
     "sequential_behavior": true,
     "adaptive_behavior": true,
     "replanning_observed": false,
-    "agentic_behavior_proven": true,
-    "classification": "PASS"
+    "steps_executed": 13,
+    "chat_status": "FAILED",
+    "step_errors": [
+      "INVALID_SCENARIO"
+    ],
+    "agentic_behavior_proven": false,
+    "classification": "FAIL",
+    "failed_criteria": [
+      "chat_status=FAILED",
+      "1 step error(s)"
+    ]
   },
   "Scenario_B": {
     "sequential_behavior": true,
     "adaptive_behavior": true,
     "replanning_observed": false,
+    "steps_executed": 10,
+    "chat_status": "COMPLETED",
+    "step_errors": [
+      "MISSING_DATA"
+    ],
     "risk_isolated_from_demand": false,
-    "agentic_behavior_proven": true,
-    "classification": "PASS"
+    "agentic_behavior_proven": false,
+    "classification": "FAIL",
+    "failed_criteria": [
+      "risk_isolated_from_demand",
+      "1 step error(s)"
+    ]
   },
   "Scenario_C": {
     "sequential_behavior": true,
     "adaptive_behavior": true,
-    "replanning_observed": true,
+    "replanning_observed": false,
+    "steps_executed": 4,
+    "chat_status": "COMPLETED",
+    "step_errors": [],
     "agentic_behavior_proven": true,
-    "classification": "PASS"
+    "classification": "PASS",
+    "failed_criteria": []
   },
   "Scenario_D": {
     "sequential_behavior": true,
     "adaptive_behavior": true,
-    "failure_trapped_by_manager": true,
-    "agentic_behavior_proven": true,
-    "classification": "PASS"
+    "replanning_observed": false,
+    "steps_executed": 4,
+    "chat_status": "COMPLETED",
+    "step_errors": [],
+    "failure_trapped": false,
+    "recovery_decisions": 0,
+    "agentic_behavior_proven": false,
+    "classification": "FAIL",
+    "failed_criteria": [
+      "injected failure was neither recorded nor recovered"
+    ]
   },
   "Scenario_E": {
     "sequential_behavior": true,
     "adaptive_behavior": true,
+    "replanning_observed": false,
+    "steps_executed": 4,
+    "chat_status": "COMPLETED",
+    "step_errors": [],
     "multi_domain_orchestration": true,
     "agentic_behavior_proven": true,
-    "classification": "PASS"
+    "classification": "PASS",
+    "failed_criteria": []
   },
   "NLU_Edge_Cases": {
     "ambiguous_request": {

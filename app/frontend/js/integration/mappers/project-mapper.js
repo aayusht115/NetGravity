@@ -38,7 +38,14 @@ export function mapProjectRecord(p) {
   return {
     id: p.id,
     name: p.name || 'Untitled Project',
-    region: p.region || 'India',
+    // The server's answer, whatever it is. This defaulted to 'India',
+    // which put an India label back onto a project the backend had
+    // deliberately left unstated — the last of four places that made
+    // an unanswered question into a stated fact.
+    region: p.region || '',
+    // How the region was arrived at: 'user', 'inferred', or '' when it
+    // is not yet known. A derived label is shown as derived.
+    regionSource: p.region_source || '',
     client: p.client || '',
     description: p.description || '',
     updated: p.updated || relativeTime(p.updated_at),

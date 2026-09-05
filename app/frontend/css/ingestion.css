@@ -20,10 +20,9 @@
    (see .chatbot-modal-overlay in chatbot.css).
    ═══════════════════════════════════════════════════════════ */
 
-#upload-data-page,
-#ingestion-page {
-  overflow-y: auto;
-}
+/* .proj-page is a flex column that does not scroll; .proj-scroll inside it
+   does. These two pages inherit that, so the top bar stays put while a long
+   mapping table moves under it. */
 
 .ing-body {
   position: relative;
@@ -34,88 +33,11 @@
   padding: calc(42 * var(--u)) calc(72 * var(--u)) calc(56 * var(--u));
 }
 
-/* ─── Shared top bar: brand + help + avatar ──────────────────── */
-.ing-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: calc(34 * var(--u));
-}
-
-.ing-topbar-left {
-  display: flex;
-  align-items: center;
-  gap: calc(22 * var(--u));
-}
-
-/* Decorative only — no click-to-navigate, unlike the sidebar lockup. */
-.ing-brand {
-  display: flex;
-  align-items: center;
-  gap: calc(10 * var(--u));
-}
-
-.ing-brand-logo {
-  width: calc(28 * var(--u));
-  height: calc(28 * var(--u));
-  flex-shrink: 0;
-}
-
-.ing-brand-name {
-  font-size: calc(18 * var(--u));
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--proj-text-1);
-}
-
-.ing-topbar-right {
-  display: flex;
-  align-items: center;
-  gap: calc(14 * var(--u));
-}
-
-.ing-back-home-btn {
-  display: flex;
-  align-items: center;
-  gap: calc(4 * var(--u));
-  background: none;
-  border: 1px solid var(--proj-border);
-  border-radius: calc(8 * var(--u));
-  padding: calc(7 * var(--u)) calc(12 * var(--u)) calc(7 * var(--u)) calc(6 * var(--u));
-  font-family: inherit;
-  font-size: calc(14 * var(--u));
-  font-weight: 600;
-  color: var(--proj-text-2);
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-}
-
-.ing-back-home-btn svg { width: calc(16 * var(--u)); height: calc(16 * var(--u)); }
-
-.ing-back-home-btn:hover {
-  border-color: var(--brand-purple);
-  color: var(--brand-purple);
-}
-
-/* Reuse the app shell's own topbar-icon-btn / user-avatar-ak classes
-   (defined in style.css) so this screen's chrome literally is the
-   same chrome as the authenticated app — just scaled to --u. */
-.ing-topbar-right .topbar-icon-btn {
-  width: calc(36 * var(--u));
-  height: calc(36 * var(--u));
-}
-
-.ing-topbar-right .topbar-icon-btn svg {
-  width: calc(17 * var(--u));
-  height: calc(17 * var(--u));
-}
-
-.ing-topbar-right .user-avatar-ak {
-  width: calc(34 * var(--u));
-  height: calc(34 * var(--u));
-  font-size: calc(12 * var(--u));
-  cursor: default;
-}
+/* The top bar these screens used to define for themselves now comes from
+   workspace-chrome.css, shared with Select Project and Create Project. The
+   rules that were here styled a brand lockup, a back pill, a help button with
+   no handler behind it, and an avatar — four things the shared bar already
+   has, three of which had drifted from their equivalents elsewhere. */
 
 .ing-title {
   font-size: calc(34 * var(--u));
@@ -258,37 +180,9 @@
 .ing-add-more:hover { text-decoration: underline; }
 .ing-add-more svg { width: calc(15 * var(--u)); height: calc(15 * var(--u)); }
 
-.ing-file-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: calc(20 * var(--u));
-  font-size: calc(14.5 * var(--u));
-}
 
-.ing-file-table th {
-  text-align: left;
-  font-size: calc(13 * var(--u));
-  font-weight: 600;
-  color: var(--proj-text-3);
-  padding: 0 calc(14 * var(--u)) calc(12 * var(--u));
-  border-bottom: 1px solid var(--proj-border-soft);
-  white-space: nowrap;
-}
 
-.ing-file-table td {
-  padding: calc(14 * var(--u)) calc(14 * var(--u));
-  border-bottom: 1px solid #f4f2f8;
-  vertical-align: middle;
-  color: var(--proj-text-2);
-}
 
-.ing-file-table tr:last-child td { border-bottom: none; }
-
-.ing-file-name-cell {
-  display: flex;
-  align-items: center;
-  gap: calc(13 * var(--u));
-}
 
 .ing-file-icon {
   width: calc(34 * var(--u));
@@ -773,15 +667,20 @@
 
 .ing-status-chip.tone-error { color: #dc2626; }
 
-.ing-dq-issue-list {
-  margin-top: calc(14 * var(--u));
-  display: flex;
-  flex-direction: column;
-  gap: calc(8 * var(--u));
-  /* The measured issue list is as long as the file demands; it scrolls inside
-     its card rather than pushing the Confirm button below the fold. */
-  max-height: calc(260 * var(--u));
-  overflow-y: auto;
+/* The one chip that is a button: the measured quality findings, which used to
+   be a full-width card between the table and the footer. */
+.ing-status-chip.tone-warn {
+  background: #fdf3e2;
+  color: #8a6410;
+  border: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.ing-status-chip.tone-warn:hover { background: #f8e8c9; }
+.ing-status-chip.tone-warn:focus-visible {
+  outline: 2px solid #b4780a;
+  outline-offset: 1px;
 }
 
 .ing-review-item-text { min-width: 0; }
@@ -845,7 +744,6 @@
   vertical-align: middle;
 }
 
-.ing-map-table tr.row-hidden { display: none; }
 
 .ing-map-source {
   display: flex;
@@ -960,60 +858,7 @@
 
 .ing-sidebar-title svg { width: calc(18 * var(--u)); height: calc(18 * var(--u)); color: var(--brand-purple); }
 
-.ing-used-item {
-  display: flex;
-  align-items: center;
-  gap: calc(11 * var(--u));
-  padding: calc(8 * var(--u)) 0;
-  font-size: calc(13.5 * var(--u));
-  color: var(--proj-text-2);
-}
 
-.ing-used-item svg { width: calc(16 * var(--u)); height: calc(16 * var(--u)); color: var(--brand-purple); flex-shrink: 0; }
-
-.ing-accept-ring-wrap {
-  display: flex;
-  align-items: center;
-  gap: calc(16 * var(--u));
-  margin: calc(18 * var(--u)) 0 calc(14 * var(--u));
-  padding-top: calc(14 * var(--u));
-  border-top: 1px solid var(--proj-border-soft);
-}
-
-.ing-accept-ring {
-  position: relative;
-  width: calc(58 * var(--u));
-  height: calc(58 * var(--u));
-  flex-shrink: 0;
-}
-
-.ing-accept-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
-.ing-accept-ring circle { fill: none; stroke-width: 5; }
-.ing-accept-ring .track { stroke: #ece7f5; }
-.ing-accept-ring .fill { stroke: var(--brand-purple); stroke-linecap: round; }
-
-.ing-accept-ring-pct {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(13 * var(--u));
-  font-weight: 800;
-  color: var(--proj-text-1);
-}
-
-.ing-accept-ring-label {
-  font-size: calc(12.5 * var(--u));
-  line-height: 1.4;
-  color: var(--proj-text-3);
-}
-
-.ing-sidebar-note {
-  font-size: calc(12.5 * var(--u));
-  line-height: 1.5;
-  color: var(--proj-text-4);
-}
 
 .ing-footer-row {
   display: flex;
@@ -1042,17 +887,6 @@
 .ing-btn-secondary:hover { border-color: var(--brand-purple); color: var(--brand-purple); }
 .ing-btn-secondary svg { width: calc(16 * var(--u)); height: calc(16 * var(--u)); }
 
-.ing-footer-link {
-  background: none;
-  border: none;
-  font-family: inherit;
-  font-size: calc(14 * var(--u));
-  font-weight: 600;
-  color: var(--proj-text-2);
-  cursor: pointer;
-}
-
-.ing-footer-link:hover { color: var(--brand-purple); text-decoration: underline; }
 
 /* ═══════════════════════════════════════════════════════════
    PDF INGESTION
@@ -1356,4 +1190,1478 @@
   background: #ffffff;
   padding-bottom: 8px;
   z-index: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   UPLOAD DATA — reworked against Dump/new project data upload.png
+
+   Only this screen. The rules above are shared with the two
+   mapping-review screens, which are still laid out in the --u
+   reference pixel; overriding them globally would have rescaled
+   both of those to match a mock that does not describe them.
+
+   Sizes are the authenticated app's — style.css .card-title 15px,
+   .btn 13px, .tag 11px, form controls 13px — not the pixel sizes
+   of the mockup image, which is drawn about a third larger than
+   every other surface in the product. See the note in projects.css.
+   ═══════════════════════════════════════════════════════════ */
+#upload-data-page .ing-body {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 22px 32px 32px;
+}
+
+#upload-data-page .ing-head-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+#upload-data-page .ing-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  color: var(--proj-text-1);
+  margin: 0;
+}
+
+#upload-data-page .ing-subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--proj-text-3);
+  max-width: 760px;
+}
+
+#upload-data-page .ing-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  align-items: stretch;
+}
+
+#upload-data-page .ing-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--proj-surface);
+  border: 1px solid var(--proj-border);
+  border-radius: 14px;
+  padding: 18px 20px 18px;
+  margin: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* .card-title in style.css. */
+#upload-data-page .ing-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--proj-text-1);
+}
+
+#upload-data-page .ing-card-icon { display: flex; color: var(--proj-purple, #9218EA); }
+#upload-data-page .ing-card-icon svg { width: 17px; height: 17px; }
+
+#upload-data-page .ing-card-sub {
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--proj-text-3);
+}
+
+#upload-data-page .ing-card-bullets {
+  margin: 4px 0 0;
+  padding-left: 17px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--proj-text-3);
+}
+
+#upload-data-page .ing-card-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#upload-data-page .ing-count-badge { color: var(--proj-text-3); font-weight: 600; }
+
+#upload-data-page .ing-add-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  color: var(--proj-purple, #9218EA);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 2px;
+  white-space: nowrap;
+}
+
+#upload-data-page .ing-add-more:hover { text-decoration: underline; }
+#upload-data-page .ing-add-more svg { width: 15px; height: 15px; }
+
+/* ─── Dropzone ───────────────────────────────────────────── */
+#upload-data-page .ing-dropzone {
+  margin-top: 14px;
+  flex: 1 1 auto;
+  min-height: 210px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed #d9c9f2;
+  border-radius: 12px;
+  background: #fcfaff;
+  cursor: pointer;
+  padding: 22px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+#upload-data-page .ing-dropzone:hover,
+#upload-data-page .ing-dropzone:focus-visible,
+#upload-data-page .ing-dropzone.dragover {
+  border-color: var(--proj-purple, #9218EA);
+  background: #f9f4ff;
+  outline: none;
+}
+
+#upload-data-page .ing-dropzone-icon { display: flex; color: var(--proj-purple, #9218EA); }
+#upload-data-page .ing-dropzone-icon svg { width: 30px; height: 30px; }
+
+#upload-data-page .ing-dropzone-main {
+  margin-top: 13px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--proj-text-1);
+  letter-spacing: -0.01em;
+}
+
+#upload-data-page .ing-dropzone-or {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--proj-text-3);
+}
+
+#upload-data-page .ing-attach-btn {
+  margin-top: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 18px;
+  border: 1px solid var(--proj-border);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--proj-purple, #9218EA);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(16, 12, 34, 0.05);
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+#upload-data-page .ing-attach-btn:hover {
+  border-color: var(--proj-purple, #9218EA);
+  transform: translateY(-1px);
+}
+
+#upload-data-page .ing-attach-btn svg { width: 15px; height: 15px; }
+
+#upload-data-page .ing-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #dc2626;
+  line-height: 1.45;
+}
+
+#upload-data-page .ing-error:empty { display: none; }
+#upload-data-page .ing-error::before { content: '⚠'; line-height: 1.4; }
+
+/* ─── Card footer links ──────────────────────────────────── */
+#upload-data-page .ing-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+#upload-data-page .ing-foot-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  color: var(--proj-purple, #9218EA);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 2px;
+}
+
+#upload-data-page .ing-foot-link:hover { text-decoration: underline; }
+#upload-data-page .ing-foot-link svg { width: 15px; height: 15px; }
+#upload-data-page .ing-foot-link:disabled { opacity: 0.5; cursor: progress; text-decoration: none; }
+
+/* ─── Uploaded files ─────────────────────────────────────── */
+#upload-data-page .ing-empty-files {
+  flex: 1 1 auto;
+  min-height: 210px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+  border: none;
+  background: none;
+}
+
+#upload-data-page .ing-empty-tile {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  background: #f3ecfd;
+  color: #c9a9f2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+#upload-data-page .ing-empty-tile svg { width: 28px; height: 28px; }
+
+#upload-data-page .ing-empty-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--proj-text-1);
+  letter-spacing: -0.01em;
+}
+
+#upload-data-page .ing-empty-sub {
+  margin-top: 5px;
+  font-size: 12.5px;
+  color: var(--proj-text-3);
+}
+
+#upload-data-page .ing-file-list {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex: 1 1 auto;
+  min-height: 210px;
+}
+
+#upload-data-page .ing-file-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px 12px 11px;
+  border: 1px solid var(--proj-border);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+#upload-data-page .ing-file-card.failed { border-color: #f3c9c6; background: #fffbfb; }
+
+#upload-data-page .ing-file-card-main { flex: 1; min-width: 0; }
+
+#upload-data-page .ing-file-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  background: #16794a;
+}
+
+#upload-data-page .ing-file-icon.type-pdf { background: #c62d1f; }
+#upload-data-page .ing-file-icon.type-csv { background: #1f5fc6; }
+
+#upload-data-page .ing-file-meta-name {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--proj-text-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#upload-data-page .ing-file-meta-sub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--proj-text-3);
+}
+
+#upload-data-page .ing-file-ok {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+#upload-data-page .ing-file-failed {
+  margin-top: 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #dc2626;
+  line-height: 1.4;
+}
+
+#upload-data-page .ing-file-failed svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 1px; }
+
+/* .tag in style.css. */
+#upload-data-page .ing-type-chip,
+#upload-data-page .ing-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+#upload-data-page .ing-type-chip { background: #f7f7fa; color: var(--proj-text-2); }
+#upload-data-page .ing-status-chip { background: #f0fdf4; color: #16a34a; }
+#upload-data-page .ing-status-chip svg { width: 12px; height: 12px; }
+#upload-data-page .ing-status-chip.reading { background: #f5f0fa; color: #6B2FA0; }
+
+#upload-data-page .ing-row-delete {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--proj-text-4);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+#upload-data-page .ing-row-delete svg { width: 15px; height: 15px; }
+#upload-data-page .ing-row-delete:hover { background: #fef2f2; color: #dc2626; }
+
+/* ─── Footer ─────────────────────────────────────────────── */
+#upload-data-page .ing-footer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 18px;
+  border-top: 1px solid var(--proj-border);
+}
+
+#upload-data-page .ing-skip-link {
+  background: none;
+  border: none;
+  color: var(--proj-text-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 6px 2px;
+}
+
+#upload-data-page .ing-skip-link:hover { color: var(--proj-purple, #9218EA); }
+
+#upload-data-page .ing-footer-bar .proj-btn-primary { height: 40px; padding: 0 22px; font-size: 13.5px; }
+
+/* ─── Upload help panel ──────────────────────────────────── */
+.ing-help-loading { color: var(--proj-text-4); }
+.ing-help-tables { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
+
+.ing-help-table {
+  border: 1px solid var(--proj-border, #e8e8ef);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.ing-help-table-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 5px;
+}
+
+.ing-help-cols { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.ing-help-cols code {
+  background: #f3f0f8;
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  color: #4b3a63;
+}
+
+#upload-data-page .ing-status-chip.reading { background: #f5f0fa; color: #6B2FA0; }
+
+.ing-spinner {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 2px solid rgba(107, 47, 160, 0.25);
+  border-top-color: #6B2FA0;
+  animation: ingSpin 0.8s linear infinite;
+}
+
+@keyframes ingSpin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ing-spinner { animation-duration: 2.4s; }
+}
+
+@media (max-width: 1000px) {
+  #upload-data-page .ing-split { grid-template-columns: 1fr; }
+  #upload-data-page .ing-dropzone,
+  #upload-data-page .ing-empty-files,
+  #upload-data-page .ing-file-list { min-height: 0; }
+}
+
+@media (max-width: 860px) {
+  #upload-data-page .ing-body { padding: 16px 16px 28px; }
+  #upload-data-page .ing-head-row { flex-direction: column-reverse; align-items: flex-start; gap: 12px; }
+  #upload-data-page .ing-title { font-size: 19px; }
+  #upload-data-page .ing-footer-bar { flex-direction: column-reverse; align-items: stretch; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MAPPING REVIEW — reworked against Dump/Ingestion Page.png
+   ═══════════════════════════════════════════════════════════════
+
+   Everything below is scoped to #ingestion-page, which hosts both
+   review screens (Excel/CSV and PDF).
+
+   TYPE SCALE
+   ----------
+   The rules further up this file size these screens in `--u`, the
+   landing page's reference pixel — clamp(0.5px, min(0.0598vw,
+   0.1063vh), 1.32px). That unit is right for a fixed poster laid
+   out once at one size; it is wrong for a scrolling table, because
+   the type shrinks with the window: at 1366×768 --u is 0.816, so
+   the 13px table body rendered at 10.6px and the 12px labels at
+   9.8px. It also meant this screen and the app it leads into never
+   agreed on a size.
+
+   These rules are in fixed px, on the authenticated app's own
+   scale — style.css sets html{font-size:14px}, .card-title 15px,
+   .btn 13px, .tag 11px, .ng-table 13px body / 11px header, and
+   home-overview.css uses 19–22px for a card's own headline. Same
+   scale the Upload, Select Project and Create Project screens were
+   put on; see the note above #upload-data-page.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ─── Shell: rail + one scrolling column ──────────────────────── */
+#ingestion-page .ing-shell,
+#upload-data-page .ing-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+#ingestion-page .ing-scroll,
+#upload-data-page .ing-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The review screen is one screenful, and the long thing inside it — the
+   mapping table — scrolls in its own box.
+
+   It used to be the whole page that scrolled, so with 147 rows the primary
+   action sat roughly 10,000px below the fold: to confirm a mapping you had to
+   scroll past every row you had just decided not to change. The chrome above
+   the table (heading, file card, counts) and the footer below it are both
+   fixed in place, so `Confirm mapping & continue` is on screen from the moment
+   the screen opens, and the counts stay visible while you work down the rows.
+
+   Every element in this chain needs `min-height: 0`. A flex item's default
+   `min-height: auto` refuses to shrink below its content, so one missing
+   declaration anywhere lets the table push the footer off the bottom again
+   instead of scrolling. */
+#ingestion-page .proj-scroll {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+#ingestion-page .ing-body {
+  width: 100%;
+  max-width: 1480px;
+  margin: 0 auto;
+  padding: 14px 28px 16px;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+#ingestion-page .ing-crumbs,
+#ingestion-page .ing-mapping-head,
+#ingestion-page .ing-stats-row,
+#ingestion-page .ing-footer-row { flex-shrink: 0; }
+
+#ingestion-page .ing-mapping-layout {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Both are needed, and neither is the default. The base rule sets
+     `align-items: start`, which sizes each column to its own content — so the
+     mapping card grew to all 147 rows and its inner scroller never had a
+     height to work against. And a grid row is `auto` unless told otherwise,
+     which means max-content: `minmax(0, 1fr)` is what lets the row be as tall
+     as the space it is given and no taller. */
+  align-items: stretch;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+#ingestion-page .ing-mapping-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#ingestion-page .ing-mapping-main-head,
+#ingestion-page .ing-flag-callout,
+#ingestion-page #ing-map-tabs-slot { flex-shrink: 0; }
+
+#ingestion-page #ing-map-table-slot {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  /* The card's own bottom padding, moved inside the scrolling box so the last
+     row clears the edge instead of touching it. */
+  padding-bottom: 4px;
+}
+
+/* The column headers stay put while 147 rows move under them. Without this,
+   scrolling a table that now has its own viewport loses the only labels that
+   say which column is the source and which the mapped field. One thead per
+   sheet, each sticking within the same box, which is what "All fields" needs. */
+#ingestion-page .ing-map-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--proj-surface);
+}
+
+#ingestion-page .ing-map-sheet-group + .ing-map-sheet-group { margin-top: 6px; }
+
+/* ─── Flow rail ───────────────────────────────────────────────── */
+/* The app's collapsed sidebar, at its width and with its icon
+   treatment (style.css .sidebar / .nav-item), so arriving in the
+   workspace afterwards is not a change of furniture. */
+.ing-rail {
+  flex: 0 0 78px;
+  width: 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 14px 8px 16px;
+  background: rgba(255, 255, 255, 0.72);
+  border-right: 1px solid var(--proj-border-soft);
+  overflow-y: auto;
+}
+
+.ing-rail-eyebrow {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--proj-text-4);
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.ing-rail-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 4px;
+  border: none;
+  background: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--proj-text-3);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ing-rail-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.ing-rail-icon svg { width: 19px; height: 19px; }
+.ing-rail-label { line-height: 1.2; text-align: center; }
+
+.ing-rail-item.state-done:hover,
+.ing-rail-item.state-live:hover { background: var(--proj-tint); color: var(--proj-purple); }
+.ing-rail-item:focus-visible { outline: 2px solid var(--proj-purple); outline-offset: 1px; }
+
+.ing-rail-item.state-current {
+  color: var(--proj-purple);
+  cursor: default;
+}
+.ing-rail-item.state-current .ing-rail-icon {
+  background: var(--proj-tint-deep);
+}
+
+/* A step already taken is marked as such, not merely un-highlighted:
+   "behind me" and "not available" are different facts and looked
+   identical when both were simply grey. */
+.ing-rail-item.state-done .ing-rail-icon {
+  background: #e9f6ef;
+  color: #157f3c;
+}
+
+/* Out of reach, and the title attribute says why. Not hidden: a step
+   that vanishes until it works gives no sense of how far this goes. */
+.ing-rail-item.state-blocked {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+.ing-rail-item.state-blocked:hover { background: none; }
+
+.ing-rail-spacer { flex: 1 1 auto; min-height: 12px; }
+
+/* ─── Back, at the top ────────────────────────────────────────── */
+/* Above the title rather than beside the primary action at the foot
+   of a 2,000px page: the way out of a screen should not require
+   reaching the end of it. Nielsen #3. */
+#ingestion-page .ing-crumbs,
+#upload-data-page .ing-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+#ingestion-page .ing-crumb-step {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--proj-text-4);
+}
+
+/* ─── Header ──────────────────────────────────────────────────── */
+#ingestion-page .ing-mapping-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+#ingestion-page .ing-mapping-head-text { flex: 1 1 380px; min-width: 0; }
+
+#ingestion-page .ing-title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  margin: 0;
+}
+
+#ingestion-page .ing-subtitle {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  max-width: 620px;
+}
+
+#ingestion-page .ing-file-summary-card {
+  flex: 0 1 420px;
+  gap: 13px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  max-width: 460px;
+}
+
+#ingestion-page .ing-file-summary-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  font-size: 10px;
+  background: #157f3c;
+}
+
+#ingestion-page .ing-file-summary-icon.type-pdf { background: #c62d1f; }
+
+#ingestion-page .ing-file-summary-name {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+#ingestion-page .ing-file-summary-meta { gap: 20px; margin-top: 7px; }
+#ingestion-page .ing-file-summary-meta-label { font-size: 11px; }
+#ingestion-page .ing-file-summary-meta-value { font-size: 13px; margin-top: 1px; }
+#ingestion-page .ing-file-summary-badge {
+  margin-top: 9px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Left in `--u` above, so it shrank with the window like everything else on
+   this screen used to. Sized here against .tag (11px), a shade larger because
+   it carries a sentence rather than a word. */
+#ingestion-page .ing-status-chip {
+  font-size: 11.5px;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+#ingestion-page .ing-status-chip svg { width: 13px; height: 13px; }
+
+/* ─── Stats strip ─────────────────────────────────────────────── */
+#ingestion-page .ing-stats-row {
+  border-radius: 12px;
+  margin-top: 14px;
+}
+
+/* The heading column stretches to the file card's height so the two settle
+   around the same centre instead of leaving a hole under the shorter one. */
+/* Explicitly a row, wrapping. The --u rules above turn this container into a
+   COLUMN below 1080px, which silently re-reads the heading block's
+   `flex: 1 1 380px` as a HEIGHT: 68px of title and subtitle sat in a 380px
+   box, leaving a 300px hole above the file card on every laptop screen. */
+#ingestion-page .ing-mapping-head {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+#ingestion-page .ing-mapping-head-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+#ingestion-page .ing-stat-item {
+  gap: 11px;
+  padding: 14px 18px;
+}
+
+#ingestion-page .ing-stat-icon { width: 32px; height: 32px; }
+#ingestion-page .ing-stat-icon svg { width: 16px; height: 16px; }
+#ingestion-page .ing-stat-value { font-size: 19px; }
+#ingestion-page .ing-stat-label { font-size: 12px; margin-top: 3px; }
+
+/* ─── Two-column body ─────────────────────────────────────────── */
+#ingestion-page .ing-mapping-layout {
+  grid-template-columns: minmax(0, 1fr) 316px;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+#ingestion-page .ing-mapping-main {
+  border-radius: 12px;
+  padding: 16px 18px 14px;
+}
+
+#ingestion-page .ing-mapping-main-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+#ingestion-page .ing-card-title { font-size: 15px; font-weight: 700; }
+#ingestion-page .ing-card-sub {
+  font-size: 12.5px;
+  line-height: 1.5;
+  margin-top: 3px;
+  max-width: 520px;
+}
+
+/* ─── Toolbar: search + filters ───────────────────────────────── */
+.ing-map-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ing-map-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ing-map-search svg {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  color: var(--proj-text-4);
+  pointer-events: none;
+}
+
+.ing-map-search-input {
+  height: 34px;
+  width: 200px;
+  padding: 0 10px 0 30px;
+  border: 1px solid var(--proj-border);
+  border-radius: 8px;
+  background: var(--proj-surface);
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--proj-text-1);
+}
+
+.ing-map-search-input::placeholder { color: var(--proj-text-4); }
+.ing-map-search-input:focus {
+  outline: none;
+  border-color: var(--proj-purple);
+  box-shadow: 0 0 0 3px rgba(146, 24, 234, 0.12);
+}
+
+.ing-map-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--proj-border);
+  border-radius: 8px;
+  background: var(--proj-surface);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--proj-text-2);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.ing-map-filter-btn svg { width: 14px; height: 14px; }
+.ing-map-filter-btn:hover { border-color: var(--proj-purple); color: var(--proj-purple); }
+.ing-map-filter-btn:focus-visible { outline: 2px solid var(--proj-purple); outline-offset: 1px; }
+
+/* Lit while it is doing something, so a table showing 3 of 147 rows
+   always has a visible reason on screen. Nielsen #1. */
+.ing-map-filter-btn.active {
+  border-color: var(--proj-purple);
+  background: var(--proj-tint);
+  color: var(--proj-purple);
+}
+
+/* The popover is a .wc-menu, so it inherits the shared z-index that
+   clears .proj-page (9990); only the checkbox rows are new. */
+.ing-filter-pop { min-width: 214px; }
+
+.ing-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--proj-text-1);
+  cursor: pointer;
+}
+
+.ing-filter-row:hover { background: var(--proj-tint); }
+.ing-filter-row input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--proj-purple);
+  cursor: pointer;
+}
+
+/* ─── Flagged callout ─────────────────────────────────────────── */
+/* The rows that need a decision, advertised where the table starts
+   rather than left for the user to find by scrolling 147 rows. The
+   table itself still opens unfiltered — a view that silently shows a
+   subset is the failure this is meant to prevent. */
+.ing-flag-callout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid #f0dcb0;
+  background: #fdf8ee;
+  border-radius: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #6b5216;
+}
+
+.ing-flag-callout > svg {
+  width: 17px;
+  height: 17px;
+  flex-shrink: 0;
+  color: #b4780a;
+}
+
+.ing-flag-callout strong { color: #4a3809; font-weight: 700; }
+
+.ing-flag-callout-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid #e0c68b;
+  border-radius: 8px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: #8a6410;
+  cursor: pointer;
+}
+
+.ing-flag-callout-btn:hover { background: #fbf1dd; }
+.ing-flag-callout-btn:focus-visible { outline: 2px solid #b4780a; outline-offset: 1px; }
+
+/* ─── Sheet tabs ──────────────────────────────────────────────── */
+#ing-map-tabs-slot { position: relative; }
+
+.ing-map-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--proj-border-soft);
+  margin-bottom: 2px;
+  scrollbar-width: thin;
+  scroll-padding-inline: 32px;
+}
+
+/* Painted over the strip by its container and click-through, so the tab
+   underneath stays reachable; only its last few pixels are dimmed. The
+   classes are set by the strip's own scroll handler, so a strip whose tabs
+   all fit shows no fade at all. */
+#ing-map-tabs-slot::before,
+#ing-map-tabs-slot::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 3px;
+  width: 36px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 1;
+}
+
+#ing-map-tabs-slot::before {
+  left: 0;
+  background: linear-gradient(to left, rgba(255, 255, 255, 0), #ffffff 78%);
+}
+
+#ing-map-tabs-slot::after {
+  right: 0;
+  background: linear-gradient(to right, rgba(255, 255, 255, 0), #ffffff 78%);
+}
+
+#ing-map-tabs-slot:has(.ing-tabs-more-left)::before,
+#ing-map-tabs-slot:has(.ing-tabs-more-right)::after { opacity: 1; }
+
+.ing-map-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 9px 12px 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--proj-text-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.ing-map-tab:hover { color: var(--proj-text-1); }
+.ing-map-tab:focus-visible { outline: 2px solid var(--proj-purple); outline-offset: -2px; }
+
+.ing-map-tab[aria-selected="true"] {
+  color: var(--proj-purple);
+  border-bottom-color: var(--proj-purple);
+}
+
+.ing-map-tab-count,
+.ing-map-tab-meta {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 20px;
+  background: var(--proj-tint);
+  color: var(--proj-text-3);
+}
+
+.ing-map-tab[aria-selected="true"] .ing-map-tab-count,
+.ing-map-tab[aria-selected="true"] .ing-map-tab-meta {
+  background: var(--proj-tint-deep);
+  color: var(--proj-purple);
+}
+
+/* The one tab that means "you have work here". */
+.ing-map-tab.tone-flag { color: #8a6410; }
+.ing-map-tab.tone-flag .ing-map-tab-count { background: #fdf3e2; color: #a8710c; }
+.ing-map-tab.tone-flag[aria-selected="true"] {
+  color: #a8710c;
+  border-bottom-color: #d99a1c;
+}
+
+/* A sheet nothing is read from. Dimmed, never dropped: "this sheet
+   contributed nothing" is a finding the user needs. */
+.ing-map-tab.tone-muted { color: var(--proj-text-4); }
+
+/* ─── Table ───────────────────────────────────────────────────── */
+#ingestion-page .ing-map-table th {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 10px;
+}
+
+#ingestion-page .ing-map-table td {
+  font-size: 13px;
+  padding: 9px 10px;
+}
+
+#ingestion-page .ing-map-source { font-size: 13px; font-weight: 600; gap: 8px; }
+#ingestion-page .ing-map-source svg { width: 15px; height: 15px; }
+
+/* Two lines, then an ellipsis — with the whole value on the cell's `title`.
+   The rule above caps the height and lets the overflow SCROLL, which at
+   1366px cut the third line of a long sample through the middle of the
+   glyphs and offered a scrollbar too small to notice, let alone use. */
+#ingestion-page .ing-map-sample {
+  font-size: 12.5px;
+  max-height: none;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+#ingestion-page .ing-map-select {
+  height: 32px;
+  font-size: 12.5px;
+  border-radius: 8px;
+  padding: 0 26px 0 10px;
+}
+
+/* A status is one word or two; wrapping "Not used" onto two lines turned a
+   chip into a paragraph and pushed the row taller than its neighbours. */
+#ingestion-page .ing-confidence-pill,
+#ingestion-page .ing-action-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+#ingestion-page .ing-action-pill svg { width: 13px; height: 13px; }
+
+#ingestion-page .ing-map-sheet-head {
+  padding: 12px 2px 7px;
+  gap: 10px;
+}
+
+#ingestion-page .ing-map-sheet-name { font-size: 12.5px; font-weight: 700; }
+#ingestion-page .ing-map-sheet-meta { font-size: 11.5px; }
+
+/* Long sample values and 5 columns need somewhere to go on a narrow
+   window; the page itself must never scroll sideways. */
+#ingestion-page #ing-map-table-slot { overflow-x: auto; }
+#ingestion-page .ing-map-table { min-width: 780px; }
+
+.ing-map-empty {
+  padding: 30px 20px 34px;
+  text-align: center;
+}
+
+.ing-map-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--proj-text-1);
+}
+
+.ing-map-empty-sub {
+  margin: 5px auto 14px;
+  max-width: 400px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--proj-text-3);
+}
+
+/* ─── AI mapping summary ──────────────────────────────────────── */
+/* Its own scroller now, not a sticky block: the page around it no longer
+   scrolls, so there is nothing for it to stick to. */
+#ingestion-page .ing-sidebar-card {
+  border-radius: 12px;
+  padding: 16px 17px 18px;
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+#ingestion-page .ing-sidebar-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--proj-text-1);
+  margin-bottom: 12px;
+}
+
+#ingestion-page .ing-sidebar-title svg {
+  width: 17px;
+  height: 17px;
+  color: var(--proj-purple);
+}
+
+.ing-sum-headline {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--proj-text-2);
+}
+
+.ing-sum-headline strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--proj-text-1);
+}
+
+.ing-sum-pill {
+  display: inline-block;
+  margin: 9px 0 4px;
+  padding: 5px 11px;
+  border-radius: 20px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.ing-sum-pill.tone-open { background: var(--proj-tint-deep); color: var(--proj-purple); }
+.ing-sum-pill.tone-clear { background: #e6f6ee; color: #157f3c; }
+
+.ing-sum-head {
+  margin-top: 14px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.ing-sum-head.tone-identified { color: var(--proj-purple); }
+.ing-sum-head.tone-review { color: #a8710c; }
+.ing-sum-head.tone-notused { color: #c0392b; }
+
+.ing-sum-list {
+  margin: 0;
+  padding-left: 15px;
+  list-style: disc;
+}
+
+.ing-sum-list li {
+  margin-bottom: 5px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--proj-text-2);
+}
+
+.ing-sum-list li.more { list-style: none; margin-left: -15px; color: var(--proj-text-4); }
+.ing-sum-list strong { color: var(--proj-text-1); font-weight: 700; }
+
+.ing-sum-list code {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  background: var(--proj-tint);
+  border-radius: 4px;
+  padding: 1px 4px;
+  color: var(--proj-text-1);
+  overflow-wrap: anywhere;
+}
+
+.ing-sum-list svg {
+  width: 12px;
+  height: 12px;
+  vertical-align: -1px;
+  color: var(--proj-text-4);
+}
+
+.ing-sum-note,
+.ing-sum-foot {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--proj-text-4);
+}
+
+.ing-sum-foot {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--proj-border-soft);
+}
+
+.ing-sum-foot-stat {
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--proj-text-2);
+}
+
+.ing-sum-foot-stat strong { color: var(--proj-text-1); font-weight: 700; }
+.ing-sum-foot em { font-style: normal; font-weight: 600; color: var(--proj-text-3); }
+
+/* ─── Data quality ────────────────────────────────────────────── */
+#ingestion-page .ing-card {
+  border-radius: 12px;
+  padding: 16px 18px 18px;
+}
+
+#ingestion-page .ing-review-item { padding: 10px 12px; }
+#ingestion-page .ing-review-item-name { font-size: 12.5px; }
+#ingestion-page .ing-review-item-note { font-size: 11.5px; }
+
+/* ─── Footer ──────────────────────────────────────────────────── */
+#ingestion-page .ing-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 18px;
+  padding-top: 0;
+  flex-wrap: wrap;
+}
+
+/* What confirming will do, next to the button that does it. */
+#ingestion-page .ing-footer-note {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--proj-text-3);
+  max-width: 620px;
+}
+
+#ingestion-page .proj-btn-primary {
+  height: 40px;
+  font-size: 13px;
+  padding: 0 20px;
+}
+
+/* A laptop at 768px has ~330px left for the table once the heading, the file
+   card, the counts and the footer have taken their share. Below that the
+   heading block is the part worth losing height on — the file card beside it
+   carries the same facts. */
+/* A short window and a narrow one have the same problem: the chrome above the
+   table takes a share of the height that a 390px phone cannot spare, and the
+   two conditions do not overlap (an iPhone is 844px tall). Same compaction for
+   both. */
+@media (max-height: 820px), (max-width: 900px) {
+  #ingestion-page .ing-body { padding-top: 10px; padding-bottom: 12px; }
+  #ingestion-page .ing-crumbs { margin-bottom: 8px; }
+  #ingestion-page .ing-title { font-size: 19px; }
+  /* The subtitle stays. Hiding it here shortened the heading column while the
+     file card beside it kept its height, and since the two are centred against
+     each other the saving turned straight into 70px of blank space above the
+     title. Two lines, clamped, is both smaller than the gap and worth reading. */
+  #ingestion-page .ing-subtitle {
+    margin-top: 4px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  #ingestion-page .ing-file-summary-card { padding: 10px 14px; gap: 11px; }
+  #ingestion-page .ing-file-summary-icon { width: 32px; height: 32px; }
+  /* Label beside value rather than above it, and the two chips at chip size.
+     The card is what sets the header's height, and every pixel it gives back
+     is a row of the table on a 768px screen. */
+  #ingestion-page .ing-file-summary-meta { gap: 14px; margin-top: 4px; }
+  #ingestion-page .ing-file-summary-meta > div {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+  #ingestion-page .ing-file-summary-meta-value { margin-top: 0; }
+  #ingestion-page .ing-file-summary-badge { margin-top: 6px; gap: 5px; }
+  #ingestion-page .ing-file-summary-badge .ing-status-chip {
+    font-size: 11px;
+    padding: 3px 9px;
+  }
+  #ingestion-page .ing-stats-row { margin-top: 10px; }
+  #ingestion-page .ing-stat-item { padding: 10px 16px; }
+  #ingestion-page .ing-stat-value { font-size: 17px; }
+  #ingestion-page .ing-mapping-layout { margin-top: 10px; }
+  #ingestion-page .ing-mapping-main { padding: 12px 16px 10px; }
+  #ingestion-page .ing-footer-row { margin-top: 12px; }
+}
+
+/* ─── PDF review ──────────────────────────────────────────────── */
+/* The same shape: the findings scroll, "Continue & confirm" does not move. */
+#ingestion-page .ing-pdf-layout {
+  max-width: 900px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+#ingestion-page .ing-demo-notice { font-size: 12.5px; line-height: 1.6; padding: 12px 14px; }
+#ingestion-page .ing-pdf-file-card { border-radius: 12px; padding: 13px 16px; }
+#ingestion-page .ing-file-icon.type-pdf { width: 36px; height: 36px; font-size: 10px; }
+#ingestion-page .ing-pdf-file-name { font-size: 13.5px; }
+#ingestion-page .ing-pdf-file-sub { font-size: 12px; }
+#ingestion-page .ing-findings-title { font-size: 14px; }
+#ingestion-page .ing-pdf-actions { margin-top: 0; margin-left: auto; max-width: 560px; }
+#ingestion-page .ing-pdf-action-caption { font-size: 11.5px; }
+
+/* ─── Responsive ──────────────────────────────────────────────── */
+/* Between these widths the two columns still fit, but only just; the summary
+   gives up 36px rather than the table giving up a column. */
+@media (min-width: 1081px) and (max-width: 1360px) {
+  #ingestion-page .ing-mapping-layout { grid-template-columns: minmax(0, 1fr) 280px; }
+}
+
+@media (max-width: 1080px) {
+  /* Below this width the summary stacks under the table. The pair scrolls
+     together and the footer alone stays pinned.
+
+     The table keeps a scroller of its own, bounded to a share of the window.
+     Without it the card is 10,000px tall and the summary sits below all of it:
+     the first stacked layout put the summary FIRST to make it reachable, which
+     on a 1100px laptop filled the entire screen with the digest and pushed the
+     table — the thing this screen is for — out of sight. Bounded table, then
+     summary, is the version where both are reachable in one short scroll. */
+  #ingestion-page .ing-mapping-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    align-items: start;
+    overflow-y: auto;
+  }
+  /* `min-height: auto` back, and it matters. The two-column mode sets
+     `min-height: 0` so the card can shrink and scroll inside its row; here the
+     row is implicit and `auto`-sized, and an item with no automatic minimum
+     lets that row collapse — it resolved to 24px while the card itself laid
+     out at 9,236px and painted straight over the summary below it. */
+  #ingestion-page .ing-mapping-main {
+    min-height: auto;
+    /* `visible`, and this is the whole of the bug. An element whose overflow
+       is anything but visible has an automatic minimum size of ZERO, so
+       `min-height: auto` bought nothing while `overflow: hidden` stood: the
+       implicit grid row resolved to 24px and the 446px card painted over the
+       summary beneath it. The slot below is the scroll container here; this
+       card does not need to be one. */
+    overflow: visible;
+  }
+  #ingestion-page #ing-map-table-slot {
+    flex: 0 0 auto;
+    max-height: 46vh;
+    overflow: auto;
+  }
+  #ingestion-page .ing-sidebar-card { max-height: none; overflow-y: visible; }
+}
+
+@media (max-width: 1024px) {
+  #ingestion-page .ing-body { padding: 14px 18px 28px; }
+  #ingestion-page .ing-file-summary-card { flex: 1 1 100%; max-width: none; }
+  .ing-map-search-input { width: 180px; }
+}
+
+@media (max-width: 760px) {
+  /* The rail becomes a horizontal strip: three steps still visible,
+     and no 78px column stolen from a 390px screen. */
+  #ingestion-page .ing-shell,
+  #upload-data-page .ing-shell { flex-direction: column; }
+  .ing-rail {
+    flex: 0 0 auto;
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--proj-border-soft);
+    overflow-x: auto;
+  }
+  .ing-rail-eyebrow { display: none; }
+  .ing-rail-spacer { display: none; }
+  .ing-rail-item { flex-direction: row; gap: 7px; padding: 6px 10px; }
+  .ing-rail-icon { width: 26px; height: 26px; border-radius: 8px; }
+  .ing-rail-icon svg { width: 16px; height: 16px; }
+
+  #ingestion-page .ing-stats-row { flex-wrap: wrap; }
+  #ingestion-page .ing-stat-item { flex: 1 1 50%; }
+  #ingestion-page .ing-stat-item:nth-child(2) { border-right: none; }
+
+  .ing-map-toolbar { width: 100%; }
+  .ing-map-search { flex: 1 1 auto; }
+  .ing-map-search-input { width: 100%; }
+
+  .ing-flag-callout { flex-wrap: wrap; }
+  .ing-flag-callout-btn { margin-left: 27px; }
+
+  /* On a phone the heading is four lines of prose above a table that has none
+     left. The file card and the counts state the same thing in less room, and
+     Help still carries the explanation. */
+  #ingestion-page .ing-subtitle { display: none; }
+  #ingestion-page .ing-title { font-size: 18px; }
+  #ingestion-page .ing-stat-item { padding: 8px 12px; gap: 8px; }
+  #ingestion-page .ing-stat-icon { width: 26px; height: 26px; }
+  #ingestion-page .ing-stat-icon svg { width: 14px; height: 14px; }
+  #ingestion-page .ing-stat-value { font-size: 15px; }
+  #ingestion-page .ing-stat-label { font-size: 11px; margin-top: 2px; }
+  #ingestion-page .ing-file-summary-card { padding: 9px 12px; }
+  #ingestion-page .ing-mapping-main { padding: 10px 12px 8px; }
+  .ing-rail { padding: 6px 10px; }
+  .ing-rail-item { padding: 5px 9px; font-size: 10px; }
+
+  #ingestion-page .ing-footer-row { flex-direction: column; align-items: stretch; }
+  #ingestion-page .ing-footer-row .proj-btn-primary { justify-content: center; }
 }

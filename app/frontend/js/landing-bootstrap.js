@@ -21,6 +21,7 @@ window.switchAuthPanel = function(view) {
     var p = document.getElementById('panel-reset');
     if (p) {
       p.classList.add('active');
+      p.classList.remove('is-confirmed');
       var f = document.getElementById('form-panel-reset');
       var c = document.getElementById('panel-reset-confirmation');
       if (f) f.style.display = 'block';

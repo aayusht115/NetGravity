@@ -79,6 +79,7 @@ export const FORECAST = {
   upper: [],
   lower: [],
   seriesLabel: '',
+  seriesName: '',
   growthRate: null,
   breachMonth: null,
   breachFacility: null,
@@ -189,19 +190,88 @@ export const RECOMMENDATION = {
 };
 
 // ─── GOVERNANCE TIERS ───────────────────────────────────────
+//
+// The approval bands, as configured. Note the explicit "INR" on each money
+// band: these are fixed policy amounts with no backend owner and no currency
+// conversion behind them, and they were written as bare "₹5L"/"₹50L" — which
+// on a dollar-denominated network reads as a threshold in the reader's own
+// currency. A materiality band a reviewer misreads by a factor of eighty is
+// worse than one they have to look up.
+//
+// GOVERNANCE_TIERS_CURRENCY is what these amounts are actually denominated in.
+// When it differs from the network's currency the Settings screen says so
+// rather than silently implying they are comparable.
+export const GOVERNANCE_TIERS_CURRENCY = 'INR';
+
 export const GOVERNANCE_TIERS = [
-  { tier: 1, label: "INFORM", description: "Low-risk informational insight. No approval required.", criteria: "Value at stake < ₹5L, fully reversible, no SLA impact", color: "#22c55e" },
-  { tier: 2, label: "PROPOSE", description: "AI recommends and prepares action. Human approval required.", criteria: "Value at stake ₹5L–₹50L, or SLA impact, or partial reversibility", color: "#f59e0b" },
-  { tier: 3, label: "HUMAN DECISION", description: "High-impact structural decision. AI analyses, cannot execute.", criteria: "Close/open DC, major contract change, CapEx > ₹50L", color: "#dc2626" },
+  { tier: 1, label: "INFORM", description: "Low-risk informational insight. No approval required.", criteria: "Value at stake < ₹5L (INR), fully reversible, no SLA impact", color: "#22c55e" },
+  { tier: 2, label: "PROPOSE", description: "AI recommends and prepares action. Human approval required.", criteria: "Value at stake ₹5L–₹50L (INR), or SLA impact, or partial reversibility", color: "#f59e0b" },
+  { tier: 3, label: "HUMAN DECISION", description: "High-impact structural decision. AI analyses, cannot execute.", criteria: "Close/open DC, major contract change, CapEx > ₹50L (INR)", color: "#dc2626" },
 ];
 
 // ─── SYSTEM STATUS ──────────────────────────────────────────
+//
+// What the Settings screen reports about the run that produced the figures on
+// screen. Written by hydration from the analysis the backend actually served.
+//
+// This was a hardcoded literal — 42 facilities, 380 lanes, 98.4% quality,
+// "ARIMA + external signals", a run dated 18/08/2026 — displayed on the
+// Settings screen of every project regardless of its data. Model-governance
+// metadata is exactly the surface where an invented number is most damaging:
+// it is what a reviewer consults to decide whether the analysis can be trusted,
+// and it described a run that never happened, for a network nobody uploaded.
+//
+// Every field is null until a solve has been read. The screen renders
+// "Not available" for a null rather than a plausible-looking substitute.
 export const SYSTEM_STATUS = {
-  data: { facilities: 42, demandZones: 120, lanes: 380, historicalPeriods: 24, qualityPct: 98.4 },
-  forecast: { model: "Enhanced Demand Forecast (ARIMA + external signals)", horizon: "6 months", lastUpdated: "2026-08-15" },
-  optimisation: { solver: "PuLP / HiGHS (MILP)", status: "Optimal", lastRun: "2026-08-18T14:22:00" },
-  ai: { agentStatus: "Active", model: "Configured LLM Provider", lastAction: "Stress-tested leading option" },
+  data: {
+    facilities: null, markets: null, lanes: null,
+    historicalPeriods: null, qualityPct: null,
+  },
+  forecast: { model: null, horizon: null, lastUpdated: null },
+  optimisation: {
+    solver: null, status: null, lastRun: null,
+    executionId: null, dataVersion: null, computeSeconds: null,
+  },
+  ai: { agentStatus: null, model: null, lastAction: null },
 };
+
+/**
+ * Record what the run that produced the current figures actually was.
+ *
+ * Called by hydration with the KPI envelope and the network it describes, so
+ * the Settings screen reports this project rather than a remembered one.
+ */
+export function applySystemStatus({ network, analysis, forecast } = {}) {
+  const d = SYSTEM_STATUS.data;
+  d.facilities = (PLANTS.length + DCS.length) || null;
+  d.markets = MARKETS.length || null;
+  d.lanes = LANES.length || null;
+  d.historicalPeriods = (network && network.observedPeriods)
+    ? network.observedPeriods.length : null;
+  // Measured data quality belongs to the ingestion run, not the solve. Left
+  // null here rather than restated from memory.
+  d.qualityPct = (network && typeof network.qualityPct === 'number')
+    ? network.qualityPct : null;
+
+  const o = SYSTEM_STATUS.optimisation;
+  const anyKpi = analysis && analysis.kpis
+    ? Object.values(analysis.kpis).find((r) => r && r.status)
+    : null;
+  o.solver = anyKpi?.authoritative_owner || null;
+  o.status = anyKpi?.input_evidence?.solver_status || anyKpi?.status || null;
+  o.lastRun = analysis?.computed_at
+    ? new Date(analysis.computed_at * 1000).toISOString() : null;
+  o.executionId = analysis?.execution_id || null;
+  o.dataVersion = analysis?.data_version || null;
+  o.computeSeconds = (typeof analysis?.compute_seconds === 'number')
+    ? analysis.compute_seconds : null;
+
+  const f = SYSTEM_STATUS.forecast;
+  f.model = forecast?.model || null;
+  f.horizon = forecast?.horizon != null ? `${forecast.horizon} periods` : null;
+  f.lastUpdated = forecast?.generatedAt || null;
+}
 
 
 // ─── PERIODS ────────────────────────────────────────────────
@@ -260,6 +330,37 @@ export function setNetworkPeriods(periods, costPeriod) {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('networkPeriodsChanged', {
       detail: { periods: PERIODS.map((p) => p.id), costPeriod },
+    }));
+  }
+}
+
+// ─── NETWORK GEOGRAPHY ──────────────────────────────────────
+//
+// Where the loaded network is, and the bounding box a map must fit to — both
+// inferred by the backend from the coordinates the upload states.
+//
+// Every map in this app was built around one country: an India basemap image,
+// India-shaped lat/lng-to-pixel projections, and an India-centred 3D camera.
+// A US network rendered as an empty grey field over the Deccan while the
+// counters beside it correctly said 24 nodes and 51 corridors. A map that
+// fits the network it was given works for any network; one that assumes a
+// country works for one.
+export const NETWORK_GEOGRAPHY = {
+  region: null,
+  bounds: null,      // { latMin, latMax, lngMin, lngMax }
+  confidence: null,
+  basis: '',
+};
+
+export function setNetworkGeography(geography) {
+  const g = geography || {};
+  NETWORK_GEOGRAPHY.region = g.region || null;
+  NETWORK_GEOGRAPHY.bounds = g.bounds || null;
+  NETWORK_GEOGRAPHY.confidence = g.confidence ?? null;
+  NETWORK_GEOGRAPHY.basis = g.basis || '';
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('networkGeographyChanged', {
+      detail: { ...NETWORK_GEOGRAPHY },
     }));
   }
 }
@@ -432,6 +533,33 @@ export function clearDemoNarrative(keepFacilityIds = []) {
  * `history` and `forecast` are `{ labels: string[], values: number[] }`;
  * `upper`/`lower` are the p90/p10 bands, absent when the engine reports none.
  */
+/**
+ * Every market-product series the engine forecast, largest first.
+ *
+ * The forecast screen plotted ONE series and offered no way to reach the
+ * others, while reporting "59 series forecast" beside it. The engine had done
+ * all the work; 98% of it was unreachable.
+ */
+export const FORECAST_CATALOGUE = [];
+
+export function setForecastCatalogue(series) {
+  FORECAST_CATALOGUE.length = 0;
+  (series || []).forEach((entry) => FORECAST_CATALOGUE.push(entry));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('forecastCatalogueLoaded', {
+      detail: { count: FORECAST_CATALOGUE.length },
+    }));
+  }
+}
+
+/** Plot one series from the catalogue, by its `market/product` key. */
+export function selectForecastSeries(key) {
+  const entry = FORECAST_CATALOGUE.find((e) => e.key === key);
+  if (!entry) return false;
+  setForecastSeries(entry);
+  return true;
+}
+
 export function setForecastSeries({ history, forecast, capacityLine = null,
                                     seriesLabel = '' } = {}) {
   DEMAND_HISTORY.months = (history && history.labels) || [];
@@ -447,6 +575,9 @@ export function setForecastSeries({ history, forecast, capacityLine = null,
   FORECAST.upper = (forecast && forecast.upper) || [];
   FORECAST.lower = (forecast && forecast.lower) || [];
   FORECAST.seriesLabel = seriesLabel;
+  // The human-readable name of the plotted series, when the caller supplies
+  // one. The chart title said "M002/P001" — an internal key.
+  FORECAST.seriesName = arguments[0]?.label || '';
 
   // Growth rate and the capacity-breach fields describe the demo network and
   // have no counterpart here unless the engine produced one.
@@ -646,14 +777,113 @@ export function getScenarioById(id) {
   return SCENARIOS.find(s => s.id === id);
 }
 
+// ─── MONEY ──────────────────────────────────────────────────
+//
+// The currency of the network currently loaded, set by hydration from the
+// backend, which reads it off the uploaded data (`CanonicalNetwork.currency`).
+//
+// Every money figure in this app used to be printed as "₹" with lakh/crore
+// grouping, hardcoded in a dozen template literals. That is correct for an
+// Indian network and wrong for every other one: the supplied US dataset states
+// USD on all 268 of its freight-rate rows, and its 23,226,260 baseline was
+// rendered "₹232.26L" — a number no reader could reconcile with their own
+// books, in a unit their data never mentioned.
+//
+// Null means the upload named no currency. Amounts then print bare, which is
+// the honest rendering of an unknown unit and stays distinguishable from a
+// figure we know to be rupees.
+let ACTIVE_CURRENCY = null;
+
+const CURRENCY_SYMBOLS = {
+  INR: '₹', USD: '$', EUR: '€', GBP: '£', JPY: '¥', CNY: '¥',
+  AUD: 'A$', CAD: 'C$', SGD: 'S$', NZD: 'NZ$', HKD: 'HK$',
+  BRL: 'R$', ZAR: 'R', KRW: '₩', RUB: '₽', TRY: '₺', ILS: '₪',
+  THB: '฿', PHP: '₱', VND: '₫',
+};
+
+/** Currencies conventionally grouped in lakh/crore rather than K/M/B. */
+const LAKH_CRORE_CURRENCIES = new Set(['INR', 'PKR', 'BDT', 'NPR', 'LKR']);
+
+export function setActiveCurrency(code) {
+  ACTIVE_CURRENCY = code ? String(code).trim().toUpperCase() : null;
+}
+
+export function getActiveCurrency() { return ACTIVE_CURRENCY; }
+
+/** The symbol for the active currency, or the ISO code, or '' when unknown. */
+export function currencySymbol() {
+  if (!ACTIVE_CURRENCY) return '';
+  return CURRENCY_SYMBOLS[ACTIVE_CURRENCY] || ACTIVE_CURRENCY;
+}
+
+/**
+ * What to write in a column heading or an axis label: the ISO code.
+ *
+ * A heading says "Total Cost (USD)", not "Total Cost ($)" — the code is
+ * unambiguous where a symbol is shared by a dozen currencies. Returns
+ * "amount" when the upload named no currency, so a heading still reads as a
+ * sentence rather than "Total Cost ()".
+ */
+export function currencyLabel() {
+  return ACTIVE_CURRENCY || 'amount';
+}
+
+/**
+ * Resolve `{ccy}` in a label written before the network was known.
+ *
+ * Row tables, axis titles and form labels are module constants, evaluated at
+ * import time — long before hydration reads the currency off the network. They
+ * carry the token; this substitutes it wherever they are rendered.
+ */
+export function withCurrency(text) {
+  return typeof text === 'string' ? text.split('{ccy}').join(currencyLabel()) : text;
+}
+
+/** The locale whose digit grouping matches the active currency's convention. */
+function numberLocale() {
+  return LAKH_CRORE_CURRENCIES.has(ACTIVE_CURRENCY) ? 'en-IN' : 'en-US';
+}
+
+/**
+ * A money amount, abbreviated, in the network's own currency.
+ *
+ * Scale words follow the currency: an Indian network reads in L/Cr, everything
+ * else in K/M/B. Printing "₹232.26L" over dollars was wrong twice — the wrong
+ * symbol AND a grouping convention the reader does not use.
+ */
 export function formatCurrency(value, decimals = 0) {
   // A cost the engine could not produce has no number. Rendering an em dash is
-  // the honest answer; "₹0" would read as a free network, and the previous
+  // the honest answer; "0" would read as a free network, and an earlier
   // version threw on null, taking the whole screen down with it.
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
-  if (value >= 100000) return "₹" + (value / 100000).toFixed(1) + "L";
-  if (value >= 1000) return "₹" + (value / 1000).toFixed(1) + "K";
-  return "₹" + Number(value).toFixed(decimals);
+  const n = Number(value);
+  const sym = currencySymbol();
+  const sign = n < 0 ? '-' : '';
+  const abs = Math.abs(n);
+  const join = (num, suffix) => `${sign}${sym}${num}${suffix}`;
+
+  if (LAKH_CRORE_CURRENCIES.has(ACTIVE_CURRENCY)) {
+    if (abs >= 10000000) return join((abs / 10000000).toFixed(2), 'Cr');
+    if (abs >= 100000) return join((abs / 100000).toFixed(1), 'L');
+    if (abs >= 1000) return join((abs / 1000).toFixed(1), 'K');
+    return join(abs.toFixed(decimals), '');
+  }
+  if (abs >= 1e9) return join((abs / 1e9).toFixed(2), 'B');
+  if (abs >= 1e6) return join((abs / 1e6).toFixed(2), 'M');
+  if (abs >= 1000) return join((abs / 1000).toFixed(1), 'K');
+  return join(abs.toFixed(decimals), '');
+}
+
+/**
+ * A money amount in full, unabbreviated — for exports and audit tables, where
+ * "$1.2M" loses the precision the reader came for.
+ */
+export function formatCurrencyExact(value, decimals = 2) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
+  const body = Number(value).toLocaleString(numberLocale(), {
+    minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+  });
+  return ACTIVE_CURRENCY ? `${currencySymbol()}${body}` : body;
 }
 
 /**
@@ -673,8 +903,12 @@ export function formatNumber(value) {
   // A quantity the engine did not produce has no number. An em dash is the
   // honest rendering; the previous version threw on null and took the screen
   // down with it.
+  //
+  // Grouped for the network's own convention: "en-IN" renders 1,435,985 as
+  // 14,35,985, which is right for an Indian reader and unreadable to anyone
+  // else. It was hardcoded on every screen.
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
-  return Number(value).toLocaleString("en-IN");
+  return Number(value).toLocaleString(numberLocale());
 }
 
 // Single owner for the utilization risk bands used everywhere in the app
@@ -690,13 +924,30 @@ export function getUtilColor(pct) {
   return "#22c55e";
 }
 
-export function getUtilLabel(pct) {
+/**
+ * The utilisation band, or the site's operating status when it has one.
+ *
+ * `isOpen === false` is not a utilisation band at all: a site the plan does
+ * not use runs at 0%, which fell into "Healthy" and put a green tag reading
+ * "Healthy" on every closed and candidate facility in the twin table. Healthy
+ * is a claim about a site that is working well; a site that is not operating
+ * is not working well, it is not working.
+ *
+ * Operating status and utilisation health are separate facts, so they get
+ * separate answers. Callers that genuinely have only a percentage — a legend,
+ * a colour scale — call this with one argument and get the band, unchanged.
+ */
+export function getUtilLabel(pct, isOpen) {
+  if (isOpen === false) return "Not selected";
+  if (pct === null || pct === undefined || Number.isNaN(Number(pct))) return "Not solved";
   if (pct >= 95) return "Critical";
   if (pct >= 85) return "Stress";
   return "Healthy";
 }
 
-export function getUtilTagClass(pct) {
+export function getUtilTagClass(pct, isOpen) {
+  if (isOpen === false) return "tag-muted";
+  if (pct === null || pct === undefined || Number.isNaN(Number(pct))) return "tag-muted";
   if (pct >= 95) return "tag-danger";
   if (pct >= 85) return "tag-warning";
   return "tag-success";
@@ -899,7 +1150,7 @@ export function loadNetworkData(networkData) {
         totalCost: { value: null, prev: null, status: 'unknown' },
         inventoryDays: { value: null, prev: null, status: 'unknown' },
         // Stated in the upload.
-        costPerUnit: { value: f.handlingCost ?? null, unit: '₹', delta: null },
+        costPerUnit: { value: f.handlingCost ?? null, unit: currencySymbol(), delta: null },
         capacity: { value: f.capacity ?? null, unit: 'units/period' },
         costBreakdown: null,
         prevLabel: 'no prior solve',

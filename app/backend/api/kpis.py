@@ -32,6 +32,7 @@ from app.backend.services.errors import (
     ValidationError,
 )
 from app.backend.services.analysis_store import analysis_service, serialise_analysis
+from app.backend.services.correlation import orchestrator_request_id
 from app.backend.services.project_registry import project_registry
 from app.backend.services.ratelimit import rate_limit
 from app.backend.services.security import require_auth
@@ -78,6 +79,10 @@ def create_kpi_blueprint(orchestrator: Optional[Orchestrator] = None,
         snapshot = orchestrator.snapshots.get(snapshot_id)
         user_id = g.current_user.user_id
 
+        # Read here, not inside `compute()`: the closure is handed to the
+        # analysis cache and there is no promise it runs inside this request.
+        request_id = orchestrator_request_id("kpi-baseline")
+
         def compute() -> Dict[str, Any]:
             # The intent is stated explicitly rather than left to free-text
             # classification. Passing prose here made the deterministic NLU
@@ -91,6 +96,7 @@ def create_kpi_blueprint(orchestrator: Optional[Orchestrator] = None,
                 actor=Actor(actor_id=user_id, role=ActorRole.PLANNER),
                 network_snapshot_id=snapshot_id,
                 disable_llm=True,
+                request_id=request_id,
             )
             response = orchestrator.run_sync(req)
             ctx = orchestrator.get_execution_state(response.execution_id)
@@ -125,6 +131,10 @@ def create_kpi_blueprint(orchestrator: Optional[Orchestrator] = None,
             # this horizon and a caller reading /flows must not have to fetch
             # /network to learn what period its numbers are on.
             "horizon": analysis.get("horizon", {}),
+            # The money unit these figures are in. Every cost KPI carries it on
+            # its own `unit` too; it is repeated once at the envelope so a
+            # screen can format a currency without inspecting a metric.
+            "currency": analysis.get("currency"),
         }
 
     # ------------------------------------------------------------------
@@ -193,6 +203,8 @@ def create_kpi_blueprint(orchestrator: Optional[Orchestrator] = None,
         snapshot = orchestrator.snapshots.get(snapshot_id)
         user_id = g.current_user.user_id
 
+        request_id = orchestrator_request_id("kpi-resilience")
+
         def compute() -> Dict[str, Any]:
             req = OrchestratorRequest(
                 input="Facility resilience assessment",
@@ -200,6 +212,7 @@ def create_kpi_blueprint(orchestrator: Optional[Orchestrator] = None,
                 actor=Actor(actor_id=user_id, role=ActorRole.PLANNER),
                 network_snapshot_id=snapshot_id,
                 disable_llm=True,
+                request_id=request_id,
             )
             response = orchestrator.run_sync(req)
             ctx = orchestrator.get_execution_state(response.execution_id)

@@ -255,7 +255,21 @@ class TestAuthoritativeKPIs:
             f"probably did not run"
         )
         assert valid["business_network_cost"]["value"] > 0
+        # INR because THIS network says so, not because the registry says INR
+        # about everything. The demo fixture declares `currency="INR"`; a US
+        # workbook declares USD and must report USD, which is the whole reason
+        # the unit stopped being a literal in `metrics/registry.py`.
         assert valid["business_network_cost"]["unit"] == "INR"
+        money_units = {
+            mid: kpi["unit"] for mid, kpi in valid.items()
+            if mid.endswith("_cost") or mid in {"solver_objective", "cost_per_period"}
+        }
+        assert set(money_units.values()) == {"INR"}, (
+            f"every money metric must carry the network's own currency: {money_units}"
+        )
+        assert res.get_json()["currency"] == "INR", (
+            "the response envelope must name the currency its figures are in"
+        )
         assert 0 <= valid["max_utilization_pct"]["value"] <= 100
 
     def test_facility_kpis_are_populated_for_a_solved_network(self, client):
@@ -342,3 +356,141 @@ class TestNoClientSideCalculationInAPI:
         code = _code_without_comments(_module_source("scenarios.py"))
         for banned in ("pulp", "LpProblem", "milp"):
             assert banned not in code, f"scenarios.py must not reference {banned}"
+
+
+class TestTheNetworkStatesItsOwnCurrencyAndGeography:
+    """
+    A project is not India, and its money is not rupees, unless its data says
+    so.
+
+    `ProjectRecord.region` defaulted to "India" on the dataclass, in `create()`,
+    in the loader and in the API — and the creation form offered no other
+    option. Every money metric's `unit` was the literal "INR", the evidence
+    formatter prefixed every amount with a rupee sign, and the browser's
+    `formatCurrency` grouped in lakh. A US workbook stating USD on all 268 of
+    its freight-rate rows reported a ₹23,226,260 baseline on every screen.
+    """
+
+    def test_a_new_project_has_no_region_until_something_says(self, client):
+        token = _signup(client, "region-blank@example.com")
+        res = client.post("/api/projects", json={"name": "Unstated"},
+                          headers=_auth(token))
+        body = res.get_json()
+        assert body["region"] == "", (
+            "an unstated region must stay unstated, not silently become India"
+        )
+        assert body.get("region_source") == ""
+
+    def test_an_explicit_region_is_recorded_as_the_users_own(self, client):
+        token = _signup(client, "region-explicit@example.com")
+        res = client.post("/api/projects",
+                          json={"name": "Stated", "region": "United States"},
+                          headers=_auth(token))
+        assert res.get_json()["region"] == "United States"
+        assert res.get_json()["region_source"] == "user"
+
+    def test_the_demo_network_reports_its_own_currency(self, client):
+        token = _signup(client, "ccy-demo@example.com")
+        res = client.get("/api/kpis/network?project_id=pr-demo-case16",
+                         headers=_auth(token))
+        body = res.get_json()
+        assert body["currency"] == "INR"
+        cost = body["kpis"]["business_network_cost"]
+        assert cost["unit"] == "INR"
+
+    def test_the_structure_endpoint_publishes_currency_and_geography(self, client):
+        token = _signup(client, "struct-geo@example.com")
+        res = client.get("/api/network/structure?project_id=pr-demo-case16",
+                         headers=_auth(token))
+        body = res.get_json()
+        assert body["currency"] == "INR"
+        assert body["geography"].get("region") == "India"
+
+    def test_evidence_amounts_carry_the_networks_symbol(self, client):
+        token = _signup(client, "ccy-evidence@example.com")
+        res = client.get("/api/insights?project_id=pr-demo-case16",
+                         headers=_auth(token))
+        money = [e for i in res.get_json()["insights"]
+                 for e in (i.get("evidence") or [])
+                 if e.get("unit") == "INR"]
+        assert money, "a solved network must report at least one money figure"
+        assert all(e["display_value"].startswith("₹") for e in money)
+
+
+class TestFacilityInsightsSurviveAFailedRun:
+    """
+    A run that produces no network state still publishes a twin state, and
+    publishes it as OPTIMIZED with zero facilities — deliberately, so a viewer
+    sees an explicitly empty state rather than a stale one.
+
+    The insights endpoint then preferred OPTIMIZED *by label*. Once any run had
+    failed for a snapshot, that empty state outranked the populated BASELINE for
+    every later request, and every facility-scoped briefing answered 404
+    "Facility 'F005' is not present in state …" — for a network whose facilities
+    were on screen beside it. The entire per-facility insight surface was
+    unreachable on a solved network.
+    """
+
+    def test_a_facility_briefing_resolves_for_a_solved_network(self, client):
+        token = _signup(client, "fac-insight@example.com")
+        facilities = client.get("/api/kpis/facilities?project_id=pr-demo-case16",
+                                headers=_auth(token)).get_json()["facilities"]
+        assert facilities
+        fid = sorted(facilities)[0]
+        res = client.get(
+            f"/api/insights?project_id=pr-demo-case16&scope=FACILITY&entity_id={fid}",
+            headers=_auth(token))
+        assert res.status_code == 200, res.get_json()
+        assert res.get_json()["entity_id"] == fid
+
+    def test_an_empty_optimized_state_does_not_outrank_a_populated_one(self):
+        """The ranking itself, without needing a failed run to exist."""
+        from types import SimpleNamespace
+
+        def rank(ref):
+            populated = 1 if getattr(ref, "n_facilities", 0) else 0
+            optimized = 1 if str(getattr(ref, "state_type", "")).upper().endswith(
+                "OPTIMIZED") else 0
+            return (populated, optimized)
+
+        empty_optimized = SimpleNamespace(
+            state_id="empty", state_type="TwinStateType.OPTIMIZED", n_facilities=0)
+        full_baseline = SimpleNamespace(
+            state_id="full", state_type="TwinStateType.BASELINE", n_facilities=12)
+        full_optimized = SimpleNamespace(
+            state_id="best", state_type="TwinStateType.OPTIMIZED", n_facilities=12)
+
+        assert sorted([empty_optimized, full_baseline], key=rank)[-1].state_id == "full"
+        assert sorted([full_baseline, full_optimized], key=rank)[-1].state_id == "best"
+
+
+class TestTheAuditEndpoint:
+    def test_a_project_with_no_upload_says_so(self, client):
+        token = _signup(client, "dataset-empty@example.com")
+        pid = client.post("/api/projects", json={"name": "Empty"},
+                          headers=_auth(token)).get_json()["id"]
+        res = client.get(f"/api/ingestions/preview/dataset?project_id={pid}",
+                         headers=_auth(token))
+        assert res.status_code == 200
+        assert res.get_json()["status"] == "NO_DATA"
+
+    def test_it_refuses_another_users_project(self, client):
+        token_a = _signup(client, "dataset-a@example.com")
+        token_b = _signup(client, "dataset-b@example.com")
+        pid = client.post("/api/projects", json={"name": "A only"},
+                          headers=_auth(token_a)).get_json()["id"]
+        res = client.get(f"/api/ingestions/preview/dataset?project_id={pid}",
+                         headers=_auth(token_b))
+        assert res.status_code == 403
+
+    def test_a_bound_project_with_no_record_explains_itself(self, client):
+        """The seeded demo has a snapshot and never went through an upload.
+        Reporting "nothing was uploaded" would be misleading."""
+        token = _signup(client, "dataset-demo@example.com")
+        res = client.get(
+            "/api/ingestions/preview/dataset?project_id=pr-demo-case16",
+            headers=_auth(token))
+        body = res.get_json()
+        assert res.status_code == 200
+        assert body["status"] == "NO_DATA"
+        assert "no upload record was kept" in body.get("notice", "")
