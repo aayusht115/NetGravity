@@ -6,6 +6,7 @@
  */
 
 import { apiClient } from '../api-client.js';
+import { CONFIG } from '../config.js';
 import { getActiveProjectId } from '../project-context.js';
 
 export const ingestionService = {
@@ -23,7 +24,42 @@ export const ingestionService = {
     return apiClient.upload(
       `/api/ingestions/preview/upload-and-parse?project_id=${encodeURIComponent(pid || '')}`,
       formData,
+      // Reading a workbook is not an ordinary request. Without this it
+      // inherited the 30-second default and reported a file as unreadable
+      // when the client had simply stopped waiting for it.
+      { timeout: CONFIG.PARSE_TIMEOUT_MS },
     );
+  },
+
+  /**
+   * The preview this project's parse produced, once it appears.
+   *
+   * Aborting the upload does not stop the parse. The server finishes, stores
+   * the preview and answers 200 to nobody; `GET /preview/active` returns that
+   * same object, so a client that gave up early can still collect it instead
+   * of telling the user their file could not be read.
+   *
+   * Returns null if nothing is there by `timeoutMs`, which is the only state
+   * in which anything may be said about the file.
+   */
+  async findParsedPreview(projectId = null, {
+    timeoutMs = 120000, intervalMs = 2500,
+  } = {}) {
+    const pid = projectId || getActiveProjectId();
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      let preview = null;
+      try {
+        preview = await this.getActivePreview(pid);
+      } catch (e) {
+        // A failed poll says nothing about the parse. Keep waiting.
+        preview = null;
+      }
+      if (preview && preview.status === 'PREVIEW') return preview;
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    return null;
   },
 
   /**

@@ -520,3 +520,95 @@ class TestNothingOnTheScreenClaimsMoreThanTheBuildDoes:
         fn = js[js.index("function qualityChipHtml"):js.index("function showQualityPanel")]
         assert "if (!q.total) return '';" in fn
         assert "if (!q.invalid && !q.issues.length) return '';" in fn
+
+
+class TestAnUploadThisPageStoppedWaitingForIsNotAFailedOne:
+    """
+    Reported on a 1.4 MB workbook:
+
+        Not parsed — Request to '/api/ingestions/preview/upload-and-parse
+        ?project_id=pr-9d596fa14e' timed out.
+
+    Two faults, and they are the same two as the scenario timeout.
+
+    THE BUDGET. `uploadAndParse` passed no timeout, so it inherited
+    REQUEST_TIMEOUT_MS — thirty seconds, the budget for `GET /api/projects`.
+    The server reads every sheet, classifies every column, assembles the
+    network structure and measures quality before it answers.
+
+    THE MESSAGE. Aborting the fetch does not stop the parse. The server
+    finishes, calls `dataset_store.put_preview` and answers 200 into a
+    connection nobody is listening on — and `GET /preview/active` then returns
+    that exact object. "Not parsed" was said about a file that had been read,
+    while its preview sat on the server.
+    """
+
+    def test_a_parse_is_not_given_an_ordinary_requests_budget(self):
+        js = _asset("js", "integration", "config.js")
+        import re as _re
+        req = int(_re.search(r"REQUEST_TIMEOUT_MS: (\d+)", js).group(1))
+        parse = int(_re.search(r"PARSE_TIMEOUT_MS: (\d+)", js).group(1))
+        solve = int(_re.search(r"SOLVE_TIMEOUT_MS: (\d+)", js).group(1))
+        assert parse > req, (parse, req)
+        # And not a solve's either: reading a file is bounded by the file.
+        assert parse < solve, (parse, solve)
+        svc = _without_comments(
+            _asset("js", "integration", "services", "ingestion-service.js"))
+        fn = svc[svc.index("async uploadAndParse("):]
+        fn = fn[:fn.index("\n  },")]
+        assert "CONFIG.PARSE_TIMEOUT_MS" in fn, fn
+
+    def test_an_aborted_upload_looks_for_the_preview_before_it_says_anything(self):
+        js = _without_comments(_asset("js", "ingestion.js"))
+        fn = js[js.index("  if (parseable.length > 0) {"):]
+        fn = fn[:fn.index("    } finally {")]
+        # The abort is told apart from a refusal…
+        assert "err.code === 'TIMEOUT'" in fn, fn
+        # …and answered by collecting what the server stored.
+        assert "findParsedPreview" in fn, fn
+        # Nothing is said about the file until that has come back empty.
+        assert fn.index("findParsedPreview") < fn.index("flow.parseError ="), fn
+        assert "if (recovered) {" in fn, fn
+        # And what it then says does not claim the file is unreadable.
+        assert "Still being read" in fn, fn
+
+    def test_the_recovered_preview_goes_through_the_same_code(self):
+        """
+        A second copy of "read a preview into `flow`" is a second thing to keep
+        correct. The block was lifted out unchanged and both paths call it.
+        """
+        js = _without_comments(_asset("js", "ingestion.js"))
+        assert "function applyParsedPreview(data, parseable, projectId)" in js
+        assert js.count("applyParsedPreview(") == 3, js.count("applyParsedPreview(")
+        fn = js[js.index("function applyParsedPreview("):]
+        fn = fn[:fn.index("\n}\n")]
+        for carried in ("flow.extractedNetwork", "flow.schemaFields",
+                        "flow.mapping[item.id]", "data.parse_errors",
+                        "DATA_QUALITY.totalRecords"):
+            assert carried in fn, carried
+
+    def test_the_poll_is_bounded_and_a_failed_poll_is_not_a_failed_parse(self):
+        svc = _without_comments(
+            _asset("js", "integration", "services", "ingestion-service.js"))
+        fn = svc[svc.index("async findParsedPreview("):]
+        fn = fn[:fn.index("\n  },")]
+        assert "deadline" in fn and "timeoutMs" in fn, fn
+        assert "status === 'PREVIEW'" in fn, fn
+        assert "catch (e)" in fn, fn
+
+    def test_a_file_nobody_could_read_does_not_unlock_the_review(self):
+        """
+        Found while verifying the above, and older than it: the button unlocked
+        on the mere presence of a file, so a workbook the server refused opened
+        the mapping review anyway — a screen whose whole purpose is to show
+        what the parse found, showing nothing.
+
+        Only when NOTHING parsed. One bad file among several still continues,
+        with that file named.
+        """
+        js = _without_comments(_asset("js", "ingestion.js"))
+        fn = js[js.index("function refreshFileTable()"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "const nothingParsed = Boolean(flow.parseError)" in fn, fn
+        assert "Object.keys(flow.mapping || {}).length === 0" in fn, fn
+        assert "|| nothingParsed;" in fn, fn
