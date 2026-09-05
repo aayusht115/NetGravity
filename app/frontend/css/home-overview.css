@@ -409,7 +409,7 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   BOTTOM — full-width "Network today" KPI strip (3 headline KPIs),
+   BOTTOM — full-width "Network today" KPI strip (4 headline KPIs),
    spanning under both columns. Purple-tinted icon badges match the
    site's overall accent colour; full breakdown lives behind "View all
    KPIs" on the Facility Dashboard tab.
@@ -417,9 +417,14 @@
 .home2-kpi-strip {
   display: flex;
   align-items: center;
-  gap: 32px;
+  gap: 24px;
   margin-top: 16px;
   padding: 18px 24px;
+  /* The right end of this row is under the fixed "Ask Netgravity" button —
+     both live at the bottom of the viewport. `--ov-fab-reserve` is written
+     by sizeOverviewToWindow() from the button's measured rect, and is 0
+     whenever that button is not on screen. */
+  padding-right: calc(24px + var(--ov-fab-reserve, 0px));
   background: #ffffff;
   border: 1px solid #eef0f3;
   border-radius: 14px;
@@ -433,10 +438,19 @@
   flex-shrink: 0;
 }
 
+/* Even columns rather than a left-packed flex row.
+   Three tiles at their natural widths left about a third of a 1400px strip
+   empty, all of it in one block on the right; the fourth tile closes part
+   of that, and equal columns spend the rest as rhythm instead of as one
+   gap. `grid-auto-columns` rather than a column count, so this rule does
+   not have to be edited when HOME_KPI_TILES is. */
 .home2-kpi-strip-row {
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 40px;
+  column-gap: 20px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 
@@ -444,6 +458,14 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+}
+
+/* A hairline between columns: across a strip this wide, four figures with
+   nothing between them read as one sentence. */
+.home2-kpi-strip-item + .home2-kpi-strip-item {
+  border-left: 1px solid #f0f1f4;
+  padding-left: 20px;
 }
 
 .home2-kpi-strip-icon {
@@ -471,6 +493,9 @@
   font-size: 12.5px;
   color: #6b7280;
   margin-top: 1px;
+  /* Four names in the width three used to have. The long ones wrap rather
+     than push their neighbours out of alignment. */
+  line-height: 1.3;
 }
 
 .home2-kpi-strip-delta {
@@ -490,20 +515,37 @@
 .home2-kpi-strip-delta strong.tone-bad  { color: #dc2626; }
 
 .home2-kpi-strip-viewall {
-  /* Sits right after the 3rd KPI (not stretched to the far edge, which
-     used to land it under the fixed "Ask Netgravity" button). */
+  /* Sits at the right end of the strip, inside the gutter the strip
+     reserves for the fixed "Ask Netgravity" button — see
+     `--ov-fab-reserve` above, which is what keeps the two apart now that
+     the KPI row stretches to fill the width. */
   flex-shrink: 0;
 }
 
-@media (max-width: 980px) {
+/* Narrow: four equal columns stop being equal in any useful sense, so the
+   row wraps to two rows of two. */
+@media (max-width: 1180px) {
   .home2-kpi-strip {
     flex-wrap: wrap;
     row-gap: 14px;
   }
   .home2-kpi-strip-row {
-    flex-wrap: wrap;
+    grid-auto-flow: row;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     row-gap: 14px;
-    gap: 24px;
+    column-gap: 20px;
+    width: 100%;
+  }
+  /* The rule between columns is wrong once they stack. */
+  .home2-kpi-strip-item + .home2-kpi-strip-item {
+    border-left: none;
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .home2-kpi-strip-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -864,15 +906,23 @@
      is knowable from here. The fallback is the value it measures at 1680x1050
      so the page is right before the first measurement lands.
 
+     `--ov-strip-h` is the KPI strip's measured height, subtracted for the
+     same reason: it is the bottom row, and a row of headline figures that
+     begins below the fold is a row nobody reads. The card it replaced —
+     "Signals influencing your network" — did start below the fold, and that
+     was defensible for three rows of a spreadsheet the build does not use;
+     it is not defensible for the network's cost, utilisation and service.
+
      The effect a reader sees: "Needs your attention" and the digital twin
-     both reach the bottom edge of the window, and "Signals influencing your
-     network" begins below the fold. */
+     stop just above the strip, and the whole page is one screen. */
   flex: 0 0 auto;
-  min-height: calc(100vh - var(--ov-main-top, 126px) - var(--space-lg, 24px));
+  min-height: calc(100vh - var(--ov-main-top, 126px)
+                   - var(--ov-strip-h, 98px) - var(--space-lg, 24px));
   /* And no more. A bounded row is what makes the attention card's own
      scroller work: unbounded, the card grew to its findings list and pushed
      the twin past the bottom of the window instead of ending at it. */
-  max-height: calc(100vh - var(--ov-main-top, 126px) - var(--space-lg, 24px));
+  max-height: calc(100vh - var(--ov-main-top, 126px)
+                   - var(--ov-strip-h, 98px) - var(--space-lg, 24px));
 }
 
 .ov-main > .ov-alert     { grid-column: 1; grid-row: 1; }

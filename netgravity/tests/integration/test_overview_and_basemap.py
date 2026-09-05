@@ -349,10 +349,20 @@ class TestTheOverviewPageIsShapedLikeTheMockup:
         return html[start:html.index("</section>", start)]
 
     def test_the_rows_are_in_the_mockups_order(self):
+        """
+        The third row was the signals card. It is now the KPI strip: nothing
+        in this build routes an uploaded signal into a forecast, so that card
+        showed three rows of the user's own spreadsheet under a chip reading
+        "Not yet applied". The signals are still drawn, on the Forecast tab,
+        by the same renderer.
+        """
         home = self._home_section()
         order = [home.index(cls) for cls in
-                 ('class="ov-head"', 'class="ov-main"', 'class="ov-signals-card"')]
+                 ('class="ov-head"', 'class="ov-main"', 'class="home2-kpi-strip"')]
         assert order == sorted(order), order
+        assert 'class="ov-signals-card"' not in home, (
+            "the signals card is back on Home"
+        )
 
     def test_the_headline_and_its_strapline_are_one_line(self):
         """
@@ -376,8 +386,15 @@ class TestTheOverviewPageIsShapedLikeTheMockup:
         home = self._home_section()
         assert 'id="ov-kpis"' not in home, "the KPI band is still in the markup"
         assert 'class="ov-band"' not in home, "the old status band is still there"
-        assert "home2-kpi-strip" not in home, (
-            "the older below-the-fold KPI strip is still in the markup"
+        # SUPERSEDED: this also banned `home2-kpi-strip` outright, as "the
+        # older below-the-fold KPI strip". Three headline figures are back —
+        # at the BOTTOM, where they take the page's width rather than the
+        # twin's height, and no longer below the fold: `.ov-main` subtracts
+        # `--ov-strip-h` from its own budget so the strip lands on the first
+        # screen. What this test protects is unchanged and asserted below: the
+        # band is not back ON TOP of the twin.
+        assert "home2-kpi-strip" not in home[:home.index('class="ov-main"')], (
+            "the KPI band is back above the twin, where it cost it half its height"
         )
         main = home[home.index('class="ov-main"'):]
         assert 'id="ov-alert"' in main, (
@@ -391,6 +408,85 @@ class TestTheOverviewPageIsShapedLikeTheMockup:
             "the twin does not span both rows, so it cannot reach the alert"
         )
         assert "grid-template-rows: auto minmax(0, 1fr)" in rows
+
+    def test_the_kpi_strip_is_on_the_first_screen(self):
+        """
+        Home fits itself to the window and does not scroll to a second screen,
+        so a row below the fold is a row nobody reads. Measured before this
+        was reserved: the strip began at y=1054 in a 1050px viewport.
+
+        The card it replaced DID start below the fold, and the stylesheet said
+        so deliberately — defensible for three rows of a spreadsheet this
+        build does not use, not for the network's cost, utilisation and
+        service.
+        """
+        css = _asset("css", "home-overview.css")
+        rows = css[css.index(".ov-main {"):]
+        rows = rows[:rows.index(".ov-attn-card,")]
+        assert "--ov-strip-h" in rows, (
+            "`.ov-main` does not leave room for the strip below it"
+        )
+        # Measured, not assumed: the height follows the type scale.
+        js = _asset("js", "app.js")
+        fn = js[js.index("function sizeOverviewToWindow()"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "home2-kpi-strip" in fn, fn
+        assert "--ov-strip-h" in fn, fn
+        assert "getBoundingClientRect()" in fn, fn
+
+    def test_the_strip_reports_the_solve_and_computes_nothing(self):
+        """
+        §9. Three figures, each read from the authoritative baseline, each
+        rendering a dash when the solve did not report it. No zero fallback,
+        and no delta — this build computes no previous-period baseline, so an
+        arrow here would compare against a number that does not exist.
+        """
+        # The CODE, not the prose: the comments here explain what is NOT
+        # done, and a bare scan for "/ " matches every "//" in them.
+        js = _without_comments(_asset("js", "app.js"))
+        fn = js[js.index("function renderHomeKpiStrip("):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "getOptimizedBaseCase()" in fn, fn
+        assert "Number.isFinite(raw)" in fn, fn
+        assert "—" in fn, fn
+        # Nothing is derived. The tile formatters round and label ONE
+        # value; they never combine two, which is what deriving would take.
+        for arithmetic in ("* 100", " / ", " - ", " + "):
+            assert arithmetic not in fn, (arithmetic, fn)
+        tiles = js[js.index("const HOME_KPI_TILES = ["):]
+        tiles = tiles[:tiles.index("\n];")]
+        # SUPERSEDED COUNT: three. A fourth was asked for, and CO2e is the one
+        # headline figure the solve reports that cost, utilisation and service
+        # do not cover. What this test protects is unchanged: every tile is a
+        # key read from the authoritative baseline, and none is derived here.
+        assert tiles.count("key:") == 4, tiles
+        for key in ("totalCost", "avgUtilization", "sla", "carbonKgCo2e"):
+            assert f"key: '{key}'" in tiles, key
+
+    def test_the_strip_leaves_room_for_the_chat_button(self):
+        """
+        "Ask Netgravity" is `position: fixed` at the bottom right of the
+        VIEWPORT; the strip is the bottom row of the page. They share a band
+        of screen at every layout, and "View all KPIs" — the strip's rightmost
+        element — is what ends up underneath.
+
+        Measured from the button's rect, not from `offsetParent`: that
+        property is null for every fixed element, visible or not, so the
+        obvious test reported the button hidden and reserved nothing. This
+        cost one run of the harness to find.
+        """
+        js = _asset("js", "app.js")
+        fn = js[js.index("function sizeOverviewToWindow()"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "floating-chatbot-fab" in fn, fn
+        assert "--ov-fab-reserve" in fn, fn
+        assert "offsetParent" not in fn.split("floating-chatbot-fab")[1], (
+            "a fixed element's visibility cannot be read from offsetParent"
+        )
+        css = _asset("css", "home-overview.css")
+        rule = css[css.index(".home2-kpi-strip {"):]
+        rule = rule[:rule.index("}")]
+        assert "var(--ov-fab-reserve" in rule, rule
 
     def test_no_dead_kpi_renderer_was_left_behind(self):
         """

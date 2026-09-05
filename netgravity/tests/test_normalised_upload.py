@@ -22,6 +22,7 @@ import pandas as pd
 import pytest
 
 from app.backend.api.network_extractor import (
+    _stated_country,
     build_network_from_dataframes,
     classify_sheet,
     infer_geography,
@@ -802,7 +803,21 @@ class TestCrossSheetReferentialIntegrity:
         assert st["integrity"] == []
 
 
-class TestGeographyIsInferredFromCoordinates:
+class TestGeographyIsInferredFromTheUpload:
+    """
+    SUPERSEDED NAME: this was `TestGeographyIsInferredFromCoordinates`, and
+    coordinates were the only evidence read. They cannot answer this question
+    in North America. The box that holds Alaska and Hawaii holds the whole of
+    Canada, so a Canadian network reported "United States" with a confidence
+    of 0.857 — and tightening the box does not help, because Toronto (43.65N)
+    is south of Seattle, Minneapolis and half of Maine. No horizontal line
+    divides the two countries.
+
+    The upload states the answer: a facilities sheet carries a State/Province
+    column, and "Ontario" is not ambiguous. That is read first; the box is the
+    fallback for everywhere the coordinates are decisive on their own.
+    """
+
     def test_us_coordinates_are_not_india(self, us_shaped_tables):
         st = build_network_from_dataframes(us_shaped_tables)
         assert st["geography"]["region"] == "United States"
@@ -813,8 +828,92 @@ class TestGeographyIsInferredFromCoordinates:
         assert st["geography"]["region"] == "India"
 
     def test_the_basis_is_stated_so_a_label_is_not_a_bare_assertion(self, us_shaped_tables):
+        """
+        SUPERSEDED ASSERTION: this required the word "coordinate", which was
+        true when coordinates were the only evidence. What it protects — that
+        the label names what it was derived from, rather than asserting itself
+        — is unchanged, and now has two forms to cover.
+        """
         st = build_network_from_dataframes(us_shaped_tables)
-        assert "coordinate" in st["geography"]["basis"]
+        basis = st["geography"]["basis"]
+        assert "of" in basis and basis.rstrip().endswith("."), basis
+        assert ("state or province" in basis) or ("coordinate" in basis), basis
+
+    # ---- the pair the boxes cannot separate --------------------------
+    def test_a_canadian_network_is_canada_not_the_united_states(self):
+        """
+        Measured before this existed, on Dump/NetGravity_Canada_Test_Data.xlsx:
+        region "United States", confidence 0.857, basis "6 of 7 node
+        coordinate(s) fall inside United States." Every screen that names the
+        geography said so, including the sidebar's Region field.
+        """
+        nodes = [
+            {"lat": 43.65, "lng": -79.38, "state": "Ontario"},
+            {"lat": 45.50, "lng": -73.57, "state": "Quebec"},
+            {"lat": 49.28, "lng": -123.12, "state": "British Columbia"},
+            {"lat": 51.05, "lng": -114.07, "state": "Alberta"},
+        ]
+        geo = infer_geography(nodes)
+        assert geo["region"] == "Canada", geo
+        assert "Canada" in geo["basis"], geo
+
+    def test_postal_abbreviations_count_as_naming_the_province(self):
+        geo = infer_geography([{"lat": 43.65, "lng": -79.38, "state": "ON"},
+                               {"lat": 45.50, "lng": -73.57, "state": "QC"}])
+        assert geo["region"] == "Canada", geo
+
+    def test_a_us_network_is_not_dragged_into_canada_by_its_northern_sites(self):
+        """
+        The mirror of the case above, and the reason a "Canada" rectangle was
+        not the fix: every one of these sits inside any box wide enough to
+        hold Canada.
+        """
+        geo = infer_geography([
+            {"lat": 47.61, "lng": -122.33, "state": "Washington"},
+            {"lat": 44.98, "lng": -93.27, "state": "Minnesota"},
+            {"lat": 42.36, "lng": -71.06, "state": "Massachusetts"},
+        ])
+        assert geo["region"] == "United States", geo
+
+    def test_a_network_spanning_the_border_claims_neither_country(self):
+        """Half in each is not "mostly" either; it falls back to the box."""
+        nodes = [{"lat": 43.65, "lng": -79.38, "state": "Ontario"},
+                 {"lat": 45.50, "lng": -73.57, "state": "Quebec"},
+                 {"lat": 40.71, "lng": -74.00, "state": "New York"},
+                 {"lat": 41.88, "lng": -87.63, "state": "Illinois"}]
+        stated, agree, of_stated = _stated_country(nodes)
+        assert stated is None, (stated, agree, of_stated)
+        assert "coordinate" in infer_geography(nodes)["basis"]
+
+    def test_a_workbook_that_names_no_province_still_gets_an_answer(self):
+        geo = infer_geography([{"lat": 28.61, "lng": 77.20},
+                               {"lat": 19.07, "lng": 72.87}])
+        assert geo["region"] == "India"
+        assert "coordinate" in geo["basis"]
+
+    def test_one_mislabelled_row_does_not_relabel_a_network(self):
+        nodes = [{"lat": 43.65, "lng": -79.38, "state": "Ontario"},
+                 {"lat": 45.50, "lng": -73.57, "state": "Quebec"},
+                 {"lat": 49.28, "lng": -123.12, "state": "British Columbia"},
+                 {"lat": 51.05, "lng": -114.07, "state": "Alberta"},
+                 {"lat": 53.55, "lng": -113.49, "state": "Texas"}]
+        assert infer_geography(nodes)["region"] == "Canada"
+
+    def test_a_reupload_after_the_fix_is_not_served_the_old_answer(self):
+        """
+        `SnapshotManager.register` derives the snapshot id from the network's
+        data version and returns the EXISTING snapshot when that id is already
+        registered. Geography was not in the fingerprint, so re-uploading the
+        same Canadian workbook was handed the snapshot the earlier upload had
+        registered — region and all. The label could not be corrected by
+        re-uploading, which is the only remedy a user has.
+        """
+        from netgravity.tests.fixtures.case16_synthetic import build_case16_network
+        net = build_case16_network()
+        net.geography = {"region": "Canada"}
+        canada = net.compute_data_version()
+        net.geography = {"region": "United States"}
+        assert net.compute_data_version() != canada
 
     def test_bounds_are_the_extent_a_map_must_fit(self, us_shaped_tables):
         b = build_network_from_dataframes(us_shaped_tables)["geography"]["bounds"]

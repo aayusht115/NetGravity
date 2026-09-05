@@ -973,6 +973,21 @@ class CanonicalNetwork(BaseModel):
                 # a cached analysis keyed only on the numbers would be served
                 # back under the wrong unit.
                 "currency":   self.currency,
+                # Where the network is, for exactly the same reason.
+                #
+                # `SnapshotManager.register` derives the snapshot id from this
+                # hash and RETURNS THE EXISTING SNAPSHOT when the id already
+                # exists — correct for identical content, and the reason a
+                # Canadian workbook kept reporting "United States" long after
+                # the inference that produced that label had been fixed. The
+                # rows were byte-identical, so the re-upload was handed the
+                # snapshot registered by the earlier one, geography and all.
+                #
+                # A network's region is a fact about the network, so it belongs
+                # in the fingerprint beside its currency. Two uploads that
+                # agree on every row but disagree about where they are are not
+                # the same network.
+                "geography":  self.geography,
             },
             sort_keys=True,
             default=str,

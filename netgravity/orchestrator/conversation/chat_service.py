@@ -195,6 +195,8 @@ class ChatService:
             return self._status_response(cid, turn_id, intent, snapshot, started)
         if intent.intent == Intent.FORECAST:
             return self._forecast_response(cid, turn_id, intent, started)
+        if intent.intent == Intent.CAPABILITY_QUERY:
+            return self._capability_response(cid, turn_id, intent, started)
 
         # ---- TRANSLATE and hand over -------------------------------------
         orchestrator_request = self._to_orchestrator_request(
@@ -570,6 +572,114 @@ class ChatService:
             network_snapshot_id=snapshot.snapshot_id,
             status="COMPLETED",
             results={"facilities": counts, "data_version": snapshot.data_version},
+            duration_seconds=round(time.perf_counter() - started, 4),
+        )
+        self._record_turn_minimal(conversation_id, intent, response)
+        return response
+
+    #: One example question per INTENT, in the words a planner would use.
+    #:
+    #: Keyed by intent rather than by workflow id, and not incidentally: §4
+    #: gives workflow selection to `WorkflowPlanner` alone, and a chat-layer
+    #: dictionary naming `wf_scenario_analysis` would be a second router with
+    #: opinions about graphs. An Intent is what this layer already handles.
+    #:
+    #: Copy, not capability. The list itself comes from the planner; an intent
+    #: with no example here is still listed, with its own description. This
+    #: can fail to illustrate a workflow that exists — it cannot invent one
+    #: that does not.
+    _INTENT_EXAMPLES = {
+        Intent.NETWORK_STATE_QUERY: "What is my total network cost, and what makes it up?",
+        Intent.STATUS_QUERY: "How many facilities, corridors and markets do I have?",
+        Intent.SCENARIO_ANALYSIS: "What happens if I close the Dallas DC?",
+        Intent.SCENARIO_COMPARISON: "Compare closing Dallas against adding capacity there.",
+        Intent.RESILIENCE_QUERY: "Which facility has the highest resilience exposure?",
+        Intent.EXTERNAL_EVENT: "Flooding is expected near Newark next month.",
+        Intent.OPTIMIZATION_REQUEST: "Optimise the network within my current footprint.",
+        Intent.EXPLANATION: "Why is my demand unserved?",
+        Intent.MARKET_INTELLIGENCE: "Diesel is up 6% this quarter.",
+        Intent.FORECAST: "Forecast demand for the next six months.",
+    }
+
+    def _capability_response(
+        self,
+        conversation_id: str,
+        turn_id: str,
+        intent: ConversationalIntent,
+        started: float,
+    ) -> ChatResponse:
+        """
+        Say what this build can do, from what it can actually run.
+
+        The list is `orchestrator.workflows()` — the planner's own catalogue,
+        read through the orchestrator rather than reached into, which is why
+        no template name appears anywhere in this module.
+
+        A capability answer typed by hand into this file would be a brochure.
+        It goes stale the moment a workflow is added or removed, and the
+        direction it goes stale in is always "claims more than it does". This
+        one cannot: there is nothing in it that is not a workflow.
+
+        No engine runs. Asking what the assistant is for should not cost a
+        solve, and before this intent existed it cost twenty-four seconds of
+        one.
+
+        Deterministic rather than model-phrased, for the reason
+        `_status_response` gives: the content is a list of things that either
+        exist or do not, it is already exact, and a generated sentence about
+        it would be an unchecked claim about the system's own abilities —
+        which is the one subject this codebase has twice had to delete
+        fabrications about.
+        """
+        try:
+            workflows = self.orchestrator.workflows() or []
+        except Exception:  # noqa: BLE001 — the answer degrades, it does not fail
+            workflows = []
+
+        lines = []
+        for wf in workflows:
+            desc = str(wf.get("description") or "").rstrip(".")
+            if not desc:
+                continue
+            example = None
+            try:
+                example = self._INTENT_EXAMPLES.get(Intent(str(wf.get("intent"))))
+            except ValueError:
+                # A workflow for an intent this layer has no example for is
+                # still listed. Its own description is the answer.
+                example = None
+            lines.append(
+                f"\u2022 {desc}." + (f' For example: "{example}"' if example else "")
+            )
+
+        if lines:
+            body = (
+                "I am the assistant for this network. I answer from the "
+                "figures your own upload was solved into \u2014 every number I "
+                "give you comes from that solve, not from me.\n\n"
+                "What I can do here:\n" + "\n".join(lines) + "\n\n"
+                "I will say so plainly when something cannot be computed, "
+                "rather than estimating it."
+            )
+        else:
+            # No workflow catalogue is a real state, and it is not "I can do
+            # everything".
+            body = (
+                "I cannot list what I can do: this build reports no runnable "
+                "workflows, so there is nothing I could promise you that I "
+                "could then carry out."
+            )
+
+        response = ChatResponse(
+            conversation_id=conversation_id,
+            turn_id=turn_id,
+            reply=body,
+            intent=Intent.CAPABILITY_QUERY.value,
+            clarity=intent.clarity.value,
+            intent_confidence=intent.confidence,
+            intent_source=intent.source,
+            provenance="OBSERVED",
+            status="COMPLETED",
             duration_seconds=round(time.perf_counter() - started, 4),
         )
         self._record_turn_minimal(conversation_id, intent, response)

@@ -136,6 +136,87 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   background: var(--primary-light); color: var(--primary); font-weight: 600;
 }
 .nav-icon { font-size: 16px; width: 22px; text-align: center; flex-shrink: 0; }
+
+/* ─── Grouped navigation ──────────────────────────────────────
+   "Baseline" holds the twin and the KPIs: two views of the network as
+   uploaded and solved. The head is a disclosure and never an active
+   tab — `.nav-item.active` is reserved for the page actually on screen,
+   so the group can carry a selected child without claiming to be it. */
+.nav-group-head { justify-content: flex-start; }
+
+/* The collapse control, separated from the head when the head became a
+   destination. Sized to a 20px hit area rather than the 14px glyph — a
+   caret that is hard to hit sends the click to the head behind it, which
+   navigates, and the group appears not to collapse at all. */
+.nav-caret-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.nav-caret-btn:hover { background: rgba(17, 24, 39, 0.08); }
+
+.nav-caret {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform var(--transition);
+}
+
+.nav-group[data-open="false"] .nav-caret { transform: rotate(-90deg); }
+
+.nav-group-items {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows var(--transition);
+}
+
+.nav-group[data-open="false"] .nav-group-items { grid-template-rows: 0fr; }
+
+/* ONE child, and the collapse depends on it. `grid-template-rows: 0fr`
+   sizes the first row only, so with the two nav items as direct children
+   the group closed to the height of the second one — measured at 69px of
+   a 90px group, which reads as a broken animation rather than a closed
+   menu. The inner wrapper is that single row; it carries the overflow
+   and the `min-height: 0` the trick needs. */
+.nav-group-inner { overflow: hidden; min-height: 0; }
+
+/* Indented under the head, with a rail so the nesting is visible rather
+   than merely implied by whitespace. */
+.nav-item.nav-sub {
+  margin-left: calc(var(--space-sm) + 16px);
+  padding-left: 12px;
+  border-left: 1.5px solid var(--border-light, #eceef2);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+}
+
+.nav-item.nav-sub.active { border-left-color: var(--primary); }
+
+/* A collapsed sidebar shows icons only, and an indent rail against a
+   28px column reads as damage. The group flattens back to two peers —
+   which is what it was before, and is legible for the same reason. */
+.sidebar.collapsed .nav-caret { display: none; }
+.sidebar.collapsed .nav-caret-btn { display: none; }
+.sidebar.collapsed .nav-item.nav-sub {
+  margin-left: var(--space-sm);
+  padding-left: var(--space-md);
+  border-left: none;
+  border-radius: var(--r-md);
+}
+.sidebar.collapsed .nav-group[data-open="false"] .nav-group-items {
+  grid-template-rows: 1fr;
+}
 .nav-badge {
   margin-left: auto; font-size: 10px; font-weight: 700;
   background: var(--primary); color: white;
@@ -2069,6 +2150,47 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   margin-top: 10px;
   border: 1px solid var(--border-light);
 }
+
+/* ─── Map zoom affordances ─────────────────────────────────
+   The fit control sits under Leaflet's own +/- bar, in the same
+   bottom-left corner, so the three zoom actions are one group. */
+.map-fit-control a {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  color: #374151;
+}
+
+.map-fit-control a:hover { color: var(--primary); }
+
+/* Shown only when the wheel is used over a compact map that has not been
+   clicked yet — see armCompactZoom(). */
+.map-zoom-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%) scale(0.96);
+  z-index: 1200;
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: rgba(17, 24, 39, 0.82);
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.map-zoom-hint.is-visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* An armed map owns the wheel, and says so with the same purple every
+   focused control on this product uses. */
+.is-zoom-armed { box-shadow: inset 0 0 0 2px rgba(146, 24, 234, 0.45); }
 
 /* Multi-Scenario Table */
 .scn-multi-table-wrap {

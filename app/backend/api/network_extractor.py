@@ -222,14 +222,100 @@ _REGION_BOXES: Tuple[Tuple[str, float, float, float, float], ...] = (
 )
 
 
+#: Which country an administrative region belongs to.
+#:
+#: Rectangles cannot separate the United States from Canada, and it is not a
+#: near miss: the box that holds Alaska (lat 72) and Hawaii (lat 18) holds the
+#: whole of Canada inside it, so a Canadian network was reported as "United
+#: States" with a confidence of 0.857 and a basis line that read "6 of 7 node
+#: coordinate(s) fall inside United States." Tightening the box does not help
+#: either — Toronto (43.65N) and Windsor (42.3N) sit SOUTH of Seattle,
+#: Minneapolis and half of Maine, so no horizontal line divides the two.
+#:
+#: What does divide them is what the upload says. The facilities and markets
+#: sheets carry a State/Province column, and "Ontario" is not ambiguous. This
+#: is evidence the file states rather than geometry inferred from it, so it is
+#: consulted first and the box is the fallback.
+#:
+#: Only this one pair is tabulated, because this is the one pair the boxes get
+#: wrong. Everywhere else the coordinates are decisive on their own.
+_CANADA_ADMIN: Tuple[str, ...] = (
+    "alberta", "british columbia", "manitoba", "new brunswick",
+    "newfoundland and labrador", "newfoundland", "northwest territories",
+    "nova scotia", "nunavut", "ontario", "prince edward island", "quebec",
+    "quebec (qc)", "saskatchewan", "yukon", "yukon territory",
+    # Canada Post abbreviations. None of these collide with a USPS code.
+    "ab", "bc", "mb", "nb", "nl", "nt", "ns", "nu", "on", "pe", "qc", "sk",
+    "yt",
+)
+
+_US_ADMIN: Tuple[str, ...] = (
+    "alabama", "alaska", "arizona", "arkansas", "california", "colorado",
+    "connecticut", "delaware", "district of columbia", "florida", "georgia",
+    "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas", "kentucky",
+    "louisiana", "maine", "maryland", "massachusetts", "michigan",
+    "minnesota", "mississippi", "missouri", "montana", "nebraska", "nevada",
+    "new hampshire", "new jersey", "new mexico", "new york",
+    "north carolina", "north dakota", "ohio", "oklahoma", "oregon",
+    "pennsylvania", "rhode island", "south carolina", "south dakota",
+    "tennessee", "texas", "utah", "vermont", "virginia", "washington",
+    "west virginia", "wisconsin", "wyoming",
+    "al", "ak", "az", "ar", "ca", "co", "ct", "de", "dc", "fl", "ga", "hi",
+    "id", "il", "in", "ia", "ks", "ky", "la", "ma", "md", "me", "mi", "mn",
+    "mo", "ms", "mt", "nc", "nd", "ne", "nh", "nj", "nm", "nv", "ny", "oh",
+    "ok", "or", "pa", "ri", "sc", "sd", "tn", "tx", "ut", "va", "vt", "wa",
+    "wi", "wv", "wy",
+)
+
+_ADMIN_TO_COUNTRY: Dict[str, str] = {}
+for _name in _CANADA_ADMIN:
+    _ADMIN_TO_COUNTRY[_name] = "Canada"
+for _name in _US_ADMIN:
+    # "Quebec" is a Canadian province and a small town in several US states;
+    # the abbreviations do not overlap at all. Nothing here overwrites a
+    # Canadian entry.
+    _ADMIN_TO_COUNTRY.setdefault(_name, "United States")
+
+
+def _stated_country(nodes: List[Dict[str, Any]]) -> Tuple[Optional[str], int, int]:
+    """
+    The country the upload's own State/Province column names, if it names one.
+
+    Returns (country, agreeing nodes, nodes that stated a recognised region).
+    `country` is None unless at least three quarters of the nodes that state a
+    recognised region agree — a single mislabelled row must not relabel a
+    network, and a network genuinely spanning the border is not either country.
+    """
+    votes: Dict[str, int] = {}
+    for node in nodes:
+        key = str(node.get("state") or "").strip().lower()
+        if not key:
+            continue
+        country = _ADMIN_TO_COUNTRY.get(key)
+        if country:
+            votes[country] = votes.get(country, 0) + 1
+    if not votes:
+        return None, 0, 0
+    stated = sum(votes.values())
+    best, count = max(votes.items(), key=lambda kv: kv[1])
+    if count / stated < 0.75:
+        return None, count, stated
+    return best, count, stated
+
+
 def infer_geography(nodes: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Where this network is, from the coordinates in the upload.
+    Where this network is, from what the upload states and what it implies.
 
     Returns the inferred region label, the bounding box a map should fit to,
-    and the share of nodes that fall inside the chosen box — so a caller can
+    and the share of the evidence that supports the label — so a caller can
     show the basis for the label instead of asserting it. `region` is None when
     the upload carries no usable coordinates at all.
+
+    Two kinds of evidence, in order: the province/state the file NAMES (see
+    `_ADMIN_TO_COUNTRY`), and failing that the box the coordinates fall in.
+    The bounding box a map frames to always comes from the coordinates, and is
+    unaffected by which label was chosen.
     """
     points = [(n.get("latSource", n.get("lat")), n.get("lngSource", n.get("lng")))
               for n in nodes]
@@ -243,6 +329,16 @@ def infer_geography(nodes: List[Dict[str, Any]]) -> Dict[str, Any]:
     lngs = [p[1] for p in points]
     bounds = {"latMin": min(lats), "latMax": max(lats),
               "lngMin": min(lngs), "lngMax": max(lngs)}
+
+    # What the file says, before what its coordinates imply.
+    stated, agree, of_stated = _stated_country(nodes)
+    if stated:
+        return {
+            "region": stated, "bounds": bounds,
+            "confidence": round(agree / of_stated, 3),
+            "basis": (f"{agree} of {of_stated} node(s) name a state or province "
+                      f"in {stated}."),
+        }
 
     best_label, best_share = None, 0.0
     for label, la0, la1, ln0, ln1 in _REGION_BOXES:

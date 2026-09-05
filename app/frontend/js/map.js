@@ -218,6 +218,92 @@ const COLORS = {
   },
 };
 
+/**
+ * "Zoom to the network", beside the +/- control.
+ *
+ * Both halves of a zoom, not one: the way IN, because the default frame is
+ * the whole country and a network can be a speck inside it (measured on the
+ * Canadian workbook: zoom 2, the sites occupying about a seventh of the card),
+ * and the way BACK, because zooming into a corner of a card this size with no
+ * reset is a trap. `fitBounds` is the only thing that knows where the nodes
+ * are; a user has no way to ask for it otherwise.
+ *
+ * The Digital Twin page gets the same button — one behaviour on every map,
+ * which is the point of the ask.
+ */
+function addFitControl(map, containerId) {
+  const control = L.control({ position: 'bottomleft' });
+  control.onAdd = () => {
+    const bar = L.DomUtil.create('div', 'leaflet-bar map-fit-control');
+    const link = L.DomUtil.create('a', '', bar);
+    link.href = '#';
+    link.title = 'Zoom to the network';
+    link.setAttribute('role', 'button');
+    link.setAttribute('aria-label', 'Zoom to the network');
+    link.innerHTML = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" '
+      + 'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" '
+      + 'width="14" height="14"><path d="M7 3H3v4M13 3h4v4M7 17H3v-4M13 17h4v-4"/></svg>';
+    L.DomEvent.disableClickPropagation(bar);
+    L.DomEvent.on(link, 'click', (e) => {
+      L.DomEvent.preventDefault(e);
+      fitToNetwork(containerId, { sites: true });
+    });
+    return bar;
+  };
+  control.addTo(map);
+}
+
+/**
+ * Give a compact map the wheel, but only once it has been asked for.
+ *
+ * The scenario planner's twin card is the bottom row of a page that scrolls.
+ * A map that takes the wheel the instant the pointer crosses it swallows that
+ * scroll — the page stops moving and the map zooms instead, which is why the
+ * wheel was turned off for compact maps in the first place. Turning it back
+ * on unconditionally would restore the original problem.
+ *
+ * So: click the map and it zooms like the Digital Twin's; move the pointer
+ * off it and the page has the wheel back. A wheel over an unarmed map says
+ * so rather than doing nothing silently — Nielsen #1, visibility of system
+ * status. Every other affordance (+/-, fit, double-click, box-zoom, keyboard)
+ * is live from the start, as it is on the twin page.
+ */
+function armCompactZoom(map, container) {
+  if (!container || container.querySelector('.map-zoom-hint')) return;
+
+  const hint = document.createElement('div');
+  hint.className = 'map-zoom-hint';
+  hint.setAttribute('aria-hidden', 'true');
+  hint.textContent = 'Click the map to zoom';
+  container.appendChild(hint);
+
+  let armed = false;
+  let hintTimer = null;
+
+  const arm = () => {
+    if (armed) return;
+    armed = true;
+    map.scrollWheelZoom.enable();
+    container.classList.add('is-zoom-armed');
+    hint.classList.remove('is-visible');
+  };
+  const disarm = () => {
+    if (!armed) return;
+    armed = false;
+    map.scrollWheelZoom.disable();
+    container.classList.remove('is-zoom-armed');
+  };
+
+  container.addEventListener('mousedown', arm);
+  container.addEventListener('mouseleave', disarm);
+  container.addEventListener('wheel', () => {
+    if (armed) return;
+    hint.classList.add('is-visible');
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => hint.classList.remove('is-visible'), 1500);
+  }, { passive: true });
+}
+
 // ─── Public API: Init Map ───────────────────────────────────
 export function initMap(containerId, options = {}) {
   const container = document.getElementById(containerId);
@@ -232,7 +318,12 @@ export function initMap(containerId, options = {}) {
 
   const zoom = options.zoom || (options.isCompact ? 4.2 : 5);
   const center = options.center || [22.5, 79.5];
-  const scrollWheelZoom = options.scrollWheelZoom !== undefined ? options.scrollWheelZoom : !options.isCompact;
+  // A compact map starts with the wheel disabled and EARNS it on click — see
+  // `armCompactZoom`. It used to be disabled outright and never re-enabled,
+  // which is why the scenario planner's twin card was the one map in the
+  // product you could not zoom into.
+  const scrollWheelZoom = options.scrollWheelZoom !== undefined
+    ? options.scrollWheelZoom : !options.isCompact;
 
   const map = L.map(containerId, {
     center: center,
@@ -247,12 +338,19 @@ export function initMap(containerId, options = {}) {
     scrollWheelZoom: scrollWheelZoom,
   });
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
+  addFitControl(map, containerId);
+  if (options.isCompact) armCompactZoom(map, container);
 
   maps[containerId] = map;
   // Read-only handle for diagnostics: "where is the map looking" is otherwise
   // unanswerable from outside this module.
-  if (typeof window !== 'undefined' && containerId === 'map-twin') {
-    window.__ngTwinMap = map;
+  if (typeof window !== 'undefined') {
+    // Every mounted map, keyed by container. "What zoom is the scenario
+    // planner's card at" was unanswerable from outside this module, which
+    // meant the only way to check that its wheel zoom works was to look at a
+    // pane transform and hope. Read-only: nothing in the app writes here.
+    window.__ngMaps = maps;
+    if (containerId === 'map-twin') window.__ngTwinMap = map;
   }
   baseLayers[containerId] = addBaseLayer(map, containerId);
   layerGroups[containerId] = {
@@ -347,7 +445,7 @@ function rebuildBaseLayer(containerId) {
  * A fixed centre/zoom is right for the demo network and wrong for anyone
  * whose sites sit in one region. No-op when nothing has coordinates.
  */
-export function fitToNetwork(containerId) {
+export function fitToNetwork(containerId, { sites = false } = {}) {
   const map = maps[containerId];
   if (!map) return;
   const nodes = [...PLANTS, ...DCS, ...MARKETS];
@@ -356,7 +454,18 @@ export function fitToNetwork(containerId) {
   // padding in SCREEN PIXELS and therefore a different amount of geography in
   // every container size; the twin padded by a share of the span. The two
   // views were framed by two rules and agreed only by coincidence.
-  const win = networkWindow(nodes);
+  //
+  // `sites: true` asks the same function for the sites alone. The default
+  // window is the whole COUNTRY, deliberately — a reader orients on a
+  // coastline they know before they read a node — and for most networks the
+  // two are close. For some they are not: Canada's outline reaches 83°N, and
+  // Mercator stretches that top strip so violently that a network entirely
+  // in the southern provinces frames at zoom 2, as a cluster a centimetre
+  // across on a map of the world. That is the default view, unchanged and
+  // still correct; this is the way in. Same window function, same padding
+  // rules — only `wholeCountry` differs, so the two framings cannot drift.
+  const win = sites ? networkWindow(nodes, { wholeCountry: false })
+                    : networkWindow(nodes);
   if (!win) return;
   try {
     map.fitBounds(

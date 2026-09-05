@@ -16,7 +16,7 @@ import {
   isDCFacility, isPlantFacility, facilityRole, clearNetworkModel,
   perPeriodLabel, SOLVE_HORIZON, horizonLabel,
   formatCurrencyExact, currencySymbol, currencyLabel, NETWORK_GEOGRAPHY,
-  getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries
+  getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries, withCurrency
 } from './data.js';
 import { initMap, setNetworkState, invalidateMapSize, refreshAllMaps,
          revealMap, renderMapLegendCounts } from './map.js';
@@ -686,6 +686,8 @@ export function navigateToTab(tab) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navKey = (tab === 'overview') ? 'home' : tab;
   document.querySelector(`.nav-item[data-tab="${navKey}"]`)?.classList.add('active');
+  // A selected page inside a collapsed group would be invisible.
+  syncNavGroups();
 
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
 
@@ -856,6 +858,62 @@ function initSidebarCollapse() {
   });
 }
 
+/**
+ * The Baseline group opens and closes, and opens itself when it has to.
+ *
+ * The head navigates nowhere: there is no baseline screen, only the two views
+ * inside it, and a header that jumped to one of its children would make the
+ * other unreachable by one click. It is a disclosure, and it is keyboard
+ * operable because it is not a `<button>`.
+ *
+ * `syncNavGroups` is called after every tab change: a group holding the
+ * active page opens itself, so the sidebar can never show a selected item
+ * inside a collapsed group.
+ */
+function bindNavGroups() {
+  document.querySelectorAll('.nav-group-head').forEach((head) => {
+    const group = head.closest('.nav-group');
+    if (!group) return;
+
+    const setOpen = (open) => {
+      group.dataset.open = open ? 'true' : 'false';
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+
+    // The caret collapses the group, and it is the only thing that does.
+    // `stopPropagation` is what keeps it from also navigating: it sits
+    // inside the head, whose own click now opens a page.
+    group.querySelector('.nav-caret-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setOpen(group.dataset.open === 'false');
+    });
+
+    // The head opens the view it stands for. A group head that only toggled
+    // looked identical to the four rows that navigate and did nothing when
+    // clicked; `data-group-tab` is the destination, and the group opens with
+    // it so the row that is now active is visible.
+    const open = () => {
+      setOpen(true);
+      const tab = head.dataset.groupTab;
+      if (tab) navigateToTab(tab);
+    };
+    head.addEventListener('click', open);
+    head.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
+    });
+  });
+  syncNavGroups();
+}
+
+function syncNavGroups() {
+  document.querySelectorAll('.nav-group').forEach((group) => {
+    if (group.querySelector('.nav-item.active')) {
+      group.dataset.open = 'true';
+      group.querySelector('.nav-group-head')?.setAttribute('aria-expanded', 'true');
+    }
+  });
+}
+
 function initTabs() {
   // Primary nav items (flat: Home, KPIs, Digital Twin, Forecast, Scenario
   // Planning — see navigateToTab for how Insights/Recommendations, which
@@ -866,6 +924,8 @@ function initTabs() {
       navigateToTab(tab);
     });
   });
+
+  bindNavGroups();
 
   // Sidebar logo lockup: returns to Home, not the landing page — this is
   // only ever visible once the user is signed in.
@@ -1404,6 +1464,43 @@ function sizePageToWindow(selector, varName) {
 
 function sizeOverviewToWindow() {
   sizePageToWindow('#tab-home.active .ov-main', '--ov-main-top');
+  // The KPI strip's real height, so `.ov-main` can leave room for it. The
+  // strip is Home's bottom row and it must be ON the first screen: measured
+  // rather than assumed, because its height follows the type scale and the
+  // sidebar's width, neither of which this file can know.
+  const strip = document.querySelector('#tab-home.active .home2-kpi-strip');
+  const shell = document.querySelector('.main-content');
+  if (!shell) return;
+  if (!strip || strip.offsetParent === null) {
+    shell.style.removeProperty('--ov-strip-h');
+    return;
+  }
+  const box = strip.getBoundingClientRect();
+  const gap = parseFloat(getComputedStyle(strip).marginTop) || 0;
+  const total = Math.round(box.height + gap);
+  if (total > 0) shell.style.setProperty('--ov-strip-h', total + 'px');
+
+  // How much of the strip's right end the "Ask Netgravity" button covers.
+  //
+  // That button is `position: fixed` at the bottom-right of the VIEWPORT and
+  // the strip is the bottom row of the page, so the two share a band of
+  // screen whatever the layout does. "View all KPIs" is the strip's
+  // rightmost element, and it is what ends up underneath.
+  //
+  // Measured rather than reserved as a constant: the button's width is its
+  // label's width, which follows the type scale, and it is hidden outright
+  // until a user is signed in — `display: none`, so there is no rect at all.
+  //
+  // Visibility is read from the rect, not from `offsetParent`: that property
+  // is null for EVERY `position: fixed` element, visible or not, so the
+  // obvious test reports the button hidden and reserves nothing. A hidden
+  // button has a zero-width rect, which is the thing actually being asked.
+  const fab = document.getElementById('floating-chatbot-fab');
+  const fabBox = fab ? fab.getBoundingClientRect() : null;
+  const overlaps = fabBox && fabBox.width > 0
+                   && fabBox.top < box.bottom && fabBox.bottom > box.top;
+  const reserve = overlaps ? Math.max(0, Math.round(box.right - fabBox.left) + 16) : 0;
+  strip.style.setProperty('--ov-fab-reserve', reserve + 'px');
 }
 
 if (typeof window !== 'undefined') {
@@ -1429,7 +1526,7 @@ function renderHome() {
   renderHomeForecast();
   renderHomeDigitalTwin();
   renderHomeAttentionFeed();
-  renderHomeSignals();
+  renderHomeKpiStrip();
   renderAnalysisTimestamp();
   // After the head row has its final text, so the measurement is of the head
   // that is actually on screen.
@@ -2499,7 +2596,89 @@ function getNetworkRecommendation() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   OVERVIEW — row 3: the signals influencing this network
+   OVERVIEW — row 2: the network's three headline figures
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * The three figures that describe this network, and nothing derived.
+ *
+ * Every value is read from `getOptimizedBaseCase().baseline`, which hydration
+ * writes straight from the authoritative KPI layer. This function does no
+ * arithmetic on a business value: it formats what is there and renders a dash
+ * for what is not. §9 — the frontend never calculates an authoritative KPI,
+ * and a figure the solver did not report has no fallback.
+ *
+ * There is no delta. The strip's stylesheet has a `.home2-kpi-strip-delta`
+ * rule with good/bad tones, from the band that used to sit at the top of this
+ * page, and it stays unused: this build computes no previous-period baseline,
+ * so any arrow rendered here would be a comparison against a number that does
+ * not exist. The link to the dashboard is what the rest of the detail is for.
+ */
+const HOME_KPI_TILES = [
+  {
+    key: 'totalCost',
+    name: 'Total network cost',
+    format: (v) => withCurrency(formatCurrency(v)),
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8v18.4"/><path d="M16.6 6.6H9.9a2.9 2.9 0 0 0 0 5.8h4.2a2.9 2.9 0 0 1 0 5.8H7"/></svg>`,
+  },
+  {
+    key: 'avgUtilization',
+    name: 'Average utilisation',
+    format: (v) => `${v.toFixed(1)}%`,
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 16.8a9 9 0 1 1 16.8 0"/><path d="M12 16.4 16.2 10"/><circle cx="12" cy="16.8" r="1.3" fill="currentColor"/></svg>`,
+  },
+  {
+    key: 'sla',
+    name: 'Demand within service level',
+    format: (v) => `${v.toFixed(1)}%`,
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><polyline points="8.2 12.3 10.9 15 15.9 9.4"/></svg>`,
+  },
+  {
+    // The fourth lens. Cost, utilisation and service are all operational;
+    // this is the one headline figure the solve reports that none of them
+    // covers, and `total_carbon_kg` is computed by the KPI engine for every
+    // solved network (netgravity/metrics/kpis.py).
+    //
+    // The kilograms the engine reports, shown in tonnes. That is a unit on
+    // one number, not a second carbon figure: nothing is summed, scaled by
+    // an assumption, or combined with anything else here — it is the value
+    // the engine returned, written the way a network-scale total is read.
+    key: 'carbonKgCo2e',
+    name: 'CO\u2082e from solved flow',
+    format: (v) => `${formatNumber(Math.round(v / 1000))} t`,
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4.6 19.4c-2-4.6.3-10.2 5-12.2 2.6-1.1 6.6-1.3 9.8-.9.5 3.2.3 7.2-.8 9.8-2 4.7-7.6 7-12.2 5"/><path d="M4.2 19.8C7.4 16.6 11 13.9 15.4 12"/></svg>`,
+  },
+];
+
+function renderHomeKpiStrip(rowId = 'ov-kpi-strip-row') {
+  const row = document.getElementById(rowId);
+  if (!row) return;
+
+  const base = getOptimizedBaseCase() || {};
+  const figures = base.baseline || {};
+  // The solver's own reason, when there is one. Shown on the tile rather than
+  // as a bare dash, so "no figure" is never mistaken for "zero".
+  const reason = base.unavailableReason || '';
+
+  row.innerHTML = HOME_KPI_TILES.map((tile) => {
+    const raw = figures[tile.key];
+    const has = typeof raw === 'number' && Number.isFinite(raw);
+    const value = has ? tile.format(raw) : '—';
+    const title = has ? '' : ` title="${escapeInsightText(reason
+      || 'This figure was not reported by the solve for this network.')}"`;
+    return `
+      <div class="home2-kpi-strip-item"${title}>
+        <span class="home2-kpi-strip-icon">${tile.icon}</span>
+        <div>
+          <div class="home2-kpi-strip-value">${escapeInsightText(value)}</div>
+          <div class="home2-kpi-strip-name">${escapeInsightText(tile.name)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   FORECAST — the signals influencing this network
    ═══════════════════════════════════════════════════════════════ */
 /**
  * The external signals the upload carried.
@@ -2513,7 +2692,10 @@ function getNetworkRecommendation() {
  * "Not yet applied" is the truthful state for every signal today, and the chip
  * will say "Used in forecast" on its own the moment that stops being true.
  */
-function renderHomeSignals(rowId = 'ov-signals-row') {
+// Named for the Home card it was written for; that card is gone and the
+// Forecast tab is the only caller now. The default follows the caller rather
+// than pointing at an element that no longer exists.
+function renderHomeSignals(rowId = 'fc-signals-row') {
   const row = document.getElementById(rowId);
   if (!row) return;
 

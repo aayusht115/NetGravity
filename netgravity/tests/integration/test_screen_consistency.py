@@ -435,7 +435,11 @@ class TestTheForecastScreenIsTheMockup:
         js = _without_comments(_asset("js", "app.js"))
         assert "function renderOverviewAlert(elId = 'ov-alert')" in js
         assert "function renderHomeAttentionFeed(listId = 'ov-attn-body')" in js
-        assert "function renderHomeSignals(rowId = 'ov-signals-row')" in js
+        # The default followed the caller when Home's signals card was
+        # replaced by the KPI strip: this renderer's only caller is now the
+        # Forecast tab, and a default naming an element that no longer exists
+        # is a trap for the next reader.
+        assert "function renderHomeSignals(rowId = 'fc-signals-row')" in js
         page = js[js.index("function renderForecastPage()"):]
         page = page[:page.index("\n}\n")]
         for call in ("renderOverviewAlert('fc-alert')",

@@ -79,6 +79,20 @@ _CLOSURE_DISAMBIGUATORS = (
 )
 
 #: Countable/inventory phrasing — answerable from the digital twin alone.
+#: Asking what the assistant is for.
+#:
+#: Deliberately narrow. Every phrase here is about the ASSISTANT — "you", "I
+#: ask", "this assistant" — so it cannot swallow a question about the network
+#: that happens to contain "what can". "What can I do about Delhi's capacity?"
+#: is a scenario question and matches none of these.
+_CAPABILITY_WORDS = (
+    "what can you do", "what do you do", "what can you help",
+    "what are you able to do", "what are your capabilities",
+    "what can i ask", "what questions can i ask", "what should i ask",
+    "what can this assistant do", "how can you help", "what are you for",
+    "what kind of questions", "what sort of questions", "help me get started",
+)
+
 _STATUS_WORDS = ("how many", "list the", "show me the list", "which facilities",
                  "what facilities", "count of", "number of", "do we have",
                  "inventory of", "which warehouses", "what warehouses")
@@ -231,6 +245,8 @@ def _bucket_for(subject: str) -> str:
 
 _AMBIGUITY_FREE_INTENTS = frozenset({
     Intent.STATUS_QUERY,
+    # A question about the assistant names no node to disambiguate.
+    Intent.CAPABILITY_QUERY,
     Intent.FORECAST,
     Intent.NETWORK_STATE_QUERY,
     Intent.OPTIMIZATION_REQUEST,
@@ -500,6 +516,17 @@ class ConversationalNLU:
         workflow that solves. Everything else delegates to the existing agent.
         """
         lowered = f" {text.lower()} "
+
+        # FIRST, because a question about the assistant is not a question
+        # about the network and every rule below reads it as one. "What can
+        # you do?" carries no metric, status or forecast vocabulary and fell
+        # through all of them to UNKNOWN; "what questions can I ask you?"
+        # contains "ask" and reached EXPLANATION, which solves.
+        if any(w in lowered for w in _CAPABILITY_WORDS):
+            return (Intent.CAPABILITY_QUERY, [], "rules", 0.95,
+                    "A question about what this assistant can do. Answered "
+                    "from the planner's workflow catalogue; no engine runs.",
+                    None, False)
 
         # A hazard outranks projection language. "Predicted", "expected" and
         # "forecast" appear in both vocabularies, and the two errors are not

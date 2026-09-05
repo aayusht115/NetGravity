@@ -72,6 +72,19 @@ class Intent(str, Enum):
     # for want of a P that never existed. Recorded as context; it never edits
     # a solver input on its own.
     MARKET_INTELLIGENCE   = "MARKET_INTELLIGENCE"
+    # "what can you do?" / "what can I ask you?"
+    #
+    # A question about the ASSISTANT, not about the network, and the only one
+    # of those the system takes. Without it, "what can you do?" resolved to
+    # UNKNOWN and was answered with "I could not work out what you would like
+    # me to do" followed by a list of every distribution centre, while "what
+    # questions can I ask you?" reached EXPLANATION and spent twenty-four
+    # seconds running a workflow over the network to answer it.
+    #
+    # It reaches no engine: the answer is the planner's own workflow
+    # catalogue, which is why it cannot describe a capability this build does
+    # not have.
+    CAPABILITY_QUERY      = "CAPABILITY_QUERY"
     UNKNOWN               = "UNKNOWN"
 
 

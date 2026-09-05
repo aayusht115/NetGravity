@@ -64,6 +64,7 @@ class Category(str, Enum):
     UNKNOWN_ENTITY  = "UNKNOWN_ENTITY"
     MALFORMED       = "MALFORMED"
     FOLLOW_UP       = "FOLLOW_UP"
+    CAPABILITY      = "CAPABILITY"
     ADVERSARIAL     = "ADVERSARIAL"
 
 
@@ -115,6 +116,37 @@ def _c(**kw) -> EvalCase:
 # ===========================================================================
 # 1. STATUS_QUERY — countable facts from the digital twin. Never a solve.
 # ===========================================================================
+
+# ---------------------------------------------------------------------------
+# CAPABILITY — questions about the assistant, not about the network
+# ---------------------------------------------------------------------------
+#
+# The first two were measured against the running system before this intent
+# existed. "What can you do?" resolved to UNKNOWN with confidence 0 and was
+# answered with "I could not work out what you would like me to do" followed
+# by a list of every distribution centre — the one message a lost user sees,
+# telling them they had not been understood. "What questions can I ask you?"
+# reached EXPLANATION and spent twenty-four seconds running a workflow over
+# the network to answer a question that is not about the network.
+_CAPABILITY: List[EvalCase] = [
+    _c(id="cap01", text="What can you do?",
+       category=Category.CAPABILITY, intent=Intent.CAPABILITY_QUERY, solver_free=True),
+    _c(id="cap02", text="What questions can I ask you?",
+       category=Category.CAPABILITY, intent=Intent.CAPABILITY_QUERY, solver_free=True),
+    _c(id="cap03", text="What are your capabilities?",
+       category=Category.CAPABILITY, intent=Intent.CAPABILITY_QUERY, solver_free=True),
+    _c(id="cap04", text="How can you help me?",
+       category=Category.CAPABILITY, intent=Intent.CAPABILITY_QUERY, solver_free=True),
+    _c(id="cap05", text="What kind of questions do you answer?",
+       category=Category.CAPABILITY, intent=Intent.CAPABILITY_QUERY, solver_free=True),
+    _c(id="cap06", text="What can I ask?",
+       category=Category.CAPABILITY, intent=Intent.CAPABILITY_QUERY, solver_free=True),
+    _c(id="cap07", text="Help me get started.",
+       category=Category.CAPABILITY, intent=Intent.CAPABILITY_QUERY, solver_free=True),
+    _c(id="cap08", text="What are you for?",
+       category=Category.CAPABILITY, intent=Intent.CAPABILITY_QUERY, solver_free=True),
+]
+
 
 _STATUS: List[EvalCase] = [
     _c(id="st01", text="How many warehouses do we have?",
@@ -757,8 +789,8 @@ _ADVERSARIAL: List[EvalCase] = [
 
 CASES: Tuple[EvalCase, ...] = tuple(
     _STATUS + _NETWORK_STATE + _EXPLANATION + _SCENARIO + _RESILIENCE
-    + _EXTERNAL + _MARKET_INTEL + _FORECAST + _AMBIGUOUS + _UNKNOWN_ENTITY + _MALFORMED
-    + _FOLLOW_UP + _ADVERSARIAL
+    + _EXTERNAL + _MARKET_INTEL + _FORECAST + _CAPABILITY + _AMBIGUOUS
+    + _UNKNOWN_ENTITY + _MALFORMED + _FOLLOW_UP + _ADVERSARIAL
 )
 
 
