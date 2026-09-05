@@ -1351,3 +1351,13 @@
   .ov-signals-row { grid-template-columns: minmax(0, 1fr); }
   .ov-head { gap: 8px; }
 }
+
+
+/* An action item's chip in the attention feed. Same tones as a finding's
+   severity chip — a required gap is a risk to the analysis and reads like
+   one — but the outline marks it as a different kind of thing: a request
+   to a person, not a conclusion about the network. */
+.ov-attn-rest-cat.is-action {
+  background: #ffffff;
+  border: 1px dashed currentColor;
+}

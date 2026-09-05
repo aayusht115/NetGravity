@@ -93,6 +93,13 @@ class IngestionReport(BaseModel):
     counts: Dict[str, int] = Field(default_factory=dict)
     extras: Dict[str, Any] = Field(default_factory=dict)
 
+    # Deterministic, rule-based data-completeness check (see
+    # netgravity.ingestion.completeness). Reported always; blocking only
+    # when NETGRAVITY_COMPLETENESS_BLOCKS_FINALIZE is set — see the note in
+    # pipeline.py step 3b.
+    missing_required: List[Dict[str, Any]] = Field(default_factory=list)
+    missing_optional: List[Dict[str, Any]] = Field(default_factory=list)
+
     @property
     def total_rows_read(self) -> int:
         return sum(f.rows_read for f in self.files)

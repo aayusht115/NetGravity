@@ -417,6 +417,7 @@ except Exception as exc:  # noqa: BLE001
 # ---------------------------------------------------------------------------
 try:
     from app.backend.api.auth import auth_bp
+    from app.backend.api.actions import create_actions_blueprint
     from app.backend.api.forecast import create_forecast_blueprint, create_signals_blueprint
     from app.backend.api.insights import create_insights_blueprint
     from app.backend.api.oidc import oidc_bp
@@ -440,6 +441,11 @@ try:
     app.register_blueprint(oidc_bp)
     app.register_blueprint(create_signals_blueprint(_orchestrator))
     app.register_blueprint(create_network_structure_blueprint(_orchestrator))
+    # Action items and the Action Agent that dispatches them. Mounted
+    # unconditionally: with no SMTP credential configured it runs in stub
+    # mode, which sends nothing and says so, so there is no state in which
+    # registering this blueprint can deliver mail nobody asked for.
+    app.register_blueprint(create_actions_blueprint())
 
     register_error_handler(app)
 

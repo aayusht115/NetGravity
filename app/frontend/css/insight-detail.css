@@ -977,3 +977,284 @@
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(146, 24, 234, 0.28);
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   ACTION VIEW
+   ───────────────────────────────────────────────────────────────────
+   The right-hand column is the request panel and it is taller than the
+   left, which is the opposite of the finding view. That is deliberate:
+   on this page the form IS the content, and the left column is the
+   context for filling it in.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.insd-missing-field {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 19px;
+  font-weight: 800;
+  color: #111827;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin-bottom: 8px;
+}
+
+.insd-missing-unit {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #6b7280;
+  background: #f5f0fa;
+  border-radius: 6px;
+  padding: 2px 8px;
+  letter-spacing: 0;
+}
+
+.insd-action-note {
+  font-size: 13.5px;
+  color: #4b5563;
+  line-height: 1.6;
+  margin: 0 0 14px;
+  /* Prose measure. A 700px line of body text at 13.5px is about 110
+     characters, which is roughly twice what stays readable. */
+  max-width: 62ch;
+}
+
+.insd-note-tight { margin: 8px 0 4px; font-size: 12.5px; }
+
+/* ─── The sites the field is missing from ───────────────────────── */
+.insd-affected {
+  border-top: 1px solid #f0f1f4;
+  padding-top: 14px;
+}
+
+.insd-affected-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 10px;
+}
+
+.insd-affected-count {
+  background: #f5f0fa;
+  color: #9218EA;
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: 11.5px;
+  letter-spacing: 0;
+}
+
+.insd-affected-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.insd-affected-list li {
+  font-size: 13.5px;
+  color: #374151;
+  padding-left: 16px;
+  position: relative;
+  line-height: 1.45;
+}
+
+/* A rule, not a bullet: these are rows of a table the reader recognises
+   from their own workbook, not a list of points being made. */
+.insd-affected-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8px;
+  width: 7px;
+  height: 1.5px;
+  background: #c9b6e2;
+}
+
+.insd-affected-more { margin-top: 8px; }
+
+.insd-affected-more summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #9218EA;
+  list-style: none;
+}
+
+.insd-affected-more summary::-webkit-details-marker { display: none; }
+.insd-affected-more[open] summary { margin-bottom: 8px; }
+
+/* ─── The request panel ─────────────────────────────────────────── */
+.insd-request { display: flex; flex-direction: column; }
+
+.insd-field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin: 14px 0 6px;
+}
+
+.insd-field-label:first-of-type { margin-top: 0; }
+
+.insd-input,
+.insd-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 12px;
+  border: 1px solid #e3e5ea;
+  border-radius: 9px;
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: #111827;
+  line-height: 1.5;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.insd-input:focus,
+.insd-textarea:focus {
+  outline: none;
+  border-color: #9218EA;
+  box-shadow: 0 0 0 3px rgba(146, 24, 234, 0.12);
+}
+
+.insd-textarea {
+  resize: vertical;
+  min-height: 150px;
+  /* The message is read as an email, and an email is monospaced-ish plain
+     text with meaningful line breaks. */
+  white-space: pre-wrap;
+}
+
+.insd-add-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.insd-btn-compact {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.insd-field-error {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: #dc2626;
+}
+
+/* ─── Recipients ────────────────────────────────────────────────── */
+.insd-recipients {
+  display: grid;
+  gap: 6px;
+}
+
+.insd-recipient {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid #eef0f3;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.insd-recipient:hover { border-color: #d9c9ee; }
+
+.insd-recipient.is-on {
+  border-color: #d3b8f0;
+  background: #faf6fe;
+}
+
+.insd-recipient input { accent-color: #9218EA; cursor: pointer; }
+
+.insd-recipient-label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.insd-recipient-email {
+  font-size: 12.5px;
+  color: #6b7280;
+  margin-left: auto;
+  /* A long address must not push the label out of the row. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 55%;
+}
+
+/* ─── What will happen, and what did ────────────────────────────── */
+.insd-delivery-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 9px;
+  font-size: 12.5px;
+  color: #78350f;
+  line-height: 1.55;
+}
+
+.insd-delivery-note svg { width: 15px; height: 15px; flex-shrink: 0; margin-top: 1px; }
+
+.insd-delivery-note code {
+  font-size: 12px;
+  background: rgba(120, 53, 15, 0.09);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.insd-outcome {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.insd-outcome.tone-good { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+.insd-outcome.tone-info { background: #f5f0fa; border: 1px solid #e4d5f5; color: #5b21b6; }
+.insd-outcome.tone-bad  { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
+.insd-send-btn {
+  margin-top: 16px;
+  width: 100%;
+  justify-content: center;
+}
+
+.insd-send-btn:disabled {
+  background: #e5e7eb;
+  color: #9ca3af;
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* The action bar sits inside the left column on the action view rather than
+   under both, because the request panel is much the taller of the two and a
+   full-width bar under it left about three hundred pixels of empty page
+   beside the card it belongs to. */
+.insd-action-bar-inline {
+  margin-top: 16px;
+  padding: 0;
+}
+
+.insd-action-bar-inline .insd-why-reveal { margin-top: 4px; }

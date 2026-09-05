@@ -207,6 +207,21 @@ def run_ingestion(
                 f"(all retained for audit)"
             )
 
+    # --- 3b. Data completeness (deterministic, no model call) -------------
+    #
+    # Runs against `TabularResult.network_rows` — the canonically-renamed
+    # rows produced right after column mapping and BEFORE any Pydantic
+    # record is built. That is the only point in the pipeline where "the
+    # client never sent this column" and "the client sent zero" are still
+    # different facts: every record field is defaulted by the time a
+    # CanonicalNetwork exists.
+    if tabular_outcome is not None:
+        from netgravity.ingestion.completeness import check_completeness
+
+        completeness = check_completeness(tabular_outcome, has_contracts=bool(contracts))
+        report.missing_required = [m.as_dict() for m in completeness.missing_required]
+        report.missing_optional = [m.as_dict() for m in completeness.missing_optional]
+
     # --- 4. Assemble ------------------------------------------------------
     if not src.facilities or not src.products:
         report.extras["error"] = (
@@ -263,6 +278,23 @@ def run_ingestion(
     report.network_assembled = True
     report.counts = summarise(network)
     report.data_version = network.data_version
+
+    if report.missing_required and cfg.completeness_blocks_finalize:
+        # OPT-IN (NETGRAVITY_COMPLETENESS_BLOCKS_FINALIZE, default off).
+        #
+        # Structurally assembled — so the review and draft screens still
+        # have something to show — but not usable for analysis. Reuses the
+        # gate finalize() already checks rather than adding a second one.
+        #
+        # Default off because turning it on changes what existing uploads
+        # do. The gap is reported and emailed either way; this only decides
+        # whether it also stops the dataset.
+        report.network_assembled = False
+        report.extras["missing_required_data"] = (
+            f"{len(report.missing_required)} required field(s) missing across "
+            f"named entities — see 'missing_required' for detail. This dataset "
+            f"cannot be finalized until they are provided."
+        )
 
     # --- 5. Engine's own pre-solve validation (reused, not duplicated) ----
     engine_report = validate_network(network)

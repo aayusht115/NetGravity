@@ -431,6 +431,69 @@ export const OBSERVED_UTILISATION = { periods: [], points: [], byFacility: {} };
 // ─── HOME ACTION ITEMS ───────────────────────────────────────
 export const HOME_ACTION_ITEMS = [];
 
+/**
+ * Who a request can be addressed to, and whether email actually goes out.
+ *
+ * Both are the server's answer, not this file's: the recipient list lives in
+ * the Action Agent's own store (so it survives a reload and is shared by the
+ * pipeline's own triggers), and `EMAIL_DELIVERY.mode` is read from whether an
+ * outbound credential is configured on the server. `'stub'` means a send is
+ * logged and nothing leaves the machine — the screen says so on the button,
+ * because a stub reported as a send is worse than no feature at all.
+ */
+export const NOTIFICATION_RECIPIENTS = [];
+
+export const EMAIL_DELIVERY = { mode: 'stub' };
+
+/**
+ * Write a `/api/actions` response into the stores the screens read.
+ *
+ * Replaces rather than merges: an action is outstanding or it is not, and a
+ * re-upload that supplies the missing column must not leave the request for
+ * it on screen. Same rule as `applyInsightResponse`.
+ */
+export function applyActionsResponse(response) {
+  HOME_ACTION_ITEMS.length = 0;
+  NOTIFICATION_RECIPIENTS.length = 0;
+  if (!response) return 0;
+
+  (response.actions || []).forEach((a) => {
+    HOME_ACTION_ITEMS.push({
+      id: a.id,
+      kind: a.kind || 'MISSING_DATA',
+      severity: a.severity || 'OPTIONAL',
+      title: a.title || '',
+      subtitle: a.subtitle || '',
+      displayLabel: a.display_label || '',
+      unit: a.unit || '',
+      whatItUnlocks: a.what_it_unlocks || '',
+      entityType: a.entity_type || '',
+      entityTypePlural: a.entity_type_plural || '',
+      // The sites the field is missing from. Named, because "fifteen DCs"
+      // is not something anyone can act on and a list of fifteen names is.
+      entities: a.entities || [],
+      // The message the server composed from the gap. Editable on screen;
+      // sent as-is if it is not edited.
+      draft: a.draft || { subject: '', body: '' },
+      lastSent: a.last_sent || null,
+    });
+  });
+
+  (response.recipients || []).forEach((r) => NOTIFICATION_RECIPIENTS.push({
+    label: r.label || r.email,
+    email: r.email,
+  }));
+
+  EMAIL_DELIVERY.mode = response.email_mode || 'stub';
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('actionsLoaded', {
+      detail: { count: HOME_ACTION_ITEMS.length },
+    }));
+  }
+  return HOME_ACTION_ITEMS.length;
+}
+
 
 /**
  * Drop demo narrative content that describes a DIFFERENT network.

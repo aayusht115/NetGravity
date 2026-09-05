@@ -43,6 +43,7 @@ from app.backend.services.demand_history_store import (
     demand_history_store,
     uploaded_signal_store,
 )
+from app.backend.services.completeness_adapter import check_structure
 from app.backend.services.dataset_store import dataset_store
 from app.backend.services.errors import ApplicationError, ValidationError
 from app.backend.services.network_assembler import assemble_network_from_structure
@@ -285,6 +286,27 @@ def upload_and_parse():
     structure = build_network_from_dataframes(all_tables)
     quality = _measure_quality(all_tables)
 
+    # What this upload does not carry, by the one rule-based registry
+    # (netgravity/ingestion/completeness.py). Deterministic: no model call,
+    # no judgement about data quality — was this column present, with a
+    # value, for this named entity.
+    #
+    # Computed HERE rather than recomputed on demand because the parsed
+    # `structure` is deliberately dropped when the dataset is committed (it
+    # is several megabytes of the client's own rows). The gaps are a few
+    # hundred bytes and are what the action items and the missing-data
+    # email are built from, so they travel with the record instead.
+    #
+    # Wrapped, and deliberately: this runs on the critical path of every
+    # upload, and it is a reporting feature. A registry entry that trips over
+    # an unusual workbook shape must cost the user a missing action item, not
+    # their upload — the parse itself has already succeeded by this point.
+    try:
+        completeness = check_structure(structure).as_dict()
+    except Exception:  # noqa: BLE001 - reported, never fatal
+        logger.exception("ingestion.completeness_failed project_id=%s", project_id)
+        completeness = {"missing_required": [], "missing_optional": []}
+
     preview = {
         "status": "PREVIEW",
         "project_id": project_id,
@@ -313,6 +335,7 @@ def upload_and_parse():
         "currency": structure.get("currency"),
         "currencyBasis": structure.get("currencyBasis") or "",
         "geography": structure.get("geography") or {},
+        "completeness": completeness,
         "structure": structure,
         "notice": (
             "This is a parsing preview for mapping review. No optimisation has "

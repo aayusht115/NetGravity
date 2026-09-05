@@ -2126,6 +2126,10 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
   const insightItems = insights.map(ins => ({
     kind: 'insight',
     id: ins.id,
+    // The chip's words. An insight's chip has always shown its severity;
+    // actions need their own vocabulary in the same slot, so both carry it
+    // explicitly rather than one of them being inferred at render time.
+    label: ins.category || categorizeAttentionLabel(ins.impact),
     // `category` is set from the engine's severity when the record came from
     // `/api/insights`; the keyword fallback covers a record that predates it.
     category: ins.category || categorizeAttentionLabel(ins.impact),
@@ -2137,13 +2141,36 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
       ? ins.evidence[0].display_value : '',
   }));
 
+  // Action items are not findings. Nothing was solved to produce them — the
+  // completeness gate read the upload and reported a column that is not
+  // there — so they carry their own category and their own label rather
+  // than borrowing the severity vocabulary the Reasoning Agent's findings
+  // use. A missing column presented as a RISK the engine identified would
+  // be this application claiming an analysis it did not run.
+  //
+  // The record shape changed with the store: `expectedImpact` was a
+  // prototype field describing a cost and an SLA delta for a demo action,
+  // and no engine produces either for a missing column. The server sends a
+  // title and a sentence built from the gap itself; both are used as sent.
   const actionItems = HOME_ACTION_ITEMS
     .filter(act => !resolvedInsightIds.has(act.id))
-    .map(act => {
-      const impact = act.expectedImpact || {};
-      const subtitle = [impact.cost, impact.sla ? `SLA ${impact.sla}` : null].filter(Boolean).join(' · ');
-      return { kind: 'action', id: act.id, category: categorizeAttentionLabel(act.tag), title: act.title, subtitle };
-    });
+    .map(act => ({
+      kind: 'action',
+      id: act.id,
+      category: act.severity === 'REQUIRED' ? 'RISK' : 'OPPORTUNITY',
+      label: act.severity === 'REQUIRED' ? 'DATA NEEDED' : 'OPTIONAL DATA',
+      title: act.title,
+      subtitle: act.subtitle,
+      headline: '',
+      isAction: true,
+    }));
+
+  // Required data first: an analysis running without a field it needs is a
+  // more urgent thing to read than one that could have gone further. Both
+  // sit under the engine's own findings, because a finding is a conclusion
+  // about the network and an action is a request to a person — and the feed
+  // is read top-down.
+  actionItems.sort((a, b) => (a.category === 'RISK' ? 0 : 1) - (b.category === 'RISK' ? 0 : 1));
 
   const items = [...insightItems, ...actionItems];
 
@@ -2164,8 +2191,20 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
   //
   // The rest are not dropped: they are listed underneath, and every one still
   // opens its own deep dive.
-  const lead = items[0];
-  const rest = items.slice(1);
+  //
+  // ACTIONS COME FIRST in that list, ahead of the remaining findings. A
+  // finding is something to read; an action is something only a person can
+  // do, and it is holding up an analysis until they do it. Ordered the other
+  // way round — findings, then actions, which is where they landed when the
+  // two lists were simply concatenated — the four data requests on a real
+  // upload sat seventh to tenth inside a scrolling card, below the fold. A
+  // request nobody scrolls to has not been raised.
+  //
+  // The LEAD stays the top-ranked finding when there is one: it is the
+  // engine's own answer to "what should I look at", and an action item is
+  // not ranked against it by anything.
+  const lead = insightItems[0] || actionItems[0] || items[0];
+  const rest = [...actionItems, ...insightItems].filter((it) => it !== lead);
   const rec = getNetworkRecommendation();
 
   /* The finding's figure and its sentence, without saying the figure twice.
@@ -2173,6 +2212,19 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
      see 452,610 units of 1,435,985 units of demand left unserved" already
      contains "452,610" — so printing the headline in front of it produced
      "452,610 units I see 452,610 units of ... left unserved". */
+  /* "3 further findings" was true when the feed held only findings. It now
+     holds two different kinds of thing — conclusions the engine reached, and
+     requests it needs a person to make — and counting an action as a finding
+     asserts an analysis that did not happen. Both are named, or neither is. */
+  function restSummary(list) {
+    const actions = list.filter((it) => it.isAction).length;
+    const findings = list.length - actions;
+    const parts = [];
+    if (findings) parts.push(`${findings} further finding${findings === 1 ? '' : 's'}`);
+    if (actions) parts.push(`${actions} action${actions === 1 ? '' : 's'} to take`);
+    return parts.join(' \u00b7 ');
+  }
+
   function impactHtml(item) {
     const head = (item.headline || '').trim();
     const sub = (item.subtitle || '').trim();
@@ -2198,7 +2250,7 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
       </div>
       ${impactHtml(lead)}
       <button type="button" class="ov-attn-more-link" data-open-lead>
-        <span>View the full finding</span>
+        <span>${lead.isAction ? 'Open this action' : 'View the full finding'}</span>
         <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
       </button>
     </div>
@@ -2224,12 +2276,12 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
          asking the reader to click to find out whether there is anything
          there. It still closes. -->
     <details class="ov-attn-rest" open>
-      <summary>${rest.length} further finding${rest.length === 1 ? '' : 's'}</summary>
+      <summary>${restSummary(rest)}</summary>
       <div class="ov-attn-rest-list">
         ${rest.map((it) => `
           <button type="button" class="ov-attn-rest-item"
                   data-kind="${it.kind}" data-id="${it.id}">
-            <span class="ov-attn-rest-cat cat-${(it.category || 'info').toLowerCase()}">${escapeInsightText(it.category || '')}</span>
+            <span class="ov-attn-rest-cat cat-${(it.category || 'info').toLowerCase()}${it.isAction ? ' is-action' : ''}">${escapeInsightText(it.label || it.category || '')}</span>
             <span class="ov-attn-rest-title">${escapeInsightText(it.title)}</span>
           </button>`).join('')}
       </div>

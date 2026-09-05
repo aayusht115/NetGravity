@@ -30,6 +30,7 @@ import {
   mapScenarioRecord, baselineFromNetworkKPIs,
 } from './mappers/scenario-mapper.js';
 import { forecastService } from './services/forecast-service.js';
+import { actionService } from './services/action-service.js';
 import { insightService } from './services/insight-service.js';
 import { getActiveProjectId, setActiveSnapshotId } from './project-context.js';
 import {
@@ -37,6 +38,7 @@ import {
   SOLVED_STATE_KEY, setNetworkPeriods, OBSERVED_UTILISATION,
   setAuthoritativeBaseline, clearDemoNarrative, loadNetworkData,
   setForecastSeries, getOptimizedBaseCase, applyInsightResponse,
+  applyActionsResponse,
   applyHorizon, SOLVE_HORIZON, setActiveCurrency, setNetworkGeography,
   applySystemStatus, MARKETS, setForecastCatalogue,
 } from '../data.js';
@@ -599,6 +601,21 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
     ? `${insightCount} finding${insightCount === 1 ? '' : 's'}`
     : 'no findings',
     insightResponse && insightResponse.execution_id);
+
+  // ---- Action items ----------------------------------------------------
+  // What the upload did not carry, from the deterministic completeness gate
+  // the parse already ran. These are not findings — nothing was solved to
+  // produce them — so they are held in their own store and the feed marks
+  // them as actions, never as things the engine concluded.
+  //
+  // Fetched here rather than on demand because the Home feed shows them: a
+  // separate round trip after first paint would make the feed reflow under
+  // the reader.
+  const actionResponse = await actionService.getActions(pid);
+  const actionCount = applyActionsResponse(actionResponse);
+  if (actionCount) {
+    console.info(`[hydrate] ${actionCount} open action item(s)`);
+  }
 
   // ---- Scenarios -------------------------------------------------------
   // Only scenarios actually solved for this project. The two fabricated
