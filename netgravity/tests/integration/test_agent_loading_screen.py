@@ -7,12 +7,13 @@ talking. That picture is a claim about the system: it says these agents exist,
 that this one is working now, and that this one is waiting on it. A claim has
 to be true.
 
-This repository has already had to delete one animated agent pipeline that was
-not — the header of `js/agent-reasoning.js` records it: stages that advanced on
-a `setInterval`, a solver the product does not use named with a fabricated
-runtime, and a verdict no engine had produced. The replacement must not be able
-to drift back into that, so the tests here are about PROVENANCE rather than
-appearance:
+This repository has had to delete TWO animated agent pipelines that were not.
+The first named a solver the product does not use, with a fabricated runtime
+and a verdict no engine had produced. The second, `js/agent-reasoning.js`,
+advanced four stages on 450ms timers and filled a progress bar to 100% in front
+of a tab change — no request, no wait, no work. The replacement must not be
+able to drift back into either, so the tests here are about PROVENANCE rather
+than appearance:
 
   * the view holds no sequence of its own;
   * the recorder holds no sequence of its own either — every step comes from
@@ -63,69 +64,144 @@ def _fn(js: str, signature: str) -> str:
 
 
 class TestTheVisualisationIsWhatTheDesignApproved:
-    def test_the_five_layers_and_the_hub_are_the_designs_own(self):
-        js = _asset("js", "agent-loading.js")
-        for name in ('Intent Layer', 'Scenario Planner', 'Extraction Layer',
-                     'Forecasting Layer', 'Reasoning Layer', 'Orchestrator Agent'):
-            assert name in js, name
+    """
+    `Dump/avengersloading.html`: a vertical phase tree in a small rectangular
+    dialog — a node per phase on a connecting line, a spinner while it runs, a
+    green tick when it lands, the title typed out and the detail streaming
+    underneath, finished phases collapsing away.
 
-    def test_they_sit_clockwise_from_the_top_as_the_mockup_places_them(self):
-        js = _asset("js", "agent-loading.js")
-        # Sliced on the declaration that FOLLOWS it, not on the prose of the
-        # comment in between: this broke once because a docblock was expanded,
-        # which says nothing about where the layers sit.
-        meta = js[js.index("const LAYER_META = {"):js.index("const STATE_LABEL = {")]
-        angles = dict(re.findall(r"(\w+): \{\s*\n\s*name: '[^']+', angle: (\d+)", meta))
-        assert angles == {'intent': '0', 'scenario': '72', 'extraction': '144',
-                          'forecasting': '216', 'reasoning': '288'}, angles
+    SUPERSEDED, deliberately. This class previously described the circular
+    visualisation from `Dump/loading page.png`: five layer circles round an
+    orchestrator with a signal travelling between whichever two were talking.
+    That design was replaced wholesale. What did NOT change is the rule the
+    rest of this file exists to enforce — the picture is drawn from what the
+    application actually dispatched, and from the orchestrator's own record of
+    what ran.
+    """
 
-    def test_the_rings_and_particles_say_nothing_and_barely_move(self):
+    def test_the_reference_is_a_demo_and_none_of_it_was_copied(self):
         """
-        The decoration is inert, and slow enough not to be watched.
+        The reference advances six hardcoded phases on a 1250ms `setTimeout`
+        and prints invented logs — "Recruiting Iron Man", "Simulating
+        14,000,605 outcomes". It is a mock-up of a loading screen, not a
+        loading screen, and this repository has twice had to delete exactly
+        that.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        for invented in ("Iron Man", "Black Widow", "S.H.I.E.L.D", "OMEGA",
+                         "AES-256", "14,000,605", "threat matrix", "PHASES"):
+            assert invented not in js, invented
+        # No phase list of any kind: the tree is built from the run's steps.
+        assert "run.steps.map(phaseHtml)" in js
 
-        It was neither. Every particle was given its own orbit at its own
-        rate and two rings turned in opposite directions, which is subtle by
-        the numbers and reads as a solar system: the eye tracks anything
-        going round in a circle, and it tracked the decoration instead of the
-        layer that was working. One ring still turns, at three minutes a
-        revolution; the particles hold station and only change brightness.
+    def test_a_timer_may_choose_when_a_fact_is_shown_never_what(self):
+        """
+        SUPERSEDED FORM: this used to ban `setTimeout` outright, bar two named
+        uses. That was a proxy for the real property, and it stopped being a
+        usable one when the reveals were paced — releasing a queue at reading
+        speed is a timer, and a necessary one.
+
+        The property itself is unchanged and is asserted directly instead:
+        every item that reaches the screen is created in ONE place, `update`,
+        by reading the recorder. The pump chooses the moment. It cannot choose
+        the content, because it has none to choose from.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        update = _fn(js, "function update(run)")
+        # Every push is inside `update`…
+        assert js.count("queue.push(") == update.count("queue.push("), (
+            "something outside `update` is putting items on the queue")
+        assert update.count("queue.push(") >= 3, update
+        # …and every one of them carries a step or a run, never a literal.
+        for push in update.split("queue.push(")[1:]:
+            body = push[:push.index("});") + 1]
+            assert "step." in body or "run." in body or "prog." in body, body
+        # The pump moves what it is handed and creates nothing.
+        for mover in ("function reveal(item)", "function revealState(item)",
+                      "function revealLog(item)", "function pump()"):
+            fn = _fn(js, mover)
+            assert "queue.push" not in fn, (mover, fn)
+
+    def test_a_phase_is_a_dispatch(self):
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        assert "run.steps.map(phaseHtml)" in js, (
+            "the tree is built from something other than the run's steps")
+        fn = js[js.index("function phaseState(step, runEnded)"):]
+        fn = fn[:fn.index("\n}\n")]
+        # Every phase state is a read of the step, not a schedule.
+        for status in ("'active'", "'done'", "'failed'"):
+            assert f"step.status === {status}" in fn, status
+
+    def test_a_phase_reports_its_own_dispatch_and_not_another(self):
+        """
+        The recorder keeps one set of lines per LAYER, and a phase folds its
+        layer's lines in. Two steps on the same layer therefore both read
+        whatever that layer last said, and each printed the other's detail —
+        measured, a five-step run on one layer put fifty items on the reveal
+        queue instead of twenty-two, the same line repeating once more with
+        every phase.
+
+        A layer's lines belong to the last dispatch that went out on it, which
+        is the one whose answer they describe. Every plan in the application
+        today puts one step on a layer, so a real run is unchanged; a plan
+        that shares one now reads correctly instead of repeating itself.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        logs = _fn(js, "function logsFor(run, step, index)")
+        assert "ownsLayer(run, step)" in logs, logs
+        owns = _fn(js, "function ownsLayer(run, step)")
+        assert "s.layer !== step.layer" in owns, owns
+        assert "s.startedAt" in owns, owns
+        assert "owner.id === step.id" in owns, owns
+
+    def test_the_four_states_are_drawn_differently(self):
+        css = _asset("css", "agent-loading.css")
+        for state in ("active", "done", "failed", "blocked"):
+            assert f".agl-phase.{state} .agl-node" in css, state
+        # A spinner only while something is running; a tick only when it landed.
+        assert ".agl-phase.active .agl-node-spin { display: block; }" in css
+        assert ".agl-phase.done .agl-node-tick { display: block; }" in css
+        assert ".agl-phase.failed .agl-node-cross { display: block; }" in css
+
+    def test_a_finished_phase_is_read_before_it_collapses(self):
+        """
+        SUPERSEDED FORM: this used to assert `max-height: 0` on `.agl-phase.done`
+        itself, which is what made a fast dispatch unreadable — the phase wrote
+        its lines and folded them away inside the same animation frame, so the
+        detail existed only in the DOM. `.done` now stays open; the fold is a
+        second class the view adds once the phase has had its time.
+
+        The dialog is small and shows what is happening now, so it does still
+        fold. The reason a run STOPPED is the exception, and stays.
         """
         css = _asset("css", "agent-loading.css")
-        body = _without_comments(css)
-        assert "@keyframes agl-spin" in css
-        assert "@keyframes agl-twinkle" in css
-
-        # Nothing travels in a circle any more.
-        assert "@keyframes agl-orbit" not in body, (
-            "the particles are orbiting again")
-        assert "agl-orbit" not in _rule(css, ".agl-particles i {"), (
-            "a particle is animating its own transform again")
-
-        # Whatever still rotates does so slowly enough to be felt, not watched.
-        for rule in re.findall(r"animation:\s*agl-spin\s+([\d.]+)s", body):
-            assert float(rule) >= 60, f"agl-spin at {rule}s is fast enough to track"
-        # Decoration must be inert to state: no rule may key a ring or a
-        # particle off an agent's state class.
-        for line in _without_comments(css).splitlines():
-            if ".agl-ring" in line or ".agl-particles" in line:
-                assert "state-" not in line, line
-        js = _asset("js", "agent-loading.js")
-        # Sliced to the next element in the skeleton, not to a call that used
-        # to build it: the links are inlined now that the dialog is built once.
-        rings = js[js.index('class="agl-rings"'):js.index('class="agl-links"')]
-        assert 'aria-hidden' in rings
-
-    def test_an_uninvolved_layer_is_subdued_and_still_legible(self):
-        css = _asset("css", "agent-loading.css")
-        idle = _rule(css, ".agl-node.state-idle {")
-        assert "opacity: 0.45" in idle
-        assert "grayscale" in idle
+        done = _rule(css, ".agl-phase.done {")
+        assert "max-height: 0" not in done, done
+        folded = _rule(css, ".agl-phase.done.collapsed {")
+        assert "max-height: 0" in folded, folded
+        # And the fold is the view's decision, taken after a stated hold.
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        fn = _fn(js, "function holdThenCollapse(id)")
+        assert "PHASE_HOLD_MS" in fn, fn
+        assert "classList.add('collapsed')" in fn, fn
+        failed = _rule(css, ".agl-phase.failed {")
+        assert "max-height: 0" not in failed, failed
+        assert "opacity: 1" in failed, failed
+        blocked = _rule(css, ".agl-phase.blocked {")
+        assert "max-height: 0" not in blocked, blocked
 
     def test_someone_who_asked_for_less_motion_gets_less_motion(self):
-        css = _without_comments(_asset("css", "agent-loading.css"))
-        block = css[css.index("prefers-reduced-motion"):]
+        css = _asset("css", "agent-loading.css")
+        block = css[css.index("@media (prefers-reduced-motion: reduce)"):]
         assert "animation: none !important" in block
-        assert ".agl-signal-dot { display: none; }" in block
+        for stilled in (".agl-orb::after", ".agl-node-spin", ".agl-caret",
+                        ".agl-log", ".agl-shell"):
+            assert stilled in block, stilled
+        # And the title is not typed out a character at a time.
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        fn = js[js.index("function typeTitle(el, text)"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "prefersReducedMotion()" in fn, fn
 
 
 class TestTheViewHoldsNoSequence:
@@ -150,7 +226,11 @@ class TestTheViewHoldsNoSequence:
         assert "Date.now()" in fn
         # The one interval in the file updates that clock and nothing else.
         assert _without_comments(js).count("setInterval") == 1
-        assert "clockTimer = setInterval(tick, 1000)" in js
+        # 100ms, because the elapsed figure now carries a tenth of a second —
+        # a four-second run is the common case and "0s → 4s" says nothing
+        # while it is happening.
+        assert "clockTimer = setInterval(tick, 100)" in js
+        assert "toFixed(1)" in js, "the clock stopped showing tenths"
 
     def test_everything_it_draws_comes_from_the_recorder(self):
         js = _asset("js", "agent-loading.js")
@@ -268,7 +348,10 @@ class TestEveryCallerReportsItsOwnRealWork:
     def test_a_scenario_run_engages_only_what_a_scenario_run_uses(self):
         js = _without_comments(_asset("js", "scenarios.js"))
         fn = js[js.index("async function runScenarioCreation()"):]
-        fn = fn[:fn.index("renderCreationProgress(CREATION_STEPS.length + 1);")]
+        # Ends at the second dispatch. This used to slice on a call into the
+        # scenario page's own step list, which no longer exists: that list was
+        # a second loading state drawn behind the dialog for the same wait.
+        fn = fn[:fn.index("stepStart('compare');")]
         assert "startRun({" in fn
         assert "layer: 'scenario'" in fn
         # And nothing else is claimed.
@@ -374,67 +457,80 @@ class TestTheLoadingScreenIsADialog:
         shell = _rule(css, ".agl-shell {")
         assert "min-height: 100vh" not in shell, (
             "the dialog is a full-height page again")
-        assert "width: min(940px" in shell, shell
+        # 560px: a small rectangular pop-up, not a page and not the 940px
+        # canvas the circular design needed.
+        assert "width: min(560px" in shell, shell
         assert "max-height: min(" in shell and "100vh" in shell, shell
         # Bounded, so it can never grow past the window; scrollable inside if
-        # a translation or a long message makes it taller than expected.
+        # a long run puts more phases in it than the height allows.
         assert "overflow-y: auto" in shell, shell
+        # And a floor, because finished phases collapse: without one the
+        # dialog shrinks and grows every time a phase lands.
+        assert "min-height:" in shell, shell
 
-    def test_the_diagram_is_a_square_so_the_ring_is_a_circle(self):
+    def test_it_is_a_rectangle_holding_a_list(self):
+        """
+        SUPERSEDED. This asserted a square stage, because the previous design
+        was a circle and a circle needs one. The finalised design is a
+        rectangular dialog holding a vertical tree, and nothing in it is
+        positioned by geometry at all.
+        """
         css = _asset("css", "agent-loading.css")
-        stage = _rule(css, ".agl-stage {")
-        assert "aspect-ratio: 1 / 1" in stage, stage
         js = _asset("js", "agent-loading.js")
-        # ONE radius. Two — one for the width, one for the height — was a
-        # correction for a rectangular stage, and had to be re-tuned whenever
-        # the container changed shape.
-        assert "const RADIUS = 40;" in js
-        assert "RADIUS_X" not in js and "RADIUS_Y" not in js, (
-            "the ring is being corrected for a rectangle again")
-        # Node and hub are shares of that same square, so the figure holds its
-        # proportions at any size.
-        assert "width: 26%;" in _rule(css, ".agl-node {")
-        assert "width: 30%;" in _rule(css, ".agl-hub {")
+        assert ".agl-stage" not in css, "the circular stage is back"
+        assert "aspect-ratio" not in css, css
+        for gone in ("RADIUS", "pointFor", "LAYER_META", "agl-signal",
+                     "agl-callout", "agl-hub"):
+            assert gone not in js, gone
+        # A column of phases, laid out by flow.
+        tree = _rule(css, ".agl-tree {")
+        assert "flex-direction: column" in tree, tree
 
     def test_it_uses_the_applications_type_scale(self):
-        """22px/800 is `.ov-title`, the Home Overview heading — the source of
-        truth for scale. The dialog must not invent one of its own."""
+        """
+        The dialog must not invent a scale of its own. 15px/800 is the
+        application's card-heading size; the reference's own 19px belongs to a
+        720px page, not to a 560px pop-up.
+        """
         css = _asset("css", "agent-loading.css")
         title = _rule(css, ".agl-title {")
-        assert "font-size: 22px;" in title, title
+        assert "font-size: 15px;" in title, title
         assert "vw" not in title, "the heading is sized off the viewport again"
-        assert "font-size: 13px;" in _rule(css, ".agl-sub {")
+        assert "font-size: 12px;" in _rule(css, ".agl-sub {")
+        # Anchored at the start of a line: `.agl-phase.blocked
+        # .agl-phase-title` contains the same substring and comes first.
+        assert "font-size: 13.5px;" in _rule(css, "\n.agl-phase-title {")
+        # And the reference's palette is not used: the app's token is.
+        # The CODE, not the prose: the header comment names the reference's
+        # purple in order to say it was not used.
+        assert "#7c3aed" not in _without_comments(css), (
+            "the reference's purple was copied in")
 
-    def test_the_motion_is_slow_enough_to_follow(self):
+    def test_nothing_moves_without_a_cause(self):
         """
-        One hand-off should read as one thing crossing between two agents.
-
-        At a 1.15s crossing against a 620ms dwell the dot crossed the diagram
-        twice per message, and the ring read as traffic rather than as a
-        conversation.
+        The previous design had ambient motion — rings turning, particles
+        twinkling — and the work needed to be told apart from it. This one has
+        almost none: a spinner on a phase that is genuinely running, an
+        entrance on a line that genuinely arrived, and a bar moving to a
+        fraction that genuinely changed.
         """
         css = _asset("css", "agent-loading.css")
         body = _without_comments(css)
-        travel = re.search(r"animation:\s*agl-travel\s+([\d.]+)s", body)
-        assert travel, "the signal no longer travels"
-        crossing = float(travel.group(1))
-        assert crossing >= 1.5, f"the signal crosses in {crossing}s"
-
-        activity = _without_comments(_asset("js", "agent-activity.js"))
-        dwell = re.search(r"SIGNAL_DWELL_MS\s*=\s*(\d+)", activity)
-        assert dwell, "the dwell is gone"
-        assert int(dwell.group(1)) >= crossing * 700, (
-            "a hand-off is shown for less than one crossing: "
-            f"{dwell.group(1)}ms for a {crossing}s trip")
-
-        # Everything else that repeats forever is slow too.
-        for name, floor in (("agl-dash", 2.0), ("agl-breathe", 5.0),
-                            ("agl-node-breathe", 4.0), ("agl-rotate", 1.2),
-                            ("agl-sweep", 2.0), ("agl-twinkle", 8.0)):
-            found = [float(x) for x in
-                     re.findall(name + r"\s+(?:calc\()?([\d.]+)s", body)]
-            assert found, f"{name} is not used"
-            assert min(found) >= floor, f"{name} runs at {min(found)}s"
+        for gone in ("agl-orbit", "agl-twinkle", "agl-travel", "agl-breathe",
+                     "agl-node-breathe", "agl-dash", "agl-spin "):
+            assert gone not in body, gone
+        # What is left, and what causes each.
+        assert ".agl-phase.active .agl-node-spin { display: block; }" in css
+        assert "animation: agl-log-in" in body
+        assert "transition: width" in _rule(css, ".agl-bar > span {")
+        # The one exception is stated as one: a sweep across the mark, with no
+        # state class on it, saying only that the dialog is live.
+        orb = body[body.index(".agl-orb::after"):]
+        orb = orb[:orb.index("}")]
+        assert "agl-sweep-orb" in orb, orb
+        for line in body.splitlines():
+            if ".agl-orb" in line:
+                assert "state-" not in line and ".active" not in line, line
 
     def test_a_hub_step_draws_no_hand_off_to_itself(self):
         """The solve is the orchestrator's own work — a step whose layer IS
@@ -564,15 +660,236 @@ class TestBlockedIsNotIdle:
         assert "strandedLayers" in fn and "'blocked'" in fn, fn
         assert "x.status === 'pending'" in fn, fn
 
-    def test_it_is_drawn_differently_from_idle_and_from_failed(self):
+    def test_it_is_drawn_differently_from_pending_and_from_failed(self):
+        """
+        In the tree the dangerous confusion is with PENDING, not idle: a
+        pending phase is one whose turn has not come, and drawing a step that
+        never ran the same way says it is still coming.
+        """
         css = _asset("css", "agent-loading.css")
-        blocked = _rule(css, ".agl-node.state-blocked {")
-        idle = _rule(css, ".agl-node.state-idle {")
-        assert blocked != idle
-        assert "b45309" in blocked.lower() or "180, 83, 9" in blocked, blocked
-        assert ".agl-badge.blocked" in css
-        js = _asset("js", "agent-loading.js")
-        assert "blocked: 'Blocked'" in js
+        blocked = _rule(css, ".agl-phase.blocked {")
+        pending = _rule(css, ".agl-phase.pending {")
+        assert blocked != pending
+        assert "max-height: 0" in pending, pending
+        assert "max-height: 0" not in blocked, blocked
+        # Amber, not the red of a failure: it did not fail, it never ran.
+        assert "#b45309" in _rule(css, ".agl-phase.blocked .agl-node {")
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        assert "runEnded ? 'blocked' : 'pending'" in js, js
+
+    def test_a_blocked_phase_says_so_in_its_own_words(self):
+        """
+        The line was there, behind a condition that almost never held: it was
+        written only if the phase had no lines of its own. A step whose layer
+        IS the hub inherits the hub's lines, so a stranded `compare` step read
+        "Continuing with 1 remaining step, without its evidence" — the
+        orchestrator's account of what it did NEXT — and never said that this
+        was the step that did not run. Measured in the browser, not reasoned
+        about: the line was absent from a real stranded step.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        fn = _fn(js, "function revealState(item)")
+        assert "!blockedNoted[item.id]" in fn, fn
+        assert "phase.logs.children.length" not in fn, fn
+        assert "Did not run" in fn, fn
+
+
+class TestTheScreenIsPacedToBeRead:
+    """
+    The screen was correct and unreadable.
+
+    Every fact on it was true and every one of them arrived at machine speed:
+    a network that had been solved before reported five dispatches and twenty
+    lines of detail inside two seconds, so each line held the screen for about
+    a twentieth of a second and a phase wrote its detail and folded it away
+    inside one animation frame. Nielsen's first heuristic asks for visibility
+    of system status; a line nobody could read was never visible, and a
+    loading screen that cannot be read is decoration with a true caption.
+
+    So reveals are queued and released at reading speed. The tests here are
+    about the two things that keeps honest:
+
+      * the queue holds only what already happened, in the order it happened
+        (`TestTheVisualisationIsWhatTheDesignApproved` above pins that);
+      * pacing a person's wait is a cost, so it is bounded, it speeds up when
+        it falls behind, it never touches the one figure that claims to be a
+        duration, and there is a way out of it.
+    """
+
+    def test_a_revealed_line_holds_the_screen_long_enough_to_be_read(self):
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        base = int(re.search(r"BASE_STEP_MS = (\d+)", js).group(1))
+        floor = int(re.search(r"FLOOR_STEP_MS = (\d+)", js).group(1))
+        hold = int(re.search(r"PHASE_HOLD_MS = (\d+)", js).group(1))
+        # Reading one short line of text is a few hundred milliseconds. The
+        # floor is what the screen falls back to when it is behind, and it is
+        # still above a flicker.
+        assert floor >= 300, floor
+        assert base >= 800, base
+        assert floor < base, (floor, base)
+        # A finished phase is held open on top of that, so its detail is not
+        # taken away on the frame it arrived.
+        assert hold >= 1000, hold
+
+    def test_it_speeds_up_rather_than_falling_further_behind(self):
+        """
+        A screen thirty seconds behind the system is describing a past. The
+        pace shortens as the backlog grows, so what is waiting is shown within
+        a bounded time however much of it there is.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        fn = _fn(js, "function stepMs()")
+        assert "queue.length" in fn, fn
+        assert "FLOOR_STEP_MS" in fn and "BASE_STEP_MS" in fn, fn
+        budget = int(re.search(r"BACKLOG_BUDGET_MS = (\d+)", js).group(1))
+        assert budget <= 12000, budget
+        # A budget needs a DEADLINE, not a ratio. Dividing the whole budget by
+        # the current backlog after every reveal gives each remaining item more
+        # time than the one before it — the queue shrinks, so the divisor does
+        # — and the total comes out as the budget times a harmonic sum.
+        # Measured that way, 777ms of work held the dialog for 21.4 seconds.
+        assert "drainBy - Date.now()" in fn, fn
+        assert "BACKLOG_BUDGET_MS" not in fn, fn
+        update = _fn(js, "function update(run)")
+        assert "drainBy = Date.now() + BACKLOG_BUDGET_MS" in update, update
+        assert "drainBy < Date.now()" in update, update
+
+    def test_a_failure_does_not_queue_behind_its_own_preamble(self):
+        """
+        Measured before this existed: a scenario that failed 300ms in put
+        seven items on the queue, and at the reading pace the reason reached
+        the screen 3.6 seconds later — behind "Turning this request into a
+        plan" and "Passing a change to the scenario planner". Nielsen's ninth
+        heuristic is about recognising and diagnosing an error, and pacing the
+        diagnosis behind the pleasantries is the one place the pacing makes
+        the screen worse rather than better.
+
+        The recorder already states this rule for hand-offs: `stepFail` stops
+        the signal queue outright because "a failure jumps the queue: it is
+        the thing the reader needs to see". This is the same rule for reveals.
+        Nothing is dropped and nothing is reordered — the queue stops WAITING,
+        so everything ahead of the failure arrives with it.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        pace = _fn(js, "function stepMs()")
+        assert "item.urgent" in pace, pace
+        assert "return 0;" in pace, pace
+        update = _fn(js, "function update(run)")
+        assert "urgent: state === 'failed'" in update, update
+        # And the pump is re-armed rather than left sitting out the wait it
+        # was scheduled for before the failure arrived.
+        pump = _fn(js, "function startPump()")
+        assert "item.urgent" in pump, pump
+        assert "clearTimeout(pumpTimer)" in pump, pump
+
+    def test_a_heading_finishes_before_its_own_detail_arrives(self):
+        """
+        A title still typing itself while the lines underneath it are already
+        landing reads as two things happening at once when only one is.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        budget = int(re.search(r"TYPE_BUDGET_MS = (\d+)", js).group(1))
+        floor = int(re.search(r"FLOOR_STEP_MS = (\d+)", js).group(1))
+        assert budget <= floor + 200, (budget, floor)
+        fn = _fn(js, "function typeTitle(el, text)")
+        assert "TYPE_BUDGET_MS / Math.max(1, text.length)" in fn, fn
+
+    def test_the_elapsed_clock_is_never_paced(self):
+        """
+        The pacing makes the SCREEN later than the work. Exactly one figure on
+        the dialog claims to be a duration, and it has to stay the true one —
+        otherwise the dialog is quietly reporting its own animation as the
+        system's response time.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        fn = _fn(js, "function elapsedText(run)")
+        assert "run.startedAt" in fn and "run.endedAt" in fn, fn
+        for paced in ("queue", "revealFloor", "instant", "stepMs"):
+            assert paced not in fn, (paced, fn)
+
+    def test_each_phase_states_the_time_it_actually_took(self):
+        """
+        A dispatch that took four hundredths of a second is held open for
+        eight tenths so it can be read. The screen says so, in the phase's own
+        lines, from the recorder's own timestamps.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        fn = _fn(js, "function logsFor(run, step, index)")
+        assert "step.endedAt - step.startedAt" in fn, fn
+        assert "'Took'" in fn, fn
+
+    def test_the_dialog_waits_for_the_queue_and_not_for_ever(self):
+        """
+        Closing on the last event would undo the pacing for the phase it
+        matters most for — the final one, whose lines would be drawn and
+        removed in the same breath. Waiting without a bound would let a
+        backlog hold a workspace shut, which is worse than either.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        fn = _fn(js, "export function dismissAgentLoading(holdMs = 0)")
+        assert "queue.length" in fn, fn
+        assert "MAX_DRAIN_MS" in fn, fn
+        assert "deadline" in fn, fn
+        cap = int(re.search(r"MAX_DRAIN_MS = (\d+)", js).group(1))
+        assert cap <= 30000, cap
+
+    def test_there_is_a_way_out_of_the_pacing(self):
+        """
+        Nielsen's third heuristic. A hold with no exit is a trap, and someone
+        who has seen this screen fifty times should not have to watch it read
+        itself out.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        flush = _fn(js, "function flush()")
+        assert "instant = true;" in flush, flush
+        assert "while (queue.length" in flush, flush
+        # Reachable by pointer and by keyboard.
+        assert "els.skip.addEventListener('click', flush);" in js, js
+        esc = js[js.index("document.addEventListener('keydown'"):]
+        esc = esc[:esc.index("});")]
+        assert "'Escape'" in esc and "flush()" in esc, esc
+        # And it says what it does not do: it is a button on a modal over
+        # running work, which reads as a cancel until it is told otherwise.
+        skeleton = js[js.index("function skeletonHtml()"):js.index("function phaseHtml")]
+        assert "does not change the work" in skeleton, skeleton
+
+    def test_the_way_out_is_offered_only_when_there_is_something_to_skip(self):
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        fn = _fn(js, "function updateSkip()")
+        assert "queue.length" in fn, fn
+        assert "hidden" in fn, fn
+
+    def test_the_fraction_agrees_with_the_tree_under_it(self):
+        """
+        A bar reading "5 of 5" above a tree still showing the third phase is a
+        dialog disagreeing with itself, and the reader believes the half that
+        is moving. The denominator is still the recorder's.
+        """
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        fn = _fn(js, "function drawProgress()")
+        assert "progress(run)" in fn, fn
+        assert "prog.total" in fn, fn
+        assert "lastState[s.id]" in fn, fn
+
+    def test_the_newest_line_is_never_left_below_the_fold(self):
+        js = _without_comments(_asset("js", "agent-loading.js"))
+        fn = _fn(js, "function keepLatestInView()")
+        assert "scrollTop" in fn and "scrollHeight" in fn, fn
+
+    def test_the_motion_is_slow_enough_to_follow(self):
+        """
+        Every duration on the dialog was tuned next to a screen that changed
+        every few hundred milliseconds. With the reveals paced there is room
+        for the motion to be legible instead of merely unobtrusive.
+        """
+        css = _asset("css", "agent-loading.css")
+        log = _rule(css, "\n.agl-log {")
+        seconds = float(re.search(r"agl-log-in (\d*\.?\d+)s", log).group(1))
+        assert seconds >= 0.45, seconds
+        spin = _rule(css, ".agl-node-spin {")
+        assert float(re.search(r"agl-rotate (\d*\.?\d+)s", spin).group(1)) >= 1.0
+        phase = _rule(css, "\n.agl-phase {")
+        assert float(re.search(r"max-height (\d*\.?\d+)s", phase).group(1)) >= 0.6
 
 
 class TestTheDialogIsBuiltOnceAndUpdatedInPlace:
@@ -605,25 +922,45 @@ class TestTheDialogIsBuiltOnceAndUpdatedInPlace:
                           "${hub", "${message"):
             assert forbidden not in skeleton, (forbidden, skeleton[:400])
 
-    def test_update_writes_into_it_rather_than_replacing_it(self):
+    def test_nothing_on_the_dialog_is_replaced_wholesale(self):
+        """
+        SUPERSEDED FORM: this read the whole property out of `update`, which
+        was where the drawing happened. The drawing moved to `reveal` when the
+        screen was paced. The property did not move: neither function replaces
+        anything, and a phase's class is still written only when its state
+        genuinely moved.
+        """
         js = _without_comments(_asset("js", "agent-loading.js"))
-        update = js[js.index("function update(run)"):]
-        update = update[:update.index("\n}\n")]
-        # The only things `update` is allowed to replace wholesale are the two
-        # that carry no animation of their own once written.
-        replaced = re.findall(r"els\.(\w+)\.innerHTML", update)
-        assert set(replaced) <= {"signalHost", "calloutHost"}, replaced
-        # Badges are per-node and only rewritten when that node's state moved.
-        assert "if (lastNodeState[id] === agent.state) return;" in update, update
+        update = _fn(js, "function update(run)")
+        assert "innerHTML" not in update, update
+        # `update` queues on a real move, and on nothing else.
+        assert "const moved = queuedState[step.id] !== state;" in update, update
+        for guarded in ("if (moved && state === 'active')",
+                        "if (moved && state !== 'active')"):
+            assert guarded in update, update
+        # And the reveal writes a class, never a subtree.
+        state = _fn(js, "function revealState(item)")
+        assert "innerHTML" not in state, state
+        assert "phase.root.className = `agl-phase ${item.state}`;" in state, state
 
-    def test_the_signal_survives_an_unrelated_update(self):
-        """Keyed on the hand-off itself. A live poll landing mid-crossing must
-        not send the dot back to the start."""
+    def test_a_title_is_typed_once_and_logs_are_only_appended(self):
+        """
+        A reveal happens throughout a run — a live poll, a trace arriving, a
+        step settling, each adding to the queue. Re-typing a title from its
+        first character, or rewriting the log list, would replay both
+        animations each time and the phase would never finish saying anything.
+        """
         js = _without_comments(_asset("js", "agent-loading.js"))
-        update = js[js.index("function update(run)"):]
-        update = update[:update.index("\n}\n")]
-        assert "if (key !== lastSignalKey)" in update, update
-        assert "${sig.from}>${sig.to}@${sig.at}" in update, update
+        state = _fn(js, "function revealState(item)")
+        assert "if (!typedFor[item.id])" in state, state
+        assert "typedFor[item.id] = true;" in state, state
+        # Appended, never rewritten.
+        log = _fn(js, "function revealLog(item)")
+        assert "insertAdjacentHTML('beforeend'" in log, log
+        assert "innerHTML" not in log, log
+        # And a line already queued is never queued twice.
+        update = _fn(js, "function update(run)")
+        assert "if (already.includes(key)) return;" in update, update
 
     def test_text_is_only_written_when_it_changed(self):
         js = _without_comments(_asset("js", "agent-loading.js"))
@@ -640,16 +977,20 @@ class TestTheDialogIsBuiltOnceAndUpdatedInPlace:
 
     def test_reduced_motion_leaves_the_dialog_drawn(self):
         """
-        The entrance starts at `opacity: 0` with `fill: both`. A rule that
-        cancels the animation must not strand the dialog on its first frame —
-        that would hand the readers who most need a legible screen a blank one.
+        Two entrances start at `opacity: 0` — the dialog's and every log
+        line's. Cancelling those animations without care would hand the
+        readers who most need a legible screen a blank box.
         """
         css = _asset("css", "agent-loading.css")
         block = css[css.index("@media (prefers-reduced-motion: reduce)"):]
         assert ".agl-shell" in block, block
         assert "animation: none !important" in block, block
-        # Nothing in that block may set an opacity or a transform, which is
-        # what would leave the dialog invisible or displaced.
         body = _without_comments(block)
-        assert "opacity:" not in body, body
-        assert "transform:" not in body, body
+        # The shell is never given an opacity or a transform here, so it
+        # cannot be stranded on its first frame.
+        for line in body.splitlines():
+            if ".agl-shell" in line:
+                assert "opacity" not in line and "transform" not in line, line
+        # The log lines DO need restoring, because their base rule starts them
+        # at zero and it is the animation that brings them in.
+        assert ".agl-log { opacity: 1; transform: none; }" in body, body

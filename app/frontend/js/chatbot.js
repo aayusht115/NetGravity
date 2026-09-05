@@ -66,6 +66,27 @@ export function initChatbot() {
 }
 
 /**
+ * Show the conversation, or the way in to one.
+ *
+ * Three functions each set the FAQ list and the chat view by hand — opening
+ * the panel onto a restored thread, asking a question, going back. The
+ * welcome card was in none of them, so "Hi there! I'm Netgravity AI, here to
+ * help you explore your network" sat above every thread for its whole length,
+ * introducing an assistant the reader was already talking to.
+ *
+ * One switch, so a fourth thing to hide cannot drift out of step with it.
+ */
+function showConversation(on) {
+  const faqSection = document.getElementById('chatbot-faq-section');
+  const chatView = document.getElementById('chatbot-chat-view');
+  const welcome = document.querySelector('.chatbot-welcome-banner');
+  if (faqSection) faqSection.style.display = on ? 'none' : 'block';
+  if (welcome) welcome.style.display = on ? 'none' : '';
+  if (chatView) chatView.style.display = on ? 'flex' : 'none';
+  return chatView;
+}
+
+/**
  * Open Ask Netgravity Modal
  */
 export function openChatbotModal() {
@@ -87,10 +108,7 @@ export function openChatbotModal() {
   // Bring back the thread this tab was already having, if there is one.
   restoreConversation().then((restored) => {
     if (!restored) return;
-    const faqSection = document.getElementById('chatbot-faq-section');
-    const chatView = document.getElementById('chatbot-chat-view');
-    if (faqSection) faqSection.style.display = 'none';
-    if (chatView) chatView.style.display = 'flex';
+    showConversation(true);
     renderChatMessages();
   });
 }
@@ -114,14 +132,8 @@ export function resetChatbotView() {
   // Going back to the FAQ list ends the thread. Keeping the id would make the
   // next question a follow-up to a conversation the user can no longer see.
   storeConversationId(null);
-  const faqSection = document.getElementById('chatbot-faq-section');
-  const chatView = document.getElementById('chatbot-chat-view');
-
-  if (faqSection) faqSection.style.display = 'block';
-  if (chatView) {
-    chatView.style.display = 'none';
-    chatView.innerHTML = '';
-  }
+  const chatView = showConversation(false);
+  if (chatView) chatView.innerHTML = '';
 
   const input = document.getElementById('chatbot-modal-input');
   if (input) {
@@ -256,11 +268,7 @@ async function restoreConversation() {
 export async function askChatbotPrompt(query) {
   if (!query || isGenerating) return;
 
-  const faqSection = document.getElementById('chatbot-faq-section');
-  const chatView = document.getElementById('chatbot-chat-view');
-
-  if (faqSection) faqSection.style.display = 'none';
-  if (chatView) chatView.style.display = 'flex';
+  showConversation(true);
 
   // Add User Message
   chatMessages.push({ role: 'user', text: query });
@@ -382,20 +390,14 @@ export function sendChatbotInput() {
 /**
  * Render Chat Bubbles in Chat View
  */
-/**
- * What is actually answering, from the server's own status.
+/* No engine label above the thread.
  *
- * The chat header read "NetGravity AI v2.4" — a version number that appears
- * nowhere in this codebase (the application reports 2.0.0) and told the user
- * nothing about whether a language model was even reachable.
+ * It read "NetGravity v2.0.0 - grounded answers, deterministic", built from
+ * `/api/status`. Both halves were true and neither was the reader's: a build
+ * number and whether a language model happened to be reachable are facts
+ * about the deployment, not about the answer being read. What grounds an
+ * answer is said by the answer — every reply carries the figures it used.
  */
-function engineLabel() {
-  const s = (typeof window !== 'undefined') ? window.__ngServerStatus : null;
-  if (!s) return 'NetGravity analysis engine';
-  const version = s.version ? ` v${s.version}` : '';
-  const llm = s.orchestrator && s.orchestrator.llm_available;
-  return `NetGravity${version} - ${llm ? 'grounded answers, model assisted' : 'grounded answers, deterministic'}`;
-}
 
 function renderChatMessages() {
   const chatView = document.getElementById('chatbot-chat-view');
@@ -406,7 +408,6 @@ function renderChatMessages() {
       <button class="chatbot-back-btn" data-action="resetChatbotView">
         ← Back to FAQs & suggestions
       </button>
-      <span style="font-size: 11.5px; color: #9ca3af; font-weight: 500;">${escapeChatText(engineLabel())}</span>
     </div>
     ${chatMessages.map(msg => {
       if (msg.role === 'user') {
@@ -440,35 +441,104 @@ function renderChatMessages() {
   }
 }
 
+/* ─── waiting for a reply ─────────────────────────────────────────────
+   Three dots and nothing else, for however long the orchestrator took. On a
+   question that reaches a solve that is twenty seconds of a bubble that never
+   changes, and a reader with no way to tell a slow answer from a dead one.
+
+   These words make no claim about the system. They are deliberately whimsical
+   — nobody reads "Percolating" as a description of a capability — because the
+   alternative, inventing plausible-sounding stage names, is the exact failure
+   this codebase has twice had to undo. What IS true is stated: the dots keep
+   moving because a request is genuinely in flight.
+
+   There is no clock. A count of seconds was shown here past ten seconds, on
+   the reasoning that a long wait needs to be told from a dead one — but the
+   moving words and dots already say the request is alive, and a number
+   climbing next to them turns waiting into watching it climb.
+
+   The loading DIALOG is not used here. A modal over the conversation would
+   hide the thing the reader is waiting on, and a chat turn is a message in a
+   thread rather than a screen being rebuilt. */
+const THINKING_WORDS = [
+  'Thinking', 'Pondering', 'Percolating', 'Mulling', 'Ruminating',
+  'Cogitating', 'Noodling', 'Simmering', 'Brewing', 'Distilling',
+  'Untangling', 'Puzzling', 'Deliberating', 'Considering', 'Musing',
+  'Sifting', 'Weighing', 'Tracing', 'Wondering', 'Marinating',
+  'Germinating', 'Whirring', 'Contemplating', 'Chewing it over',
+];
+
+/** How long each word is shown. Long enough to read, short enough to notice. */
+const THINKING_WORD_MS = 2400;
+
+let thinkingTimer = null;
+
+/** A shuffled queue, so the words do not repeat until all have been shown. */
+function shuffledWords() {
+  const words = THINKING_WORDS.slice();
+  for (let i = words.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [words[i], words[j]] = [words[j], words[i]];
+  }
+  return words;
+}
+
 /**
- * Show animated typing dots indicator
+ * Show that a reply is being waited for.
+ *
+ * One timer, started here and cleared in `removeTypingIndicator`, which every
+ * exit path from `sendChatMessage` calls — including the failure path.
  */
 function showTypingIndicator() {
   const chatView = document.getElementById('chatbot-chat-view');
   if (!chatView) return;
+  removeTypingIndicator();
 
   const typingEl = document.createElement('div');
   typingEl.id = 'chatbot-typing-indicator';
   typingEl.className = 'chat-msg-row ai';
+  // One stable label for a screen reader. Announcing each word as it changed
+  // would read the whole list aloud to someone waiting for an answer.
   typingEl.innerHTML = `
-    <div class="chat-bubble-ai" style="padding: 10px 16px;">
-      <div class="typing-indicator">
+    <div class="chat-bubble-ai chat-thinking" role="status"
+         aria-label="Waiting for a reply">
+      <span class="chat-thinking-word" aria-hidden="true"></span>
+      <span class="typing-indicator" aria-hidden="true">
         <span class="typing-dot"></span>
         <span class="typing-dot"></span>
         <span class="typing-dot"></span>
-      </div>
+      </span>
     </div>
   `;
   chatView.appendChild(typingEl);
+
+  const wordEl = typingEl.querySelector('.chat-thinking-word');
+  let queue = shuffledWords();
+
+  const nextWord = () => {
+    if (!queue.length) queue = shuffledWords();
+    const word = queue.shift();
+    wordEl.textContent = `${word}…`;
+    // Restarted deliberately: the fade belongs to the word, and each new word
+    // gets its own.
+    wordEl.classList.remove('is-in');
+    void wordEl.offsetWidth;
+    wordEl.classList.add('is-in');
+  };
+
+  nextWord();
+  thinkingTimer = setInterval(nextWord, THINKING_WORD_MS);
 
   const body = document.getElementById('chatbot-modal-body');
   if (body) body.scrollTop = body.scrollHeight;
 }
 
-/**
- * Remove animated typing indicator
- */
+/** Stop waiting: the reply arrived, or it failed. */
 function removeTypingIndicator() {
+  if (thinkingTimer) {
+    clearInterval(thinkingTimer);
+    thinkingTimer = null;
+  }
   const typingEl = document.getElementById('chatbot-typing-indicator');
   if (typingEl) typingEl.remove();
 }

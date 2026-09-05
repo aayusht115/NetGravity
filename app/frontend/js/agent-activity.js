@@ -7,9 +7,11 @@
  * The loading visualisation shows five specialist layers around an
  * orchestrator, and it has to show the ones that are genuinely working on the
  * request in front of the user. That is a hard requirement rather than a
- * stylistic one: this repository has already had to delete one animated
- * "agent pipeline" that advanced on a `setInterval` and named a solver the
- * product does not use (see the header of `agent-reasoning.js`). A picture of
+ * stylistic one: this repository has now had to delete TWO animated "agent
+ * pipelines" that advanced on timers and named a solver the product does not
+ * use. The second, `agent-reasoning.js`, ran four stages on 450ms timers,
+ * filled a progress bar to 100% and printed lines into a fake terminal — in
+ * front of a tab change, with no work happening behind it at all. A picture of
  * agents talking to each other is a claim about the system, and a claim has to
  * be true.
  *

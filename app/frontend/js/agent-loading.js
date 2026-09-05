@@ -1,84 +1,91 @@
 /**
  * NetGravity — the agent loading screen
  * =====================================
- * The approved circular visualisation (`Dump/loading page.png`): an
- * orchestrator at the centre with five specialist layers around it, the
- * signal travelling between whichever two are actually talking, and a
- * progress bar counting real dispatches.
+ * The approved design (`Dump/avengersloading.html`): a small rectangular
+ * dialog holding a vertical phase tree. Each phase is a node on a line — a
+ * spinner while it runs, a green tick when it lands — with its title typed
+ * out and its detail streaming underneath. Finished phases collapse away, so
+ * what is on screen is what is happening now.
  *
  * This file draws. It decides nothing.
  *
- * Every state it renders comes from `agent-activity.js`, which records what
- * the application genuinely dispatched and folds in the orchestrator's own
- * execution trace. There is no sequence in here, no timer that advances a
- * stage, and no flow named after a screen. Point it at a run that engaged two
- * layers and it draws two lit layers and three dark ones.
+ * The reference is a demo, and the difference matters. Its six phases are a
+ * fixed list advanced by `setTimeout` every 1250ms, with invented logs —
+ * "Recruiting Iron Man", "Simulating 14,000,605 outcomes". Nothing of that
+ * kind is here. The phases ARE the dispatches the caller declared in
+ * `startRun({ plan })`, they change state only when a request genuinely starts
+ * and returns, and every log line is either the message the caller stated or a
+ * fact read back from the orchestrator's own execution trace. A scenario run
+ * shows two phases because it makes two requests; opening a project shows
+ * five because hydration awaits five.
  *
- * The parts that ARE decoration — the concentric rings, the drifting
- * particles — carry no information and are stated as such: they are marked
- * `aria-hidden` and they never change with state.
+ * The structure is built once and updated in place. Replacing an element
+ * restarts every CSS animation inside it, and this screen is almost entirely
+ * animation: rebuilding on each state change left the dialog stuck in the
+ * opening frames of its own fade and re-typed every title from scratch.
  */
 
 import {
-  LAYERS, HUB, subscribe, getRun, progress, layersEngaged, clearRun,
+  subscribe, getRun, progress, clearRun,
 } from './agent-activity.js';
 
 const OVERLAY_ID = 'agent-loading-overlay';
 
-/* ─── the five layers, as the design names them ──────────────────────── */
+/* ─── pacing ─────────────────────────────────────────────────────────────
+   The screen is deliberately behind the work.
 
-/**
- * Position is an angle on the ring, in degrees clockwise from twelve o'clock,
- * matching the mockup: Intent at the top, then Scenario Planner, Extraction,
- * Forecasting, Reasoning.
- */
-const LAYER_META = {
-  intent: {
-    name: 'Intent Layer', angle: 0,
-    desc: 'Understanding your request',
-    icon: '<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9 9 0 0 1-3.2-.6L3 21l1.8-5.2A8.4 8.4 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z"/>',
-  },
-  scenario: {
-    name: 'Scenario Planner', angle: 72,
-    desc: 'Designing & evaluating scenarios',
-    icon: '<circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><line x1="8.4" y1="10.7" x2="15.6" y2="6.3"/><line x1="8.4" y1="13.3" x2="15.6" y2="17.7"/>',
-  },
-  extraction: {
-    name: 'Extraction Layer', angle: 144,
-    // 'uploaded' dropped from the mockup's wording: at the dialog's scale
-    // the line clamps to two, and the full sentence was cut mid-word.
-    desc: 'Extracting & structuring data',
-    icon: '<ellipse cx="12" cy="5.6" rx="7.4" ry="2.9"/><path d="M4.6 5.6v5.6c0 1.6 3.3 2.9 7.4 2.9s7.4-1.3 7.4-2.9V5.6"/><path d="M4.6 11.2v5.6c0 1.6 3.3 2.9 7.4 2.9s7.4-1.3 7.4-2.9v-5.6"/>',
-  },
-  forecasting: {
-    name: 'Forecasting Layer', angle: 216,
-    desc: 'Predicting future demand & trends',
-    icon: '<polyline points="3 17 9 11 13 15 21 6.5"/><polyline points="15.4 6.5 21 6.5 21 12"/>',
-  },
-  reasoning: {
-    name: 'Reasoning Layer', angle: 288,
-    desc: 'Deriving insights & recommendations',
-    icon: '<path d="M9.5 3.2A3.2 3.2 0 0 0 6.3 6.4a3 3 0 0 0-2 5.2 3 3 0 0 0 .6 4.6 3.1 3.1 0 0 0 4.6 3.5V3.2z"/><path d="M14.5 3.2a3.2 3.2 0 0 1 3.2 3.2 3 3 0 0 1 2 5.2 3 3 0 0 1-.6 4.6 3.1 3.1 0 0 1-4.6 3.5V3.2z"/>',
-  },
-};
+   Events arrive at machine speed. A network that has been solved before
+   reports five dispatches and twenty lines of detail inside two seconds, and
+   a screen that draws each one the instant it arrives gives every line a
+   twentieth of a second — which is the same as giving it none. Nielsen's
+   first heuristic asks for visibility of system status, and a line nobody
+   could read was never visible; the tenth asks that the system explain
+   itself, and an explanation that flashes past explains nothing.
 
-/**
- * What a state is called, in the words the design uses.
- *
- * `idle` and `blocked` look similar and mean opposite things, so they are
- * never worded alike: idle is "nobody asked this layer to do anything", and
- * blocked is "this layer was part of the request and something stopped it".
- * The first is not a problem and the second is.
- */
-const STATE_LABEL = {
-  idle: 'Not involved in this request',
-  waiting: 'Waiting for inputs…',
-  active: 'ACTIVE',
-  retrying: 'RETRYING',
-  blocked: 'Blocked',
-  done: 'Complete',
-  failed: 'Failed',
-};
+   So reveals are QUEUED, and released at reading speed. What is queued is
+   only ever something that has already genuinely happened, released in the
+   order it happened. The queue chooses WHEN a fact reaches the screen. It
+   never chooses WHAT — that is `update`, reading the recorder, and nothing
+   else in this file creates an item.
+
+   Three consequences are handled openly rather than hidden:
+
+     - The screen can fall behind. It speeds up as the backlog grows, to a
+       floor, so it is never describing a past the system has left.
+     - The dialog can outlast the work: `dismissAgentLoading` waits for the
+       queue to drain, so the last thing that happened is read rather than
+       flashed. That wait is bounded by `MAX_DRAIN_MS`.
+     - Holding a reader has a cost, so there is a way out of it. "Skip to
+       latest" and Escape release everything at once — Nielsen's third
+       heuristic, and the reason pacing a person's wait is defensible at all.
+
+   The elapsed clock is never paced: it counts real seconds from the real
+   start, so the one number on the dialog that claims to be a duration always
+   is one. Each phase states its own true duration for the same reason — a
+   step held open for eight tenths of a second says, in its own words, that
+   it took four hundredths. */
+
+/** One revealed item holds the floor for this long when nothing is waiting. */
+const BASE_STEP_MS = 900;
+/** …and never for less than this, however far behind the screen falls. */
+const FLOOR_STEP_MS = 380;
+/** The screen aims to be no further behind than this, and speeds up to hold it. */
+const BACKLOG_BUDGET_MS = 9000;
+/** A completed phase stays open this long after its tick, then collapses. */
+const PHASE_HOLD_MS = 1400;
+/** The closing verdict gets longer than a log line: it is the answer. */
+const FINALE_HOLD_MS = 1200;
+/** The queue is never drained for longer than this once dismissal is asked. */
+const MAX_DRAIN_MS = 20000;
+/** How long one character of a typed title takes… */
+const TYPE_MS = 30;
+/** …but a whole title never takes longer than this.
+
+    A title still typing itself while the lines underneath it are already
+    arriving reads as two things happening at once when only one is. The
+    budget keeps the heading ahead of its own detail on a long label without
+    making a short one flick past. */
+const TYPE_BUDGET_MS = 520;
 
 function escapeHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
@@ -86,349 +93,587 @@ function escapeHtml(s) {
   ));
 }
 
-/* ─── geometry ───────────────────────────────────────────────────────── */
-
-/* One radius, in percentages of a SQUARE stage.
-
-   It used to be two — 30% of the width and 33% of the height — because the
-   stage was a wide rectangle filling the page, and two radii were what it
-   took to stop a wide box from flattening the ring into a lens. That was a
-   correction for the container's shape rather than a description of the
-   figure, and it had to be re-tuned every time the container changed.
-   The stage is now square (`aspect-ratio: 1/1`), so one radius draws a true
-   circle at any size and nothing here has to know how big it is. */
-const RADIUS = 40;    // % of the square stage
-
-/* Clearance a callout keeps from the node it belongs to. `12.5%` is exactly
-   half a node — they are sized at 25% of the same square — so this stays
-   correct when the stage resizes, which a px value could not. */
-const CALLOUT_GAP = 'calc(12.5% + 14px)';
-
-function pointFor(angleDeg) {
-  const rad = ((angleDeg - 90) * Math.PI) / 180;
-  return { x: 50 + RADIUS * Math.cos(rad), y: 50 + RADIUS * Math.sin(rad) };
+function prefersReducedMotion() {
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (e) {
+    return false;
+  }
 }
 
-/* ─── markup ─────────────────────────────────────────────────────────── */
+/* ─── what a phase says ──────────────────────────────────────────────── */
 
-function badgeFor(state) {
-  if (state === 'done') {
-    return `<span class="agl-badge done" title="Complete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="5 12.5 10 17.5 19 7"/></svg></span>`;
+/**
+ * The log lines for one phase, in the order they became true.
+ *
+ * Four sources, all of them real:
+ *
+ *   - `step.message`, the caller's own statement of what is being passed;
+ *   - `step.detail`, what came back;
+ *   - the layer's lines, which `absorbTrace` and `absorbLive` write from the
+ *     orchestrator's execution record — capability names, retry counts,
+ *     failures, the resolved intent;
+ *   - the step's own measured duration, from the timestamps the recorder took
+ *     when the request left and when it returned.
+ *
+ * Nothing is generated here. A phase with nothing to say shows nothing.
+ */
+function logsFor(run, step, index) {
+  const out = [];
+  // The orchestrator resolves the intent while serving the FIRST request, so
+  // that is the phase it belongs to. No step carries the intent layer — the
+  // tree is a list of dispatches, and interpreting the request is not one —
+  // and without this the one thing the trace says about what the orchestrator
+  // understood would never reach the screen.
+  if (index === 0) {
+    const intent = run.agents.intent;
+    if (intent && intent.lines) {
+      intent.lines.filter(Boolean).forEach((line) => out.push(splitLine(line)));
+    }
   }
-  if (state === 'failed') {
-    return `<span class="agl-badge failed" title="Failed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="7" y1="7" x2="17" y2="17"/><line x1="17" y1="7" x2="7" y2="17"/></svg></span>`;
+  if (step.message) out.push({ text: step.message });
+  // The layer's lines, but only for the step that owns the layer right now.
+  //
+  // The recorder keeps one set of lines per layer, so two steps on the same
+  // layer would both read whatever that layer last said and each of them
+  // would print the other's detail. Ownership is the last dispatch to go out
+  // on the layer, which is the one whose answer those lines describe.
+  const agent = run.agents[step.layer];
+  if (agent && agent.lines && ownsLayer(run, step)) {
+    agent.lines.filter(Boolean).forEach((line) => out.push(splitLine(line)));
   }
-  if (state === 'blocked') {
-    return `<span class="agl-badge blocked" title="Blocked"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><line x1="9" y1="7" x2="9" y2="17"/><line x1="15" y1="7" x2="15" y2="17"/></svg></span>`;
+  if (step.detail && step.status !== 'failed') out.push({ text: step.detail });
+  if (step.status === 'failed') out.push({ text: step.detail || 'failed', tone: 'error' });
+  // The measured wait, stated by the phase that waited it.
+  //
+  // The screen holds a phase open for long enough to be read, which for a
+  // fast dispatch is longer than the dispatch took. That is a choice about
+  // legibility, and the honest way to make it is to say so: the spinner is
+  // paced, this figure is not.
+  if (step.startedAt && step.endedAt && step.status !== 'active') {
+    out.push({ text: 'Took', value: `${((step.endedAt - step.startedAt) / 1000).toFixed(2)}s` });
   }
-  if (state === 'active' || state === 'retrying') {
-    return `<span class="agl-badge working" title="Working"><span class="agl-spinner"></span></span>`;
-  }
-  return '';
+  // Deduped: `stepDone` writes the same detail to the step and the layer.
+  const seen = new Set();
+  return out.filter((l) => {
+    const key = `${l.text}|${l.value || ''}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Is this the step the layer's current lines belong to? */
+function ownsLayer(run, step) {
+  let owner = null;
+  run.steps.forEach((s) => {
+    if (s.layer !== step.layer || !s.startedAt) return;
+    if (!owner || s.startedAt >= owner.startedAt) owner = s;
+  });
+  return !owner || owner.id === step.id;
 }
 
 /**
- * The callout beside a layer.
- *
- * Only for layers with something to say. A layer nobody asked to do anything
- * has no card, because an empty card beside a dark circle reads as a card
- * that failed to load.
+ * "Retried: optimization.solve ×2" reads better as a label and a value, which
+ * is how the design sets a log line out. Presentation only — the string is
+ * whatever the trace produced.
  */
-function calloutHtml(id, agent) {
-  if (agent.state === 'idle') return '';
-  const meta = LAYER_META[id];
-  const p = pointFor(meta.angle);
-  // Outside its own node, on whichever side of the ring the node is on. A
-  // node at dead centre-top counts as the right-hand side, which is where the
-  // mockup puts the Intent Layer's card.
-  const side = p.x >= 50 ? 'right' : 'left';
-  const edge = side === 'right'
-    ? `left:calc(${p.x}% + ${CALLOUT_GAP})`
-    : `right:calc(${(100 - p.x).toFixed(2)}% + ${CALLOUT_GAP})`;
-  const head = agent.state === 'active' || agent.state === 'retrying'
-    ? `${STATE_LABEL[agent.state]}: ${escapeHtml(agent.headline || meta.desc)}`
-    : escapeHtml(agent.headline || STATE_LABEL[agent.state]);
-  const lines = (agent.lines || []).filter(Boolean).slice(0, 3);
-  return `
-    <div class="agl-callout side-${side} state-${agent.state}" data-callout="${id}"
-         style="top:${p.y}%;${edge}">
-      <div class="agl-callout-head">${head}</div>
-      ${lines.map((l) => `<div class="agl-callout-line">${escapeHtml(l)}</div>`).join('')}
-    </div>`;
+function splitLine(line) {
+  const at = String(line).indexOf(': ');
+  if (at > 0 && at < 34) {
+    return { text: line.slice(0, at), value: line.slice(at + 2) };
+  }
+  return { text: line };
 }
 
 /**
- * The signal in flight, as an SVG line with a travelling dot.
+ * The phase's own state, from the step's.
  *
- * Drawn only while there IS one. `from`/`to` are the two nodes actually
- * exchanging something, so the line is never between a pair that is not
- * talking.
+ * `blocked` is the one that is not a straight read of `step.status`. A step
+ * that is still pending when the RUN has ended never ran, and it never will:
+ * something upstream stopped it. Drawing that as "pending" would say it is
+ * about to happen — the opposite of what is true — and drawing it as done
+ * would be worse. The recorder marks the layer blocked for the same reason;
+ * this is the same fact, on the phase.
  */
-function signalHtml(signal) {
-  if (!signal) return '';
-  const a = signal.from === HUB ? { x: 50, y: 50 } : pointFor(LAYER_META[signal.from].angle);
-  const b = signal.to === HUB ? { x: 50, y: 50 } : pointFor(LAYER_META[signal.to].angle);
-  const tone = signal.tone === 'error' ? 'error' : 'ok';
-  // The line is SVG stretched to the stage (`preserveAspectRatio: none`), which
-  // is right for a line and wrong for a dot: a circle in that viewBox comes out
-  // as an ellipse as wide as the stage's aspect ratio. So the dot is an element
-  // of its own, positioned in the same percentages and animated between them,
-  // which keeps it round at any stage shape.
-  return `
-    <svg class="agl-signal tone-${tone}" viewBox="0 0 100 100"
-         preserveAspectRatio="none" aria-hidden="true">
-      <line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="agl-signal-line"/>
-    </svg>
-    <span class="agl-signal-dot tone-${tone}" aria-hidden="true"
-          style="--x1:${a.x}%;--y1:${a.y}%;--x2:${b.x}%;--y2:${b.y}%"></span>`;
-}
-
-function elapsedText(run) {
-  const end = run.endedAt || Date.now();
-  const total = Math.max(0, Math.round((end - run.startedAt) / 1000));
-  const mm = String(Math.floor(total / 60)).padStart(2, '0');
-  const ss = String(total % 60).padStart(2, '0');
-  return `00:${mm}:${ss}`;
+function phaseState(step, runEnded) {
+  if (step.status === 'active') return 'active';
+  if (step.status === 'done') return 'done';
+  if (step.status === 'failed') return 'failed';
+  return runEnded ? 'blocked' : 'pending';
 }
 
 /* ─── the skeleton ───────────────────────────────────────────────────── */
 
-/**
- * Everything that does NOT depend on the run, built once.
- *
- * The dialog used to be re-created from a template string on every state
- * change. That is the obvious way to write a view and it is wrong here for
- * one reason: replacing an element restarts every CSS animation inside it.
- * The dialog's entrance played again on every emit — and with the live poll
- * and the signal queue both firing, it never got past the opening frames of
- * its own fade, so the screen showed a blurred workspace and no dialog at
- * all. The travelling signal had the same problem in a form nobody could miss
- * once it was pointed out: a 1.9-second crossing restarted from the beginning
- * whenever anything changed, so the dot never once arrived.
- *
- * So the structure is built once and `update()` writes text and class names
- * into it. Nothing that animates is replaced while it is animating.
- */
 function skeletonHtml() {
   return `
     <div class="agl-shell" role="status" aria-live="polite">
-      <h1 class="agl-title">AI agents are
-        <span class="agl-title-verb"></span></h1>
-      <p class="agl-sub"></p>
-
-      <div class="agl-stage">
-        <div class="agl-rings" aria-hidden="true">
-          <span class="agl-ring r1"></span>
-          <span class="agl-ring r2"></span>
-          <span class="agl-ring r3"></span>
-          <span class="agl-particles">
-            ${Array.from({ length: 14 }, (_, i) => `<i style="--i:${i}"></i>`).join('')}
-          </span>
-        </div>
-        <svg class="agl-links" viewBox="0 0 100 100" preserveAspectRatio="none"
-             aria-hidden="true">
-          ${LAYERS.map((id) => {
-            const pt = pointFor(LAYER_META[id].angle);
-            return `<line x1="50" y1="50" x2="${pt.x}" y2="${pt.y}"
-                          class="agl-link" data-link="${id}"/>`;
-          }).join('')}
-        </svg>
-        <div class="agl-signal-host"></div>
-
-        <div class="agl-hub">
-          <span class="agl-hub-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
-                 stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="6" cy="5.5" r="2.2"/><circle cx="18" cy="5.5" r="2.2"/>
-              <circle cx="6" cy="18.5" r="2.2"/><circle cx="18" cy="18.5" r="2.2"/>
-              <path d="M6 7.7v8.6M18 7.7v8.6M8.2 5.5c3 3.2 6.6 9.8 9.8 13"/>
-            </svg>
-          </span>
-          <span class="agl-hub-name">Orchestrator Agent</span>
-          <span class="agl-hub-state"></span>
-          <span class="agl-hub-line"></span>
-        </div>
-
-        ${LAYERS.map((id) => {
-          const meta = LAYER_META[id];
-          const pt = pointFor(meta.angle);
-          return `
-            <div class="agl-node" data-layer="${id}" style="left:${pt.x}%;top:${pt.y}%">
-              <span class="agl-badge-host"></span>
-              <span class="agl-node-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                     stroke-width="1.7" stroke-linecap="round"
-                     stroke-linejoin="round">${meta.icon}</svg>
-              </span>
-              <span class="agl-node-name">${escapeHtml(meta.name)}</span>
-              <span class="agl-node-desc">${escapeHtml(meta.desc)}</span>
-            </div>`;
-        }).join('')}
-
-        <div class="agl-callout-host"></div>
-      </div>
-
-      <div class="agl-progress-card">
-        <span class="agl-progress-icon" aria-hidden="true">
+      <div class="agl-head">
+        <span class="agl-orb" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
-               stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.6 14 9l6.4 2-6.4 2-2 6.4-2-6.4L3.6 11 10 9z"/></svg>
+               stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="5.5" r="2.2"/><circle cx="18" cy="5.5" r="2.2"/>
+            <circle cx="6" cy="18.5" r="2.2"/><circle cx="18" cy="18.5" r="2.2"/>
+            <path d="M6 7.7v8.6M18 7.7v8.6M8.2 5.5c3 3.2 6.6 9.8 9.8 13"/>
+          </svg>
         </span>
-        <div class="agl-progress-text">
-          <div class="agl-progress-title"></div>
-          <div class="agl-progress-msg"></div>
-          <div class="agl-progress-bar"><span></span></div>
+        <div class="agl-head-text">
+          <h1 class="agl-title"></h1>
+          <p class="agl-sub">Elapsed <span class="agl-elapsed" id="agl-elapsed">0.0s</span>
+            <span class="agl-sub-note"></span></p>
         </div>
-        <div class="agl-progress-figs">
-          <div class="agl-fig"><span class="agl-fig-value" data-fig="pct"></span></div>
-          <div class="agl-fig">
-            <span class="agl-fig-value" data-fig="engaged"></span>
-            <span class="agl-fig-label">Layers engaged</span>
-          </div>
-          <div class="agl-fig">
-            <span class="agl-fig-value" id="agl-elapsed"></span>
-            <span class="agl-fig-label">Elapsed time</span>
-          </div>
-        </div>
+        <button type="button" class="agl-skip" hidden
+                title="Show everything that has already happened, without waiting for it to be read out. This does not change the work.">
+          Skip to latest
+        </button>
       </div>
 
-      <p class="agl-trace-note" hidden></p>
+      <div class="agl-bar"><span></span></div>
 
-      <p class="agl-foot">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10.5" width="15" height="10" rx="2.2"/><path d="M8 10.5V7.6a4 4 0 0 1 8 0v2.9"/></svg>
-        Your data is secure and encrypted during processing.
-      </p>
+      <div class="agl-tree"></div>
+
+      <div class="agl-finale" hidden>
+        <span class="agl-finale-mark" aria-hidden="true"></span>
+        <div class="agl-finale-text">
+          <div class="agl-finale-title"></div>
+          <div class="agl-finale-sub"></div>
+        </div>
+      </div>
     </div>`;
 }
 
-/** Cached references into the skeleton, so `update` never queries the DOM. */
+function phaseHtml(step) {
+  return `
+    <div class="agl-phase pending" data-step="${escapeHtml(step.id)}">
+      <span class="agl-node" aria-hidden="true">
+        <span class="agl-node-dot"></span>
+        <span class="agl-node-spin"></span>
+        <span class="agl-node-tick">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4 4L19 7"/></svg>
+        </span>
+        <span class="agl-node-cross">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"
+               stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>
+        </span>
+      </span>
+      <div class="agl-phase-title"></div>
+      <div class="agl-logs"></div>
+    </div>`;
+}
+
+/* ─── mounted references ─────────────────────────────────────────────── */
+
 let els = null;
+let phases = null;          // step id -> { root, title, logs, label }
+let lastPlanKey = '';
+let lastState = {};         // what is DRAWN
+let queuedState = {};       // what has been queued to be drawn
+let typedFor = {};
+let loggedFor = {};
+let blockedNoted = {};
+let typeTimer = null;
+
+let queue = [];
+let pumpTimer = null;
+let collapseTimers = {};
+let revealFloorUntil = 0;
+let drainBy = 0;
+let queuedFinale = false;
+/** The reader asked not to be paced. Everything is released at once. */
+let instant = false;
 
 function buildSkeleton(overlay) {
   overlay.innerHTML = skeletonHtml();
   const q = (sel) => overlay.querySelector(sel);
   els = {
     shell: q('.agl-shell'),
-    verb: q('.agl-title-verb'),
-    sub: q('.agl-sub'),
-    links: {},
-    nodes: {},
-    badges: {},
-    signalHost: q('.agl-signal-host'),
-    calloutHost: q('.agl-callout-host'),
-    hub: q('.agl-hub'),
-    hubState: q('.agl-hub-state'),
-    hubLine: q('.agl-hub-line'),
-    card: q('.agl-progress-card'),
-    title: q('.agl-progress-title'),
-    msg: q('.agl-progress-msg'),
-    bar: q('.agl-progress-bar'),
-    barFill: q('.agl-progress-bar > span'),
-    pct: q('[data-fig="pct"]'),
-    engaged: q('[data-fig="engaged"]'),
-    elapsed: q('#agl-elapsed'),
-    note: q('.agl-trace-note'),
+    title: q('.agl-title'),
+    elapsed: q('.agl-elapsed'),
+    note: q('.agl-sub-note'),
+    skip: q('.agl-skip'),
+    bar: q('.agl-bar'),
+    barFill: q('.agl-bar > span'),
+    tree: q('.agl-tree'),
+    finale: q('.agl-finale'),
+    finaleTitle: q('.agl-finale-title'),
+    finaleSub: q('.agl-finale-sub'),
   };
-  LAYERS.forEach((id) => {
-    els.links[id] = overlay.querySelector(`[data-link="${id}"]`);
-    els.nodes[id] = overlay.querySelector(`[data-layer="${id}"]`);
-    els.badges[id] = els.nodes[id].querySelector('.agl-badge-host');
+  els.skip.addEventListener('click', flush);
+  phases = null;
+  lastPlanKey = '';
+}
+
+/** The tree is rebuilt only when the RUN changes, never on a state change. */
+function buildTree(run) {
+  els.tree.innerHTML = run.steps.map(phaseHtml).join('');
+  phases = {};
+  run.steps.forEach((step) => {
+    const root = els.tree.querySelector(`[data-step="${CSS.escape(step.id)}"]`);
+    phases[step.id] = {
+      root,
+      title: root.querySelector('.agl-phase-title'),
+      logs: root.querySelector('.agl-logs'),
+      label: step.label || step.id,
+    };
   });
+  resetPacing();
+  lastState = {};
+  // Every phase is already drawn `pending`, so that state is never queued:
+  // the queue exists to show things happening, and nothing has yet.
+  queuedState = {};
+  run.steps.forEach((step) => { queuedState[step.id] = 'pending'; });
+  typedFor = {};
+  loggedFor = {};
+  blockedNoted = {};
 }
 
-/* What was last written, so nothing is written twice. Setting an identical
-   class or innerHTML is not free: it is what restarts an animation. */
-let lastNodeState = {};
-let lastHubState = '';
-let lastSignalKey = '';
-let lastCalloutKey = '';
-
-function setText(el, text) {
-  const value = text == null ? '' : String(text);
-  if (el && el.textContent !== value) el.textContent = value;
+function resetPacing() {
+  if (pumpTimer) { clearTimeout(pumpTimer); pumpTimer = null; }
+  Object.keys(collapseTimers).forEach((id) => clearTimeout(collapseTimers[id]));
+  collapseTimers = {};
+  queue = [];
+  revealFloorUntil = 0;
+  drainBy = 0;
+  queuedFinale = false;
+  instant = false;
 }
+
+/* ─── typing ─────────────────────────────────────────────────────────── */
+
+/**
+ * Type a title out, once, when its phase begins.
+ *
+ * Guarded on the phase rather than run on every update: this is called from a
+ * reveal, and reveals happen throughout a run, so re-typing from the first
+ * character each time is exactly the class of bug that made the previous
+ * screen unreadable.
+ */
+function typeTitle(el, text) {
+  if (prefersReducedMotion() || instant) {
+    el.textContent = text;
+    return;
+  }
+  el.textContent = '';
+  const caret = document.createElement('span');
+  caret.className = 'agl-caret';
+  caret.textContent = '▍';
+  const body = document.createTextNode('');
+  el.appendChild(body);
+  el.appendChild(caret);
+  const per = Math.min(TYPE_MS, TYPE_BUDGET_MS / Math.max(1, text.length));
+  let i = 0;
+  const step = () => {
+    if (i > text.length) return;
+    body.textContent = text.slice(0, i);
+    i += 1;
+    typeTimer = setTimeout(step, per);
+  };
+  step();
+}
+
+/* ─── the queue ──────────────────────────────────────────────────────── */
+
+/**
+ * How long the item just revealed holds the floor.
+ *
+ * A lone item gets the full reading pace. As the backlog grows the pace
+ * shortens, so that whatever is waiting is on screen within roughly
+ * `BACKLOG_BUDGET_MS` — a screen thirty seconds behind the system would be
+ * describing a past, which is a different lie from the one this avoids.
+ * `FLOOR_STEP_MS` is where it stops: below that a line is a flicker again.
+ */
+function stepMs() {
+  if (instant) return 0;
+  // A failure still on the queue is the thing the reader needs to see, and it
+  // is not made easier to read by three lines of preamble arriving first. The
+  // queue keeps its order and loses nothing; it just stops waiting until the
+  // failure is on screen.
+  if (queue.some((item) => item.urgent)) return 0;
+  const waiting = queue.length || 1;
+  // What is LEFT of the budget over what is left to show. Dividing the whole
+  // budget by the current backlog looks equivalent and is not: the backlog
+  // shrinks as it drains, so each remaining item would be given more time
+  // than the one before it and the total would run to several times the
+  // budget. Measured that way, 777ms of work held the dialog for 21 seconds.
+  const left = Math.max(0, drainBy - Date.now());
+  return Math.max(FLOOR_STEP_MS, Math.min(BASE_STEP_MS, left / waiting));
+}
+
+function pump() {
+  pumpTimer = null;
+  if (!queue.length) { updateSkip(); return; }
+  reveal(queue.shift());
+  if (queue.length) {
+    pumpTimer = setTimeout(pump, instant ? 0 : Math.max(0, revealFloorUntil - Date.now()));
+  }
+  updateSkip();
+}
+
+function startPump() {
+  updateSkip();
+  if (!queue.length) return;
+  // A failure arriving while the next reveal is already scheduled has to
+  // re-arm it. Marking the item urgent sets the PACE to nothing, but the
+  // pump was timed off the previous reveal and would still sit out the rest
+  // of that wait first — measured, the reason reached the screen 1.3 seconds
+  // after it was recorded rather than immediately.
+  const urgent = instant || queue.some((item) => item.urgent);
+  if (pumpTimer) {
+    if (!urgent) return;
+    clearTimeout(pumpTimer);
+    pumpTimer = null;
+  }
+  pumpTimer = setTimeout(pump, urgent ? 0 : Math.max(0, revealFloorUntil - Date.now()));
+}
+
+/** Put one already-true fact on the screen. */
+function reveal(item) {
+  if (item.kind === 'state') revealState(item);
+  else if (item.kind === 'log') revealLog(item);
+  else if (item.kind === 'finale') revealFinale(item);
+  revealFloorUntil = Date.now()
+    + (item.kind === 'finale' && !instant ? FINALE_HOLD_MS : stepMs());
+  drawProgress();
+  keepLatestInView();
+}
+
+function revealState(item) {
+  const phase = phases && phases[item.id];
+  if (!phase) return;
+  lastState[item.id] = item.state;
+  phase.root.className = `agl-phase ${item.state}`;
+  // The title is typed when the phase first appears, and left alone after.
+  // Blocked included: the reader has to be able to see which step it was that
+  // never got to run.
+  if (!typedFor[item.id]) {
+    typedFor[item.id] = true;
+    typeTitle(phase.title, phase.label);
+  }
+  if (item.state !== 'active') {
+    const caret = phase.title.querySelector('.agl-caret');
+    if (caret) caret.remove();
+  }
+  // A blocked phase says so in its own words, always.
+  //
+  // This used to be conditional on the phase having no lines of its own,
+  // which meant it almost never appeared: a step whose layer is the hub
+  // inherits the hub's lines, so a stranded step showed "Continuing with 1
+  // remaining step" and never the fact that it was the step that did not run.
+  if (item.state === 'blocked' && !blockedNoted[item.id]) {
+    blockedNoted[item.id] = true;
+    phase.logs.insertAdjacentHTML('beforeend', logHtml({
+      text: 'Did not run — the run stopped before this step was reached',
+      tone: 'error',
+    }));
+  }
+  if (item.state === 'done') holdThenCollapse(item.id);
+}
+
+/**
+ * A finished phase is read, and only then folded away.
+ *
+ * It used to collapse on the same frame its tick landed, which meant the
+ * lines it had just written left with it — the detail was drawn and removed
+ * inside one animation frame. The hold is the fix, and it is why the dialog
+ * is allowed to outlive the work by a bounded amount.
+ */
+function holdThenCollapse(id) {
+  clearTimeout(collapseTimers[id]);
+  const fold = () => {
+    const phase = phases && phases[id];
+    if (phase && lastState[id] === 'done') phase.root.classList.add('collapsed');
+  };
+  if (instant) { fold(); return; }
+  collapseTimers[id] = setTimeout(fold, PHASE_HOLD_MS);
+}
+
+function revealLog(item) {
+  const phase = phases && phases[item.id];
+  if (!phase) return;
+  // Lines are APPENDED as they are released, never rewritten: each one has an
+  // entrance animation, and rebuilding the list would replay all of them every
+  // time a single new line arrived.
+  phase.logs.insertAdjacentHTML('beforeend', logHtml(item.line));
+}
+
+function revealFinale(item) {
+  els.finale.hidden = false;
+  els.finale.classList.toggle('failed', item.failed);
+  setText(els.finaleTitle, item.failed ? 'Stopped' : 'Done');
+  setText(els.finaleSub, item.sub);
+}
+
+/**
+ * Release the whole queue now.
+ *
+ * Nielsen's third heuristic. The pacing above holds a reader on purpose, and
+ * a hold with no way out of it is a trap: someone who has seen this screen
+ * fifty times should not have to watch it read itself out. Skipping changes
+ * only the display — the work is wherever it was, and if it is still running
+ * the dialog stays up until it is not.
+ */
+function flush() {
+  instant = true;
+  if (pumpTimer) { clearTimeout(pumpTimer); pumpTimer = null; }
+  if (typeTimer) { clearTimeout(typeTimer); typeTimer = null; }
+  let guard = 2000;
+  while (queue.length && guard > 0) { reveal(queue.shift()); guard -= 1; }
+  revealFloorUntil = 0;
+  // Half-typed titles are completed rather than left mid-word.
+  if (phases) {
+    Object.keys(phases).forEach((id) => {
+      if (typedFor[id]) setText(phases[id].title, phases[id].label);
+      if (lastState[id] === 'done') holdThenCollapse(id);
+    });
+  }
+  updateSkip();
+  keepLatestInView();
+}
+
+/** Offered only when there is something waiting to be shown. */
+function updateSkip() {
+  if (!els || !els.skip) return;
+  els.skip.hidden = instant || !queue.length;
+}
+
+/** The newest line is the one being read. It is never left below the fold. */
+function keepLatestInView() {
+  if (!els || !els.shell) return;
+  if (els.shell.scrollHeight > els.shell.clientHeight + 1) {
+    els.shell.scrollTop = els.shell.scrollHeight;
+  }
+}
+
+/* ─── render ─────────────────────────────────────────────────────────── */
 
 function render(run) {
   const overlay = document.getElementById(OVERLAY_ID);
   if (!overlay) return;
   if (!run) {
     overlay.classList.remove('active');
-    lastNodeState = {};
-    lastHubState = '';
-    lastSignalKey = '';
-    lastCalloutKey = '';
+    if (typeTimer) { clearTimeout(typeTimer); typeTimer = null; }
+    resetPacing();
     if (els) {
-      els.signalHost.innerHTML = '';
-      els.calloutHost.innerHTML = '';
+      els.tree.innerHTML = '';
+      els.finale.hidden = true;
+      els.skip.hidden = true;
     }
+    phases = null;
+    lastPlanKey = '';
     return;
   }
   if (!els || !els.shell || !els.shell.isConnected) buildSkeleton(overlay);
   overlay.classList.add('active');
+
+  // A different run means a different set of phases.
+  const planKey = run.steps.map((s) => s.id).join('|');
+  if (planKey !== lastPlanKey) {
+    lastPlanKey = planKey;
+    buildTree(run);
+  }
   update(run);
 }
 
-function update(run) {
+function setText(el, text) {
+  const value = text == null ? '' : String(text);
+  if (el && el.textContent !== value) el.textContent = value;
+}
+
+function elapsedText(run) {
+  const end = run.endedAt || Date.now();
+  return `${Math.max(0, (end - run.startedAt) / 1000).toFixed(1)}s`;
+}
+
+function logHtml(line) {
+  return `<div class="agl-log${line.tone === 'error' ? ' error' : ''}">`
+    + '<span class="agl-log-mark" aria-hidden="true">▸</span>'
+    + `<span class="agl-log-text">${escapeHtml(line.text)}</span>`
+    + (line.value ? `<span class="agl-log-value">${escapeHtml(line.value)}</span>` : '')
+    + '</div>';
+}
+
+/**
+ * The fraction, and the count beside it, are what the READER has been shown.
+ *
+ * `progress(run)` still supplies the denominator, because the number of
+ * dispatches planned is the recorder's fact and not this file's. The
+ * numerator is the settled phases already on screen: a bar reading 5 of 5
+ * above a tree still showing the third phase is a dialog disagreeing with
+ * itself, and the reader believes the half that is moving.
+ */
+function drawProgress() {
+  const run = getRun();
+  if (!run || !els) return;
   const prog = progress(run);
-  const engaged = layersEngaged(run);
-  const hub = run.agents[HUB];
-  const active = run.steps.find((s) => s.status === 'active');
-  const message = run.failure
-    || (active ? (active.message || active.label) : '')
-    || (run.endedAt ? 'Finished.' : run.subtitle);
-
-  els.shell.setAttribute('aria-label', run.title);
-  setText(els.verb, run.verb);
-  setText(els.sub, run.subtitle);
-
-  // The hub.
-  if (hub.state !== lastHubState) {
-    els.hub.className = `agl-hub state-${hub.state}`;
-    lastHubState = hub.state;
-  }
-  setText(els.hubState, hub.headline || 'Coordinating');
-  setText(els.hubLine, (hub.lines || []).length ? hub.lines[hub.lines.length - 1] : '');
-
-  // The layers, and the links to them.
-  LAYERS.forEach((id) => {
-    const agent = run.agents[id];
-    if (lastNodeState[id] === agent.state) return;
-    lastNodeState[id] = agent.state;
-    els.nodes[id].className = `agl-node state-${agent.state}`;
-    els.badges[id].innerHTML = badgeFor(agent.state);
-    els.links[id].setAttribute(
-      'class', `agl-link${agent.state === 'idle' ? '' : ' on'}`);
-  });
-
-  // The signal. Replaced ONLY when a different hand-off is being shown, so a
-  // crossing that is under way is allowed to finish.
-  const sig = run.signal;
-  const key = sig ? `${sig.from}>${sig.to}@${sig.at}` : '';
-  if (key !== lastSignalKey) {
-    lastSignalKey = key;
-    els.signalHost.innerHTML = signalHtml(sig);
-  }
-
-  // The callouts, likewise: rewritten only when what they say changes.
-  const calloutMarkup = LAYERS.map((id) => calloutHtml(id, run.agents[id])).join('');
-  if (calloutMarkup !== lastCalloutKey) {
-    lastCalloutKey = calloutMarkup;
-    els.calloutHost.innerHTML = calloutMarkup;
-  }
-
-  // The progress card.
-  els.card.classList.toggle('failed', Boolean(run.failure));
-  setText(els.title, run.title);
-  setText(els.msg, message);
   els.bar.classList.toggle('indeterminate', !prog);
-  els.barFill.style.width = `${prog ? prog.pct : 100}%`;
-  setText(els.pct, prog ? `${prog.pct}%` : '\u2014');
-  setText(els.engaged, `${engaged.engaged} of ${engaged.total}`);
+  if (!prog) {
+    els.barFill.style.width = '100%';
+    setText(els.note, '');
+    return;
+  }
+  const shown = run.steps.filter((s) => {
+    const drawn = lastState[s.id];
+    return drawn === 'done' || drawn === 'failed';
+  }).length;
+  els.barFill.style.width = `${Math.round((shown / prog.total) * 100)}%`;
+  setText(els.note, ` · ${shown} of ${prog.total} complete`);
+}
+
+/**
+ * Read the recorder, and queue whatever has become true since the last read.
+ *
+ * This is the only place an item is created, and every field on one is copied
+ * off a step or off the run. Nothing downstream invents; `reveal` moves what
+ * is handed to it onto the screen and chooses nothing.
+ */
+function update(run) {
+  setText(els.title, run.title);
   setText(els.elapsed, elapsedText(run));
 
-  const note = run.traceNotes.length ? run.traceNotes[run.traceNotes.length - 1] : '';
-  setText(els.note, note);
-  els.note.hidden = !note;
+  run.steps.forEach((step, index) => {
+    if (!phases[step.id]) return;
+    const state = phaseState(step, Boolean(run.endedAt));
+    const moved = queuedState[step.id] !== state;
+    if (state === 'pending') return;
+
+    // A phase that is STARTING is announced before it says anything. A phase
+    // that is finishing says its last words first, and the tick lands after
+    // them — a step that reports "27 KPIs computed" has not finished until it
+    // has reported it.
+    if (moved && state === 'active') {
+      queuedState[step.id] = state;
+      queue.push({ kind: 'state', id: step.id, state });
+    }
+    const already = loggedFor[step.id] || (loggedFor[step.id] = []);
+    logsFor(run, step, index).forEach((line) => {
+      const key = `${line.text}|${line.value || ''}|${line.tone || ''}`;
+      if (already.includes(key)) return;
+      already.push(key);
+      queue.push({ kind: 'log', id: step.id, line });
+    });
+    if (moved && state !== 'active') {
+      queuedState[step.id] = state;
+      queue.push({ kind: 'state', id: step.id, state, urgent: state === 'failed' });
+    }
+  });
+
+  if (run.endedAt && !queuedFinale) {
+    queuedFinale = true;
+    const prog = progress(run);
+    queue.push({
+      kind: 'finale',
+      failed: Boolean(run.failure),
+      sub: run.failure || (prog ? `${prog.done} of ${prog.total} steps completed` : ''),
+    });
+  }
+  // The deadline opens when a backlog first forms and is not moved while
+  // it is being worked off, so a burst arriving in pieces still drains
+  // inside one budget rather than restarting it with every arrival.
+  if (queue.length && drainBy < Date.now()) {
+    drainBy = Date.now() + BACKLOG_BUDGET_MS;
+  }
+  startPump();
 }
 
 /* ─── the clock ──────────────────────────────────────────────────────── */
@@ -461,10 +706,19 @@ export function mountAgentLoading() {
     document.body.appendChild(overlay);
   }
   buildSkeleton(overlay);
+  // Escape is what a reader reaches for to get out of a modal. There is no
+  // "out" while work is running — cancelling a solve is not something this
+  // client can do, and pretending otherwise would be worse than not offering
+  // it — so it does the thing that IS available: stops the pacing.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const ov = document.getElementById(OVERLAY_ID);
+    if (ov && ov.classList.contains('active') && queue.length) flush();
+  });
   subscribe((run) => {
     render(run);
     if (run && !run.endedAt) {
-      if (!clockTimer) clockTimer = setInterval(tick, 1000);
+      if (!clockTimer) clockTimer = setInterval(tick, 100);
     } else if (clockTimer) {
       clearInterval(clockTimer);
       clockTimer = null;
@@ -475,17 +729,32 @@ export function mountAgentLoading() {
 /**
  * Take the overlay down.
  *
- * `holdMs` keeps a failed run on screen long enough to be read — the reason a
- * run stopped is the one thing a loading screen must not flash past.
+ * It waits for the queue to drain first. Closing on the last event would undo
+ * the pacing entirely for the phase that matters most — the final one, whose
+ * lines would be drawn and removed in the same breath.
+ *
+ * `holdMs` is the caller's own hold on top of that, and a failed run gets a
+ * long one: the reason a run stopped is the one thing this screen must not
+ * flash past. `MAX_DRAIN_MS` bounds the whole thing, so a backlog that never
+ * empties cannot hold a workspace shut.
  */
 export function dismissAgentLoading(holdMs = 0) {
-  const done = () => {
+  const deadline = Date.now() + MAX_DRAIN_MS;
+  const close = () => {
     clearRun();
     const overlay = document.getElementById(OVERLAY_ID);
     if (overlay) overlay.classList.remove('active');
   };
-  if (holdMs > 0) setTimeout(done, holdMs);
-  else done();
+  const whenRead = () => {
+    const waiting = queue.length || Date.now() < revealFloorUntil;
+    if (waiting && Date.now() < deadline) {
+      setTimeout(whenRead, 120);
+      return;
+    }
+    if (holdMs > 0) setTimeout(close, holdMs);
+    else close();
+  };
+  whenRead();
 }
 
 if (typeof window !== 'undefined') {

@@ -12,6 +12,7 @@
 import { SCENARIOS, DCS, PLANTS, MARKETS, NETWORK_REGIONS, PRODUCT_CATEGORIES,
          formatNumber, formatCurrency,
          SOLVE_HORIZON, currencyLabel, withCurrency } from './data.js';
+import { countriesContaining, loadAdmin1 } from './world-basemap.js';
 import { initMap, renderScenarioDigitalTwin, invalidateMapSize,
          revealMap } from './map.js';
 import { scenarioService } from './integration/services/scenario-service.js';
@@ -1370,10 +1371,7 @@ function openCreateToolbox() {
   const modal = document.getElementById('modal-create-toolbox');
   if (!modal) return;
 
-  const formBody = document.getElementById('toolbox-form-body');
-  const execView = document.getElementById('agent-execution-view');
-  if (formBody) formBody.classList.remove('hidden');
-  if (execView) execView.classList.add('hidden');
+  document.getElementById('toolbox-form-body')?.classList.remove('hidden');
   document.getElementById('scn-creation-error')?.remove();
 
   const nameInput = document.getElementById('toolbox-scenario-name');
@@ -1430,42 +1428,170 @@ function facilityOptionsHtml({ includePlants = false, includeAll = false } = {})
 }
 
 /**
- * Cities to place a new site at, as a shortcut for typing coordinates.
+ * Places to put a new site, as a shortcut for typing coordinates.
  *
- * A NEW facility can go anywhere — the two coordinate inputs beside this list
- * are the authority, and they are editable. This is a convenience so the common
- * case does not require looking up a latitude, not a restriction on where a
- * site may be proposed. The coordinates are ordinary public geography, not a
- * claim about the client's network.
+ * This was a list of thirty-two Indian cities, hardcoded. On a US network the
+ * "Jump to a city" control offered Coimbatore and Guwahati — and picking one
+ * wrote those coordinates into the latitude and longitude fields, so the
+ * shortcut's only effect was to propose a site nine thousand kilometres from
+ * the network it was being added to.
+ *
+ * It is now built from two things the application actually knows:
+ *
+ *   1. the places in the uploaded network — its markets, then its facilities,
+ *      which are named locations with real coordinates; and
+ *   2. the administrative subdivisions of the countries that network sits in,
+ *      from the same Natural Earth data both maps draw, so a site can be
+ *      proposed somewhere the network does not yet reach.
+ *
+ * The two coordinate inputs beside this remain the authority and are editable:
+ * a new facility can go anywhere, and this is a convenience, not a
+ * restriction. Nothing here is pre-selected.
  */
-const INDIA_SITE_PRESETS = [
-  ['Ahmedabad', 23.0225, 72.5714], ['Bengaluru', 12.9716, 77.5946],
-  ['Bhopal', 23.2599, 77.4126], ['Bhubaneswar', 20.2961, 85.8245],
-  ['Chandigarh', 30.7333, 76.7794], ['Chennai', 13.0827, 80.2707],
-  ['Coimbatore', 11.0168, 76.9558], ['Dehradun', 30.3165, 78.0322],
-  ['Delhi NCR', 28.6139, 77.2090], ['Guwahati', 26.1445, 91.7362],
-  ['Hyderabad', 17.3850, 78.4867], ['Indore', 22.7196, 75.8577],
-  ['Jaipur', 26.9124, 75.7873], ['Kanpur', 26.4499, 80.3319],
-  ['Kochi', 9.9312, 76.2673], ['Kolkata', 22.5726, 88.3639],
-  ['Lucknow', 26.8467, 80.9462], ['Ludhiana', 30.9010, 75.8573],
-  ['Madurai', 9.9252, 78.1198], ['Mumbai', 19.0760, 72.8777],
-  ['Nagpur', 21.1458, 79.0882], ['Nashik', 19.9975, 73.7898],
-  ['Patna', 25.5941, 85.1376], ['Pune', 18.5204, 73.8567],
-  ['Raipur', 21.2514, 81.6296], ['Rajkot', 22.3039, 70.8022],
-  ['Ranchi', 23.3441, 85.3096], ['Siliguri', 26.7271, 88.3953],
-  ['Surat', 21.1702, 72.8311], ['Vadodara', 22.3072, 73.1812],
-  ['Varanasi', 25.3176, 82.9739], ['Visakhapatnam', 17.6868, 83.2185],
-];
 
+/** Distinct named places in the loaded network, markets first. */
+function networkPlacePresets() {
+  const seen = new Set();
+  const out = [];
+  const push = (node, kind) => {
+    if (!Number.isFinite(node.lat) || !Number.isFinite(node.lng)) return;
+    const label = node.city || node.name || node.id;
+    if (!label) return;
+    // Deduped on the place, not the node: several facilities can share a city,
+    // and the list is a list of places.
+    const key = `${String(label).toLowerCase()}|${node.lat.toFixed(2)},${node.lng.toFixed(2)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ label, kind, lat: +node.lat.toFixed(4), lng: +node.lng.toFixed(4) });
+  };
+  MARKETS.forEach((m) => push(m, 'market'));
+  DCS.forEach((f) => push(f, 'facility'));
+  PLANTS.forEach((f) => push(f, 'facility'));
+  return out;
+}
+
+/**
+ * The centroid of a ring, by the shoelace formula.
+ *
+ * Not the centre of its bounding box, which for a crescent-shaped region — a
+ * Chile, a West Virginia — lands outside the region itself. This stays inside
+ * for any convex shape and for most concave ones. It is a starting point the
+ * user edits, and it is labelled as the region rather than as a town.
+ */
+function ringCentroid(ring) {
+  let twiceArea = 0;
+  let x = 0;
+  let y = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const cross = (ring[j][0] * ring[i][1]) - (ring[i][0] * ring[j][1]);
+    twiceArea += cross;
+    x += (ring[j][0] + ring[i][0]) * cross;
+    y += (ring[j][1] + ring[i][1]) * cross;
+  }
+  if (!twiceArea) return null;
+  return { lng: x / (3 * twiceArea), lat: y / (3 * twiceArea) };
+}
+
+/** The largest polygon of a feature, which is the one worth centring on. */
+function largestRing(feature) {
+  let best = null;
+  let bestSpan = -1;
+  for (const poly of feature.geometry.coordinates) {
+    const ring = poly[0];
+    if (!ring || ring.length < 4) continue;
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [lng, lat] of ring) {
+      if (lng < minX) minX = lng;
+      if (lng > maxX) maxX = lng;
+      if (lat < minY) minY = lat;
+      if (lat > maxY) maxY = lat;
+    }
+    const span = (maxX - minX) * (maxY - minY);
+    if (span > bestSpan) { bestSpan = span; best = ring; }
+  }
+  return best;
+}
+
+function escapeAttr(text) {
+  return String(text == null ? '' : text)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function presetOptionHtml({ label, lat, lng }) {
+  return `<option value="${lat},${lng}">${escapeAttr(label)}</option>`;
+}
+
+/**
+ * The synchronous part: a prompt, and the network's own places.
+ *
+ * The regions arrive separately — the subdivision data is 1.6 MB and is loaded
+ * on demand, and a form must not wait on it.
+ */
 function sitePresetOptionsHtml() {
-  // Nothing is pre-selected. Index 20 (Nagpur) used to be, which meant the form
-  // opened already proposing a specific Indian city — a suggestion the product
-  // had no basis for, sitting in the same fields as the numbers derived from
-  // the user's own network. The user picks, or types coordinates.
-  return '<option value="" selected>Choose a city, or type coordinates below</option>'
-    + INDIA_SITE_PRESETS
-      .map(([name, lat, lng]) => `<option value="${lat},${lng}">${name}</option>`)
-      .join('');
+  const places = networkPlacePresets();
+  const prompt = places.length
+    ? '<option value="" selected>Jump to a place, or type coordinates below</option>'
+    : '<option value="" selected>Type coordinates below</option>';
+  if (!places.length) return prompt;
+  return prompt
+    + '<optgroup label="In your network">'
+    + places.map(presetOptionHtml).join('')
+    + '</optgroup>';
+}
+
+/**
+ * Add the regions of the network's own countries, once they have loaded.
+ *
+ * Best effort: if the subdivision data is unavailable the control still offers
+ * the network's own places and the coordinate inputs, which is the whole of
+ * what it needs to work.
+ */
+async function hydrateSitePresetRegions() {
+  const select = document.getElementById('toolbox-site-city');
+  if (!select || select.querySelector('optgroup[data-regions]')) return;
+
+  const nodes = [...DCS, ...PLANTS, ...MARKETS];
+  const countries = countriesContaining(nodes).map((c) => c.name);
+  if (!countries.length) return;
+
+  let admin1 = null;
+  try {
+    admin1 = await loadAdmin1();
+  } catch (e) {
+    return;
+  }
+  if (!admin1 || !admin1.collection) return;
+  // The form may have been closed, or re-rendered for another scenario type,
+  // while the data was in flight.
+  const target = document.getElementById('toolbox-site-city');
+  if (!target || target !== select || target.querySelector('optgroup[data-regions]')) return;
+
+  const wanted = new Set(countries);
+  const byCountry = new Map();
+  for (const feature of admin1.collection.features) {
+    const country = feature.properties && feature.properties.admin;
+    if (!wanted.has(country)) continue;
+    const ring = largestRing(feature);
+    if (!ring) continue;
+    const centre = ringCentroid(ring);
+    if (!centre || !Number.isFinite(centre.lat) || !Number.isFinite(centre.lng)) continue;
+    const list = byCountry.get(country) || byCountry.set(country, []).get(country);
+    list.push({
+      label: feature.properties.name,
+      lat: +centre.lat.toFixed(4),
+      lng: +centre.lng.toFixed(4),
+    });
+  }
+  if (!byCountry.size) return;
+
+  const html = [...byCountry.entries()].map(([country, regions]) => {
+    regions.sort((a, b) => a.label.localeCompare(b.label));
+    return `<optgroup data-regions="1" label="${escapeAttr(country)} — regions">`
+      + regions.map(presetOptionHtml).join('')
+      + '</optgroup>';
+  }).join('');
+  target.insertAdjacentHTML('beforeend', html);
 }
 
 /**
@@ -1569,7 +1695,7 @@ function renderToolboxDynamicFields(type) {
     // was no way to ask about a site that does not exist yet.
     setHeader('Open a Facility',
       'Commit to a site already in your data — including one you supplied as a '
-      + 'proposal — or put a new one anywhere in India.');
+      + 'proposal — or put a new one anywhere on the map.');
     const handling = medianOf(DCS.map((d) => d.handlingCost));
     const fixed = medianOf(DCS.map((d) => d.fixedCostPerYear));
     const capacity = medianOf(DCS.map((d) => d.capacity));
@@ -1582,7 +1708,7 @@ function renderToolboxDynamicFields(type) {
       <div class="form-group mb-sm">
         <label class="form-label">What kind of site?</label>
         <select class="form-select" id="toolbox-open-mode">
-          <option value="NEW" selected>A new site — anywhere in India</option>
+          <option value="NEW" selected>A new site — anywhere on the map</option>
           <option value="EXISTING">One of the sites already in my data</option>
         </select>
       </div>
@@ -1609,7 +1735,7 @@ function renderToolboxDynamicFields(type) {
             <input type="text" class="form-input" id="toolbox-site-name" placeholder="Name this site" maxlength="48" value="New DC">
           </div>
           <div class="form-group">
-            <label class="form-label">Jump to a city</label>
+            <label class="form-label">Jump to a place</label>
             <select class="form-select" id="toolbox-site-city">
               ${sitePresetOptionsHtml()}
             </select>
@@ -1618,11 +1744,16 @@ function renderToolboxDynamicFields(type) {
         <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
           <div class="form-group">
             <label class="form-label">Latitude</label>
-            <input type="number" class="form-input" id="toolbox-site-lat" value="${centre ? centre.lat : ''}" placeholder="Latitude" step="0.0001" min="6" max="38">
+            <!-- The whole globe. These read min="6" max="38" and the
+                 longitude min="67" max="98" — India's bounding box — so on a
+                 US network the form opened at its own centroid (-98) with the
+                 field already out of range, and the browser refused to submit
+                 a scenario the solver would have accepted. -->
+            <input type="number" class="form-input" id="toolbox-site-lat" value="${centre ? centre.lat : ''}" placeholder="Latitude" step="0.0001" min="-85" max="85">
           </div>
           <div class="form-group">
             <label class="form-label">Longitude</label>
-            <input type="number" class="form-input" id="toolbox-site-lng" value="${centre ? centre.lng : ''}" placeholder="Longitude" step="0.0001" min="67" max="98">
+            <input type="number" class="form-input" id="toolbox-site-lng" value="${centre ? centre.lng : ''}" placeholder="Longitude" step="0.0001" min="-180" max="180">
           </div>
         </div>
         <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
@@ -1668,6 +1799,10 @@ function renderToolboxDynamicFields(type) {
     });
 
     const city = document.getElementById('toolbox-site-city');
+    // The regions of the network's own countries, added when the subdivision
+    // data has loaded. The control is usable before then: it already carries
+    // every place in the uploaded network.
+    hydrateSitePresetRegions();
     city?.addEventListener('change', () => {
       if (!city.value) return;
       const [lat, lng] = city.value.split(',');
@@ -1808,14 +1943,6 @@ function renderToolboxDynamicFields(type) {
 // every figure rendered comes back from the authoritative KPI layer with its
 // own status.
 
-const CREATION_STEPS = [
-  'Validating scenario',
-  'Submitting to orchestrator',
-  'Running network optimisation',
-  'Comparing against baseline',
-  'Reading authoritative KPIs',
-];
-
 /**
  * The change this scenario makes, in the words the form used.
  *
@@ -1828,24 +1955,12 @@ function scenarioActionLabel(body) {
   return action || 'this change';
 }
 
-function renderCreationProgress(activeIndex, failed = false) {
-  for (let i = 1; i <= CREATION_STEPS.length; i++) {
-    const el = document.getElementById(`step-phase-${i}`);
-    if (!el) continue;
-    const label = CREATION_STEPS[i - 1];
-    el.classList.remove('text-muted');
-    if (failed && i === activeIndex) {
-      el.innerHTML = `<span>${label}</span><span style="color:var(--red);font-weight:700">✕</span>`;
-    } else if (i < activeIndex) {
-      el.innerHTML = `<span>${label}</span><span style="color:var(--green);font-weight:700">✓</span>`;
-    } else if (i === activeIndex) {
-      el.innerHTML = `<span>${label}</span><span class="telemetry-spinner"></span>`;
-    } else {
-      el.innerHTML = `<span>${label}</span>`;
-      el.classList.add('text-muted');
-    }
-  }
-}
+/* The step list that used to live here is gone.
+   It drew six phases with a spinner inside the scenario modal while the agent
+   dialog was already on screen, in front of it, reporting the same wait — two
+   loading states for one request, disagreeing about how far along it was.
+   The dialog is the loading screen; this panel now carries only the reason a
+   run stopped. */
 
 /**
  * Show why a run stopped, and put the user back on the field that stopped it.
@@ -1862,14 +1977,19 @@ function renderCreationProgress(activeIndex, failed = false) {
  * user to the exact input for every OTHER refusal rather than making them hunt.
  */
 function showCreationError(message, fieldId = null) {
-  const execView = document.getElementById('agent-execution-view');
-  if (!execView) return;
+  const formBody = document.getElementById('toolbox-form-body');
+  if (!formBody) return;
+  // A refusal belongs beside the form that has to change, with the user's
+  // own inputs still in it. It used to be written into a separate panel that
+  // replaced the form — so the message and the field it was about could not
+  // be on screen at the same time, and a "Back to the form" button existed
+  // to undo a swap that never needed to happen.
+  formBody.classList.remove('hidden');
+  document.getElementById('modal-create-toolbox')?.classList.add('visible');
 
   if (fieldId) {
     const field = document.getElementById(fieldId);
     if (field) {
-      execView.classList.add('hidden');
-      document.getElementById('toolbox-form-body')?.classList.remove('hidden');
       field.focus();
       field.scrollIntoView({ behavior: 'smooth', block: 'center' });
       // Cleared on the next edit, so the mark tracks the current value rather
@@ -1888,25 +2008,9 @@ function showCreationError(message, fieldId = null) {
     banner.className = 'alert alert-error';
     banner.style.cssText = 'margin-top:12px;padding:10px 12px;border-radius:8px;'
       + 'background:rgba(220,38,38,.08);color:var(--red);font-size:12px;line-height:1.5';
-    execView.appendChild(banner);
+    formBody.appendChild(banner);
   }
   banner.textContent = message;
-
-  // A failed run must be recoverable without closing and re-opening the modal.
-  if (!document.getElementById('scn-creation-back')) {
-    const back = document.createElement('button');
-    back.id = 'scn-creation-back';
-    back.className = 'btn btn-secondary btn-sm';
-    back.style.cssText = 'margin-top:10px';
-    back.textContent = 'Back to the form';
-    back.addEventListener('click', () => {
-      document.getElementById('agent-execution-view')?.classList.add('hidden');
-      document.getElementById('toolbox-form-body')?.classList.remove('hidden');
-      document.getElementById('scn-creation-error')?.remove();
-      back.remove();
-    });
-    execView.appendChild(back);
-  }
 }
 
 /**
@@ -2032,13 +2136,16 @@ function readScenarioForm() {
 }
 
 async function runScenarioCreation() {
-  const formBody = document.getElementById('toolbox-form-body');
-  const execView = document.getElementById('agent-execution-view');
-  if (formBody) formBody.classList.add('hidden');
-  if (execView) execView.classList.remove('hidden');
-
+  // The modal is not swapped to a view of its own here.
+  //
+  // It used to hide its form and reveal `#agent-execution-view` — the panel
+  // that held this page's private six-step run display until that was
+  // deleted for reporting the same request the agent dialog reports. The
+  // panel stayed, empty, and was still being revealed: every scenario run
+  // opened a blank white card, in front of the loading screen it had just
+  // raised. The loading dialog is what reports a run, so the modal closes
+  // and lets it.
   document.getElementById('scn-creation-error')?.remove();
-  document.getElementById('scn-creation-back')?.remove();
 
   // The form validates itself now and says which field is wrong. It used to
   // check only `facility_ids.length` and print "Select a facility before
@@ -2047,12 +2154,11 @@ async function runScenarioCreation() {
   // rendered no facility field for them in the first place.
   const { body, error, field } = readScenarioForm();
   if (error) {
-    renderCreationProgress(1, true);
     showCreationError(error, field);
     return;
   }
+  document.getElementById('modal-create-toolbox')?.classList.remove('visible');
 
-  renderCreationProgress(2);
 
   // The agent view of this run.
   //
@@ -2099,12 +2205,9 @@ async function runScenarioCreation() {
     stepFail('simulate', { error: message });
     finishRun({ error: message });
     dismissAgentLoading(2600);
-    renderCreationProgress(3, true);
     showCreationError(message);
     return;
   }
-
-  renderCreationProgress(CREATION_STEPS.length + 1);
 
   stepStart('compare');
   const mapped = mapScenarioRecord(solved);
@@ -2252,4 +2355,3 @@ function wireScenarioEvents() {
     document.getElementById('scenario-drawer-overlay')?.classList.remove('visible');
   });
 }
-
