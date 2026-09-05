@@ -1370,10 +1370,7 @@ function openCreateToolbox() {
   const modal = document.getElementById('modal-create-toolbox');
   if (!modal) return;
 
-  const formBody = document.getElementById('toolbox-form-body');
-  const execView = document.getElementById('agent-execution-view');
-  if (formBody) formBody.classList.remove('hidden');
-  if (execView) execView.classList.add('hidden');
+  document.getElementById('toolbox-form-body')?.classList.remove('hidden');
   document.getElementById('scn-creation-error')?.remove();
 
   const nameInput = document.getElementById('toolbox-scenario-name');
@@ -1936,14 +1933,19 @@ function scenarioActionLabel(body) {
  * user to the exact input for every OTHER refusal rather than making them hunt.
  */
 function showCreationError(message, fieldId = null) {
-  const execView = document.getElementById('agent-execution-view');
-  if (!execView) return;
+  const formBody = document.getElementById('toolbox-form-body');
+  if (!formBody) return;
+  // A refusal belongs beside the form that has to change, with the user's
+  // own inputs still in it. It used to be written into a separate panel that
+  // replaced the form — so the message and the field it was about could not
+  // be on screen at the same time, and a "Back to the form" button existed
+  // to undo a swap that never needed to happen.
+  formBody.classList.remove('hidden');
+  document.getElementById('modal-create-toolbox')?.classList.add('visible');
 
   if (fieldId) {
     const field = document.getElementById(fieldId);
     if (field) {
-      execView.classList.add('hidden');
-      document.getElementById('toolbox-form-body')?.classList.remove('hidden');
       field.focus();
       field.scrollIntoView({ behavior: 'smooth', block: 'center' });
       // Cleared on the next edit, so the mark tracks the current value rather
@@ -1962,25 +1964,9 @@ function showCreationError(message, fieldId = null) {
     banner.className = 'alert alert-error';
     banner.style.cssText = 'margin-top:12px;padding:10px 12px;border-radius:8px;'
       + 'background:rgba(220,38,38,.08);color:var(--red);font-size:12px;line-height:1.5';
-    execView.appendChild(banner);
+    formBody.appendChild(banner);
   }
   banner.textContent = message;
-
-  // A failed run must be recoverable without closing and re-opening the modal.
-  if (!document.getElementById('scn-creation-back')) {
-    const back = document.createElement('button');
-    back.id = 'scn-creation-back';
-    back.className = 'btn btn-secondary btn-sm';
-    back.style.cssText = 'margin-top:10px';
-    back.textContent = 'Back to the form';
-    back.addEventListener('click', () => {
-      document.getElementById('agent-execution-view')?.classList.add('hidden');
-      document.getElementById('toolbox-form-body')?.classList.remove('hidden');
-      document.getElementById('scn-creation-error')?.remove();
-      back.remove();
-    });
-    execView.appendChild(back);
-  }
 }
 
 /**
@@ -2100,13 +2086,16 @@ function readScenarioForm() {
 }
 
 async function runScenarioCreation() {
-  const formBody = document.getElementById('toolbox-form-body');
-  const execView = document.getElementById('agent-execution-view');
-  if (formBody) formBody.classList.add('hidden');
-  if (execView) execView.classList.remove('hidden');
-
+  // The modal is not swapped to a view of its own here.
+  //
+  // It used to hide its form and reveal `#agent-execution-view` — the panel
+  // that held this page's private six-step run display until that was
+  // deleted for reporting the same request the agent dialog reports. The
+  // panel stayed, empty, and was still being revealed: every scenario run
+  // opened a blank white card, in front of the loading screen it had just
+  // raised. The loading dialog is what reports a run, so the modal closes
+  // and lets it.
   document.getElementById('scn-creation-error')?.remove();
-  document.getElementById('scn-creation-back')?.remove();
 
   // The form validates itself now and says which field is wrong. It used to
   // check only `facility_ids.length` and print "Select a facility before
@@ -2115,9 +2104,10 @@ async function runScenarioCreation() {
   // rendered no facility field for them in the first place.
   const { body, error, field } = readScenarioForm();
   if (error) {
-      showCreationError(error, field);
+    showCreationError(error, field);
     return;
   }
+  document.getElementById('modal-create-toolbox')?.classList.remove('visible');
 
 
   // The agent view of this run.

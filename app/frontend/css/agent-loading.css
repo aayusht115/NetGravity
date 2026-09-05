@@ -27,7 +27,12 @@
 .agl-overlay {
   position: fixed;
   inset: 0;
-  z-index: 99995;
+  /* Above everything, modals included (`.modal-overlay` is 999999).
+     A screen that blurs the whole workspace and takes every click IS the
+     topmost thing; at 99995 any modal still open when a run started drew
+     over it, which is how a scenario run put a blank card in front of its
+     own loading dialog. */
+  z-index: 1000000;
   display: none;
   align-items: center;
   justify-content: center;

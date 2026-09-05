@@ -50,6 +50,12 @@ def _exists(*parts: str) -> bool:
     return path.exists()
 
 
+def _fn(js: str, signature: str) -> str:
+    """One function body, from its signature to the next top-level close."""
+    start = js.index(signature)
+    return js[start:js.index("\n}\n", start)]
+
+
 def _without_comments(text: str) -> str:
     text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
     text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
@@ -98,9 +104,59 @@ class TestOnlyOneLoadingScreen:
         js = _asset("js", "scenarios.js")
         assert "renderCreationProgress" not in js
         assert "CREATION_STEPS" not in js
-        # The panel survives, for the one thing it is still needed for.
-        assert 'id="agent-execution-view"' in html
+
+    def test_the_panel_that_held_it_is_gone_too(self):
+        """
+        SUPERSEDED FORM: this used to assert the panel SURVIVED, "for the one
+        thing it is still needed for" — carrying a creation error. It was
+        still being revealed on every run, and by then it was empty, so each
+        scenario opened a blank white card. In front of the loading dialog,
+        because `.modal-overlay` is z-index 999999 and the dialog was 99995.
+
+        A refusal belongs beside the form that has to change, with the user's
+        inputs still in it, so the error moved into the form body and the
+        panel went with the display it used to hold.
+        """
+        html = _asset("index.html")
+        js = _asset("js", "scenarios.js")
+        assert "agent-execution-view" not in html
+        # The CODE, not the prose: a comment there records what the panel was
+        # and why it went, which is the part worth keeping.
+        assert "agent-execution-view" not in _without_comments(js)
         assert "showCreationError" in js
+        # The refusal is written into the form, and the form is put back up.
+        fn = js[js.index("function showCreationError(message, fieldId = null)"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "formBody.appendChild(banner)" in fn, fn
+        assert "modal-create-toolbox" in fn, fn
+        # And the swap that "Back to the form" existed to undo is gone with it.
+        assert "scn-creation-back" not in js
+
+    def test_a_run_closes_the_modal_that_started_it(self):
+        js = _asset("js", "scenarios.js")
+        fn = js[js.index("async function runScenarioCreation()"):]
+        fn = fn[:fn.index("  let solved;")]
+        assert "classList.remove('visible')" in fn, fn
+        # And it does not close before the form has been accepted, or a
+        # refusal would have nowhere to be read.
+        assert fn.index("readScenarioForm()") < fn.index("classList.remove('visible')")
+
+    def test_the_loading_dialog_is_above_everything(self):
+        """
+        It was below every modal in the application. Any modal open when a run
+        started drew over the screen that had just blurred the workspace and
+        taken every click — measured on the scenario planner, where the modal
+        was still up and had been emptied.
+        """
+        css = _asset("css", "agent-loading.css")
+        style = _asset("css", "style.css")
+        agl = int(re.search(r"z-index: (\d+);", css).group(1))
+        # ".modal-overlay" is the competitor, and the one that caused the bug.
+        # (".modal-content" carries a higher number, but it is nested INSIDE
+        # that overlay's stacking context and cannot climb out of it.)
+        rule = style[style.index(".modal-overlay {"):]
+        overlay = int(re.search(r"z-index: (\d+)", rule[:rule.index("}")]).group(1))
+        assert agl > overlay, (agl, overlay)
 
     def test_the_dead_ingestion_popup_mount_is_gone(self):
         assert "loading-modal-overlay" not in _asset("index.html")
@@ -183,10 +239,54 @@ class TestTheChatbotWaitsInline:
         assert 'aria-label="Waiting for a reply"' in js
         assert 'class="chat-thinking-word" aria-hidden="true"' in js
 
-    def test_the_elapsed_count_is_a_real_number(self):
+    def test_there_is_no_clock(self):
+        """
+        SUPERSEDED FORM: this used to assert the elapsed count WAS a real
+        number rather than a fabricated progress figure, which it was. The
+        objection to it is different — the moving words and the dots already
+        say the request is alive, and a number climbing beside them turns
+        waiting into watching it climb.
+        """
         js = _asset("js", "chatbot.js")
-        assert "Date.now() - startedAt" in js
-        assert "THINKING_ELAPSED_AFTER_MS" in js
+        code = _without_comments(js)
+        for gone in ("THINKING_ELAPSED_AFTER_MS", "chat-thinking-elapsed",
+                     "startedAt"):
+            assert gone not in code, gone
+        assert ".chat-thinking-elapsed" not in _without_comments(
+            _asset("css", "chatbot.css"))
+        # What says the wait is alive is still there.
+        assert "THINKING_WORDS" in js and "typing-dot" in js
+
+    def test_no_version_or_engine_mode_above_the_thread(self):
+        """
+        It read "NetGravity v2.0.0 - grounded answers, deterministic". Both
+        halves were true and neither was the reader's: a build number and
+        whether a language model happened to be reachable are facts about the
+        deployment. What grounds an answer is said by the answer.
+        """
+        code = _without_comments(_asset("js", "chatbot.js"))
+        assert "engineLabel" not in code, code
+        assert "__ngServerStatus" not in code
+        assert "grounded answers, deterministic" not in code
+
+    def test_the_welcome_card_goes_when_the_conversation_starts(self):
+        """
+        "Hi there! I'm Netgravity AI, here to help you explore your network"
+        sat above every thread for its whole length, introducing an assistant
+        the reader was already talking to. Three functions set the FAQ list
+        and the chat view by hand and none of them touched it — which is why
+        there is now one switch rather than a fourth thing to remember.
+        """
+        js = _asset("js", "chatbot.js")
+        assert "function showConversation(on)" in js
+        fn = _fn(js, "function showConversation(on)")
+        assert "chatbot-welcome-banner" in fn, fn
+        assert "chatbot-faq-section" in fn and "chatbot-chat-view" in fn, fn
+        # Every path through the panel uses it.
+        code = _without_comments(js)
+        assert code.count("showConversation(") >= 4, code.count("showConversation(")
+        assert "faqSection.style.display = 'none'" not in code, (
+            "a view switch is bypassing the one that hides the welcome card")
 
 
 class TestTheNewSiteFormFollowsTheData:
