@@ -220,6 +220,24 @@ export const GOVERNANCE_TIERS = [
   { tier: 3, label: "HUMAN DECISION", description: "High-impact structural decision. AI analyses, cannot execute.", criteria: "Close/open DC, major contract change, CapEx > ₹50L (INR)", color: "#dc2626" },
 ];
 
+// ─── ACTION AGENT: NOTIFICATION RECIPIENTS (mocked — see js/ingestion.js
+// and js/insight-detail.js headers) ─────────────────────────
+// Standing list for recommendation/investigate emails (Action Agent
+// triggers 3/4). Seeded with the same two dev/test addresses the backend
+// seeds its own store with (NETGRAVITY_DEFAULT_RECIPIENT_EMAIL /
+// NETGRAVITY_DEFAULT_TEST_RECIPIENT_EMAIL) — fully editable here, not a
+// permanent pair. This mock array has no connection to that backend store;
+// see the STATUS notes in ingestion.js/insight-detail.js/app.js.
+export const NOTIFICATION_RECIPIENTS = [
+  { label: "Me", email: "aayush.t115@gmail.com" },
+  { label: "Client (test)", email: "dummy.t115@gmail.com" },
+];
+
+// Per-source contact for missing-data emails (Action Agent triggers 1/2/5),
+// keyed by source id. Empty until a reviewer sets one in the ingestion
+// console's file-mapping step.
+export const SOURCE_CONTACTS = {};
+
 // ─── SYSTEM STATUS ──────────────────────────────────────────
 //
 // What the Settings screen reports about the run that produced the figures on

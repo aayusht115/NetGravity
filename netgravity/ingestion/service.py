@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
@@ -16,6 +17,10 @@ from netgravity.ingestion.memory.field_memory import FieldMemory
 from netgravity.ingestion.pipeline import run_ingestion
 from netgravity.ingestion.session import IngestionSession, IngestionSessionStore
 from netgravity.ingestion.storage import get_storage
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 class IngestionServiceError(RuntimeError):
@@ -58,7 +63,9 @@ class IngestionService:
             status="PROFILING",
         )
         self.sessions.save(session)
-        return self._refresh(session, save=False)
+        refreshed = self._refresh(session, save=False)
+        self._maybe_notify_completeness(refreshed)
+        return refreshed
 
     def get(self, run_id: str) -> IngestionSession:
         try:
@@ -161,6 +168,7 @@ class IngestionService:
 
         session.revision += 1
         refreshed = self._refresh(session, save=False)
+        self._maybe_notify_completeness(refreshed)
         return {
             "outcome": applied.as_dict(),
             "session": refreshed.as_dict(include_draft=False),
@@ -192,6 +200,52 @@ class IngestionService:
             )
         return refreshed
 
+    def resume_with_file(self, run_id: str, filename: str, content: bytes) -> IngestionSession:
+        """
+        Add a corrected file to an existing session's source directory and
+        re-run the pipeline against it — the reply-by-email upload path
+        (netgravity/action_agent/inbound_email.py) hands a verified
+        attachment here so it goes through the exact same mapping/review/
+        completeness logic as any other upload, tagged to the session it
+        was a reply to. No new validation logic.
+        """
+        session = self.get(run_id)
+        source_dir = Path(session.source)
+        source_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = Path(filename).name or "corrected_upload"
+        (source_dir / safe_name).write_bytes(content)
+
+        session.revision += 1
+        refreshed = self._refresh(session, save=True)
+        self._maybe_notify_completeness(refreshed)
+        return refreshed
+
+    def _maybe_notify_completeness(self, session: IngestionSession) -> None:
+        """
+        Fire the Action Agent's missing-data emails at most once per session
+        per kind (required/optional dedup lives on the session itself —
+        required_notified_at/optional_notified_at). Imported lazily so
+        `ingestion` never takes a hard, load-time dependency on the new
+        `action_agent` package.
+        """
+        from netgravity.action_agent import triggers as action_agent_triggers
+
+        report = session.report or {}
+        changed = False
+
+        if report.get("missing_required") and not session.required_notified_at:
+            action_agent_triggers.on_completeness_failure(session, kind="required")
+            session.required_notified_at = _now_iso()
+            changed = True
+
+        if report.get("missing_optional") and not session.optional_notified_at:
+            action_agent_triggers.on_completeness_failure(session, kind="optional")
+            session.optional_notified_at = _now_iso()
+            changed = True
+
+        if changed:
+            self.sessions.save(session)
+
     def _execute(self, session: IngestionSession, *, save: bool):
         return run_ingestion(
             Path(session.source),
@@ -210,6 +264,10 @@ class IngestionService:
             request = result.review_request
             request.run_id = session.run_id
             session.review = request.as_dict()
+            session.review["missing_data_items"] = [
+                item.as_dict() for item in review_module.build_missing_data_items(
+                    result.report.missing_required, result.report.missing_optional)
+            ]
             session.draft = build_draft(Path(session.source), result)
             session.report = {
                 "rows_read": result.report.total_rows_read,
@@ -222,6 +280,8 @@ class IngestionService:
                 "ai_mode": ("stub" if self.config.stub_mode else "live"),
                 "ai_failure_count": sum(
                     1 for file_result in result.report.files if file_result.ai_failed),
+                "missing_required": list(result.report.missing_required),
+                "missing_optional": list(result.report.missing_optional),
             }
             session.snapshot_path = result.report.snapshot_path
             session.error = result.report.extras.get("error")

@@ -10,6 +10,7 @@ import {
   DEMAND_HISTORY, FORECAST,
   RECOMMENDATION, PERIODS, HOME_ACTION_ITEMS, FACILITY_KPIS,
   GOVERNANCE_TIERS, GOVERNANCE_TIERS_CURRENCY, SYSTEM_STATUS,
+  NOTIFICATION_RECIPIENTS,
   formatCurrency, formatNumber, fmtNum, getUtilColor, getUtilLabel, getUtilTagClass,
   getFacilityById, getInsightsForFacility, getKpisForFacility, getOptimizedBaseCase,
   getNetworkInsights, NETWORK_RECOMMENDATION, OBSERVED_UTILISATION,
@@ -2779,12 +2780,48 @@ function renderAdminSettingsModal() {
       &ldquo;Not available&rdquo; when this run did not produce it.
     </div>
 
+    <div class="card-title" style="font-size:13px;margin:18px 0 6px">Notification Recipients</div>
+    <div class="text-xs text-muted" style="margin-bottom:6px">Who receives recommendation and investigate-tier emails from the Action Agent.</div>
+    <div id="admin-recipients-list" style="border:1px solid var(--border-light);border-radius:var(--r-sm);padding:4px 12px">
+      ${NOTIFICATION_RECIPIENTS.map((r, i) => `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0">
+          <div><strong>${r.label}</strong> <span class="text-xs text-muted">${r.email}</span></div>
+          <button data-remove-recipient="${i}" title="Remove" style="cursor:pointer;background:none;border:none;color:var(--text-2);font-size:14px">✕</button>
+        </div>
+      `).join('<hr style="border:none;border-top:1px solid var(--border-light);margin:0">')
+      || '<div class="text-xs text-muted" style="padding:6px 0">No recipients yet.</div>'}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <input id="admin-recipient-email-input" type="email" placeholder="name@company.com"
+             style="flex:1;padding:6px 10px;border:1px solid var(--border-light);border-radius:var(--r-sm);font-size:12.5px">
+      <button id="admin-add-recipient-btn" class="btn btn-sm">Add</button>
+    </div>
+
     <div class="card-title" style="font-size:13px;margin:18px 0 6px">Trigger Keywords / Buckets</div>
     <div class="text-xs" style="color:var(--text-2);font-style:italic">Not available — no keyword/bucket configuration exists in this build yet.</div>
 
     <div class="card-title" style="font-size:13px;margin:18px 0 6px">Product Master / Configuration</div>
     <div class="text-xs" style="color:var(--text-2);font-style:italic">Not available — no Product Master data exists in this build yet.</div>
   `;
+
+  body.querySelectorAll('[data-remove-recipient]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      NOTIFICATION_RECIPIENTS.splice(Number(btn.getAttribute('data-remove-recipient')), 1);
+      renderAdminSettingsModal();
+    });
+  });
+
+  const addRecipientBtn = document.getElementById('admin-add-recipient-btn');
+  const recipientInput = document.getElementById('admin-recipient-email-input');
+  if (addRecipientBtn && recipientInput) {
+    addRecipientBtn.addEventListener('click', () => {
+      const email = recipientInput.value.trim();
+      if (!email) return;
+      NOTIFICATION_RECIPIENTS.push({ label: email, email });
+      showNotification(`Added ${email} to your regular recipients`);
+      renderAdminSettingsModal();
+    });
+  }
 }
 
 // ─── In-product info panel ──────────────────────────────────

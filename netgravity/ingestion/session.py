@@ -32,6 +32,11 @@ class IngestionSession:
     report: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
     snapshot_path: Optional[str] = None
+    # Action Agent dedup: set once the required/optional missing-data email
+    # has been sent for this session, so a re-run of the pipeline (e.g. a
+    # reviewer answering an unrelated question) never sends it twice.
+    required_notified_at: Optional[str] = None
+    optional_notified_at: Optional[str] = None
 
     def as_dict(self, include_draft: bool = True) -> Dict[str, Any]:
         payload = {
@@ -47,6 +52,8 @@ class IngestionSession:
             "report": dict(self.report),
             "error": self.error,
             "snapshot_path": self.snapshot_path,
+            "required_notified_at": self.required_notified_at,
+            "optional_notified_at": self.optional_notified_at,
             "next_actions": self.next_actions,
         }
         if include_draft:
@@ -81,6 +88,8 @@ class IngestionSession:
             report=dict(raw.get("report") or {}),
             error=raw.get("error") or None,
             snapshot_path=raw.get("snapshot_path") or None,
+            required_notified_at=raw.get("required_notified_at") or None,
+            optional_notified_at=raw.get("optional_notified_at") or None,
         )
 
 

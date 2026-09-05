@@ -20,7 +20,7 @@
  * so on the screen itself.
  */
 
-import { DATA_QUALITY, CONTRACT_DEMO, loadNetworkData } from './data.js';
+import { DATA_QUALITY, CONTRACT_DEMO, SOURCE_CONTACTS, loadNetworkData } from './data.js';
 import { getActiveProjectId, setActiveProject } from './integration/project-context.js';
 import { hydrateFromBackend } from './integration/hydrate.js';
 import {
@@ -1431,6 +1431,10 @@ function renderExcelIngestion(file) {
                 ? `<span class="ing-status-chip tone-error">${I.warning}Could not read this file</span>`
                 : `<span class="ing-status-chip">${I.checkCircle}File processed successfully</span>`}
                 ${parseError ? '' : qualityChipHtml()}</div>
+              <div class="ing-file-summary-meta-label" style="margin-top:10px">Source contact (for missing-data emails)</div>
+              <input id="ing-source-contact-input" type="email" placeholder="name@company.com"
+                     value="${ingEsc((SOURCE_CONTACTS[file.id] || {}).email || '')}"
+                     style="margin-top:4px;width:100%;padding:5px 8px;border:1px solid var(--border-light);border-radius:var(--r-sm);font-size:12px">
             </div>
           </div>
         </div>
@@ -1512,6 +1516,12 @@ function bindExcelIngestion(file) {
       if (label) label.textContent = n ? 'Filters (' + n + ')' : 'Filters';
     }
   }
+
+  document.getElementById('ing-source-contact-input')?.addEventListener('change', e => {
+    const email = e.target.value.trim();
+    if (email) SOURCE_CONTACTS[file.id] = { ...(SOURCE_CONTACTS[file.id] || {}), email };
+    else delete SOURCE_CONTACTS[file.id];
+  });
 
   document.getElementById('ing-map-table-slot')?.addEventListener('change', e => {
     const sel = e.target.closest('[data-row-select]');

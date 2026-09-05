@@ -2,7 +2,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![MILP Core](https://img.shields.io/badge/Solver-PuLP%20%7C%20HiGHS%20%7C%20CBC-purple.svg)](https://github.com/coin-or/pulp)
-[![Tests](https://img.shields.io/badge/Automated%20Tests-1308%20Passing-brightgreen.svg)](netgravity/tests/)
+[![Tests](https://img.shields.io/badge/Automated%20Tests-2498%20Passing-brightgreen.svg)](netgravity/tests/)
 [![Architecture](https://img.shields.io/badge/Architecture-Deterministic%20MILP%20%2B%20Governed%20Orchestrator-orange.svg)](#3-system-architecture)
 
 > **NetGravity** is a decision-intelligence and network optimization platform for logistics networks. It joins mathematically rigorous Mixed-Integer Linear Programming with a governed AI control plane — and keeps a hard line between the two.
@@ -39,6 +39,7 @@ A fourth principle runs through everything: **missing is not zero.** When exposu
 | Orchestrator control plane (planning, dependencies, governance, audit) | Complete |
 | Orchestrator ↔ deterministic core integration | Complete — see [§6](#6-integration-phases) |
 | Conversational layer (chatbot → NLU → orchestrator) | Complete — see [§6](#6-integration-phases) |
+| Action Agent (notification dispatcher — missing-data alerts, recommendation/investigate emails, reply-by-email upload) | Complete — see [§6b](#6b-action-agent--notification-dispatcher) |
 | Forecasting agent | **Not built** — requests are recognised and honestly declined |
 | Interactive web cockpit | Demonstration build on a synthetic Case-16 fixture |
 | Authentication / multi-process persistence | **Not built** — see [§9](#9-known-limitations) |
@@ -282,6 +283,35 @@ Recorded because they are the substance of the work, not incidental to it.
 
 ---
 
+## 6b. Action Agent — Notification Dispatcher
+
+Everything upstream of this section computes; nothing in this one does. **The Action Agent is a dispatcher, never a second decision-maker** — the same read-only-evidence discipline that governs the Reasoning Agent (§1) extends here: every email it sends traces back to something the MILP/governance layer or a purely rule-based check already decided. It never runs a scenario, never invents a recommendation, and never originates a number.
+
+Five triggers, each firing off something that already exists elsewhere in the system:
+
+| # | Fires when | Source of truth | Ever blocks? |
+|---|---|---|---|
+| 1 | A required data field is missing from an upload | `netgravity/ingestion/completeness.py` — deterministic, rule-based, no model call | Yes — blocks `finalize()` via the existing `network_assembled` gate |
+| 2 | An optional data field is missing | Same completeness check | Never |
+| 3 | Governance settles `APPROVAL_REQUIRED` (Tier 2) | The real `ActionClassifier` decision, already made in `_govern()` | No |
+| 4 | Governance settles `HUMAN_ONLY` (Tier 3) | Same | No |
+| 5 | A data owner replies to a missing-data email with a corrected file | Re-enters the exact same upload pipeline, tagged to the original session | No |
+
+**Design choices that keep it consistent with the rest of the system:**
+- **No new persistence mechanism.** Recipients, source contacts, and the dispatch log are JSON blobs behind the same `StorageBackend` abstraction `IngestionSessionStore` already uses — so `NETGRAVITY_STORAGE_BACKEND=local|azure_blob` moves them to Azure Blob Storage with zero code changes, exactly like every other piece of durable state in this codebase.
+- **No new decision system.** "Tier 2 / Tier 3 card" reuses the orchestrator's own `ApprovalRequest` and `execution_id` — there is no separate Card model to keep in sync with governance.
+- **Stub mode by default**, mirroring the LLM client's contract exactly: no `NETGRAVITY_SMTP_HOST`/`NETGRAVITY_EMAIL_API_KEY` configured → every send is logged ("would have emailed ...") and recorded in the dispatch log, never actually delivered. A live send that fails degrades to the same labelled-stub shape unless `NETGRAVITY_EMAIL_STRICT` is set. No outbound credential exists by default; enabling live sending is an explicit, separate step (`.env.example` documents Gmail/Workspace/Microsoft 365/a sandbox relay).
+- **Credentials follow the same path already documented for the LLM key**: local `.env` today, an Azure Key Vault secret reference / App Service Configuration value in production — no code change either way.
+- **Every link the Action Agent sends is a URL string, nothing more.** `netgravity/action_agent/deep_link_placeholder.py` is an explicit, clearly-marked stand-in that gives those links somewhere real to land before the frontend owns `/ingestion/<id>/review` and `/insights/<id>` — swapping it for the real frontend (or a redirect to it) touches that one file only.
+
+Test it end to end, with mock data, in stub mode (no credentials needed, no network calls):
+
+```bash
+python scripts/verify_9_action_agent.py
+```
+
+---
+
 ## 7. Repository Structure
 
 ```
@@ -320,15 +350,27 @@ NetGravity/
 │   │   ├── state/                      #    snapshot / scenario / execution stores
 │   │   ├── twin/                       #    Digital Twin: states, deltas, comparison
 │   │   ├── audit/                      #    execution traces, canonical events
+│   │   ├── staleness.py                #    read-only freshness check for Action Agent deep links
 │   │   └── routing/, tools/, schemas/
+│   ├── ingestion/                      # Upload → mapping → review → finalize pipeline
+│   │   └── completeness.py             #    required/optional field gate (Action Agent triggers 1-2)
+│   ├── action_agent/                   # Notification dispatcher — see §6b
+│   │   ├── triggers.py                 #    the five entry points
+│   │   ├── email_builder.py / email_sender.py   #    templates / stub-or-live SMTP send
+│   │   ├── recipients.py / dispatch_log.py      #    who to notify / dedup + audit trail
+│   │   ├── inbound_email.py / api.py            #    reply-by-email upload webhook
+│   │   └── deep_link_placeholder.py    #    PATCH POINT — swap for the real frontend
 │   ├── network/  inventory/  service/  carbon/  metrics/
 │   ├── scenarios/  sensitivity/  diagnostics/  cog/
 │   ├── schemas/  assumptions/  validation/  config/
 │   └── tests/
 │       ├── test_*.py                   # Unit & subsystem suites
+│       ├── action_agent/               # Action Agent unit + API tests
 │       └── integration/                # Phase 2 end-to-end integration suite
 │
-└── scripts/build_standalone.py
+└── scripts/
+    ├── build_standalone.py
+    └── verify_9_action_agent.py         # Action Agent, all 5 triggers, mock data
 ```
 
 ---
@@ -337,24 +379,27 @@ NetGravity/
 
 ```bash
 python smoke_test.py                    # 7-check verification (~2s)
-pytest -m "not slow"                    # ~1,308 tests, ~220s
+pytest -m "not slow"                    # ~2,498 tests, ~80s
 pytest                                  # includes large-scale benchmarks
 pytest netgravity/tests/integration/    # integration suites only
+pytest netgravity/tests/action_agent/   # Action Agent unit + API tests only
 python scripts/run_nlu_eval.py          # 159-case NLU evaluation, offline, free
+python scripts/verify_9_action_agent.py # Action Agent, all 5 triggers, mock data
 ```
 
-**1,308 passing, 1 skipped, 0 failing.**
+**2,498 passing, 1 skipped, 3 failing** — the 3 are pre-existing `test_extraction_agent.py` reference-corpus failures unrelated to anything in this document; confirmed present identically on `main` before the Action Agent work below, not something introduced or silently left broken by it.
 
 | Suite | Tests |
 |---|---|
 | `integration/` — Phase 2, R7 governance, Phase 3 conversational, Phase 3.1 NLU, Phase 3.2 entity/context | **588** |
+| `action_agent/` — recipients, dispatch log, email sender (stub + live SMTP), inbound webhook, PDF report builder, deep-link placeholder | **51** |
 | `test_phase1_risk_chain.py` | 84 |
 | `test_orchestrator.py` | 114 |
 | `test_orchestrator_hardening.py` | 84 |
 | `test_hardening_v14.py` | 69 |
 | `test_rei_v1.py` | 65 |
 | `test_resilience_rei.py` | 53 |
-| MILP core, costs, inventory, service, carbon, scenarios, stress, validation | remainder |
+| MILP core, costs, inventory, service, carbon, scenarios, stress, validation, ingestion pipeline | remainder |
 
 The integration suite exercises the **real** MILP, REI and RF services end to end. Only the LLM gateway and the external signal source are injected doubles — both are boundaries of the system, not parts of it. A test that passed against a faked solver would prove nothing about integration.
 
@@ -384,6 +429,13 @@ Stated plainly. **NetGravity is not production-ready**, and passing tests is not
 - No in-flight cache deduplication: simultaneous cold REI requests each compute a batch. Redundant work, not divergence.
 - Request idempotency returns a point-in-time view to a duplicate racing the original. Sequential retry is fully correct.
 - The web cockpit runs on a synthetic Case-16 fixture, not live data.
+
+**Action Agent — what generalizes to Azure cleanly, and what to revisit before real load**
+- **Storage and credentials already follow the deployment path.** Recipients, source contacts and the dispatch log move to Azure Blob Storage the same way every other piece of durable state does (`NETGRAVITY_STORAGE_BACKEND=azure_blob`, zero code change). The SMTP/email credential moves from local `.env` to an Azure Key Vault secret reference / App Service Configuration value the same way `NETGRAVITY_LLM_API_KEY` already does. Neither needed new work for this — they inherited the existing pattern.
+- **Outbound email currently sends inline, synchronously, inside the request that triggered it** (`_govern()` calls the Action Agent directly, wrapped in try/except so a send failure can't break governance — but it doesn't decouple the *latency*). Fine at pilot volume; at real traffic this belongs on a queue (Azure Storage Queue / Service Bus) with a separate worker, so a slow or unreachable mail server never adds latency to a user-facing orchestrator response. Not built — flagged for before scale-up, not glossed over.
+- **The dispatch log's dedup check (`already_dispatched`) reads every record on every check** — an `O(n)` scan with no index, same shape `IngestionSessionStore` already has for sessions. Correct and fine at dozens-to-hundreds of dispatches; revisit (a real index, or Azure Table Storage/Cosmos DB) if dispatch volume grows into the thousands.
+- **The Flask dev server (`app.run(debug=True)`) is not a production server** — Flask says so itself. Azure App Service / Container Apps needs a real WSGI server (gunicorn/uwsgi) in front, same as any Flask app; nothing Action-Agent-specific here.
+- **The email's links land on an explicit placeholder** (`netgravity/action_agent/deep_link_placeholder.py`), not the real frontend — by design, clearly marked, and a one-file swap once the frontend owns those routes.
 
 **Performance**
 - Parallel speed-up decays with size (1.98× at 7 facilities → 1.14× at 50). Beyond ~50 facilities a process pool or distributed workers is needed; the `max_workers` / `solve_fn` seams accept either.
@@ -440,6 +492,16 @@ export NETGRAVITY_DISABLE_LLM=1         # force offline
 ```
 
 Credentials are read from the environment only. They are never placed in prompts, URLs, source or logs, and never recorded in the audit trail. The gateway is called from backend code only.
+
+### Optional: enabling the Action Agent's outbound email
+
+Same rule as the LLM: the system runs fully offline by default. With no `NETGRAVITY_SMTP_HOST`/`NETGRAVITY_EMAIL_API_KEY` set, every notification is logged and recorded in the dispatch log, never actually sent — the whole feature, and its test suite, run with zero network calls and zero credentials.
+
+```bash
+python scripts/verify_9_action_agent.py     # see it work end to end, stub mode, mock data
+```
+
+To see a real email land in an inbox, add SMTP credentials to `.env` (see `.env.example` for the exact fields and Gmail/Workspace/Microsoft 365 setup notes) and set `NETGRAVITY_APP_BASE_URL` so the email's links are clickable — then run the same script again; it switches to live sending automatically.
 
 ---
 
