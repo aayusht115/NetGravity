@@ -13,6 +13,20 @@ import { CONFIG } from '../config.js';
 import { getActiveProjectId } from '../project-context.js';
 
 export const scenarioService = {
+  /**
+   * Rank a set of solved scenarios and get the verdict.
+   *
+   * The ranking and the recommendation are the SERVER's, from authoritative
+   * KPI values. The browser used to decide this itself, which put a
+   * recommendation in JavaScript where nothing could audit or test it.
+   */
+  async compare(scenarioIds, projectId = null) {
+    return apiClient.post('/api/scenarios/compare', {
+      project_id: projectId || getActiveProjectId(),
+      scenario_ids: scenarioIds,
+    });
+  },
+
   async listScenarios(projectId = null) {
     const res = await apiClient.get('/api/scenarios', {
       project_id: projectId || getActiveProjectId(),

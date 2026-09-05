@@ -8,7 +8,15 @@ import { apiClient } from '../api-client.js';
 import { getActiveSnapshotId } from '../project-context.js';
 
 export const chatService = {
-  async sendMessage(message, conversationId = null, snapshotId = null) {
+  /**
+   * @param clarificationOption  the id of a ClarificationRequest option the
+   *   user PICKED. It resumes the request the question was asked about
+   *   instead of being read as a new one — "Lowest cost" typed on its own is
+   *   not an instruction, and the server would classify it as a fresh
+   *   (different) question.
+   */
+  async sendMessage(message, conversationId = null, snapshotId = null,
+                    clarificationOption = null) {
     // Default to the snapshot the active project is bound to. Every caller
     // omitted this argument, so the orchestrator fell back to the network it
     // boots with and answered questions about facilities the user has never
@@ -16,6 +24,7 @@ export const chatService = {
     const snapshot = snapshotId || getActiveSnapshotId();
     return apiClient.post('/orchestrator/chat', {
       message,
+      clarification_option: clarificationOption || undefined,
       conversation_id: conversationId || undefined,
       network_snapshot_id: snapshot || undefined,
       disable_llm: false,

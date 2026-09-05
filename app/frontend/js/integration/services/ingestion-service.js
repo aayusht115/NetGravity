@@ -103,6 +103,35 @@ export const ingestionService = {
     });
   },
 
+  /**
+   * Register who owns this upload's data.
+   *
+   * A missing-data request has to have somewhere to go; without this the
+   * backend answers "no_contact" rather than pretending it sent something.
+   */
+  async setSourceContact(email, name = '', projectId = null) {
+    return apiClient.post('/api/ingestions/preview/source-contact', {
+      project_id: projectId || getActiveProjectId(),
+      email,
+      name,
+    });
+  },
+
+  /**
+   * Ask the source for one tier ('required' | 'optional') of the fields the
+   * completeness report says are absent.
+   *
+   * Fires the Action Agent's real trigger server-side. With no email
+   * credential configured the send is stubbed and only the dispatch log
+   * records it — nothing leaves the machine.
+   */
+  async requestMissingData(kind = 'optional', projectId = null) {
+    return apiClient.post('/api/ingestions/preview/request-missing-data', {
+      project_id: projectId || getActiveProjectId(),
+      kind,
+    });
+  },
+
   async uploadFiles(files, categories = {}) {
     const formData = new FormData();
     files.forEach(f => formData.append('files', f));

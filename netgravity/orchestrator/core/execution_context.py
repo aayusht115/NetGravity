@@ -113,6 +113,11 @@ class ExecutionContext:
     # The observed network snapshot this run is pinned to. Never changes once
     # set; if the live snapshot moves, the run goes STALE rather than drifting.
     baseline_snapshot_id: Optional[str] = None
+    #: What this execution was asked to optimise FOR — an
+    #: `OptimisationLever.id` from conversation/priorities.py, or None for the
+    #: default (cost). Applied to OptimizationConfig at the solve, so a stated
+    #: priority produces a different network rather than a different sentence.
+    optimisation_priority: Optional[str] = None
     # Hypothetical overlay, when the run analyses a scenario.
     scenario_id: Optional[str] = None
     scenario_version: Optional[int] = None
@@ -653,4 +658,6 @@ class ExecutionContext:
             market_signals=list(request.market_signals),
             baseline_snapshot_id=request.network_snapshot_id or current_snapshot_id,
             llm_enabled=not request.disable_llm,
+            optimisation_priority=(request.metadata or {}).get(
+                "optimisation_priority") or None,
         )

@@ -140,6 +140,12 @@ class DatasetStore:
                 "network_summary": network_summary,
                 "assumptions": list(assumptions),
                 "issues": list(issues),
+                # What the upload did NOT contain, as measured at review time.
+                # Carried across the commit because the preview is dropped
+                # below and this is exactly when it starts mattering: the
+                # analysis has now run on this data, and the gaps are what
+                # would have made it better.
+                "completeness": preview.get("completeness", {}),
             }
             history = list(record.get("history") or [])
             history.append(committed)

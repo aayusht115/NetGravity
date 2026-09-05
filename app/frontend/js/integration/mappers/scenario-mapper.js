@@ -186,6 +186,13 @@ export function mapScenarioRecord(raw) {
       ? +(scenarioCost - referenceCost).toFixed(2) : null,
     referenceNote: raw.reference_note || '',
 
+    // THIS scenario's own grounded briefing, from the reasoning step its
+    // workflow already ran. Null when the run produced none — the pane then
+    // says it has nothing to explain, rather than showing the network's
+    // briefing beside a scenario's numbers.
+    explanation: raw.explanation && Object.keys(raw.explanation).length
+      ? raw.explanation : null,
+
     deltas,
     baselineKpis: raw.baseline_kpis || {},
     referenceKpis: raw.reference_kpis || {},

@@ -130,6 +130,7 @@ class ReasoningAgent:
         scope: ReasoningScope = ReasoningScope.NETWORK,
         entity_id: Optional[str] = None,
         user_question: str = "",
+        single_request: bool = False,
     ) -> ReasoningResult:
         """
         Explain a set of deterministic results.
@@ -145,6 +146,14 @@ class ReasoningAgent:
             provenance:           execution/snapshot/scenario ids, attached to
                                   every accepted numeric claim.
             allow_llm:            False forces the template path.
+            single_request:       True forbids the agent runtime, whatever the
+                                  environment selects. The runtime reaches the
+                                  model once per metric it decides to cite —
+                                  an agent loop, not a request — so a caller
+                                  that must spend exactly one model request
+                                  sets this and gets the gateway path, where
+                                  the whole evidence pack travels in the
+                                  prompt and `generate()` is called once.
 
         Returns:
             ReasoningResult. Never raises — reasoning is advisory, and its
@@ -167,7 +176,14 @@ class ReasoningAgent:
         # Preferred live path: one focused OpenAI Agent, typed output and only
         # read-only evidence tools. Runtime availability is explicit, so an
         # installed SDK alone can never trigger a paid call.
-        if allow_llm and self.runtime is not None and self.runtime.available:
+        #
+        # SKIPPED ENTIRELY under `single_request`. This runtime is an agent
+        # loop: its prompt instructs the model to call `get_evidence` before
+        # citing each metric, so a briefing quoting six figures costs at least
+        # seven model requests. A caller that promised one request cannot use
+        # it, however the environment is configured.
+        if (allow_llm and not single_request
+                and self.runtime is not None and self.runtime.available):
             try:
                 draft = self.runtime.run(evidence_pack)
                 violations = validate_reasoning_draft(draft, evidence_pack)
@@ -416,15 +432,33 @@ class ReasoningAgent:
             "guessing.\n"
             f"{missing_block}"
             f"{ask_block}\n"
-            "Write figures the way a person would: thousands separated, "
-            "currency to the rupee, percentages to one decimal place.\n"
+            # HOW TO WRITE. Each rule is here because its absence produced a
+            # specific defect on screen.
+            "HOW TO WRITE:\n"
+            "- Do NOT write any figures, amounts, percentages or currency "
+            "symbols. The numbers are added afterwards, in the project's own "
+            "currency. A figure written here appears beside a table in a "
+            "different currency, and is stripped by validation, leaving a "
+            "sentence with a hole in it.\n"
+            "- Plain business English. No model names, no algorithm names, no "
+            "solver vocabulary.\n"
+            "- Third person. Never 'I', 'my', 'I see', 'my models'.\n"
+            "- Name the real facilities, markets and products from the "
+            "results. Never a placeholder such as 'Warehouse A'.\n"
+            "- No urgency the results do not establish: never 'immediately' "
+            "or 'urgently'.\n"
+            "- Where cost improves but service or capacity does not, say so "
+            "in the same breath. Cheaper is not better on its own.\n"
+            "- Say each thing once. Do not restate the summary in the "
+            "recommendation.\n"
             "Reply with ONLY this JSON, and keep every string short:\n"
-            '{"summary":"<2 sentences, first person (I/my), answering the '
-            'question rather than listing figures>",'
-            '"recommendation":"<1 sentence, one concrete next step>",'
+            '{"summary":"<the conclusion in 1 short sentence, then what it '
+            'means in 1 more. No figures.>",'
+            '"recommendation":"<1 sentence, one concrete next step. No '
+            'figures.>",'
             '"confidence":"LOW|MEDIUM|HIGH",'
             '"key_drivers":["<6 words>","<6 words>"],'
-            '"risks":["<6 words>"],'
+            '"risks":["<the one thing not to miss, 12 words, no figures>"],'
             '"evidence":["<one figure quoted from the results>"]}\n'
             "Set confidence to LOW if key results are missing or the network "
             "is infeasible; HIGH only when the results are complete.\n"
@@ -456,15 +490,57 @@ class ReasoningAgent:
 
         structured = [c for c in (parsed.get("claims") or []) if isinstance(c, dict)][:20]
 
+        summary = str(parsed.get("summary", ""))[:2000]
+        drivers = as_list("key_drivers")
+        risks = as_list("risks")
+        recommendation = str(parsed.get("recommendation", ""))[:1000]
+
         return ReasoningResult(
-            summary=str(parsed.get("summary", ""))[:2000],
-            key_drivers=as_list("key_drivers"),
-            risks=as_list("risks"),
-            recommendation=str(parsed.get("recommendation", ""))[:1000],
+            summary=summary,
+            key_drivers=drivers,
+            risks=risks,
+            recommendation=recommendation,
             confidence=confidence,
             evidence=as_list("evidence"),
+            # A BRIEFING, like every other path returns.
+            #
+            # This path used to return None here, and `/api/insights` reads
+            # `result.briefing.kpi_insights` directly — so the moment a live
+            # call succeeded, the Overview raised AttributeError and 500ed.
+            # The failure was invisible while the LLM was off, because the
+            # template path always builds one.
+            briefing=self._briefing_from_parts(
+                summary=summary, drivers=drivers, risks=risks,
+                recommendation=recommendation),
             source="llm",
             grounded_claims=structured,
+        )
+
+    @staticmethod
+    def _briefing_from_parts(*, summary: str, drivers: List[str],
+                             risks: List[str], recommendation: str) -> ExecutiveBriefing:
+        """
+        The gateway's one narrative, in the shape every consumer reads.
+
+        One `KPIInsight`, not none: the gateway path returns a single summary
+        rather than per-theme findings, and a briefing with an empty
+        `kpi_insights` renders as a blank card on screens that iterate it.
+        One insight carrying what the model actually said is the honest
+        representation — inventing themes to fill the list would not be.
+        """
+        insights: List[KPIInsight] = []
+        if summary:
+            insights.append(KPIInsight(
+                theme="Summary",
+                headline="What I found in these results",
+                narrative=summary[:700],
+            ))
+        return ExecutiveBriefing(
+            opening=summary[:500],
+            key_drivers=drivers[:4],
+            kpi_insights=insights,
+            recommendation=recommendation[:350],
+            limitation=(risks[0][:350] if risks else ""),
         )
 
     @staticmethod
@@ -876,6 +952,319 @@ class ReasoningAgent:
         )]
 
     @staticmethod
+    def _reoptimisation_insights(reference: Dict[str, Any], state: Dict[str, Any],
+                                 refs_for) -> List[KPIInsight]:
+        """
+        What redesigning the existing footprint is worth.
+
+        The Overview shows the network as it RUNS — the footprint pinned open.
+        The reference is that same network re-solved with the freedom to open
+        and close sites. The gap between them is the value of redesigning, and
+        it is almost always larger than any single change, which is why a
+        scenario tested against the as-is figure appears to save so much.
+
+        Reported only when both figures are real. Nothing is derived beyond
+        one subtraction, which `optimised_reference` has already done.
+        """
+        saving = reference.get("reoptimisation_saving")
+        reference_cost = reference.get("reference_cost")
+        if saving is None or reference_cost is None:
+            return []
+
+        if saving < 0:
+            narrative = (
+                f"Re-solved with the freedom to open and close sites, this same "
+                f"network costs {reference_cost:,.2f} — {abs(saving):,.2f} less "
+                f"than the footprint as it runs today. That gap is the value of "
+                f"redesigning, before any single change is tested, and a "
+                f"scenario measured against today's figure will appear to "
+                f"contain it."
+            )
+            severity = InsightSeverity.OPPORTUNITY
+        elif saving > 0:
+            narrative = (
+                f"Re-solved with the freedom to change the footprint, this "
+                f"network costs {reference_cost:,.2f} — no less than it costs "
+                f"today. The footprint you run is already at or near what the "
+                f"solver would choose."
+            )
+            severity = InsightSeverity.INFORMATION
+        else:
+            narrative = (
+                f"Re-solving with the freedom to change the footprint reaches "
+                f"the same cost, {reference_cost:,.2f}. There is nothing to be "
+                f"had from redesigning alone."
+            )
+            severity = InsightSeverity.INFORMATION
+
+        insights = [KPIInsight(
+            theme="Footprint",
+            headline="I compared your footprint against a free redesign",
+            narrative=narrative,
+            severity=severity,
+            metric_refs=refs_for("reference_cost"),
+        )]
+
+        # Where the redesign puts volume differently, say how many sites it
+        # keeps — the concentration question, at the level the figures support.
+        open_now = state.get("n_facilities_open")
+        open_reference = reference.get("reference_facilities_open")
+        if (isinstance(open_now, (int, float))
+                and isinstance(open_reference, (int, float))
+                and open_now != open_reference):
+            insights.append(KPIInsight(
+                theme="Footprint shape",
+                headline="The redesign uses a different number of sites",
+                narrative=(
+                    f"It runs {open_reference:,.0f} sites against the "
+                    f"{open_now:,.0f} open today, so the saving is a different "
+                    f"footprint rather than the same one run more cheaply."
+                ),
+                metric_refs=refs_for("reference_facilities_open"),
+            ))
+        return insights
+
+    @staticmethod
+    def _comparison_insights(comparison: Dict[str, Any],
+                             alternatives: List[Dict[str, Any]],
+                             refs_for) -> List[KPIInsight]:
+        """
+        Why the recommended scenario is preferable to the ones beside it.
+
+        "Nagpur costs less" is a fact about Nagpur. "Nagpur costs less than
+        expanding Delhi while serving the same demand" is the comparison a
+        decision needs, and it is only said when the figures support BOTH
+        halves — a cost gap and a demand comparison that is genuinely equal.
+        Where demand differs, that is stated instead of glossed, because a
+        cheaper plan that serves less is not simply cheaper.
+        """
+        insights: List[KPIInsight] = []
+        winner = comparison.get("recommended_name")
+        if not winner or not alternatives:
+            return insights
+
+        comparable = [a for a in alternatives
+                      if a.get("cost_gap_vs_recommended") is not None]
+        for alt in comparable[:2]:
+            gap = alt["cost_gap_vs_recommended"]
+            fill_gap = alt.get("fill_gap_vs_recommended_pts")
+
+            if gap > 0:
+                lead = f"{winner} costs {gap:,.2f} less than {alt['name']}"
+            elif gap < 0:
+                lead = f"{winner} costs {abs(gap):,.2f} MORE than {alt['name']}"
+            else:
+                lead = f"{winner} and {alt['name']} cost the same"
+
+            # The service half of the trade-off, only where it is measurable.
+            if fill_gap is None:
+                service = ("Demand served cannot be compared between these two "
+                           "solves, so this is a cost comparison only.")
+            elif abs(fill_gap) < 0.05:
+                service = "Both serve the same demand."
+            elif fill_gap > 0:
+                service = (f"{alt['name']} serves {fill_gap:,.1f} points more of "
+                           f"demand, so the difference is not cost alone.")
+            else:
+                service = (f"{alt['name']} serves {abs(fill_gap):,.1f} points less "
+                           f"of demand.")
+
+            insights.append(KPIInsight(
+                theme="Trade-off",
+                headline=f"{winner} against {alt['name']}",
+                narrative=f"{lead}. {service}",
+                severity=(InsightSeverity.OPPORTUNITY if gap > 0
+                          else InsightSeverity.INFORMATION),
+                metric_refs=refs_for("cost_gap_vs_recommended", limit=2),
+            ))
+
+        not_comparable = comparison.get("n_not_comparable") or 0
+        if not_comparable:
+            insights.append(KPIInsight(
+                theme="Not compared",
+                headline=f"{not_comparable} of the compared produced no usable cost",
+                narrative=(
+                    f"{not_comparable} scenario(s) returned no cost the engine "
+                    f"could measure against the others, so they are listed but "
+                    f"take no position in this ranking."
+                ),
+                severity=InsightSeverity.RISK,
+                metric_refs=refs_for("n_not_comparable"),
+            ))
+        return insights
+
+    @staticmethod
+    def _comparison_recommendation(comparison: Dict[str, Any],
+                                   alternatives: List[Dict[str, Any]]) -> str:
+        """
+        The next step a comparison supports.
+
+        It never says "do this". The ranking is a finding; opening or closing
+        a site is classified HUMAN_ONLY by governance whatever the economics
+        say, and this sentence must not read as approval.
+        """
+        winner = comparison.get("recommended_name")
+        if not winner:
+            return ("I recommend re-running these scenarios: none of them "
+                    "produced a cost that can be compared, so there is nothing "
+                    "to choose between yet.")
+        close = [a for a in alternatives
+                 if a.get("cost_gap_vs_recommended") is not None
+                 and abs(a["cost_gap_vs_recommended"]) < 1]
+        if close:
+            return (f"I recommend deciding this on something other than cost: "
+                    f"{winner} and {close[0]['name']} are within rounding of each "
+                    f"other, so the choice rests on factors this comparison does "
+                    f"not measure.")
+        return (f"I recommend reviewing {winner} with the people who would have "
+                f"to carry it out. The comparison says which is cheaper; whether "
+                f"it is the right change is a decision, and not one I make.")
+
+    @staticmethod
+    def _forecast_insights(forecast: Dict[str, Any], series: List[Dict[str, Any]],
+                           refs_for) -> List[KPIInsight]:
+        """
+        What the forecast says, and how far it can be trusted.
+
+        Every figure is one the forecasting engine produced. Nothing here
+        explains WHY demand moves: no engine in `netgravity/forecasting/`
+        computes a cause, so a sentence claiming one would be invented. A
+        structural break is reported as a detected shift, never as its reason.
+        """
+        insights: List[KPIInsight] = []
+        n_ok = forecast.get("n_series_forecast") or 0
+        n_requested = forecast.get("n_series_requested") or 0
+        if not n_requested:
+            return insights
+
+        horizon = forecast.get("horizon_periods")
+        span = f" over the next {horizon} periods" if horizon else ""
+        unavailable = forecast.get("n_series_unavailable") or 0
+        insights.append(KPIInsight(
+            theme="Forecast coverage",
+            headline=f"I forecast {n_ok} of {n_requested} demand series",
+            narrative=(
+                f"I produced a forecast{span} for {n_ok} of the {n_requested} "
+                f"market-product series in this network"
+                + (f"; {unavailable} could not be forecast and carry no numbers "
+                   f"at all, rather than a defaulted quantity."
+                   if unavailable else ". Every requested series was forecast.")
+            ),
+            severity=(InsightSeverity.RISK if unavailable and not n_ok
+                      else InsightSeverity.INFORMATION),
+            metric_refs=refs_for("n_series_forecast"),
+        ))
+
+        # The band, in the engine's own p10/p90. This is the whole confidence
+        # statement a forecast can honestly make.
+        banded = next((sr for sr in series
+                       if sr.get("last_period_p10") is not None
+                       and sr.get("last_period_p90") is not None), None)
+        if banded is not None:
+            insights.append(KPIInsight(
+                theme="Forecast confidence",
+                headline="I state a range, not a single number",
+                narrative=(
+                    f"For {banded.get('market_id', 'the first series')}, the last "
+                    f"forecast period sits between {banded['last_period_p10']:,.0f} "
+                    f"and {banded['last_period_p90']:,.0f} units, around a central "
+                    f"{banded.get('last_period_mean', 0):,.0f}. The spread is the "
+                    f"forecast's own uncertainty; planning against the midpoint "
+                    f"alone ignores it."
+                ),
+                metric_refs=refs_for("last_period_p90"),
+            ))
+
+        backtested = forecast.get("n_series_backtested") or 0
+        if backtested:
+            scored = next((sr for sr in series
+                           if (sr.get("accuracy") or {}).get("mase") is not None), None)
+            if scored is not None:
+                mase = scored["accuracy"]["mase"]
+                # MASE < 1 means the model beat a naive-1 benchmark. There is
+                # deliberately no "confidence score" anywhere in this codebase.
+                verdict = ("better than simply repeating last period"
+                           if mase < 1 else
+                           "no better than simply repeating last period")
+                insights.append(KPIInsight(
+                    theme="Forecast accuracy",
+                    headline="I measured this forecast against held-out history",
+                    narrative=(
+                        f"A rolling-origin backtest over "
+                        f"{scored['accuracy'].get('n_folds', 0)} folds scored MASE "
+                        f"{mase:,.2f} on {scored.get('market_id', 'one series')} — "
+                        f"{verdict}. {backtested} "
+                        f"series {'was' if backtested == 1 else 'were'} measured "
+                        f"this way; the rest were not, which is a different "
+                        f"statement from their error being small."
+                    ),
+                    severity=(InsightSeverity.INFORMATION if mase < 1
+                              else InsightSeverity.RISK),
+                    metric_refs=refs_for("mase"),
+                ))
+
+        breaks = forecast.get("n_structural_breaks_detected") or 0
+        if breaks:
+            insights.append(KPIInsight(
+                theme="Structural break",
+                headline=f"I found a level shift in {breaks} series",
+                narrative=(
+                    f"Detection found a change in level part-way through the "
+                    f"history of {breaks} series, so those forecasts were fitted "
+                    f"on the period after the shift rather than on all of it. "
+                    f"What caused the shift is not something I can see — only "
+                    f"that the series before and after it are different."
+                ),
+                severity=InsightSeverity.RISK,
+                metric_refs=refs_for("n_structural_breaks_detected"),
+            ))
+
+        patterns = forecast.get("patterns") or {}
+        if patterns:
+            named = ", ".join(f"{count} {pattern.lower()}"
+                              for pattern, count in sorted(patterns.items()))
+            insights.append(KPIInsight(
+                theme="Demand pattern",
+                headline="I chose the engine from the shape of each series",
+                narrative=(
+                    f"Classified by the Syntetos-Boylan scheme: {named}. The "
+                    f"classification decides which engine runs, so it is part of "
+                    f"how these numbers were produced rather than an aside."
+                ),
+                metric_refs=refs_for("patterns"),
+            ))
+
+        return insights
+
+    @staticmethod
+    def _forecast_recommendation(forecast: Dict[str, Any]) -> str:
+        """
+        The next step a forecast genuinely supports.
+
+        No branch states what a change would be worth: no scenario has been run
+        against this forecast, and naming a result would be an invention.
+        """
+        unavailable = forecast.get("n_series_unavailable") or 0
+        n_ok = forecast.get("n_series_forecast") or 0
+
+        if not n_ok:
+            return ("I recommend supplying more demand history before planning on "
+                    "a forecast: no series had enough of it to be forecast, so "
+                    "there is nothing here to plan against.")
+        if unavailable:
+            return (f"I recommend checking the {unavailable} series that could not "
+                    f"be forecast before using this for planning — they carry no "
+                    f"quantity at all, so any plan built on this covers less "
+                    f"demand than the network has.")
+        if not forecast.get("n_series_backtested"):
+            return ("I recommend treating this as unmeasured: no backtest ran, so "
+                    "I can state what the forecast says but not how well this "
+                    "engine has done on this data before.")
+        return ("I recommend planning against the range rather than the central "
+                "line, and re-running the network at the p90 demand to see which "
+                "sites bind first. That is a scenario I have not run.")
+
+    @staticmethod
     def _recommendation(*, infeasible: bool, state: Dict[str, Any],
                         payload: Dict[str, Any], negatives: List[Dict[str, Any]],
                         insights: List[KPIInsight]) -> str:
@@ -995,6 +1384,14 @@ class ReasoningAgent:
         # hand — as several tests do — is not silently ignored.
         market_raw = payload.get("market_evidence") or []
         market_signals = [market_raw] if isinstance(market_raw, dict) else list(market_raw)
+        # One more deterministic block, read exactly like the others. A
+        # FORECAST-scope pack carries these and no network_state, so the
+        # cost/utilisation branches below simply find nothing and say nothing.
+        forecast_block = payload.get("forecast") or {}
+        forecast_series = payload.get("forecast_series") or []
+        comparison_block = payload.get("comparison") or {}
+        comparison_alternatives = payload.get("comparison_alternatives") or []
+        reference_block = payload.get("optimised_reference") or {}
 
         infeasible = self._is_infeasible(payload)
 
@@ -1232,15 +1629,73 @@ class ReasoningAgent:
                     f"number."
                 )
 
+        if reference_block:
+            reference_insights = self._reoptimisation_insights(
+                reference_block, state, refs_for)
+            insights.extend(reference_insights)
+            for insight in reference_insights:
+                parts.append(insight.narrative)
+            saving = reference_block.get("reoptimisation_saving")
+            if saving is not None and saving < 0:
+                drivers.append(
+                    f"Redesigning the footprint is worth {abs(saving):,.2f} "
+                    f"before any single change.")
+
+        if comparison_block:
+            comparison_insights = self._comparison_insights(
+                comparison_block, comparison_alternatives, refs_for)
+            insights.extend(comparison_insights)
+            for insight in comparison_insights:
+                parts.append(insight.narrative)
+            if comparison_block.get("verdict"):
+                # The backend's own finding, first. Everything above explains
+                # it rather than restating it.
+                parts.insert(0, comparison_block["verdict"])
+            recommended_cost = comparison_block.get("recommended_cost")
+            if recommended_cost is not None:
+                evidence.append(f"recommended_cost = {recommended_cost:,.2f}")
+            if comparison_block.get("n_not_comparable"):
+                risks.append(
+                    f"{comparison_block['n_not_comparable']} compared scenario(s) "
+                    f"produced no usable cost.")
+
+        if forecast_block:
+            forecast_insights = self._forecast_insights(
+                forecast_block, forecast_series, refs_for)
+            insights.extend(forecast_insights)
+            for insight in forecast_insights:
+                parts.append(insight.narrative)
+            n_ok = forecast_block.get("n_series_forecast") or 0
+            n_requested = forecast_block.get("n_series_requested") or 0
+            evidence.append(f"n_series_forecast = {n_ok} of {n_requested}")
+            unavailable = forecast_block.get("n_series_unavailable") or 0
+            if unavailable:
+                risks.append(
+                    f"{unavailable} demand series could not be forecast and carry "
+                    f"no quantity at all.")
+            breaks = forecast_block.get("n_structural_breaks_detected") or 0
+            if breaks:
+                drivers.append(
+                    f"A level shift was detected in {breaks} series, so those were "
+                    f"fitted on the history after it.")
+            if not forecast_block.get("n_series_backtested"):
+                risks.append("No backtest ran, so this forecast's error is unmeasured.")
+
         if not parts:
             parts.append("I could not find a deterministic result to explain for this request.")
 
-        recommendation = self._recommendation(
-            infeasible=infeasible,
-            state=state,
-            payload=payload,
-            negatives=negatives,
-            insights=insights,
+        recommendation = (
+            self._comparison_recommendation(comparison_block,
+                                            comparison_alternatives)
+            if comparison_block
+            else self._forecast_recommendation(forecast_block) if forecast_block
+            else self._recommendation(
+                infeasible=infeasible,
+                state=state,
+                payload=payload,
+                negatives=negatives,
+                insights=insights,
+            )
         )
 
         completeness = (

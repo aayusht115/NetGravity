@@ -89,6 +89,182 @@ def _serialise_series(sf: Any) -> Dict[str, Any]:
     }
 
 
+def _forecast_explanation(result: Any, horizon: int, project_id: str,
+                          execution_id: str) -> Dict[str, Any]:
+    """
+    ONE overall explanation of the forecast run.
+
+    Deliberately one, not sixty. The engine forecasts every market-product
+    pair — 60 on the US dataset — and a model request returning sixty
+    paragraphs is a large, slow, expensive response for words most of which
+    nobody will read. So this covers the run: how much of the network was
+    forecastable, how wide the bands are, what the measured error says, and
+    which series are exceptions.
+
+    The per-series detail a reader gets when they change the chart is
+    DETERMINISTIC and travels with each series (see `_series_explanation`).
+    Switching from Delhi to Mumbai therefore changes the words without
+    costing a request.
+
+    Saved against the forecast run, so re-opening the tab spends nothing.
+    Never raises: an explanation is advisory and the forecast stands without
+    one.
+    """
+    try:
+        from netgravity.ingestion.config import IngestionConfig
+        from netgravity.ingestion.storage import get_storage
+        
+        from netgravity.orchestrator.explanation_llm import (
+            explanation_reasoning_agent,
+            explanations_llm_enabled,
+        )
+        from netgravity.orchestrator.explanation_service import ExplanationService
+        from netgravity.orchestrator.explanations import (
+            KIND_FORECAST,
+            ExplanationStore,
+        )
+        from netgravity.orchestrator.reasoning.forecast_evidence import (
+            forecast_reasoning_payload,
+        )
+        from netgravity.orchestrator.schemas.reasoning import ReasoningScope
+
+        service = ExplanationService(
+            # The SHARED connection, not a bare agent. A bare
+            # `ReasoningAgent()` has no gateway, so it produced
+            # templates however the switch was set.
+            explanation_reasoning_agent(),
+            ExplanationStore(get_storage(IngestionConfig())))
+        return service.explain(
+            subject_id=project_id,
+            kind=KIND_FORECAST,
+            scope=ReasoningScope.FORECAST,
+            # The RUN identifies it: a re-forecast is a new analysis.
+            result_parts=[execution_id, horizon],
+            build_payload=lambda: forecast_reasoning_payload(
+                result, horizon=horizon),
+            provenance={"authoritative_source": "netgravity.forecasting"},
+            allow_llm=explanations_llm_enabled(),
+            figures=_forecast_figures(result, horizon),
+        )
+    except Exception as exc:  # noqa: BLE001 — the forecast still stands
+        logger.warning("forecast.explanation_failed: %s", exc)
+        return {}
+
+
+def _forecast_figures(result: Any, horizon: int) -> List[Any]:
+    """
+    Three numbers for the run, supplied by code.
+
+    Coverage, horizon and how many series were actually measured — not a
+    restatement of any one series, which is what the per-series card is for.
+    """
+    from netgravity.orchestrator.reasoning.card import Figure
+
+    series = list(getattr(result, "series", []) or [])
+    ok = [s for s in series
+          if str(getattr(getattr(s, "status", None), "value", "")) == "OK"]
+    measured = [s for s in ok if getattr(s, "accuracy", None) is not None]
+    return [
+        Figure(label="Series forecast", value=f"{len(ok)} of {len(series)}"),
+        Figure(label="Horizon", value=f"{horizon} periods"),
+        Figure(label="Accuracy measured",
+               value=f"{len(measured)} series",
+               note="" if measured else "no backtest ran"),
+    ]
+
+
+def _series_explanation(row: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    What THIS series says, in plain language, from its own numbers.
+
+    Deterministic and computed per series, so switching the chart changes the
+    words with it and costs nothing. It states direction, uncertainty and
+    measured accuracy — and never a cause. Nothing in
+    `netgravity/forecasting/` computes why demand moves, so a sentence about
+    promotions or growth would be invented.
+    """
+    points = row.get("points") or []
+    status = row.get("status")
+    label = f"{row.get('market_id', '')}/{row.get('product_id', '')}".strip("/")
+
+    if status != "OK" or not points:
+        return {
+            "headline": f"No forecast for {label}",
+            "narrative": (row.get("reason")
+                          or "This series could not be forecast, so it carries "
+                             "no quantity at all rather than a defaulted one."),
+            "figures": [],
+        }
+
+    first, last = points[0], points[-1]
+    mean_first, mean_last = first.get("mean"), last.get("mean")
+    p10, p90 = last.get("p10"), last.get("p90")
+
+    # The verb that fits "demand is expected to ___", and how far it moves.
+    # A 2% floor: below that the series is flat and saying otherwise reads a
+    # rounding difference as a trend.
+    direction, size = "hold steady", ""
+    if isinstance(mean_first, (int, float)) and isinstance(mean_last, (int, float)):
+        if mean_first:
+            change = (mean_last - mean_first) / abs(mean_first)
+            if abs(change) >= 0.02:
+                direction = "rise" if change > 0 else "fall"
+                size = "slightly" if abs(change) < 0.10 else "sharply"
+
+    accuracy = row.get("accuracy") or {}
+    mase = accuracy.get("mase")
+    if mase is None:
+        accuracy_note = ("No backtest ran for this series, so its error is "
+                         "unmeasured — which is not the same as small.")
+    elif mase < 1:
+        accuracy_note = (f"A backtest scored MASE {mase:,.2f} — better than "
+                         f"repeating last period.")
+    else:
+        accuracy_note = (f"A backtest scored MASE {mase:,.2f} — no better than "
+                         f"repeating last period.")
+
+    band = ""
+    if isinstance(p10, (int, float)) and isinstance(p90, (int, float)):
+        band = (f" By the last period it sits between {p10:,.0f} and "
+                f"{p90:,.0f} units; plan against that range, not the midpoint.")
+
+    # Units, not currency — the forecast is a quantity, so these are rendered
+    # here. Nothing on this card is money.
+    figures = []
+    if isinstance(mean_last, (int, float)):
+        figures.append({"label": "Final period", "value": f"{mean_last:,.0f} units",
+                        "format": "text"})
+    if isinstance(p10, (int, float)) and isinstance(p90, (int, float)):
+        figures.append({"label": "Planning range",
+                        "value": f"{p10:,.0f}–{p90:,.0f}", "format": "text"})
+    if mase is not None:
+        # A word, not a score. "MASE 0.72" is the measure; "Good" is what it
+        # means, and the measure itself belongs in the technical detail.
+        figures.append({"label": "Forecast accuracy",
+                        "value": "Good" if mase < 1 else "Weak",
+                        "note": f"MASE {mase:,.2f}", "format": "text"})
+
+    # Plain business English, and no algorithm name in the main line — the
+    # engine and the backtest belong in the collapsed detail.
+    plan = ""
+    if isinstance(p10, (int, float)) and isinstance(p90, (int, float)):
+        plan = (f"Plan for roughly {p10:,.0f} to {p90:,.0f} units in the final "
+                f"period, not the midpoint alone.")
+    return {
+        "headline": (f"{label} demand is expected to {direction}"
+                     + (f" {size}" if size else "")
+                     + f" over the next {len(points)} periods."),
+        "narrative": plan,
+        "details": [
+            f"Modelled with {row.get('engine') or 'the selected engine'} on "
+            f"{row.get('n_history_periods', 0)} periods of history.",
+            accuracy_note,
+        ],
+        # Three at most: this sits beside the chart, not instead of it.
+        "figures": figures[:3],
+    }
+
+
 def _uploaded_signals_for(orchestrator: Any, snapshot_id: str
                           ) -> Tuple[List[Any], List[str]]:
     """
@@ -262,7 +438,14 @@ def create_forecast_blueprint(orchestrator: Optional[Orchestrator] = None,
         # that was refused.
         adjusted = sum(1 for row in series if row.get("signal_adjustments"))
 
+        # Per-series words, deterministic, travelling with each series so the
+        # explanation follows the chart selection without another request.
+        for row in series:
+            row["explanation"] = _series_explanation(row)
+
         return jsonify({
+            "explanation": _forecast_explanation(
+                result, horizon, project_id, response.execution_id),
             "project_id": project_id,
             "snapshot_id": snapshot_id,
             "execution_id": response.execution_id,

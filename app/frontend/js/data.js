@@ -91,6 +91,9 @@ export const FORECAST = {
   lower: [],
   seriesLabel: '',
   seriesName: '',
+  //: The selected series' own explanation, from `/api/forecast`. Deterministic
+  //: and per-series, so the words follow the chart without another request.
+  explanation: null,
   growthRate: null,
   breachMonth: null,
   breachFacility: null,
@@ -425,9 +428,20 @@ export const NETWORK_INSIGHTS = [];
 // by the evidence, with the reasoning that produced it.
 export const NETWORK_RECOMMENDATION = {
   text: '',
+  // The briefing's own framing of the result, before any single finding: what
+  // was solved, and what the shape of the answer is. Both are already grounded
+  // — numeric_grounding.py re-checks every numeric claim in them and strips
+  // anything it cannot support — so they are rendered as written, never
+  // rephrased and never recomputed from.
+  opening: '',
+  context: '',
   keyDrivers: [],
   limitation: '',
   suggestedQuestions: [],
+  // Questions whose answers would materially improve this insight, as
+  // `[{question_ref, question, impact, blocking}]`. The endpoint has always
+  // returned these; nothing read them.
+  missingInformation: [],
   evidenceCompleteness: '',
   groundingStatus: '',
   stateId: '',
@@ -522,7 +536,8 @@ export function clearDemoNarrative(keepFacilityIds = []) {
   HOME_ACTION_ITEMS.length = 0;
   NETWORK_INSIGHTS.length = 0;
   Object.assign(NETWORK_RECOMMENDATION, {
-    text: '', keyDrivers: [], limitation: '', suggestedQuestions: [],
+    text: '', opening: '', context: '',
+    keyDrivers: [], limitation: '', suggestedQuestions: [], missingInformation: [],
     evidenceCompleteness: '', groundingStatus: '', stateId: '', computedAt: null,
   });
   SCENARIO_COMPARISON_INSIGHTS.length = 0;
@@ -612,6 +627,9 @@ export function setForecastSeries({ history, forecast, capacityLine = null,
   // The human-readable name of the plotted series, when the caller supplies
   // one. The chart title said "M002/P001" — an internal key.
   FORECAST.seriesName = arguments[0]?.label || '';
+  // THIS series' own deterministic explanation, computed with it server-side.
+  // Selecting another market swaps the words with the chart, at no cost.
+  FORECAST.explanation = arguments[0]?.explanation || null;
 
   // Growth rate and the capacity-breach fields describe the demo network and
   // have no counterpart here unless the engine produced one.
@@ -737,7 +755,10 @@ export function applyInsightResponse(response) {
       text: response.recommendation || '',
       keyDrivers: response.key_drivers || [],
       limitation: response.limitation || '',
+      opening: response.opening || '',
+      context: response.context || '',
       suggestedQuestions: response.suggested_questions || [],
+      missingInformation: response.missing_information || [],
       evidenceCompleteness: response.evidence_completeness || '',
       groundingStatus: (response.grounding && response.grounding.status) || '',
       stateId: response.state_id || '',

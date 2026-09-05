@@ -514,32 +514,41 @@ class TestTheForecastScreenIsTheMockup:
 
     def test_no_forecast_recommendation_is_invented(self):
         """
-        The reasoning agent has no FORECAST scope and /api/forecast reports
-        `llm_used: false`. The card therefore shows the agent's NETWORK
-        recommendation, and says so, rather than a forecast-shaped sentence
-        nothing produced.
+        The forecast card renders the FORECAST-scoped briefing the engine
+        produced — and nothing else.
+
+        This used to assert that no such scope existed, which was true and is
+        no longer: `ReasoningScope.FORECAST` and its evidence pack exist, and
+        /api/forecast returns a grounded briefing built from the forecasting
+        engine's own figures. The rule the test protects is unchanged — the
+        page must not compose a forecast-shaped sentence of its own — so it
+        now checks that against how the page actually works.
         """
         js = _asset("js", "app.js")
-        # The scope the recommendation belongs to is stated where the page is
-        # drawn, so the next person to read it knows what they are showing.
-        doc = js[:js.index("function renderForecastPage()")]
-        doc = doc[doc.rindex("/**"):]
-        assert "no FORECAST scope" in doc, doc[-600:]
-        assert "llm_used: false" in doc
+        page = js[js.index("function renderForecastExplanation()"):]
+        page = page[:page.index("\n}\n")]
 
-        # And nothing on this page composes a recommendation of its own: the
-        # card is drawn by the Overview's renderer, off the agent's own text.
-        page = js[js.index("function renderForecastPage()"):]
-        page = page[:page.index("function renderForecastAxisNote")]
-        assert "NETWORK_RECOMMENDATION" not in page
+        # Every field is read off the server's briefing. Nothing is authored.
+        assert "meta.explanation" in page
+        assert "insightCardHtml(" in page
+        for authored in ("I recommend", "This forecast shows", "demand will"):
+            assert authored not in page, (
+                f"the forecast card composes its own narrative ({authored!r})")
 
-        html = _asset("index.html")
-        fc = html[html.index('id="tab-forecast"'):]
-        fc = fc[:fc.index("</section>")]
-        assert "reasoning agent has no FORECAST scope" in html[:html.index('id="tab-forecast"')]             or "FORECAST scope" in html[max(0, html.index('id="tab-forecast"') - 1600):
-                                        html.index('id="tab-forecast"')], (
-            "the markup should say the same thing the code does"
-        )
+        # The model is reached only when the explanation switch is on, and it
+        # is off by default. Either way the words come from the reasoning
+        # layer and are grounded; this page composes none of its own.
+        forecast_api = (pathlib.Path(app.root_path) / "api"
+                        / "forecast.py").read_text(encoding="utf-8")
+        block = forecast_api.split("def _forecast_explanation")[1].split("\ndef ")[0]
+        assert "allow_llm=explanations_llm_enabled()" in block
+        assert "ReasoningScope.FORECAST" in block
+
+        # The attention card beside it is still the NETWORK recommendation,
+        # drawn by the Overview's own renderer rather than composed here.
+        whole = js[js.index("function renderForecastPage()"):]
+        whole = whole[:whole.index("function renderForecastExplanation")]
+        assert "NETWORK_RECOMMENDATION" not in whole
 
     def test_the_axis_is_not_under_the_floating_chat_button(self):
         css = _without_comments(_asset("css", "style.css"))

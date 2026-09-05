@@ -114,6 +114,20 @@ class Conversation:
         return bool(last and last.clarity.value in
                     ("AMBIGUOUS", "INSUFFICIENT_INFORMATION"))
 
+    @property
+    def clarification_subject(self) -> Optional[str]:
+        """
+        The request a pending clarification is ABOUT.
+
+        The user's own words from the turn that could not be answered — which
+        is what has to be re-run when they pick an option, because the option
+        answers that request and is not a request of its own.
+        """
+        last = self.last_turn
+        if not self.pending_clarification or last is None:
+            return None
+        return last.user_input or None
+
 
 class ConversationStore:
     """In-memory conversation registry behind a narrow, replaceable interface."""

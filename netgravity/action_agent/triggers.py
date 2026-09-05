@@ -110,6 +110,59 @@ def on_completeness_failure(session: Any, kind: str) -> None:
     ))
 
 
+def on_data_request_raised(request: Any, *, source_id: str = "") -> str:
+    """
+    Notify the source that the orchestrator has raised a data request.
+
+    The orchestrator has already decided and RECORDED the request
+    (orchestrator/data_requests.py); this only tells the owner of the data
+    that one exists, and reports back what happened so the record can say so.
+    A dispatcher, never a second decision-maker — the same division as
+    `on_recommendation_card_created`.
+
+    Returns one of "notified" | "no_contact", and never raises: a failed
+    notification must not lose the request that has already been recorded.
+    """
+    storage = _storage()
+    contacts = SourceContactStore(storage)
+    contact = contacts.get(source_id or request.subject_id)
+    if contact is None or not contact.email:
+        logger.warning(
+            "on_data_request_raised: no source contact for subject_id=%s — "
+            "the request stands, but there is nobody to ask",
+            request.subject_id)
+        return "no_contact"
+
+    resume_link = _resume_link(request.subject_id)
+    missing = list(request.fields)
+    if request.tier == "required":
+        content = email_builder.build_required_missing_email(
+            source_name=request.subject_id,
+            upload_date=request.requested_at[:10],
+            file_name="your uploaded data",
+            contact_name=contact.label or "there",
+            missing_required=missing, resume_link=resume_link,
+            ingestion_session_id=request.subject_id,
+        )
+        trigger_type = "required_data"
+    else:
+        content = email_builder.build_optional_missing_email(
+            source_name=request.subject_id, contact_name=contact.label or "there",
+            missing_optional=missing, resume_link=resume_link,
+            ingestion_session_id=request.subject_id,
+        )
+        trigger_type = "optional_data"
+
+    result = get_sender().send(to=[contact.email], subject=content.subject,
+                               body=content.body, reply_to=content.reply_to)
+    DispatchLogStore(storage).record(DispatchRecord(
+        trigger_type=trigger_type, reference_id=request.request_id,
+        recipients=[contact.email], subject=content.subject,
+        result="stubbed" if result.stubbed else ("failed" if result.failed else "sent"),
+    ))
+    return "notified"
+
+
 def _briefing_text(context: Any) -> tuple:
     """
     Pull already-grounded headline/narrative text off an ExecutionContext.

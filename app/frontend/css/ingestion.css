@@ -2665,3 +2665,86 @@
   #ingestion-page .ing-footer-row { flex-direction: column; align-items: stretch; }
   #ingestion-page .ing-footer-row .proj-btn-primary { justify-content: center; }
 }
+
+/* ═══════════════════════════════════════════════════════════
+   MISSING-DATA OPPORTUNITY  (js/missing-data-card.js)
+   Explanation -> why it matters -> supporting facts -> one action.
+   Nothing here is styled per field; there is one card per tier and one
+   row per missing field, whatever those turn out to be.
+   ═══════════════════════════════════════════════════════════ */
+.ing-gap-card {
+  border: 1px solid var(--proj-border-soft, #e6e8ee);
+  border-left: calc(3 * var(--u)) solid var(--text-3, #9aa1ad);
+  border-radius: calc(12 * var(--u));
+  background: var(--proj-surface, #ffffff);
+  padding: calc(16 * var(--u)) calc(20 * var(--u));
+  margin-top: calc(16 * var(--u));
+}
+.ing-gap-card.tone-required { border-left-color: #dc2626; }
+.ing-gap-card.tone-optional { border-left-color: #d08700; }
+
+.ing-gap-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(12 * var(--u));
+  margin-bottom: calc(10 * var(--u));
+}
+.ing-gap-card-title {
+  font-size: calc(12 * var(--u));
+  font-weight: 600;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+  color: var(--text-2, #4b5563);
+}
+.ing-gap-card-count { font-size: calc(12 * var(--u)); color: var(--text-3, #9aa1ad); }
+
+.ing-gap-row + .ing-gap-row {
+  margin-top: calc(12 * var(--u));
+  padding-top: calc(12 * var(--u));
+  border-top: 1px solid var(--border-light, #eceef2);
+}
+.ing-gap-headline {
+  font-size: calc(14 * var(--u));
+  font-weight: 600;
+  color: var(--text-1, #101418);
+}
+.ing-gap-why {
+  font-size: calc(13 * var(--u));
+  color: var(--text-2, #4b5563);
+  margin-top: calc(3 * var(--u));
+}
+.ing-gap-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(6 * var(--u)) calc(10 * var(--u));
+  margin-top: calc(8 * var(--u));
+}
+.ing-gap-fact {
+  font-size: calc(12 * var(--u));
+  color: var(--text-3, #9aa1ad);
+}
+/* A middot between facts, not before the first — reads as one line of
+   supporting detail rather than a bulleted list. */
+.ing-gap-fact + .ing-gap-fact::before { content: '· '; }
+
+.ing-gap-actions {
+  display: flex;
+  align-items: center;
+  gap: calc(12 * var(--u));
+  margin-top: calc(14 * var(--u));
+  flex-wrap: wrap;
+}
+.ing-gap-request-btn {
+  border: 1px solid var(--proj-border-soft, #e6e8ee);
+  border-radius: calc(8 * var(--u));
+  background: var(--proj-surface, #ffffff);
+  color: var(--text-1, #101418);
+  font-size: calc(12.5 * var(--u));
+  font-weight: 600;
+  padding: calc(7 * var(--u)) calc(14 * var(--u));
+  cursor: pointer;
+}
+.ing-gap-request-btn:hover:not(:disabled) { background: var(--bg-hover, #f5f6f8); }
+.ing-gap-request-btn:disabled { opacity: .55; cursor: default; }
+.ing-gap-status { font-size: calc(12 * var(--u)); color: var(--text-2, #4b5563); }

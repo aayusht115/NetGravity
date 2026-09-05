@@ -37,6 +37,7 @@ from netgravity.orchestrator.agents.intent_agent import (
     _MARKET_UP_WORDS,
 )
 from netgravity.orchestrator.agents.external_signal_agent import ExternalSignalAgent
+from netgravity.orchestrator.conversation import priorities
 from netgravity.orchestrator.conversation.entity_resolver import EntityResolver
 from netgravity.orchestrator.exceptions import LLMFailureError
 from netgravity.orchestrator.schemas.conversation import (
@@ -219,6 +220,37 @@ _MARKET_BUCKETS = {
               "tariff", "duty", "customs", "gst", "excise", "levy",
               "exchange rate", "currency", "rupee", "forex", "fx"),
 }
+
+
+#: Intents that ask the system to CHOOSE a network, rather than to report one
+#: or to evaluate a change the user has already specified. Only these can be
+#: ambiguous about what to optimise for: "what if we close Delhi" states the
+#: change, and "how many DCs do we have" states no objective to have.
+#:
+#: A set, not a condition, so adding SCENARIO_COMPARISON later is one entry.
+_PRIORITY_BEARING_INTENTS = frozenset({
+    Intent.OPTIMIZATION_REQUEST,
+})
+
+
+#: How an answer to each kind of question is applied to the request it was
+#: asked about. A registry, so a kind with no entry falls through to asking
+#: again rather than silently running under an answer nothing understood.
+_CLARIFICATION_RESUMERS = {
+    AmbiguityKind.UNSTATED_PRIORITY: priorities.apply_priority_answer,
+}
+
+
+def apply_clarification_answer(intent, option_id: str):
+    """
+    Resume a clarified request with the option the user picked.
+
+    The intent handed in is the ORIGINAL request, re-understood — so it
+    carries the same ambiguity that produced the question, and applying the
+    answer here is what turns it back into something runnable.
+    """
+    resumer = _CLARIFICATION_RESUMERS.get(intent.ambiguity)
+    return resumer(intent, option_id) if resumer else intent
 
 
 def _bucket_for(subject: str) -> str:
@@ -449,13 +481,15 @@ class ConversationalNLU:
             scenarios = self._scenarios_for(text, resolved_ids)
 
         # ---- intent-level ambiguity ---------------------------------------
-        ambiguity = self._detect_intent_ambiguity(text, intent, scenarios, resolved_ids)
+        ambiguity = self._detect_intent_ambiguity(
+            text, intent, scenarios, resolved_ids, network)
         if ambiguity is not None:
             return self._with_clarification(
                 intent, ambiguity, mentions, resolved_ids, conversation_id,
                 source, confidence, raw,
                 mentions_capacity=any(w in f" {text.lower()} "
                                       for w in ("capacity", "throughput")),
+                network=network,
             )
 
         external_event = self._extract_event(text, intent, network, resolved_ids)
@@ -466,6 +500,7 @@ class ConversationalNLU:
             intent=intent,
             clarity=IntentClarity.CLEAR,
             ambiguity=AmbiguityKind.NONE,
+            optimisation_priority=priorities.stated_priority(text),
             mentions=mentions,
             resolved_entity_ids=resolved_ids,
             scenario_overrides=scenarios,
@@ -716,6 +751,7 @@ class ConversationalNLU:
         intent: Intent,
         scenarios: List[ScenarioIntentSpec],
         resolved_ids: List[str],
+        network: Optional[CanonicalNetwork] = None,
     ) -> Optional[AmbiguityKind]:
         """
         Decide whether the ACTION is unclear, given a resolved entity.
@@ -763,6 +799,18 @@ class ConversationalNLU:
         # worth asking rather than a failure worth reporting.
         if intent == Intent.UNKNOWN and resolved_ids:
             return AmbiguityKind.AMBIGUOUS_INTENT
+
+        # "Optimise my network." — optimised for what?
+        #
+        # Asked only when three things hold: the request is a design choice,
+        # the user named no priority, and there is more than one lever to
+        # choose between. That last one is why most networks are never asked:
+        # the solver always solves for cost, and carbon is only a real
+        # alternative when the data prices it. One option is not a choice.
+        if intent in _PRIORITY_BEARING_INTENTS and \
+                priorities.stated_priority(text) is None and \
+                priorities.worth_asking(network, getattr(network, "config", None)):
+            return AmbiguityKind.UNSTATED_PRIORITY
 
         return None
 
@@ -1087,10 +1135,24 @@ class ConversationalNLU:
         raw: Optional[str],
         *,
         mentions_capacity: bool = True,
+        network: Optional[CanonicalNetwork] = None,
     ) -> ConversationalIntent:
         target = resolved_ids[0] if resolved_ids else "that facility"
 
-        if kind == AmbiguityKind.AMBIGUOUS_INTENT:
+        if kind == AmbiguityKind.UNSTATED_PRIORITY:
+            # Options come from the registry, filtered to what can bite on THIS
+            # network — never a fixed list written here. A lever with no basis
+            # in the data (a carbon objective with no carbon price or cap) is
+            # not offered, because choosing it would change nothing.
+            levers = priorities.available_levers(network, getattr(network, "config", None))
+            clarification = ClarificationRequest(
+                kind=kind,
+                question=priorities.clarification_question(levers),
+                options=priorities.clarification_options(levers),
+                missing_parameter="optimisation_priority",
+            )
+            clarity = IntentClarity.INSUFFICIENT_INFORMATION
+        elif kind == AmbiguityKind.AMBIGUOUS_INTENT:
             clarification = ClarificationRequest(
                 kind=kind,
                 question=(

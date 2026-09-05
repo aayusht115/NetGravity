@@ -69,6 +69,10 @@ from netgravity.orchestrator.schemas.requests import (
 
 logger = logging.getLogger(__name__)
 
+from netgravity.orchestrator.explanation_llm import (  # noqa: E402
+    explanations_llm_enabled,
+)
+
 #: Scopes a caller may ask for. `COMPARISON` is deliberately absent: it needs a
 #: second state, which is the scenario comparison endpoint's job.
 _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
@@ -90,7 +94,7 @@ _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
 #:   3  the SLA insight no longer describes unserved demand as "served late",
 #:      and a cost COMPONENT names the horizon it covers rather than being
 #:      labelled "per period" on a multi-period solve
-_PAYLOAD_VERSION = 3
+_PAYLOAD_VERSION = 4
 
 
 #: Theme -> the per-facility field that theme is ABOUT. A chart for a finding
@@ -417,12 +421,53 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
         chosen = sorted(refs, key=rank)[-1]
         return snapshot_id, orchestrator.twin.materialize(chosen.state_id)
 
+    def _reference_kpis(state: Any) -> Dict[str, Any]:
+        """
+        The network re-solved with the freedom a scenario has.
+
+        Reuses the scenario API's cached reference — one solve per snapshot,
+        shared — rather than running a second one here. Returns {} when it is
+        unavailable, and the briefing then simply does not make the footprint
+        comparison rather than guessing at it.
+        """
+        try:
+            from app.backend.api.scenarios import optimised_reference_for
+
+            return optimised_reference_for(
+                state.snapshot_id, g.current_user.user_id) or {}
+        except Exception as exc:  # noqa: BLE001 — the briefing still stands
+            logger.warning("insights.reference_unavailable: %s", exc)
+            return {}
+
+    def _missing_data_for(project_id: str) -> Dict[str, Any]:
+        """
+        The completeness gaps for the data these results were produced from.
+
+        Read, never recomputed: the report was measured at review time and
+        carried across the commit (`dataset_store.record_commit`). Empty when
+        there is none, which is a real answer.
+        """
+        try:
+            from app.backend.services.dataset_store import dataset_store
+
+            committed = dataset_store.committed(project_id) or {}
+            report = committed.get("completeness")
+            if not report:
+                report = (dataset_store.preview(project_id) or {}).get("completeness")
+            return report or {}
+        except Exception as exc:  # noqa: BLE001 — the briefing still stands
+            logger.warning("insights.missing_data_unavailable: %s", exc)
+            return {}
+
     def _briefing_for(state: Any, scope: ReasoningScope,
                       entity_id: Optional[str], question: str,
                       allow_llm: bool) -> Any:
         """Returns `(ReasoningResult, ReasoningEvidencePack)`."""
         from netgravity.orchestrator.reasoning.evidence import (
-            build_evidence_pack, twin_reasoning_payload, with_policy_thresholds,
+            build_evidence_pack,
+            twin_reasoning_payload,
+            with_optimised_reference,
+            with_policy_thresholds,
         )
 
         # Wrapped, not called bare. `with_policy_thresholds` exists precisely so
@@ -434,6 +479,11 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
         # a policy constant it does not own.
         payload = with_policy_thresholds(twin_reasoning_payload(
             state, scope=scope, entity_id=entity_id, comparison=None))
+        # Pair the network AS IT RUNS with the same network re-solved freely.
+        # Only at NETWORK scope: a facility or lane briefing is about one node,
+        # and the footprint question is not asked there.
+        if scope is ReasoningScope.NETWORK:
+            payload = with_optimised_reference(payload, _reference_kpis(state))
         unavailable = {
             item.field: {"status": item.status.value, "reason": item.reason}
             for item in state.unavailable
@@ -459,6 +509,11 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
             scope=scope,
             entity_id=entity_id,
             user_question=question,
+            # One request, whatever the environment selects. The agent runtime
+            # reaches the model once per metric it decides to cite, which is
+            # an agent loop rather than a request — and this endpoint's answer
+            # is cached per state, so it is spent once per analysis.
+            single_request=True,
         )
         return result, pack
 
@@ -497,16 +552,33 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
             raise ValidationError(f"scope={scope_arg} requires an entity_id.")
 
         question = str(request.args.get("question") or "")[:1000]
-        allow_llm = request.args.get("use_llm") == "1"
+        # The switch decides; `use_llm=1` remains as a per-request override so
+        # one briefing can be tried live without turning the deployment on.
+        #
+        # It was the ONLY way in, and no frontend caller passed it — so the
+        # reasoning layer was permanently deterministic no matter how it was
+        # configured.
+        # TWO different reasons the model might be used, and they cache
+        # differently.
+        #
+        #   a configured TEXT_API_TOKEN — the standing mode for every caller.
+        #       The answer is the same for all of them, so it caches like any
+        #       other briefing.
+        #   ?use_llm=1 — an ad-hoc one-off. Not cached: it is a request about
+        #       this request, and may carry a question with it.
+        per_request_llm = request.args.get("use_llm") == "1"
+        allow_llm = per_request_llm or explanations_llm_enabled()
         scope = ReasoningScope(scope_arg)
 
         payload = _briefing_analysis(project_id, scope_arg, scope, entity_id,
-                                     question, allow_llm)
+                                     question, allow_llm,
+                                     per_request_llm=per_request_llm)
         return jsonify(payload), 200
 
     def _briefing_analysis(project_id: str, scope_arg: str, scope: ReasoningScope,
                            entity_id: Optional[str], question: str,
-                           allow_llm: bool) -> Dict[str, Any]:
+                           allow_llm: bool,
+                           per_request_llm: bool = False) -> Dict[str, Any]:
         """
         The briefing for one scope, cached per network version.
 
@@ -521,10 +593,16 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
         snapshot_id = project_registry.snapshot_for(project_id, user_id=user_id)
         snapshot = orchestrator.snapshots.get(snapshot_id)
 
-        # A question or a model call makes the answer specific to this request,
-        # so neither is cached: an ad-hoc question must not be served to the next
-        # caller who asks a different one.
-        cacheable = not question and not allow_llm
+        # A question, or an ad-hoc model call, makes the answer specific to
+        # this request, so neither is cached: an ad-hoc question must not be
+        # served to the next caller who asks a different one.
+        #
+        # NOT `allow_llm`. That was right when the only way to reach a model
+        # was `?use_llm=1`; once a configured token could set it too, this
+        # line disabled the cache for every caller — so every view of
+        # Optimized Results spent a model request, which is exactly the rule
+        # the explanation store exists to keep.
+        cacheable = not question and not per_request_llm
         # The payload SHAPE is part of the cache key, not just the network.
         #
         # A cached briefing is invalidated when the network changes
@@ -588,6 +666,12 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 "suggested_questions": list(briefing.suggested_questions),
                 "missing_information": [m.model_dump(mode="json")
                                         for m in briefing.missing_information],
+                # What the UPLOAD did not contain, beside what the RESULTS
+                # mean. Both belong to one analysis, so they come from one
+                # response: a screen showing "here is what your network costs"
+                # and "here is what would make that number better" should not
+                # have to ask twice.
+                "missing_data": _missing_data_for(project_id),
                 "evidence_completeness": briefing.evidence_completeness.value,
                 # Whether the narrative's numbers were checked against the
                 # deterministic results, and what failed if any did. A consumer

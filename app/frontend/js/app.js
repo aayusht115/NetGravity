@@ -41,6 +41,11 @@ import { initIngestion } from './ingestion.js';
 import { initChatbot } from './chatbot.js';
 import { apiClient } from './integration/api-client.js';
 import { initActions } from './actions.js';
+import {
+  bindMissingDataCards, missingDataCardsHtml,
+} from './missing-data-card.js';
+import { ingestionService } from './integration/services/ingestion-service.js';
+import { bindInsightCards, insightCardHtml } from './insight-card.js';
 import { showInfoPanel, signOut } from './workspace-chrome.js';
 import { getActiveProjectId, setActiveProject } from './integration/project-context.js';
 import { loadIdentity, getCurrentUser } from './identity.js';
@@ -213,6 +218,9 @@ window.addEventListener('forecastSeriesLoaded', () => {
   try { renderForecastChart('chart-forecast'); } catch (err) { }
   try { renderForecastChart('chart-forecast-home'); } catch (err) { }
   try { renderForecastSummary(); } catch (err) { }
+  // The forecast's own briefing arrives with the same response, so it is
+  // written when the numbers it explains are.
+  try { renderForecastExplanation(); } catch (err) { }
   // Home's forecast sentence is derived from the same series, so it has to be
   // rewritten when the series arrives — otherwise it keeps whatever it said
   // before the engine answered.
@@ -291,14 +299,10 @@ function renderForecastSummary() {
  * `renderHomeAttentionFeed` both take the element they draw into. Nothing on
  * this page computes a finding, a figure or a recommendation of its own.
  *
- * On the recommendation: the reasoning agent has no FORECAST scope
- * (netgravity/orchestrator/schemas/reasoning.py lists NETWORK, FACILITY,
- * LANE, SCENARIO, COMPARISON, RESILIENCE, INGESTION) and `/api/forecast` is
- * deterministic — its own provenance block reports `llm_used: false`. So
- * there is no forecast-specific recommended action to integrate, and what
- * this card shows is the agent's NETWORK recommendation, labelled as one.
- * Inventing a forecast-shaped sentence to fill the space would be writing a
- * recommendation the engine never made.
+ * The attention card still shows the agent's NETWORK recommendation, labelled
+ * as one. The FORECAST-scoped briefing — what this forecast says and how far
+ * it can be trusted — is its own card under the chart, next to the numbers it
+ * explains. See `renderForecastExplanation`.
  */
 function renderForecastPage() {
   renderOverviewAlert('fc-alert');
@@ -306,9 +310,63 @@ function renderForecastPage() {
   renderHomeSignals('fc-signals-row');
   renderAnalysisTimestamp();
   renderForecastSummary();
+  renderForecastExplanation();
   renderDataIntelligence();
   wireForecastPage();
   requestAnimationFrame(() => sizePageToWindow('.fc-main', '--fc-main-top'));
+}
+
+/**
+ * What the forecast says, and how confident it is.
+ *
+ * The briefing is FORECAST-scoped and produced by the same reasoning path
+ * every other scope uses — evidence pack, deterministic template, then
+ * `numeric_grounding`, which re-checks every numeric claim and strips
+ * anything it cannot source. It is rendered as written.
+ *
+ * It deliberately does not say WHY demand moves: nothing in
+ * netgravity/forecasting/ computes a cause, and a sentence claiming one
+ * would be the invention this whole architecture exists to prevent.
+ */
+function renderForecastExplanation() {
+  const el = document.getElementById('fc-explanation');
+  if (!el) return;
+
+  const meta = window.__ngForecastMeta || null;
+  const overall = (meta && meta.explanation) || null;
+  const series = FORECAST && FORECAST.explanation;
+
+  if (!overall && !series) { el.innerHTML = ''; return; }
+
+  // ONE card, about the series on screen. The run-wide reading is context
+  // and sits in the collapsed detail — it was a second full card saying
+  // roughly the same thing, and the AI's own paragraph was being printed
+  // twice besides, once as the opening and again as the first insight.
+  const card = (overall && overall.card) || {};
+  const runDetails = [
+    card.headline, card.meaning, card.warning,
+    ...(card.details || []),
+  ].filter(Boolean);
+
+  el.innerHTML = insightCardHtml({
+    headline: (series && series.headline) || card.headline || '',
+    meaning: (series && series.narrative) || card.meaning || '',
+    // The run-wide warning applies to the whole forecast, so it stays
+    // visible whichever series is selected.
+    warning: card.warning || '',
+    next_step: card.next_step || '',
+    // The SELECTED series' own numbers — they change with the chart.
+    figures: (series && series.figures) || card.figures || [],
+    details: runDetails,
+    source: card.source || 'template',
+    cached: Boolean(overall && overall.cached),
+  }, {
+    title: 'Demand forecast',
+    subtitle: (FORECAST && FORECAST.seriesName) || (FORECAST && FORECAST.seriesLabel) || '',
+    showProvenance: true,
+    formatCurrency,
+  });
+  bindInsightCards(el);
 }
 
 /**
@@ -524,6 +582,9 @@ function renderForecastSeriesSelect() {
       if (!selectForecastSeries(select.value)) return;
       renderForecastChart('chart-forecast');
       renderForecastSummary();
+      // The words have to follow the chart. Without this the pane kept
+      // discussing whichever market was selected first.
+      renderForecastExplanation();
     });
     // The title has to fit its own text: a select sized to the longest option
     // makes the heading as wide as the widest market name in the catalogue.
@@ -909,6 +970,9 @@ function initTabs() {
     // dashboard behind it went on showing the previous figures as though
     // nothing were happening.
     beginAnalysisLoading(project.name || 'this project', true);
+    // A re-analysis may have run on re-uploaded data, so the completeness
+    // record is re-read rather than served from the last paint.
+    invalidateMissingDataOpportunity();
     import('./integration/hydrate.js')
       .then((m) => m.hydrateFromBackend(project.id, reportAnalysisStage))
       .then(() => { endAnalysisLoading(); })
@@ -1430,11 +1494,76 @@ function renderHome() {
   renderHomeForecast();
   renderHomeDigitalTwin();
   renderHomeAttentionFeed();
+  renderMissingDataOpportunity();
   renderHomeSignals();
   renderAnalysisTimestamp();
   // After the head row has its final text, so the measurement is of the head
   // that is actually on screen.
   requestAnimationFrame(sizeOverviewToWindow);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OVERVIEW — missing-data opportunity
+   ═══════════════════════════════════════════════════════════════ */
+//: The completeness report and the requests already raised against it, as the
+//: server last returned them. Cached because the card re-renders on every
+//: Home paint and the report only changes when the dataset does.
+let missingDataState = { completeness: null, requests: [], loadedFor: null };
+
+/**
+ * What the analysis on this page was missing, and how to ask for it.
+ *
+ * On Optimized Results rather than on the upload screen: a field the file did
+ * not carry is an observation about the answer above it. During upload there
+ * is no answer yet, so the same card is an interruption; here it is the
+ * reason a number could be better.
+ *
+ * Renders nothing at all when nothing is missing — an empty card that says
+ * "no gaps" is a card asking to be ignored.
+ */
+async function renderMissingDataOpportunity() {
+  const el = document.getElementById('ov-missing-data');
+  if (!el) return;
+
+  const projectId = (window.getCurrentProject && window.getCurrentProject()?.id) || null;
+  if (!projectId) { el.innerHTML = ''; return; }
+
+  if (missingDataState.loadedFor !== projectId) {
+    try {
+      const record = await ingestionService.getDataset(projectId);
+      missingDataState = {
+        completeness: (record && record.completeness) || null,
+        requests: (record && record.data_requests) || [],
+        loadedFor: projectId,
+      };
+    } catch (err) {
+      // A gap in the audit record is not a reason to break the results page.
+      console.warn('could not read dataset completeness:', err);
+      missingDataState = { completeness: null, requests: [], loadedFor: projectId };
+    }
+  }
+
+  el.innerHTML = missingDataCardsHtml(
+    missingDataState.completeness, requestStateByTier(missingDataState.requests));
+  bindMissingDataCards(el, async (tier) => {
+    const res = await ingestionService.requestMissingData(tier, projectId);
+    missingDataState.requests = [
+      ...missingDataState.requests.filter((r) => r.tier !== tier), res,
+    ];
+    return res;
+  });
+}
+
+/** Standing requests, keyed by tier, in the shape the card reads. */
+function requestStateByTier(requests) {
+  const out = {};
+  (requests || []).forEach((r) => { if (r && r.tier) out[r.tier] = r; });
+  return out;
+}
+
+/** Force a re-read of the completeness record — used after a re-analysis. */
+function invalidateMissingDataOpportunity() {
+  missingDataState = { completeness: null, requests: [], loadedFor: null };
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -2177,6 +2306,8 @@ if (typeof window !== 'undefined') {
   // a network, and a facility id can legitimately repeat across two of them.
   window.addEventListener('networkModelCleared', () => {
     requestedFacilityInsights.clear();
+    // The completeness record belongs to the dataset that was just dropped.
+    invalidateMissingDataOpportunity();
   });
 }
 

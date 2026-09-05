@@ -74,6 +74,11 @@ class AmbiguityKind(str, Enum):
     UNKNOWN_ENTITY     = "UNKNOWN_ENTITY"      # no such facility
     MISSING_PARAMETER  = "MISSING_PARAMETER"   # "reduce capacity" — by how much?
     UNSUPPORTED_ACTION = "UNSUPPORTED_ACTION"
+    # "optimise my network" — optimised for WHAT? Cost, carbon and resilience
+    # give different networks, and picking one silently would answer a
+    # question the user did not ask. The options come from
+    # conversation/priorities.py, which offers only levers the MILP implements.
+    UNSTATED_PRIORITY  = "UNSTATED_PRIORITY"
 
 
 class EntityKind(str, Enum):
@@ -264,6 +269,13 @@ class ConversationalIntent(BaseModel):
     clarity: IntentClarity = IntentClarity.CLEAR
     ambiguity: AmbiguityKind = AmbiguityKind.NONE
     clarification: Optional[ClarificationRequest] = None
+
+    #: Which optimisation lever the user stated, when they stated one. An
+    #: `OptimisationLever.id` from conversation/priorities.py — carried through
+    #: to the solver's OptimizationConfig, so answering the UNSTATED_PRIORITY
+    #: question changes the network that comes back rather than only the
+    #: wording of the reply.
+    optimisation_priority: Optional[str] = None
 
     #: Everything the user referred to, resolved or not.
     mentions: List[EntityMention] = Field(default_factory=list)
@@ -471,6 +483,14 @@ class ChatTurn(BaseModel):
 class ChatRequest(BaseModel):
     """Inbound user message."""
     message: str
+    #: The id of a `ClarificationRequest` option the user chose.
+    #:
+    #: Set when the user answers a question by PICKING one of the offered
+    #: options rather than typing. It resumes the request the question was
+    #: asked about, instead of being read as a fresh one: "Lowest cost" on its
+    #: own is not an instruction, and interpreting it as one is how answering
+    #: a clarification ends up running nothing.
+    clarification_option: Optional[str] = None
     conversation_id: Optional[str] = None
     #: Pin to a snapshot, exactly as `OrchestratorRequest` does.
     network_snapshot_id: Optional[str] = None

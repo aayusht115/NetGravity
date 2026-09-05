@@ -36,7 +36,10 @@ from typing import Any, Dict, List, Optional
 
 from netgravity.orchestrator.audit import events
 from netgravity.orchestrator.conversation.entity_resolver import EntityResolver
-from netgravity.orchestrator.conversation.nlu import ConversationalNLU
+from netgravity.orchestrator.conversation.nlu import (
+    ConversationalNLU,
+    apply_clarification_answer,
+)
 from netgravity.orchestrator.conversation.store import ConversationStore
 from netgravity.orchestrator.exceptions import LLMFailureError, OrchestratorError
 from netgravity.orchestrator.schemas.actions import FinalResponse
@@ -118,10 +121,22 @@ class ChatService:
         )
         snapshot = self.orchestrator.snapshots.get(snapshot_id)
 
+        # ---- RESUME, when this message ANSWERS a question we asked --------
+        #
+        # A picked option is not a request. "Lowest cost" on its own means
+        # nothing to the NLU, and reading it as a fresh message is how
+        # answering a clarification ends up running nothing at all. So the
+        # request the question was asked ABOUT is what gets re-run, with the
+        # answer applied to it.
+        resumed_from = None
+        if request.clarification_option:
+            resumed_from = conversation.clarification_subject
+        message = resumed_from or request.message
+
         # ---- UNDERSTAND -------------------------------------------------
         try:
             intent = self.nlu.understand(
-                request.message,
+                message,
                 snapshot.network,
                 conversation_id=cid,
                 allow_llm=not request.disable_llm,
@@ -182,9 +197,16 @@ class ChatService:
             )
             return self._clarification_response(cid, turn_id, intent, started)
 
+        # Re-understanding the original request reproduces the same ambiguity
+        # deterministically, so the answer is applied to it here — before the
+        # clarify gate below, which would otherwise ask the same question again.
+        if request.clarification_option and intent.needs_clarification:
+            intent = apply_clarification_answer(
+                intent, request.clarification_option)
+
         # ---- CLARIFY (do not guess) --------------------------------------
         if intent.needs_clarification:
-            return self._clarification_response(cid, turn_id, intent, started)
+            return self._clarification_response(cid, turn_id, intent, started, message)
 
         if intent.clarity == IntentClarity.UNSUPPORTED or not intent.is_actionable:
             return self._unsupported_response(cid, turn_id, intent,
@@ -198,7 +220,7 @@ class ChatService:
 
         # ---- TRANSLATE and hand over -------------------------------------
         orchestrator_request = self._to_orchestrator_request(
-            intent, request, snapshot_id,
+            intent, request, snapshot_id, message=message,
         )
         try:
             final = self.orchestrator.run_sync(orchestrator_request)
@@ -222,6 +244,7 @@ class ChatService:
         intent: ConversationalIntent,
         request: ChatRequest,
         snapshot_id: str,
+        message: Optional[str] = None,
     ) -> OrchestratorRequest:
         """
         Build the request the orchestrator already understands.
@@ -253,7 +276,9 @@ class ChatService:
 
         return OrchestratorRequest(
             request_id=request.request_id or str(uuid.uuid4()),
-            input=request.message,
+            # The request being answered, which is not the same string as the
+            # message when an option was picked.
+            input=message or request.message,
             explicit_intent=intent.intent,
             explicit_scenarios=list(intent.scenario_overrides),
             external_signal=external_signal,
@@ -270,6 +295,11 @@ class ChatService:
                 "intent_source": intent.source,
                 "intent_confidence": intent.confidence,
                 "resolved_entity_ids": list(intent.resolved_entity_ids),
+                # What the user said to optimise for, when they said. Read by
+                # ExecutionContext.from_request and applied to the solver's
+                # config — so answering the UNSTATED_PRIORITY question changes
+                # the network that comes back, not just the wording.
+                "optimisation_priority": intent.optimisation_priority or "",
             },
         )
 
@@ -622,6 +652,7 @@ class ChatService:
         turn_id: str,
         intent: ConversationalIntent,
         started: float,
+        user_input: str = "",
     ) -> ChatResponse:
         assert intent.clarification is not None
         logger.info(
@@ -642,7 +673,8 @@ class ChatService:
             status="AWAITING_CLARIFICATION",
             duration_seconds=round(time.perf_counter() - started, 4),
         )
-        self._record_turn_minimal(conversation_id, intent, response)
+        # The request this question is ABOUT, so answering it can resume it.
+        self._record_turn_minimal(conversation_id, intent, response, user_input)
         return response
 
     def _unsupported_response(
@@ -743,10 +775,21 @@ class ChatService:
         conversation_id: str,
         intent: ConversationalIntent,
         response: ChatResponse,
+        user_input: str = "",
     ) -> None:
+        """
+        Record a turn that ran no execution.
+
+        `user_input` is recorded for a turn that ASKED SOMETHING, because the
+        answer has to be applied back to it. It was unconditionally blank, so
+        a clarification remembered the question it asked and not the request it
+        asked about — and picking an option then re-ran the option's own words
+        ("Most resilient"), which the NLU reads as a resilience query rather
+        than as the optimisation the user had actually asked for.
+        """
         self.store.append(conversation_id, ChatTurn(
             turn_id=response.turn_id,
-            user_input="",
+            user_input=user_input,
             intent=intent.intent,
             clarity=intent.clarity,
             resolved_entity_ids=list(intent.resolved_entity_ids),

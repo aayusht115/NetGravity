@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from netgravity.ingestion.schemas.content import ContentType
+from netgravity.schemas.network import parse_facility_status
 
 # ---------------------------------------------------------------------------
 # Field registries — plain data, not prompts.
@@ -37,6 +38,8 @@ from netgravity.ingestion.schemas.content import ContentType
 # a planner would not recognise.
 # ---------------------------------------------------------------------------
 
+#: Used where a spec applies to any facility, whatever its role.
+ENTITY_FACILITY = "Facility"
 ENTITY_SUPPLY = "Supply Location"
 ENTITY_DC = "Candidate DC"
 ENTITY_DEMAND_ZONE = "Demand Zone"
@@ -49,6 +52,12 @@ ENTITY_LANE = "Lane"
 #: network-design use case and the same uppercase role convention
 #: adapters/structured.py already checks role_raw against.
 _SUPPLY_ROLES = {"SUPPLIER", "PLANT"}
+
+#: `FacilityStatus` members as plain strings, so a spec can name one without
+#: this module importing the solver's schema into its registry declarations.
+STATUS_EXISTING = "EXISTING"
+STATUS_CANDIDATE = "CANDIDATE"
+STATUS_CLOSED = "CLOSED"
 
 
 @dataclass(frozen=True)
@@ -78,6 +87,37 @@ class OptionalFieldSpec:
     #: Special-cased: satisfied by contracts being present at all, not by a
     #: tabular column. See check_completeness(has_contracts=...).
     satisfied_by_contracts: bool = False
+    #: Only for FACILITY rows: which role-bucket this spec applies to
+    #: ("supply" or "dc"), same meaning as RequiredFieldSpec.role_bucket.
+    #:
+    #: Set it when the field is meaningless for the other bucket. A scoped
+    #: spec is checked ROW BY ROW inside its bucket and names the entities
+    #: that are missing it, instead of the dataset-wide "is this key
+    #: anywhere" check an unscoped spec gets. A dataset with no rows in the
+    #: bucket at all is not flagged — there is nothing there to be missing.
+    role_bucket: Optional[str] = None
+    #: Check this field ROW BY ROW even with no role/status filter, naming the
+    #: rows that lack it.
+    #:
+    #: The default dataset-wide check asks "is this key anywhere", which is
+    #: right for a field that describes the network (a carbon factor, a rate
+    #: card) and wrong for one that describes each row. One facility stating a
+    #: status satisfied the whole file, so a mixed upload — Delhi EXISTING,
+    #: Mumbai blank — reported no gap, and Mumbai was then invisible to the
+    #: status-scoped checks below as well. It fell through everything.
+    per_entity: bool = False
+    #: Entity noun for the report, when the role bucket does not supply one.
+    entity_type: Optional[str] = None
+    #: Only for FACILITY rows: which `FacilityStatus` this spec applies to.
+    #:
+    #: A SECOND, independent filter, because role and status answer different
+    #: questions. `role_bucket` separates the supply side from the
+    #: distribution side; this separates a site that exists from one that is
+    #: only proposed. Opening cost needs both: it is meaningless for a plant
+    #: AND meaningless for a warehouse already operating, and conflating the
+    #: two reported every existing warehouse as missing a cost it will never
+    #: incur.
+    facility_status: Optional[str] = None
 
 
 REQUIRED_FIELDS: List[RequiredFieldSpec] = [
@@ -120,6 +160,34 @@ OPTIONAL_FIELDS: List[OptionalFieldSpec] = [
     OptionalFieldSpec("lane_capacity", "Lane / Route Capacity Limit (units/day)",
                       "units/day", "would let us flag routes that can't carry the flow",
                       ContentType.LANE),
+    # Optional, not required: a candidate without it still solves. But it
+    # solves on a defaulted 0.0 (adapters/structured.py), and the MILP
+    # objective prices opening cost for candidates (milp.py opening_cost_term)
+    # — so an absent column makes building a new DC look free, quietly biasing
+    # the solver toward opening one.
+    # Ranked above opening cost deliberately: without it, nothing below can
+    # tell an operating warehouse from a proposed one, and the two assemblers
+    # in this codebase default it in OPPOSITE directions (EXISTING in
+    # adapters/structured.py, CANDIDATE in network_assembler.py). Which one a
+    # dataset gets is not something a planner should discover from the answer.
+    OptionalFieldSpec("status", "Facility Status (existing or proposed)", "",
+                      "would let us tell the sites you already operate from the "
+                      "ones you are considering, instead of assuming",
+                      ContentType.FACILITY,
+                      # Per ROW: one facility stating a status says nothing
+                      # about the one beside it, and a row with no status is
+                      # invisible to every status-scoped check below.
+                      per_entity=True, entity_type=ENTITY_FACILITY),
+    OptionalFieldSpec("opening_cost", "Candidate DC Opening Cost (₹ lakh)", "₹ lakh",
+                      "would let us weigh the one-time cost of building a new DC, "
+                      "instead of treating it as free to build",
+                      ContentType.FACILITY, role_bucket="dc",
+                      # CANDIDATE, not merely "not a plant". The MILP prices
+                      # opening cost only for `fac.is_candidate`
+                      # (milp.py opening_cost_term), so an existing warehouse
+                      # will never incur one and reporting it as missing sends
+                      # a planner looking for a number that does not exist.
+                      facility_status=STATUS_CANDIDATE),
 ]
 
 
@@ -135,6 +203,20 @@ def _role_bucket(row: Dict[str, Any]) -> str:
     return "supply" if role_raw in _SUPPLY_ROLES else "dc"
 
 
+def _facility_status(row: Dict[str, Any]) -> Optional[str]:
+    """
+    The status this row STATES, or None when it states none.
+
+    Never defaulted here. The two assemblers default an absent status
+    differently — adapters/structured.py to EXISTING, network_assembler.py to
+    CANDIDATE — and a completeness check that picked either would contradict
+    one of them. "The file does not say" is its own answer, and it is handled
+    as one below.
+    """
+    status = parse_facility_status(row.get("status"))
+    return status.value if status is not None else None
+
+
 def _facility_name(row: Dict[str, Any]) -> str:
     return str(row.get("facility_name") or row.get("facility_id") or "(unnamed)")
 
@@ -147,6 +229,19 @@ class MissingField:
     entity_type: str
     entity_name: str = ""
     what_it_unlocks: str = ""
+    #: Every named entity this gap applies to.
+    #:
+    #: A required gap is reported one row at a time, so this holds the single
+    #: name already in `entity_name`. A role-scoped optional gap is reported
+    #: once for the whole field and lists every entity missing it, so a reader
+    #: gets "3 candidate DCs" without the email repeating the same line three
+    #: times. Consumers that only understand `entity_name` keep working: it is
+    #: still filled in, joined, for exactly that reason.
+    entity_names: List[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.entity_names and self.entity_name:
+            self.entity_names = [self.entity_name]
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -155,6 +250,7 @@ class MissingField:
             "unit": self.unit,
             "entity_type": self.entity_type,
             "entity_name": self.entity_name,
+            "entity_names": list(self.entity_names),
             "what_it_unlocks": self.what_it_unlocks,
         }
 
@@ -274,6 +370,54 @@ def _check_lane_required(outcome, missing: List[MissingField]) -> None:
                     ENTITY_LANE, entity_name))
 
 
+#: Entity label to report a role-scoped gap against. Same buckets
+#: `_role_bucket()` returns.
+_BUCKET_ENTITY_TYPE = {"supply": ENTITY_SUPPLY, "dc": ENTITY_DC}
+
+
+def _check_scoped_optional(spec: OptionalFieldSpec, rows: List[Dict[str, Any]],
+                           missing: List[MissingField]) -> None:
+    """
+    A scoped optional field, checked row by row inside its own scope.
+
+    Rows outside the scope are not just ignored for the verdict — they are
+    invisible to it. Opening cost on an existing supply plant is not a gap, and
+    neither is opening cost on a warehouse that is already operating: both are
+    category errors, and a dataset with no candidate sites at all has nothing
+    to be missing.
+    """
+    # Each filter applies only when the spec declares it, so a spec may scope
+    # by role, by status, or by both.
+    scoped = list(rows)
+    if spec.role_bucket:
+        scoped = [r for r in scoped if _role_bucket(r) == spec.role_bucket]
+    if spec.facility_status:
+        # A row that states no status is invisible to a status-scoped spec.
+        # We cannot know whether it is in scope, and guessing produces the
+        # worst outcome available: forty operating warehouses reported as
+        # missing a build cost they will never incur. What that file is
+        # actually missing is the status column, which is its own registry
+        # entry below and is what the reader is told instead.
+        scoped = [r for r in scoped if _facility_status(r) == spec.facility_status]
+    if not scoped:
+        return
+
+    absent = [r for r in scoped
+              if not _present(r, spec.canonical_key)
+              and not (spec.alt_canonical_key and _present(r, spec.alt_canonical_key))]
+    if not absent:
+        return
+
+    names = [_facility_name(r) for r in absent]
+    missing.append(MissingField(
+        spec.canonical_key, spec.display_label, spec.unit,
+        entity_type=(spec.entity_type
+                     or _BUCKET_ENTITY_TYPE.get(spec.role_bucket or "", "")),
+        entity_name=", ".join(names),
+        what_it_unlocks=spec.what_it_unlocks,
+        entity_names=names))
+
+
 def _check_optional(outcome, has_contracts: bool, missing: List[MissingField]) -> None:
     for spec in OPTIONAL_FIELDS:
         if spec.satisfied_by_contracts and has_contracts:
@@ -282,6 +426,10 @@ def _check_optional(outcome, has_contracts: bool, missing: List[MissingField]) -
         rows = outcome.network_rows.get(spec.content_type) or []
         if spec.content_type == ContentType.HISTORICAL_VOLUME:
             rows = outcome.staging_rows.get(ContentType.HISTORICAL_VOLUME.value) or []
+
+        if spec.role_bucket or spec.facility_status or spec.per_entity:
+            _check_scoped_optional(spec, rows, missing)
+            continue
 
         found = any(_present(r, spec.canonical_key) for r in rows)
         if not found and spec.alt_canonical_key:

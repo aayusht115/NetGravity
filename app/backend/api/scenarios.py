@@ -55,6 +55,11 @@ from netgravity.orchestrator.schemas.requests import (
 
 logger = logging.getLogger(__name__)
 
+from netgravity.orchestrator.explanation_llm import (  # noqa: E402
+    explanation_reasoning_agent,
+    explanations_llm_enabled,
+)
+
 _ACTION_MAP = {
     "CHANGE_CAPACITY": ScenarioActionType.CHANGE_CAPACITY,
     "CHANGE_DEMAND": ScenarioActionType.CHANGE_DEMAND,
@@ -179,9 +184,362 @@ def _overrides_of(engine: Any, scenario_key: Optional[str]) -> List[str]:
         return []
 
 
+def _scenario_explanation(ctx: Any) -> Dict[str, Any]:
+    """
+    The scenario's grounded briefing, in the shape the explanation pane reads.
+
+    Already computed and already grounded — `numeric_grounding` has re-checked
+    every numeric claim by the time it gets here. Nothing is generated or
+    recomputed; this selects fields off `ExecutiveBriefing`.
+
+    Returns {} when the run produced no briefing, so the pane says it has
+    nothing to explain rather than showing the network's briefing in its place.
+    """
+    reasoning = getattr(ctx, "reasoning", None)
+    briefing = getattr(reasoning, "briefing", None) if reasoning else None
+    if briefing is None:
+        return {}
+
+    from netgravity.orchestrator.explanation_service import build_card
+
+    return {
+        # The ONE card the screen renders. Everything below it is the fuller
+        # record, kept for the audit view rather than for display.
+        "card": build_card(reasoning, figures=_scenario_figures(ctx)),
+        "scope": briefing.scope.value,
+        "entity_id": briefing.entity_id,
+        "opening": briefing.opening,
+        "context": briefing.context,
+        "insights": [
+            {
+                "theme": item.theme,
+                "headline": item.headline,
+                "narrative": item.narrative,
+                "severity": item.severity.value,
+            }
+            for item in briefing.kpi_insights
+        ],
+        "key_drivers": list(briefing.key_drivers),
+        "recommendation": briefing.recommendation,
+        "limitation": briefing.limitation,
+        "evidence_completeness": briefing.evidence_completeness.value,
+        "suggested_questions": list(briefing.suggested_questions),
+        "missing_information": [m.model_dump(mode="json")
+                                for m in briefing.missing_information],
+        "grounding": {"warnings": list(getattr(reasoning, "validation_warnings", []))},
+    }
+
+
+def _scenario_figures(ctx: Any) -> List[Any]:
+    """
+    The three numbers for one scenario, supplied by code.
+
+    Cost, demand served and capacity risk — the same three the comparison
+    shows, so a reader moving between them is reading the same quantities.
+    Money travels as an amount; the screen applies the project's currency.
+    """
+    from netgravity.orchestrator.reasoning.card import Figure
+
+    state = {}
+    try:
+        result = (ctx.network_states or {}).get("optimization.solve_scenario")
+        state = result.kpis.model_dump(mode="json") if result and result.kpis else {}
+    except Exception:  # noqa: BLE001 — figures are advisory
+        state = {}
+
+    fill = state.get("demand_fill_rate")
+    return [
+        Figure.money("Cost", state.get("business_network_cost")),
+        Figure(label="Demand served",
+               value=(f"{fill * 100:,.1f}%" if isinstance(fill, (int, float))
+                      else "Not available")),
+        Figure(label="Sites open",
+               value=(f"{state['n_facilities_open']:,.0f}"
+                      if isinstance(state.get("n_facilities_open"), (int, float))
+                      else "Not available")),
+    ]
+
+
 def _serialise_kpis(results: Dict[str, Any]) -> Dict[str, Any]:
     """`KPIResult` -> JSON, status and provenance preserved verbatim."""
     return {k: v.model_dump(mode="json") for k, v in results.items()}
+
+
+def optimised_reference_for(snapshot_id: str, user_id: str) -> Dict[str, Any]:
+    """
+    The network re-solved with the freedom a scenario has, for THIS snapshot.
+
+    Replaced with the real, cached implementation when the scenario blueprint
+    is mounted. Until then it answers "no reference", which is the honest
+    answer for a process that cannot produce one.
+    """
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# Comparing scenarios
+#
+# The ranking and the recommendation are made HERE, from the authoritative
+# KPI values, not in the browser. A screen that ranks its own rows decides
+# what to recommend in JavaScript, where the decision is invisible to the
+# audit trail, untestable from the backend suite, and free to disagree with
+# whatever the same numbers say elsewhere.
+# ---------------------------------------------------------------------------
+
+#: A metric is only usable when its own status says so. A None value with a
+#: non-VALID status is a refusal, and must never be read as a number.
+def _valid(kpis: Dict[str, Any], metric_id: str) -> Optional[float]:
+    result = (kpis or {}).get(metric_id) or {}
+    if result.get("status") != "VALID":
+        return None
+    value = result.get("value")
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def _rank_scenarios(baseline: Dict[str, Any],
+                    records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Cheapest first, on the solver's own business network cost.
+
+    A scenario whose cost is not VALID is still returned — it was compared,
+    and dropping it would silently shorten the comparison — but it ranks last
+    and is marked not comparable rather than being given a position it did
+    not earn.
+    """
+    baseline_cost = _valid(baseline, "business_network_cost")
+    baseline_fill = _valid(baseline, "demand_fill_rate")
+
+    rows: List[Dict[str, Any]] = []
+    for record in records:
+        kpis = record.get("scenario_kpis") or {}
+        cost = _valid(kpis, "business_network_cost")
+        fill = _valid(kpis, "demand_fill_rate")
+        rows.append({
+            "scenario_id": record.get("id"),
+            "name": record.get("name"),
+            "cost": cost,
+            "cost_delta": (None if cost is None or baseline_cost is None
+                           else round(cost - baseline_cost, 4)),
+            "fill_rate": fill,
+            "fill_delta": (None if fill is None or baseline_fill is None
+                           else round((fill - baseline_fill) * 100.0, 4)),
+            "comparable": cost is not None and baseline_cost is not None,
+        })
+    # Deterministic regardless of the order the ids arrived in.
+    #
+    # Sorting on cost alone left ties — two scenarios with equal cost, or two
+    # with no comparable cost at all — resolved by input order. So comparing
+    # A and B named a different winner than comparing B and A, which is the
+    # same analysis asked twice. The id is the tiebreak: arbitrary, but
+    # stable, which is the property that matters.
+    rows.sort(key=lambda r: (r["cost_delta"] is None,
+                             r["cost_delta"] if r["cost_delta"] is not None else 0.0,
+                             str(r["scenario_id"] or "")))
+    return rows
+
+
+#: How much demand a plan may serve below the baseline before the saving is
+#: called what it is: a smaller promise, not a cheaper way of keeping the
+#: same one. Percentage points.
+_MATERIAL_FILL_DROP_PTS = 0.05
+
+
+#: Below this, demand coverage is a problem in its own right and the cheapest
+#: option cannot be presented as simply "the answer". Read from the policy
+#: module rather than written here, so the screen and the engine draw the line
+#: in the same place.
+def _service_floor() -> float:
+    try:
+        from netgravity.config.defaults import SERVICE_THRESHOLDS
+
+        return float(SERVICE_THRESHOLDS.get("fill_rate_floor", 0.95))
+    except Exception:  # noqa: BLE001
+        return 0.95
+
+
+def _service_warning(best: Dict[str, Any], record: Optional[Dict[str, Any]]) -> str:
+    """
+    The thing a cost ranking must not be allowed to bury.
+
+    "Cheapest" is a fact about cost and nothing else. A plan that costs less
+    while stranding a third of demand, or while leaving a site at its limit,
+    is cheaper and not therefore better — and a card headed with the cost
+    alone invites exactly that reading.
+
+    Returns "" only when there is genuinely nothing to warn about.
+    """
+    problems: List[str] = []
+
+    fill = best.get("fill_rate")
+    if isinstance(fill, (int, float)) and fill < _service_floor():
+        problems.append(f"it still serves only {fill * 100:,.1f}% of demand")
+
+    risk = str((record or {}).get("capacity_risk") or "").strip()
+    if risk.lower() in ("high", "critical"):
+        problems.append(f"capacity risk remains {risk.lower()}")
+
+    if not problems:
+        return ""
+    joined = problems[0] if len(problems) == 1 else " and ".join(problems)
+    return (f"This is the lower-cost option, but {joined}. The cheapest "
+            f"scenario is not necessarily an acceptable one.")
+
+
+def _comparison_verdict(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    What the numbers say, in one sentence, and what it rests on.
+
+    No branch states a figure the KPI layer did not report, and none of them
+    recommends acting — this says which scenario the comparison ranks first
+    and why, which is a finding, not a decision.
+    """
+    if not rows:
+        return {"recommended_scenario_id": None,
+                "verdict": "No scenario was compared.", "caveats": []}
+
+    best = rows[0]
+    caveats: List[str] = []
+    incomparable = [r for r in rows if not r["comparable"]]
+    if incomparable:
+        caveats.append(
+            f"{len(incomparable)} scenario(s) produced no cost the engine could "
+            f"compare, so they are listed but not ranked.")
+
+    if not best["comparable"]:
+        return {
+            "recommended_scenario_id": None,
+            "verdict": ("None of the compared scenarios produced a cost that can "
+                        "be measured against the current network."),
+            "caveats": caveats,
+        }
+
+    delta = best["cost_delta"]
+    # Plain business English, and no engine vocabulary. It read "below the
+    # current network on solved business network cost", which is a sentence
+    # about a solver rather than about a decision.
+    if delta < 0:
+        verdict = (f"{best['name']} costs less than the network you run today, "
+                   f"and less than the {len(rows) - 1} other option(s) compared."
+                   if len(rows) > 1 else
+                   f"{best['name']} costs less than the network you run today.")
+    else:
+        verdict = (f"Nothing compared costs less than the network you run "
+                   f"today. {best['name']} comes closest.")
+
+    if best["fill_delta"] is not None and best["fill_delta"] < -_MATERIAL_FILL_DROP_PTS:
+        caveats.append(
+            f"{best['name']} serves less demand than the network does today — "
+            f"part of any saving is a smaller promise, not a cheaper way of "
+            f"keeping the same one.")
+
+    return {"recommended_scenario_id": best["scenario_id"],
+            "verdict": verdict, "caveats": caveats, "best_row": best}
+
+
+def _comparison_figures(best: Dict[str, Any],
+                        record: Optional[Dict[str, Any]]) -> List[Any]:
+    """
+    Three numbers, and they are the three that decide this: what it costs,
+    how much demand it serves, and whether capacity is at risk.
+
+    Cost alone was the whole card, which is how "cheapest" came to read as
+    "best" on a plan serving 68.5% of demand.
+    """
+    from netgravity.orchestrator.reasoning.card import Figure
+
+    fill = best.get("fill_rate")
+    risk = str((record or {}).get("capacity_risk") or "").strip()
+    return [
+        Figure.money("Cost", best.get("cost")),
+        Figure(label="Demand served",
+               value=(f"{fill * 100:,.1f}%" if isinstance(fill, (int, float))
+                      else "Not available")),
+        Figure(label="Capacity risk", value=risk or "Not available"),
+    ]
+
+
+def _comparison_explanation(project_id: str, rows: List[Dict[str, Any]],
+                            verdict: Dict[str, Any],
+                            baseline: Dict[str, Any],
+                            figures: Optional[List[Any]] = None,
+                            warning: str = "") -> Dict[str, Any]:
+    """
+    The comparison's own grounded briefing.
+
+    One model request per SET of scenarios, keyed on the set — so comparing
+    A and B twice, or reopening the Decision Package, spends nothing. See
+    orchestrator/explanation_service.py.
+
+    Never raises: an explanation is advisory, and the ranking beside it is
+    perfectly good without one.
+    """
+    try:
+        from netgravity.ingestion.config import IngestionConfig
+        from netgravity.ingestion.storage import get_storage
+        
+        from netgravity.orchestrator.explanation_service import ExplanationService
+        from netgravity.orchestrator.explanations import (
+            KIND_COMPARISON,
+            ExplanationStore,
+        )
+        from netgravity.orchestrator.reasoning.comparison_evidence import (
+            comparison_reasoning_payload,
+        )
+        from netgravity.orchestrator.schemas.reasoning import ReasoningScope
+
+        scenario_ids = [r.get("scenario_id") for r in rows]
+        service = ExplanationService(
+            # The SHARED connection, not a bare agent. A bare
+            # `ReasoningAgent()` has no gateway, so it produced
+            # templates however the switch was set.
+            explanation_reasoning_agent(),
+            ExplanationStore(get_storage(IngestionConfig())))
+        return service.explain(
+            subject_id=project_id,
+            kind=KIND_COMPARISON,
+            scope=ReasoningScope.COMPARISON,
+            # The SET identifies the analysis. Same set, any order, one call.
+            result_parts=[scenario_ids, verdict.get("recommended_scenario_id")],
+            build_payload=lambda: comparison_reasoning_payload(
+                ranked=rows,
+                recommended_scenario_id=verdict.get("recommended_scenario_id"),
+                verdict=verdict.get("verdict", ""),
+                baseline_cost=_valid(baseline, "business_network_cost"),
+            ),
+            # One switch for every explanation flow. Off by default; see
+            # netgravity/orchestrator/explanation_llm.py.
+            allow_llm=explanations_llm_enabled(),
+            figures=figures,
+            details=list(verdict.get("caveats") or []),
+        )
+    except Exception as exc:  # noqa: BLE001 — the ranking still stands
+        logger.warning("scenario.comparison_explanation_failed: %s", exc)
+        return {}
+
+
+#: Solved-topology changes that permanently alter the physical network.
+#: Mirrors STRUCTURAL_ACTIONS in orchestrator/governance/action_classifier.py.
+_STRUCTURAL_ACTIONS = {"CLOSE_FACILITY", "OPEN_FACILITY", "ADD_FACILITY"}
+
+
+def _is_structural(record: Dict[str, Any]) -> bool:
+    """
+    Whether this scenario opens or closes a site.
+
+    Read from the SOLVED topology as well as the request, because a scenario
+    that merely offered a site to the solver has not opened one, and a
+    capacity change that made a site unviable has closed one.
+    """
+    if str((record.get("request") or {}).get("action") or "") in _STRUCTURAL_ACTIONS:
+        return True
+    before = record.get("baseline_facilities") or {}
+    after = record.get("scenario_facilities") or {}
+    for fid, state in after.items():
+        was_open = bool((before.get(fid) or {}).get("isOpen"))
+        is_open = bool((state or {}).get("isOpen"))
+        if was_open != is_open:
+            return True
+    return False
 
 
 def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
@@ -277,6 +635,13 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             _reference[snapshot_id] = result
         return result
 
+    # Published so `/api/insights` can pair the network as it RUNS with the
+    # same network re-solved freely, using this one cached solve rather than
+    # running a second. Assigned at mount, so a process with no scenario
+    # blueprint simply has no reference and the briefing omits the comparison.
+    global optimised_reference_for
+    optimised_reference_for = _optimised_reference
+
     def _require_engine() -> Orchestrator:
         if orchestrator is None:
             raise EngineUnavailableError(
@@ -309,6 +674,98 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             "project_id": project_id,
             "scenarios": records,
             "total": len(records),
+        }), 200
+
+    @bp.route("/compare", methods=["POST"])
+    @require_auth
+    def compare_scenarios():
+        """
+        Rank a set of solved scenarios and say which one the numbers favour.
+
+        This is the Decision Package's source. The ranking, the verdict and
+        the caveats are decided HERE, from the authoritative KPI values and
+        their statuses — not in the browser, where the reasoning would be
+        invisible to the audit trail and free to disagree with the same
+        numbers elsewhere on screen.
+
+        It RANKS. It does not approve: a structural change is flagged as a
+        human decision whatever the economics say, matching
+        orchestrator/governance/action_classifier.py.
+        """
+        project_id, _ = _project_scope()
+        body = request.get_json(silent=True) or {}
+        wanted = [str(x) for x in (body.get("scenario_ids") or [])]
+
+        _load_scenarios()
+        with _lock:
+            records = list(_store.get(project_id, []))
+        by_id = {r.get("id"): r for r in records}
+        if wanted:
+            # A requested comparison that cannot be resolved is REFUSED, not
+            # quietly widened. Falling back to every saved scenario answered a
+            # different question than the one asked, under the heading of the
+            # one asked — and the user had no way to see the substitution.
+            unknown = [i for i in wanted if i not in by_id]
+            if unknown:
+                raise ValidationError(
+                    "Some of the scenarios you asked to compare are not "
+                    "available for this project, so the comparison was not "
+                    "run.",
+                    context={"unknown_scenario_ids": unknown,
+                             "requested": wanted})
+            selected = [by_id[i] for i in wanted]
+        else:
+            selected = records
+        if not selected:
+            raise ValidationError(
+                "There is no solved scenario for this project to compare.")
+
+        # One baseline for every row, from a scenario's own baseline_kpis —
+        # the same snapshot solve each was measured against.
+        baseline = selected[0].get("baseline_kpis") or {}
+        rows = _rank_scenarios(baseline, selected)
+        verdict = _comparison_verdict(rows)
+
+        recommended = by_id.get(verdict["recommended_scenario_id"])
+        caveats = list(verdict["caveats"])
+        if recommended and recommended.get("reference_note"):
+            caveats.append(recommended["reference_note"])
+
+        # Cost NEXT TO service and risk, never cost alone. Supplied by code,
+        # so the model states no figure and cannot state one in the wrong
+        # currency. Money travels as an amount; the screen applies the
+        # project's own currency to it.
+        best_row = verdict.get("best_row") or {}
+        warning = _service_warning(best_row, recommended)
+        figures = _comparison_figures(best_row, recommended)
+
+        return jsonify({
+            "project_id": project_id,
+            "baseline_kpis": baseline,
+            "ranked": rows,
+            "recommended_scenario_id": verdict["recommended_scenario_id"],
+            "verdict": verdict["verdict"],
+            "caveats": caveats,
+            # Why the recommended one is preferable to the others — a
+            # COMPARISON-scope briefing about the set, not about the winner
+            # alone. Produced once per set of scenarios and saved against it,
+            # so re-opening the Decision Package spends nothing.
+            "explanation": _comparison_explanation(
+                project_id, rows, verdict, baseline,
+                figures=figures, warning=warning),
+            # The one thing a cost ranking must not bury. Empty when there is
+            # genuinely nothing to warn about.
+            "warning": warning,
+            "structural": bool(recommended and _is_structural(recommended)),
+            "governance": {
+                "classification": ("HUMAN_ONLY" if recommended
+                                   and _is_structural(recommended) else "ANALYSIS"),
+                "note": ("Opening or closing a site is a structural change and is "
+                         "always a human decision, whatever the economics say."
+                         if recommended and _is_structural(recommended)
+                         else "This is an analysis of what the solver found."),
+                "actioned": False,
+            },
         }), 200
 
     @bp.route("/baseline", methods=["GET"])
@@ -459,7 +916,15 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             explicit_scenarios=[spec],
             actor=Actor(actor_id=g.current_user.user_id, role=ActorRole.PLANNER),
             network_snapshot_id=snapshot_id,
-            disable_llm=True,
+            # This run produces the scenario's OWN explanation, so it honours
+            # the explanation switch. The two solves above do not: the
+            # baseline and the re-optimised reference are numbers, and nothing
+            # narrates them.
+            #
+            # The reasoning step inside is `single_request=True`, so a live
+            # scenario costs exactly one model request, once, saved against
+            # the run.
+            disable_llm=not explanations_llm_enabled(),
             request_id=orchestrator_request_id("scenario-simulate"),
         )
 
@@ -583,6 +1048,13 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
                 t.model_dump(mode="json")
                 for t in registry.evaluate_thresholds(list(scenario_kpis.values()))
             ],
+            # THIS scenario's own explanation, from the reasoning step the
+            # scenario workflow already runs (`_reason_and_govern`). It was
+            # computed on every simulate and returned on none of them, so a
+            # screen that wanted to explain a what-if had only the network's
+            # general briefing to show — an explanation of something else,
+            # next to this scenario's numbers.
+            "explanation": _scenario_explanation(ctx),
             "provenance": {
                 "engine": "netgravity MILP (PuLP/HiGHS)",
                 "authoritative_source": "KPIRegistry (Phase 9.1)",

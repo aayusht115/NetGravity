@@ -688,7 +688,8 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                     f"default size."
                 )
 
-            status = (_text(row, status_col) or "ACTIVE").upper()
+            stated_status = _text(row, status_col)
+            status = (stated_status or "ACTIVE").upper()
             is_plant = ("PLANT" in raw_type or "MANUFACTUR" in raw_type
                         or fac_id.upper().startswith("PLT")
                         or (not raw_type and "PLANT" in fac_name.upper()))
@@ -705,6 +706,15 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 "capacity": capacity,
                 "region": region,
                 "status": "EXISTING" if status in ("ACTIVE", "TRUE", "EXISTING", "1") else status,
+                # Whether the UPLOAD said that, or whether the line above
+                # supplied it. `status` is defaulted to EXISTING so a file with
+                # no status column is not handed to the solver as a network of
+                # greenfield sites it may close — but "the client said this is
+                # operating" and "we assumed it was" are different facts, and a
+                # completeness check that cannot tell them apart either invents
+                # a gap or hides one. Read by
+                # netgravity/ingestion/completeness_sources.py.
+                "statusStated": bool(stated_status),
                 "coordsExact": exact,
                 # Read for EVERY facility, not only DCs. A plant carries a
                 # fixed cost in exactly the same column, and reading it only

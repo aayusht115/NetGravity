@@ -26,6 +26,7 @@
   <link rel="stylesheet" href="css/workspace-chrome.css">
   <link rel="stylesheet" href="css/projects.css">
   <link rel="stylesheet" href="css/ingestion.css">
+  <link rel="stylesheet" href="css/explanation-pane.css">
   <script src="js/landing-bootstrap.js"></script>
 </head>
 <body style="margin:0;padding:0;">
@@ -567,6 +568,15 @@
             </div>
           </div>
 
+          <!-- Missing-data opportunity.
+               HERE, after the analysis, rather than on the upload screen: a
+               field the file did not carry is an observation about the answer
+               on this page, and it is only actionable once there is an answer
+               to weigh it against. Populated by renderMissingDataOpportunity()
+               from the server's completeness report (js/missing-data-card.js).
+               Empty and invisible when nothing is missing. -->
+          <div id="ov-missing-data"></div>
+
           <!-- row 3 -->
           <div class="ov-signals-card">
             <div class="ov-signals-head">
@@ -865,13 +875,14 @@
              agent recommends are network-level facts, and they are as true
              here, beside the demand that produced them, as they are on Home.
 
-             The reasoning agent has no FORECAST scope (NETWORK, FACILITY,
-             LANE, SCENARIO, COMPARISON, RESILIENCE, INGESTION — see
-             netgravity/orchestrator/schemas/reasoning.py), and
-             /api/forecast is a deterministic route with `llm_used: false`.
-             So there is no forecast-specific recommended action to show, and
-             this card says which scope its recommendation belongs to rather
-             than implying the agent wrote it about the chart. -->
+             The forecast's OWN explanation now sits under the chart:
+             ReasoningScope.FORECAST exists, and /api/forecast returns a
+             grounded briefing built from the engine's own figures (see
+             netgravity/orchestrator/reasoning/forecast_evidence.py). It is
+             still `llm_used: false` — the deterministic template path — and
+             it says what the forecast says and how confident it is, never
+             why demand moves, because nothing in the forecasting engine
+             computes a cause. -->
         <section class="tab-panel" id="tab-forecast">
 
           <!-- row 0 -->
@@ -989,6 +1000,12 @@
                 <p class="fc-method-note fc-method-prov" id="fc-method-prov"></p>
               </div>
             </div>
+
+            <!-- What this forecast says, and how far it can be trusted.
+                 Rendered by renderForecastExplanation() from the briefing
+                 /api/forecast returns. Empty and invisible when the engine
+                 produced no forecast to explain. -->
+            <div id="fc-explanation"></div>
           </div>
 
           <!-- row 1 -->
@@ -1069,6 +1086,12 @@
             <!-- Right column: NetGravity's take -->
             <div class="scn-single-right">
               <div class="scn-take-card" id="scn-multi-take-card">
+                <!-- Populated by JS -->
+              </div>
+              <!-- The reasoning behind the network these scenarios are compared
+                   against. Rendered from the briefing the analysis already
+                   produced (js/insight-card.js) — it computes nothing. -->
+              <div id="scn-multi-explanation-card">
                 <!-- Populated by JS -->
               </div>
             </div>

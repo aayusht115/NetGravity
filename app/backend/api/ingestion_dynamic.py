@@ -44,10 +44,15 @@ from app.backend.services.demand_history_store import (
     uploaded_signal_store,
 )
 from app.backend.services.dataset_store import dataset_store
-from app.backend.services.errors import ApplicationError, ValidationError
+from app.backend.services.errors import (
+    ApplicationError,
+    EngineUnavailableError,
+    ValidationError,
+)
 from app.backend.services.network_assembler import assemble_network_from_structure
 from app.backend.services.project_registry import project_registry
 from app.backend.services.security import require_auth
+from netgravity.ingestion.completeness_sources import check_structure_completeness
 from app.backend.api.network_extractor import (
     build_network_from_dataframes,
     CANONICAL_FIELDS,
@@ -314,6 +319,12 @@ def upload_and_parse():
         "currencyBasis": structure.get("currencyBasis") or "",
         "geography": structure.get("geography") or {},
         "structure": structure,
+        # What this upload does NOT contain, judged by the same registry the
+        # session pipeline uses (netgravity/ingestion/completeness.py). Required
+        # gaps stop a solve being meaningful; optional ones only make the
+        # results poorer — and either way the reviewer is told before they
+        # confirm, not after the number is on screen.
+        "completeness": check_structure_completeness(structure).as_dict(),
         "notice": (
             "This is a parsing preview for mapping review. No optimisation has "
             "run and no KPI has been produced. Confirm the dataset through "
@@ -504,6 +515,11 @@ def get_project_dataset():
     record = dataset_store.record(project_id)
     record["project_name"] = project.name
     record["snapshot_id"] = project.snapshot_id
+    # The completeness of the data the RESULTS came from, plus anything
+    # already asked for about it. Both here rather than on a second endpoint:
+    # "what is missing" and "did we already ask" are one question.
+    record["completeness"] = _completeness_for(project_id)
+    record["data_requests"] = _data_requests_for(project_id)
     committed = record.get("committed")
     record["status"] = (
         "COMMITTED" if committed else
@@ -519,6 +535,112 @@ def get_project_dataset():
             "trail."
         )
     return jsonify(record), 200
+
+
+# ---------------------------------------------------------------------------
+# Asking the source for what is missing
+# ---------------------------------------------------------------------------
+# This route RAISES A REQUEST; it does not send anything. The orchestrator
+# records the request (netgravity/orchestrator/data_requests.py) and then
+# tells the Action Agent one exists — the same order, and the same division
+# of labour, as a governance decision.
+#
+# The earlier version called the Action Agent's trigger straight from here.
+# That put a dispatcher in the position of being the record: a failed send
+# left no trace that a planner had asked, and a successful one left a trace
+# only in the dispatch log, which is an audit of what was SENT rather than of
+# what is NEEDED.
+
+#: The completeness tiers a request may be raised for.
+_REQUESTABLE_TIERS = ("required", "optional")
+
+
+def _data_requests_for(project_id: str) -> List[Dict[str, Any]]:
+    """Standing data requests for this project. Never raises."""
+    orchestrator = getattr(project_registry, "_orchestrator", None)
+    if orchestrator is None:
+        return []
+    try:
+        return [r.as_dict() for r in orchestrator.data_requests_for(project_id)]
+    except Exception as exc:  # noqa: BLE001 — the audit view still stands
+        logger.warning("ingestion.data_requests_unavailable: %s", exc)
+        return []
+
+
+def _completeness_for(project_id: str) -> Dict[str, Any]:
+    """
+    The completeness report for the data this project is ANALYSING.
+
+    The committed record first: once an upload is committed the preview is
+    dropped, and the committed dataset is the one the results on screen were
+    produced from. A project still at review falls back to its preview.
+    """
+    committed = dataset_store.committed(project_id) or {}
+    if committed.get("completeness"):
+        return committed["completeness"]
+    return (dataset_store.preview(project_id) or {}).get("completeness") or {}
+
+
+@ingestion_dynamic_bp.route("/source-contact", methods=["POST"])
+@require_auth
+def set_preview_source_contact():
+    """Who owns this upload's data, so a missing-data request has a To:."""
+    body = request.get_json(silent=True) or {}
+    project_id = str(body.get("project_id") or "").strip()
+    if not project_id:
+        raise ValidationError("A project_id is required.")
+    project_registry.get(project_id, user_id=g.current_user.user_id)
+
+    email = str(body.get("email") or "").strip()
+    if "@" not in email:
+        raise ValidationError(f"Not an email address: {email!r}")
+
+    from netgravity.action_agent.recipients import SourceContactStore
+    from netgravity.ingestion.config import IngestionConfig
+    from netgravity.ingestion.storage import get_storage
+
+    contact = SourceContactStore(get_storage(IngestionConfig())).set(
+        project_id, email, str(body.get("name") or ""))
+    return jsonify({"project_id": project_id, "contact": contact.as_dict()}), 200
+
+
+@ingestion_dynamic_bp.route("/request-missing-data", methods=["POST"])
+@require_auth
+def request_preview_missing_data():
+    """
+    Ask the source for one tier of missing data.
+
+    Driven entirely by what the completeness report lists — this route does
+    not know which fields exist, only which tier was asked for.
+    """
+    body = request.get_json(silent=True) or {}
+    project_id = str(body.get("project_id") or "").strip()
+    if not project_id:
+        raise ValidationError("A project_id is required.")
+    project_registry.get(project_id, user_id=g.current_user.user_id)
+
+    tier = str(body.get("kind") or body.get("tier") or "optional")
+    if tier not in _REQUESTABLE_TIERS:
+        raise ValidationError(
+            f"Unknown completeness tier: {tier!r}; "
+            f"expected one of {list(_REQUESTABLE_TIERS)}.")
+
+    gaps = _completeness_for(project_id).get(f"missing_{tier}") or []
+    if not gaps:
+        raise ValidationError(f"This dataset has no missing {tier} fields to request.")
+
+    orchestrator = getattr(project_registry, "_orchestrator", None)
+    if orchestrator is None:
+        raise EngineUnavailableError(
+            "The orchestrator is not mounted, so no data request can be raised.")
+
+    request_record = orchestrator.request_missing_data(
+        subject_id=project_id, subject_kind="project", tier=tier, fields=gaps,
+        requested_by=g.current_user.user_id,
+    )
+    logger.info("ingestion.data_request project_id=%s tier=%s status=%s",
+                project_id, tier, request_record.status)
+    return jsonify({"project_id": project_id, **request_record.as_dict()}), 200
 
 
 @ingestion_dynamic_bp.errorhandler(ApplicationError)

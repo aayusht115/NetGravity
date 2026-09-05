@@ -89,7 +89,15 @@ function showConversation(on) {
 /**
  * Open Ask Netgravity Modal
  */
-export function openChatbotModal() {
+/**
+ * Open Ask Netgravity.
+ *
+ * `prefill` puts a question in the box and leaves it there for the user to
+ * send. It is not sent automatically: a question to the assistant runs a
+ * solve and a reasoning pass, and starting minutes of work from one click
+ * elsewhere in the app would be a surprise, not a shortcut.
+ */
+export function openChatbotModal({ prefill = '' } = {}) {
   const overlay = document.getElementById('chatbot-modal-overlay');
   if (!overlay) return;
 
@@ -102,7 +110,9 @@ export function openChatbotModal() {
 
   setTimeout(() => {
     const input = document.getElementById('chatbot-modal-input');
-    if (input) input.focus();
+    if (!input) return;
+    if (prefill) input.value = prefill;
+    input.focus();
   }, 100);
 
   // Bring back the thread this tab was already having, if there is one.
@@ -265,7 +275,15 @@ async function restoreConversation() {
 /**
  * Ask a specific predefined prompt or FAQ
  */
-export async function askChatbotPrompt(query) {
+/**
+ * Ask the assistant.
+ *
+ * `pickedOption` is set only when the user ANSWERED a clarification by
+ * choosing one of its options. It travels alongside the message so the server
+ * resumes the request the question was asked about; without it "Lowest cost"
+ * is just a new message, and the server rightly makes nothing of it.
+ */
+export async function askChatbotPrompt(query, pickedOption = null) {
   if (!query || isGenerating) return;
 
   showConversation(true);
@@ -305,7 +323,7 @@ export async function askChatbotPrompt(query) {
     // context.
     const threadId = (conversationProjectId === getActiveProjectId())
       ? conversationId : null;
-    const res = await chatService.sendMessage(query, threadId);
+    const res = await chatService.sendMessage(query, threadId, null, pickedOption);
     removeTypingIndicator();
     isGenerating = false;
 
@@ -332,10 +350,17 @@ export async function askChatbotPrompt(query) {
         actionTab: 'twin',
       });
     } else if (clarification) {
+      // `clarification` is a ClarificationRequest — {kind, question, options,
+      // missing_parameter} — not a string. It was rendered with
+      // escapeChatText(), which prints "[object Object]"; and even read
+      // correctly, a question whose options can only be answered by retyping
+      // them is a question the server then reads as a different request.
       chatMessages.push({
         role: 'ai',
         topic: 'NEEDS CLARIFICATION',
-        text: escapeChatText(clarification),
+        text: escapeChatText(clarification.question || clarification),
+        // Rendered as buttons. Picking one resumes the original request.
+        choices: (clarification.options || []).filter((o) => o && o.id),
       });
     } else {
       // The orchestrator answered but produced no text. Say so; do not
@@ -422,6 +447,20 @@ function renderChatMessages() {
             <div class="chat-bubble-ai">
               ${msg.topic ? `<div class="ai-badge-chip">✦ ${msg.topic}</div>` : ''}
               <div>${msg.text}</div>
+              ${(msg.choices && msg.choices.length) ? `
+                <div class="chat-choices">
+                  ${msg.choices.map((choice) => `
+                    <button type="button" class="chat-choice-btn"
+                            data-clarify-option="${escapeChatText(choice.id)}"
+                            data-clarify-label="${escapeChatText(choice.label || choice.id)}"
+                            ${msg.answered ? 'disabled' : ''}>
+                      <span class="chat-choice-label">${escapeChatText(choice.label || choice.id)}</span>
+                      ${choice.description
+                        ? `<span class="chat-choice-desc">${escapeChatText(choice.description)}</span>`
+                        : ''}
+                    </button>`).join('')}
+                </div>
+              ` : ''}
               ${msg.actionText && msg.actionTab ? `
                 <button class="action-link-btn" data-action="exploreInTwin" data-arg="${escapeChatText(msg.actionTab)}" data-topic="${escapeChatText(msg.topic || 'Network Optimization')}">
                   ${msg.actionText}
@@ -433,6 +472,23 @@ function renderChatMessages() {
       }
     }).join('')}
   `;
+
+  chatView.querySelectorAll('[data-clarify-option]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      // Only the bubble that was answered is spent. Earlier questions in the
+      // thread stay as they were rather than appearing to have been answered.
+      const bubble = btn.closest('.chat-bubble-ai');
+      const msg = chatMessages.find((m) => m.choices && !m.answered);
+      if (msg) msg.answered = true;
+      if (bubble) {
+        bubble.querySelectorAll('[data-clarify-option]')
+          .forEach((b) => { b.disabled = true; });
+      }
+      askChatbotPrompt(btn.getAttribute('data-clarify-label'),
+                       btn.getAttribute('data-clarify-option'));
+    });
+  });
 
   // Scroll to bottom
   const body = document.getElementById('chatbot-modal-body');

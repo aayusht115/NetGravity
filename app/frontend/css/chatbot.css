@@ -631,3 +631,50 @@
 .chatbot-footer-disclaimer svg {
   color: #9ca3af;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   CLARIFICATION CHOICES  (js/chatbot.js)
+   The assistant's question, answered by picking rather than by retyping.
+   Retyping an option's words produces a DIFFERENT request — "Most resilient"
+   reads as a resilience query, not as the optimisation it was answering — so
+   these buttons carry the option id, and the server resumes the original.
+   ═══════════════════════════════════════════════════════════ */
+.chat-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.chat-choice-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid var(--border-light, #eceef2);
+  border-radius: 8px;
+  background: var(--bg-card, #ffffff);
+  cursor: pointer;
+  font: inherit;
+}
+.chat-choice-btn:hover:not(:disabled) {
+  border-color: var(--brand-purple, #6B2FA0);
+  background: var(--bg-hover, #f7f5fb);
+}
+/* Spent, not hidden: the thread should still read as a question that was
+   asked and an answer that was given. */
+.chat-choice-btn:disabled { opacity: .5; cursor: default; }
+
+.chat-choice-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1, #101418);
+}
+.chat-choice-desc {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-2, #4b5563);
+}

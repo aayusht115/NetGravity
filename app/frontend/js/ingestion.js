@@ -156,6 +156,13 @@ const flow = {
   //: Files (0)" and there was no route to the file, the mapping, the quality
   //: findings or the ingestion time behind its own numbers.
   dataset: null,
+  //: What the upload does NOT contain, as the server's completeness report.
+  //:
+  //: Kept so the source-contact field on this screen has a reason to exist,
+  //: but NOT rendered here. The gap is surfaced on Optimized Results instead:
+  //: a missing field is an observation about the answer, and it is only
+  //: actionable once there is an answer to compare it against.
+  completeness: null,
   //: How many uploads are still being read by the server.
   //:
   //: The file appears in the list the moment it is chosen, but the parse that
@@ -588,6 +595,7 @@ function applyParsedPreview(data, parseable, projectId) {
   flow.parseError = null;
   if (!data) return;
   flow.extractedNetwork = data.structure;
+  flow.completeness = data.completeness || null;
   flow.projectId = projectId;
   flow.schemaFields = data.schemaFields || flow.schemaFields;
 
@@ -1562,10 +1570,19 @@ function bindExcelIngestion(file) {
     }
   }
 
-  document.getElementById('ing-source-contact-input')?.addEventListener('change', e => {
+  document.getElementById('ing-source-contact-input')?.addEventListener('change', async e => {
     const email = e.target.value.trim();
     if (email) SOURCE_CONTACTS[file.id] = { ...(SOURCE_CONTACTS[file.id] || {}), email };
     else delete SOURCE_CONTACTS[file.id];
+    // Register it server-side too: the missing-data request below is sent by
+    // the backend, which looks the contact up in its own store rather than in
+    // this page's memory.
+    if (!email) return;
+    try {
+      await ingestionService.setSourceContact(email, '', flow.projectId);
+    } catch (err) {
+      console.warn('could not register the source contact:', err);
+    }
   });
 
   document.getElementById('ing-map-table-slot')?.addEventListener('change', e => {

@@ -21,6 +21,13 @@ class ReasoningScope(str, Enum):
     COMPARISON = "COMPARISON"
     RESILIENCE = "RESILIENCE"
     INGESTION = "INGESTION"
+    #: A demand forecast: what it says, and how confident it is. The forecast
+    #: engine computes real figures (ETS / intermittent / quantile modelling,
+    #: structural-break detection, p10/p90 bands, measured backtest error) and
+    #: none of it was narrated anywhere. See
+    #: orchestrator/reasoning/forecast_evidence.py for what this scope's
+    #: evidence pack carries.
+    FORECAST = "FORECAST"
 
 
 class EvidenceCompleteness(str, Enum):

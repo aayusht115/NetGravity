@@ -23,6 +23,15 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+#: The two completeness tiers, mapped to the session field recording that
+#: this tier's missing-data email has already gone out. Registry, not an
+#: if-chain: a third tier would be one entry here and nothing else.
+COMPLETENESS_NOTIFY_FLAGS = {
+    "required": "required_notified_at",
+    "optional": "optional_notified_at",
+}
+
+
 class IngestionServiceError(RuntimeError):
     status_code = 400
 
@@ -220,30 +229,38 @@ class IngestionService:
         self._maybe_notify_completeness(refreshed)
         return refreshed
 
-    def _maybe_notify_completeness(self, session: IngestionSession) -> None:
+    def _notify_completeness(self, session: IngestionSession, kind: str) -> bool:
         """
-        Fire the Action Agent's missing-data emails at most once per session
-        per kind (required/optional dedup lives on the session itself —
-        required_notified_at/optional_notified_at). Imported lazily so
+        Send one tier's missing-data email, at most once per session.
+
+        Returns True only when an email actually went out on this call, so
+        the caller knows whether the session needs saving. Imported lazily so
         `ingestion` never takes a hard, load-time dependency on the new
         `action_agent` package.
         """
         from netgravity.action_agent import triggers as action_agent_triggers
 
-        report = session.report or {}
-        changed = False
+        flag = COMPLETENESS_NOTIFY_FLAGS[kind]
+        if not (session.report or {}).get(f"missing_{kind}"):
+            return False
+        if getattr(session, flag):
+            return False
 
-        if report.get("missing_required") and not session.required_notified_at:
-            action_agent_triggers.on_completeness_failure(session, kind="required")
-            session.required_notified_at = _now_iso()
-            changed = True
+        action_agent_triggers.on_completeness_failure(session, kind=kind)
+        setattr(session, flag, _now_iso())
+        return True
 
-        if report.get("missing_optional") and not session.optional_notified_at:
-            action_agent_triggers.on_completeness_failure(session, kind="optional")
-            session.optional_notified_at = _now_iso()
-            changed = True
-
-        if changed:
+    def _maybe_notify_completeness(self, session: IngestionSession) -> None:
+        """
+        Fire the Action Agent's missing-data emails at most once per session
+        per kind. The dedup flags live on the session itself
+        (required_notified_at / optional_notified_at).
+        """
+        # A list, not a generator: every tier must be offered the chance to
+        # fire, not just the first one that does.
+        fired = [self._notify_completeness(session, kind)
+                 for kind in COMPLETENESS_NOTIFY_FLAGS]
+        if any(fired):
             self.sessions.save(session)
 
     def _execute(self, session: IngestionSession, *, save: bool):

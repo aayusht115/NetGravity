@@ -220,6 +220,65 @@ _FACT_SPEC: Dict[str, Tuple[ClaimKind, str]] = {
     "performance_impact":        (ClaimKind.CURRENCY, "rei_engine"),
     "cost_impact_pct":           (ClaimKind.PERCENTAGE, "rei_engine"),
     "service_loss":              (ClaimKind.RATIO, "rei_engine"),
+    # The same network re-solved with the freedom a scenario has. See
+    # orchestrator/reasoning/evidence.py::with_optimised_reference — the
+    # Overview shows the footprint as it RUNS, and this is what redesigning it
+    # would be worth.
+    "reference_cost":            (ClaimKind.CURRENCY, "optimization_result"),
+    "reoptimisation_saving":     (ClaimKind.CURRENCY, "optimization_result"),
+    "reference_fill_rate":       (ClaimKind.RATIO, "optimization_result"),
+    "reference_facilities_open": (ClaimKind.COUNT, "optimization_result"),
+    # Scenario comparison
+    #
+    # A comparison's figures are DIFFERENCES between two solved scenarios, and
+    # the difference is the whole point: "Nagpur costs less than expanding
+    # Delhi" cannot be said without citing the gap. Each is derived from two
+    # authoritative costs by subtraction only — see
+    # orchestrator/reasoning/comparison_evidence.py, which re-ranks nothing
+    # and decides nothing.
+    "recommended_cost":          (ClaimKind.CURRENCY, "kpi_engine"),
+    "recommended_cost_delta":    (ClaimKind.CURRENCY, "kpi_engine"),
+    "baseline_cost":             (ClaimKind.CURRENCY, "kpi_engine"),
+    "cost_gap_vs_recommended":   (ClaimKind.CURRENCY, "kpi_engine"),
+    "recommended_fill_rate":     (ClaimKind.RATIO, "kpi_engine"),
+    "fill_rate":                 (ClaimKind.RATIO, "kpi_engine"),
+    "fill_gap_vs_recommended_pts": (ClaimKind.PERCENTAGE, "kpi_engine"),
+    "n_compared":                (ClaimKind.COUNT, "kpi_engine"),
+    "n_not_comparable":          (ClaimKind.COUNT, "kpi_engine"),
+    # Forecasting engine
+    #
+    # A forecast states a RANGE, so both ends of it are citable — a narrative
+    # allowed to quote the midpoint but not the p10/p90 would be pushed into
+    # reporting a single number for a quantity the engine deliberately does not
+    # give as one.
+    "mean":                      (ClaimKind.UNITS, "forecast_engine"),
+    "p10":                       (ClaimKind.UNITS, "forecast_engine"),
+    "p50":                       (ClaimKind.UNITS, "forecast_engine"),
+    "p90":                       (ClaimKind.UNITS, "forecast_engine"),
+    "first_period_mean":         (ClaimKind.UNITS, "forecast_engine"),
+    "first_period_p10":          (ClaimKind.UNITS, "forecast_engine"),
+    "first_period_p90":          (ClaimKind.UNITS, "forecast_engine"),
+    "last_period_mean":          (ClaimKind.UNITS, "forecast_engine"),
+    "last_period_p10":           (ClaimKind.UNITS, "forecast_engine"),
+    "last_period_p90":           (ClaimKind.UNITS, "forecast_engine"),
+    # Measured out-of-sample error. MAE/RMSE are in demand units; WAPE is a
+    # fraction; MASE is a ratio against a naive-1 benchmark and is the one
+    # figure that says whether the model beat doing nothing.
+    "mae":                       (ClaimKind.UNITS, "forecast_engine"),
+    "rmse":                      (ClaimKind.UNITS, "forecast_engine"),
+    "wape":                      (ClaimKind.RATIO, "forecast_engine"),
+    "mase":                      (ClaimKind.RATIO, "forecast_engine"),
+    # Bare counts. `_is_policeable` ignores these as claims; declared so that
+    # when one appears beside a quantity it is sourced rather than unexplained.
+    "n_series_requested":        (ClaimKind.COUNT, "forecast_engine"),
+    "n_series_forecast":         (ClaimKind.COUNT, "forecast_engine"),
+    "n_series_unavailable":      (ClaimKind.COUNT, "forecast_engine"),
+    "n_series_backtested":       (ClaimKind.COUNT, "forecast_engine"),
+    "n_structural_breaks_detected": (ClaimKind.COUNT, "forecast_engine"),
+    "n_history_periods":         (ClaimKind.COUNT, "forecast_engine"),
+    "n_forecast_periods":        (ClaimKind.COUNT, "forecast_engine"),
+    "n_folds":                   (ClaimKind.COUNT, "forecast_engine"),
+    "horizon_periods":           (ClaimKind.COUNT, "forecast_engine"),
     # Risk engine
     "risk_factor":               (ClaimKind.RATIO, "risk_engine"),
     "max_risk_factor":           (ClaimKind.RATIO, "risk_engine"),

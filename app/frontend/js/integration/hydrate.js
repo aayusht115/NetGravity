@@ -88,6 +88,10 @@ function reshapeForecastSeries(series, names) {
     seriesLabel: `${series.market_id}/${series.product_id}`,
     accuracy: series.accuracy || null,
     engine: series.engine || '',
+    // THIS series' own words, computed deterministically server-side and
+    // travelling with it — so changing the chart changes the explanation
+    // beside it without another request.
+    explanation: series.explanation || null,
     history: {
       labels: hist.map((p, i) => p.timestamp || p.period || `T${i + 1}`),
       values: hist.map((p) => Number(p.quantity ?? p)),
@@ -680,6 +684,11 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
         shown: chosen.seriesLabel,
         engine: chosen.engine,
         accuracy: chosen.accuracy || null,
+        // The forecast's OWN grounded briefing, from the FORECAST reasoning
+        // scope. The endpoint has returned it since that scope existed and
+        // nothing read it, so the screen had the numbers and none of the
+        // words that go with them.
+        explanation: fc.explanation || null,
         // The orchestrator's id for the run that produced this forecast, so
         // the loading screen can read its trace.
         executionId: fc.execution_id || null,
@@ -693,6 +702,9 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
       forecastReport = {
         status: fc.status || 'NO_SERIES', series: 0,
         reason: fc.message || '',
+        // Present even here: "no series had enough history" is exactly the
+        // kind of thing the explanation exists to say.
+        explanation: fc.explanation || null,
       };
       publishForecastMeta(forecastReport);
       setForecastCatalogue([]);

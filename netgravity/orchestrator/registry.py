@@ -378,11 +378,34 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
         }
 
     # ---- optimization.solve -------------------------------------------
+    def _config_for_priority(network, priority: Optional[str]):
+        """
+        The network's config, adjusted for a stated optimisation priority.
+
+        Returns None when nothing was stated, which is what
+        `solve_result` already treats as "use the network's own config" —
+        so the default path is byte-identical to what it was.
+        """
+        if not priority:
+            return None
+        from netgravity.orchestrator.conversation import priorities as _priorities
+
+        overrides = _priorities.config_overrides_for(priority, network.config)
+        if not overrides:
+            return None
+        return network.config.model_copy(update=overrides)
+
     async def solve_network(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
         snapshot = orch.snapshots.get(ctx.baseline_snapshot_id or "")
         mode_name = req.params.get("mode")
         mode = OptimizationMode(mode_name) if mode_name else None
-        state = await svc["optimization"].solve_result(snapshot.network, mode=mode)
+        # What the user asked this to be optimised FOR. The overrides come
+        # from conversation/priorities.py, which only offers levers the MILP
+        # implements — so a priority reaching here always changes the model.
+        # None (the usual case) leaves the network's own config untouched.
+        config = _config_for_priority(snapshot.network, ctx.optimisation_priority)
+        state = await svc["optimization"].solve_result(
+            snapshot.network, config=config, mode=mode)
         # Keep the TYPED contract for the Digital Twin projection. The flattened
         # dict below drops per-facility utilisation and per-lane flow, and no
         # consumer can recover them from it.
@@ -837,6 +860,21 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
         return finish(assessment)
 
     # ---- reasoning.synthesise ---------------------------------------------
+    def _reasoning_scope_for(ctx: ExecutionContext) -> Any:
+        """
+        SCENARIO for one what-if, COMPARISON for several, NETWORK otherwise.
+
+        Read off the execution rather than declared by the caller, so it
+        cannot disagree with what was actually solved.
+        """
+        from netgravity.orchestrator.schemas.reasoning import ReasoningScope
+
+        if len(ctx.scenario_ids or []) > 1:
+            return ReasoningScope.COMPARISON
+        if ctx.scenario_id:
+            return ReasoningScope.SCENARIO
+        return ReasoningScope.NETWORK
+
     async def synthesise(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
         """
         Explain the deterministic results that ARE available.
@@ -904,6 +942,27 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
                 # either. The figures were right and the answer was to a
                 # different question.
                 user_question=(ctx.raw_input or "").strip(),
+                # WHAT this briefing is about.
+                #
+                # It was always NETWORK, including on a scenario run — so a
+                # what-if produced an explanation of the network in general,
+                # and a screen showing it beside a scenario's numbers was
+                # captioning the wrong picture. The scope follows what the
+                # execution actually did.
+                scope=_reasoning_scope_for(ctx),
+                entity_id=ctx.scenario_id,
+                # ONE model request for this explanation, whatever the
+                # environment selects for the reasoning runtime. That runtime
+                # is an agent loop — its prompt tells the model to fetch each
+                # metric before citing it — so a briefing quoting six figures
+                # costs seven or more requests. Every result-screen flow is
+                # budgeted at one.
+                #
+                # Chat runs through this step too and is helped by it, not
+                # harmed: it spends one request explaining rather than N. Chat
+                # still costs a second request to UNDERSTAND the question,
+                # which is why it is treated separately.
+                single_request=True,
                 provenance={
                     "execution_id": ctx.execution_id,
                     "snapshot_id": ctx.baseline_snapshot_id or "",

@@ -68,6 +68,45 @@ class FacilityStatus(str, Enum):
     CLOSED    = "CLOSED"      # currently closed, could re-open
 
 
+#: Raw `status` text a client's file may carry → the status it means.
+#:
+#: ONE table, because two copies of "what counts as a candidate" drift, and a
+#: completeness warning that disagrees with the assembler tells a planner to
+#: fix something the model does not think is wrong. Read by
+#: app/backend/services/network_assembler.py and
+#: netgravity/ingestion/completeness.py.
+FACILITY_STATUS_SYNONYMS: Dict[str, "FacilityStatus"] = {
+    "EXISTING": FacilityStatus.EXISTING,
+    "ACTIVE": FacilityStatus.EXISTING,
+    "OPEN": FacilityStatus.EXISTING,
+    "OPERATIONAL": FacilityStatus.EXISTING,
+    "TRUE": FacilityStatus.EXISTING,
+    "1": FacilityStatus.EXISTING,
+    "CLOSED": FacilityStatus.CLOSED,
+    "INACTIVE": FacilityStatus.CLOSED,
+    "FALSE": FacilityStatus.CLOSED,
+    "0": FacilityStatus.CLOSED,
+    "CANDIDATE": FacilityStatus.CANDIDATE,
+    "PLANNED": FacilityStatus.CANDIDATE,
+    "PROPOSED": FacilityStatus.CANDIDATE,
+}
+
+
+def parse_facility_status(raw: Any) -> Optional["FacilityStatus"]:
+    """
+    The status a raw cell states, or None when it states none.
+
+    None means "this file does not say", which is a different fact from any
+    particular status and must stay distinguishable from one: a caller that
+    defaults it has made a modelling decision, and should do so explicitly
+    rather than by reading a default out of here.
+    """
+    text = str(raw or "").strip().upper()
+    if not text:
+        return None
+    return FACILITY_STATUS_SYNONYMS.get(text)
+
+
 class TransportMode(str, Enum):
     """Available transportation modes."""
     ROAD        = "ROAD"

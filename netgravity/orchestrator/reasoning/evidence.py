@@ -264,3 +264,49 @@ def twin_reasoning_payload(
     if comparison is not None:
         payload["comparison"] = comparison.model_dump(mode="json")
     return payload
+
+
+def with_optimised_reference(payload: Dict[str, Any],
+                             reference_kpis: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Add the same network re-solved with the freedom a scenario has.
+
+    WHAT THIS IS FOR. The Overview shows an `ACTUAL_AS_IS_EVALUATION` — the
+    client's footprint pinned open, because that is the network they actually
+    run and the figure they recognise. So "explain the optimised result
+    against the baseline" had no baseline to compare to: the screen IS the
+    baseline, and the optimised model was computed only to attribute scenario
+    savings.
+
+    This pairs them, so the briefing can say what re-optimising the existing
+    footprint is worth before any single change is tested — which is the most
+    useful sentence available on that screen and was not being said.
+
+    Reads `reference_kpis` as given. Nothing is solved or recomputed here; the
+    reference comes from the cached run the scenario API already makes.
+    """
+    if not reference_kpis:
+        return payload
+
+    def value(metric_id: str) -> Optional[float]:
+        result = reference_kpis.get(metric_id) or {}
+        if result.get("status") != "VALID":
+            return None
+        raw = result.get("value")
+        return float(raw) if isinstance(raw, (int, float)) else None
+
+    reference_cost = value("business_network_cost")
+    state = payload.get("network_state") or {}
+    current_cost = state.get("business_network_cost")
+
+    block: Dict[str, Any] = {
+        "reference_cost": reference_cost,
+        "reference_fill_rate": value("demand_fill_rate"),
+        "reference_facilities_open": value("n_facilities_open"),
+    }
+    if reference_cost is not None and isinstance(current_cost, (int, float)):
+        # What redesigning the footprint is worth, before any change is
+        # tested. Negative means the re-solve is cheaper than what runs today.
+        block["reoptimisation_saving"] = round(reference_cost - current_cost, 4)
+
+    return {**payload, "optimised_reference": block}

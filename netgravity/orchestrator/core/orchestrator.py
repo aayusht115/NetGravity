@@ -1018,8 +1018,99 @@ class Orchestrator:
                      classification=decision.classification.value,
                      rules=decision.triggered_rules)
 
-    def _notify_action_agent(self, kind: str, *, context: ExecutionContext,
-                             approval: Any = None, decision: Any = None) -> None:
+    # ---- data requests ------------------------------------------------
+    def request_missing_data(
+        self,
+        *,
+        subject_id: str,
+        tier: str,
+        fields: List[Dict[str, Any]],
+        subject_kind: str = "project",
+        requested_by: str = "",
+        execution_id: Optional[str] = None,
+        source_id: str = "",
+    ) -> Any:
+        """
+        Raise a request for data the analysis is missing, and hand it off.
+
+        The orchestrator RECORDS the request first, then tells the Action
+        Agent one exists — the same order as `_govern`, and for the same
+        reason. A notification that fails leaves a standing request a planner
+        can see and retry; a direct send that fails leaves nothing at all.
+
+        Idempotent per subject and tier: asking twice is asking once, and the
+        existing request is returned unchanged.
+        """
+        from netgravity.orchestrator.data_requests import (
+            STATUS_NO_CONTACT,
+            STATUS_NOTIFIED,
+            DataRequest,
+            DataRequestStore,
+        )
+
+        store = DataRequestStore(self._data_request_storage())
+        existing = store.open_for(subject_id, tier)
+        if existing is not None:
+            return existing
+
+        request = DataRequest(
+            subject_id=subject_id, subject_kind=subject_kind, tier=tier,
+            fields=list(fields), requested_by=requested_by,
+            execution_id=execution_id,
+        )
+        store.save(request)
+        logger.info(
+            "orchestrator.data_request.raised request_id=%s subject=%s tier=%s fields=%d",
+            request.request_id, subject_id, tier, len(request.fields),
+        )
+
+        outcome = self._notify_action_agent(
+            "missing_data", context=None, data_request=request,
+            source_id=source_id or subject_id)
+        if outcome == "notified":
+            request.status = STATUS_NOTIFIED
+            request.notified_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            request.recipient = self._data_request_recipient(source_id or subject_id)
+        elif outcome == "no_contact":
+            request.status = STATUS_NO_CONTACT
+            request.note = ("No source contact is registered, so nobody has been "
+                            "asked yet. The request stands.")
+        else:
+            request.note = ("The notification could not be sent. The request "
+                            "stands and can be retried.")
+        store.save(request)
+        return request
+
+    def data_requests_for(self, subject_id: str) -> List[Any]:
+        """Every request raised against one subject, oldest first."""
+        from netgravity.orchestrator.data_requests import DataRequestStore
+
+        return DataRequestStore(self._data_request_storage()).for_subject(subject_id)
+
+    @staticmethod
+    def _data_request_storage():
+        from netgravity.ingestion.config import IngestionConfig
+        from netgravity.ingestion.storage import get_storage
+
+        return get_storage(IngestionConfig())
+
+    @staticmethod
+    def _data_request_recipient(source_id: str) -> Optional[str]:
+        """Who was asked, for the record. Never raises."""
+        try:
+            from netgravity.action_agent.recipients import SourceContactStore
+            from netgravity.ingestion.config import IngestionConfig
+            from netgravity.ingestion.storage import get_storage
+
+            contact = SourceContactStore(get_storage(IngestionConfig())).get(source_id)
+            return contact.email if contact else None
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _notify_action_agent(self, kind: str, *, context: Optional[ExecutionContext],
+                             approval: Any = None, decision: Any = None,
+                             data_request: Any = None,
+                             source_id: str = "") -> Optional[str]:
         """
         Dispatch a "card exists" event to the Action Agent — a notification
         dispatcher, never a second decision-maker. Governance has already
@@ -1040,11 +1131,16 @@ class Orchestrator:
             elif kind == "investigate":
                 action_agent_triggers.on_investigate_card_created(
                     context.execution_id, decision, context)
+            elif kind == "missing_data":
+                return action_agent_triggers.on_data_request_raised(
+                    data_request, source_id=source_id)
         except Exception:
             logger.exception(
                 "orchestrator.action_agent.notify_failed kind=%s execution_id=%s",
-                kind, context.execution_id,
+                kind, getattr(context, "execution_id", None),
             )
+            return "failed"
+        return None
 
     def _collect_evidence(self, context: ExecutionContext) -> Dict[str, Any]:
         """Gather the deterministic facts governance rules evaluate."""

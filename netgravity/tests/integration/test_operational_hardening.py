@@ -508,7 +508,17 @@ class TestTheWebAppLoadsItsGatewayCredentials:
     """
 
     def test_a_value_in_the_file_reaches_the_environment(self, tmp_path, monkeypatch):
-        monkeypatch.delenv("TEXT_API_TOKEN", raising=False)
+        # setenv BEFORE delenv, so monkeypatch has a recorded prior value and
+        # its teardown removes whatever `load_dotenv` writes below.
+        #
+        # `load_dotenv` writes straight into `os.environ`, behind monkeypatch's
+        # back. With only a `delenv` on a variable that was already absent
+        # there is nothing recorded to undo, so "from-the-file" survived into
+        # every later test in the session — and once the reasoning gateway
+        # started reading this variable, that leaked token made the suite
+        # issue a real request to the live gateway and take a 401.
+        monkeypatch.setenv("TEXT_API_TOKEN", "restored-on-teardown")
+        monkeypatch.delenv("TEXT_API_TOKEN")
         env_file = tmp_path / ".env"
         env_file.write_text("TEXT_API_TOKEN=from-the-file\n", encoding="utf-8")
 
@@ -529,10 +539,19 @@ class TestTheWebAppLoadsItsGatewayCredentials:
         load_dotenv(env_file, override=False)
         assert os.environ.get("TEXT_API_TOKEN") == "from-the-environment"
 
-    def test_the_app_module_loads_credentials_at_import(self):
+    def test_the_app_module_loads_credentials_at_import(self, monkeypatch):
         """
-        The behaviour that was missing: importing the web application must put
-        the gateway credentials in the process environment when a .env exists.
+        The behaviour that was missing: the web application must put the
+        gateway credentials in the process environment when a .env supplies
+        them.
+
+        This calls the loader rather than inspecting whatever is already in
+        `os.environ`. It used to assert the ambient variable — which passed
+        for the wrong reason: this checkout's .env states no TEXT_API_TOKEN,
+        and what the assertion actually saw was "from-the-file", leaked out of
+        the test above by a `load_dotenv` that wrote behind monkeypatch's
+        back. A test that passes on another test's leftovers is not testing
+        the loader.
         """
         import app.backend.app as app_module
         assert hasattr(app_module, "_load_gateway_credentials")
@@ -540,10 +559,20 @@ class TestTheWebAppLoadsItsGatewayCredentials:
         repo_env = pathlib.Path(app_module.__file__).resolve().parents[2] / ".env"
         if not repo_env.exists():
             pytest.skip("no .env in this checkout; nothing to assert about loading it")
+
+        stated = [line for line in repo_env.read_text(encoding="utf-8").splitlines()
+                  if line.startswith("TEXT_API_TOKEN=")
+                  and line.split("=", 1)[1].strip()]
+        if not stated:
+            pytest.skip(".env states no TEXT_API_TOKEN; there is nothing to load")
+
+        # Cleared by the suite-wide guard, so the loader has to do real work.
+        # monkeypatch owns it either way, so nothing survives this test.
+        monkeypatch.delenv("TEXT_API_TOKEN", raising=False)
+        app_module._load_gateway_credentials()
         assert os.environ.get("TEXT_API_TOKEN", "").strip(), (
-            "importing the web app left TEXT_API_TOKEN unset despite a .env "
-            "being present — the assistant would run without its model and say "
-            "nothing about it"
+            "the loader left TEXT_API_TOKEN unset despite a .env stating one — "
+            "the assistant would run without its model and say nothing about it"
         )
 
     def test_the_token_is_never_written_to_a_log_line(self):

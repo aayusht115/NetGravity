@@ -38,6 +38,7 @@ from netgravity.schemas.network import (
     OptimizationMode,
     ProductRecord,
     TransportMode,
+    parse_facility_status,
 )
 
 logger = logging.getLogger(__name__)
@@ -316,14 +317,15 @@ def assemble_network_from_structure(
         # `Status` column was being dropped — so eight live facilities were
         # offered to the solver as greenfield options and it "optimised" by
         # shutting three of them, including two of the three plants.
+        # The synonym table lives with FacilityStatus itself, so this and the
+        # ingestion completeness gate read the same one. Two copies drift, and
+        # a gate that disagrees with this assembler would tell a planner to fix
+        # something the model does not think is wrong.
         raw_status = str(raw.get("status") or "").strip().upper()
         if role != NodeRole.MARKET:
-            if raw_status in ("EXISTING", "ACTIVE", "OPEN", "OPERATIONAL", "TRUE", "1"):
-                record.status = FacilityStatus.EXISTING
-            elif raw_status in ("CLOSED", "INACTIVE", "FALSE", "0"):
-                record.status = FacilityStatus.CLOSED
-            elif raw_status in ("CANDIDATE", "PLANNED", "PROPOSED"):
-                record.status = FacilityStatus.CANDIDATE
+            parsed = parse_facility_status(raw_status)
+            if parsed is not None:
+                record.status = parsed
             elif raw_status:
                 unknown_status.append(f"{fid} ({raw_status})")
             else:
