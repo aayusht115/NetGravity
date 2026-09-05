@@ -452,9 +452,21 @@ function refreshFileTable() {
     // what the parse found, and opening it mid-parse showed an empty mapping
     // for a workbook that was about to arrive with 147 columns in it.
     const busy = flow.parsing > 0;
-    continueBtn.disabled = flow.files.length === 0 || busy;
+    // Nor when the parse produced nothing. The button used to unlock on the
+    // mere presence of a file, so a workbook the server could not read opened
+    // the mapping review anyway — a screen whose entire purpose is to show
+    // what the parse found, showing nothing, for a file that was refused.
+    // Only when NOTHING was parsed: a batch where one file of several failed
+    // still continues, with that file named.
+    const nothingParsed = Boolean(flow.parseError)
+      && Object.keys(flow.mapping || {}).length === 0;
+    continueBtn.disabled = flow.files.length === 0 || busy || nothingParsed;
     const label = continueBtn.querySelector('span');
-    if (label) label.textContent = busy ? 'Reading your file…' : 'Continue to AI Analysis';
+    if (label) {
+      label.textContent = busy ? 'Reading your file…'
+        : nothingParsed ? 'Nothing to review yet'
+        : 'Continue to AI Analysis';
+    }
   }
 }
 
@@ -506,66 +518,51 @@ async function addFiles(fileList) {
 
   // Send real files to backend parser
   if (parseable.length > 0) {
+    // Scoped to the active project and authenticated. The parse endpoint
+    // moved under /preview in Phase 10.0 to separate "read the file" from
+    // "commit a network the solver may run on".
+    const projectId = (window.getCurrentProject && window.getCurrentProject()?.id)
+      || getActiveProjectId();
     try {
       const formData = new FormData();
       parseable.forEach(item => {
         formData.append('files', item.file);
       });
-      // Scoped to the active project and authenticated. The parse endpoint
-      // moved under /preview in Phase 10.0 to separate "read the file" from
-      // "commit a network the solver may run on".
-      const projectId = (window.getCurrentProject && window.getCurrentProject()?.id)
-        || getActiveProjectId();
-      const data = await ingestionService.uploadAndParse(formData, projectId);
-      flow.parseError = null;
-      if (data) {
-        flow.extractedNetwork = data.structure;
-        flow.projectId = projectId;
-        flow.schemaFields = data.schemaFields || flow.schemaFields;
-
-        (data.files || []).forEach(summary => {
-          if (summary && summary.name) flow.fileSummaries[summary.name] = summary;
-        });
-
-        if (data.mapping) {
-          parseable.forEach(item => {
-            // Keyed by file name. Never fall back to "whatever the first key
-            // is": with two uploads that showed one file's columns under the
-            // other file's name.
-            const mappedRows = Array.isArray(data.mapping)
-              ? data.mapping : data.mapping[item.name];
-            if (mappedRows && mappedRows.length) flow.mapping[item.id] = mappedRows;
-            if (data.mapStats) flow.mapStats[item.id] = data.mapStats;
-          });
-        }
-        // A file the parser could not read is named, not silently dropped.
-        (data.parse_errors || []).forEach(pe => {
-          const match = parseable.find(v => v.name === pe.file);
-          if (match) flow.parseErrors = { ...(flow.parseErrors || {}), [match.id]: pe.error };
-        });
-        if (data.dataQuality) {
-          DATA_QUALITY.totalRecords = data.dataQuality.totalRecords ?? DATA_QUALITY.totalRecords;
-          DATA_QUALITY.validRecords = data.dataQuality.validRecords ?? DATA_QUALITY.validRecords;
-          DATA_QUALITY.validPct = data.dataQuality.validPct ?? DATA_QUALITY.validPct;
-          DATA_QUALITY.nullCellPct = data.dataQuality.nullCellPct ?? null;
-          DATA_QUALITY.duplicateRows = data.dataQuality.duplicateRows ?? null;
-          DATA_QUALITY.emptyRows = data.dataQuality.emptyRows ?? null;
-          // Replace, never merge: the demo issues describe the prototype's own
-          // facilities and would sit alongside the real ones as if measured.
-          DATA_QUALITY.issues = data.dataQuality.issues || [];
-        }
-      }
+      applyParsedPreview(
+        await ingestionService.uploadAndParse(formData, projectId),
+        parseable, projectId);
     } catch (err) {
-      // The review screen's entire purpose is to show what was parsed. With no
-      // parse there is nothing to review, and continuing would present a
-      // mapping for a file nobody read.
-      flow.parseError = (err && err.message) || 'the file could not be parsed';
-      console.warn('Backend extraction notice:', err);
-      parseable.forEach((item) => {
-        flow.parseErrors = {
-          ...(flow.parseErrors || {}), [item.id]: flow.parseError,
-        };
-      });
+      // A TIMEOUT is a statement about how long this page waited. It is not a
+      // statement about the parse, which does not stop when the fetch is
+      // aborted: the server finishes reading the workbook, stores the preview
+      // and answers 200 into a connection nobody is listening on. Reported as
+      // "Not parsed — ... timed out" for a file that had in fact been read.
+      let recovered = null;
+      if (err && err.code === 'TIMEOUT') {
+        recovered = await ingestionService.findParsedPreview(projectId);
+      }
+
+      if (recovered) {
+        applyParsedPreview(recovered, parseable, projectId);
+      } else {
+        // The review screen's entire purpose is to show what was parsed. With
+        // no parse there is nothing to review, and continuing would present a
+        // mapping for a file nobody read.
+        //
+        // What is said depends on what is known. A refusal names the reason; a
+        // timeout with no preview behind it cannot tell a slow read from a
+        // failed one, so it does not pretend to.
+        flow.parseError = (err && err.code === 'TIMEOUT')
+          ? 'Still being read — this page stopped waiting. Reopen this project '
+            + 'in a moment and the file will be ready for mapping if it was read.'
+          : ((err && err.message) || 'the file could not be parsed');
+        console.warn('Backend extraction notice:', err);
+        parseable.forEach((item) => {
+          flow.parseErrors = {
+            ...(flow.parseErrors || {}), [item.id]: flow.parseError,
+          };
+        });
+      }
     } finally {
       // In `finally`, so a failed parse re-enables the button rather than
       // leaving the screen permanently stuck on "Reading your file…".
@@ -576,6 +573,54 @@ async function addFiles(fileList) {
       });
     }
     refreshFileTable();
+  }
+}
+
+/**
+ * Read a parsing preview into the upload flow.
+ *
+ * Lifted out of the upload handler unchanged so the recovery path — a parse
+ * this page stopped waiting for, collected afterwards from
+ * `/preview/active` — lands in exactly the same state as one that answered in
+ * time, rather than through a second copy of this that is free to drift.
+ */
+function applyParsedPreview(data, parseable, projectId) {
+  flow.parseError = null;
+  if (!data) return;
+  flow.extractedNetwork = data.structure;
+  flow.projectId = projectId;
+  flow.schemaFields = data.schemaFields || flow.schemaFields;
+
+  (data.files || []).forEach(summary => {
+    if (summary && summary.name) flow.fileSummaries[summary.name] = summary;
+  });
+
+  if (data.mapping) {
+    parseable.forEach(item => {
+      // Keyed by file name. Never fall back to "whatever the first key
+      // is": with two uploads that showed one file's columns under the
+      // other file's name.
+      const mappedRows = Array.isArray(data.mapping)
+        ? data.mapping : data.mapping[item.name];
+      if (mappedRows && mappedRows.length) flow.mapping[item.id] = mappedRows;
+      if (data.mapStats) flow.mapStats[item.id] = data.mapStats;
+    });
+  }
+  // A file the parser could not read is named, not silently dropped.
+  (data.parse_errors || []).forEach(pe => {
+    const match = parseable.find(v => v.name === pe.file);
+    if (match) flow.parseErrors = { ...(flow.parseErrors || {}), [match.id]: pe.error };
+  });
+  if (data.dataQuality) {
+    DATA_QUALITY.totalRecords = data.dataQuality.totalRecords ?? DATA_QUALITY.totalRecords;
+    DATA_QUALITY.validRecords = data.dataQuality.validRecords ?? DATA_QUALITY.validRecords;
+    DATA_QUALITY.validPct = data.dataQuality.validPct ?? DATA_QUALITY.validPct;
+    DATA_QUALITY.nullCellPct = data.dataQuality.nullCellPct ?? null;
+    DATA_QUALITY.duplicateRows = data.dataQuality.duplicateRows ?? null;
+    DATA_QUALITY.emptyRows = data.dataQuality.emptyRows ?? null;
+    // Replace, never merge: the demo issues describe the prototype's own
+    // facilities and would sit alongside the real ones as if measured.
+    DATA_QUALITY.issues = data.dataQuality.issues || [];
   }
 }
 

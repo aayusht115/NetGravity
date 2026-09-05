@@ -364,6 +364,62 @@ class TestEveryCallerReportsItsOwnRealWork:
         assert "stepFail('simulate'" in fn
         assert "finishRun({ error: message })" in fn
 
+    def test_a_solve_this_client_stopped_waiting_for_is_not_called_failed(self):
+        """
+        MEASURED on Dump/NetGravity_Canada_Test_Data.xlsx: the first scenario
+        on a new network took 5m19s, the client aborted at 5m00s, and the
+        screen said "The scenario could not be solved" — for a scenario the
+        server had built, stored and answered 201 for. Aborting a fetch does
+        not abort the optimiser.
+
+        (Why it was slow: `_build_scenario_analysis` carries a `rei` step, and
+        `resilience.assess` is one MILP solve per facility. The batch is cached
+        by material fingerprint — the second scenario on that network took 31s
+        — but nothing before it asks for that batch, so the first scenario a
+        user runs pays for the whole cold assessment.)
+
+        A TIMEOUT says this client stopped waiting. It says nothing about
+        whether the work succeeded, so neither does the screen.
+        """
+        js = _without_comments(_asset("js", "scenarios.js"))
+        fn = js[js.index("async function runScenarioCreation()"):]
+        fn = fn[:fn.index("if (!baselineScenario())")]
+        # The abort is told apart from a refusal…
+        assert "err.code === 'TIMEOUT'" in fn, fn
+        # …and answered by looking for what the server may have finished.
+        assert "findScenarioCreatedSince" in fn, fn
+        # A failure is only declared once that has come back with nothing.
+        assert fn.index("findScenarioCreatedSince") < fn.index("stepFail('simulate'"), fn
+        assert "if (!solved) {" in fn, fn
+        # And what it then says does not claim the run failed.
+        assert "could not be solved: ${err.message}" in fn, fn
+        assert "still running on the server" in fn, fn
+
+    def test_the_recovery_collects_only_this_run_s_scenario(self):
+        """
+        A scenario is matched by name, so an older one of the same name must
+        not be adopted as this run's result.
+        """
+        js = _without_comments(
+            _asset("js", "integration", "services", "scenario-service.js"))
+        fn = js[js.index("async findScenarioCreatedSince("):]
+        fn = fn[:fn.index("\n  },")]
+        assert "created_at" in fn, fn
+        assert ">= after" in fn, fn
+        # Bounded: it polls, it does not wait for ever.
+        assert "deadline" in fn, fn
+        assert "timeoutMs" in fn, fn
+        # A failed poll is not read as a failed solve.
+        assert "catch (e)" in fn, fn
+
+    def test_the_client_waits_longer_than_the_measured_cold_path(self):
+        js = _asset("js", "integration", "config.js")
+        import re as _re
+        ms = int(_re.search(r"SOLVE_TIMEOUT_MS: (\d+)", js).group(1))
+        # 5m19s measured, 5m30s on the re-run. This is patience, not
+        # correctness — the recovery above is what makes it safe.
+        assert ms >= 420000, ms
+
     def test_the_fabricated_pre_analysis_popup_is_gone(self):
         """
         `finishIngestion` opened with a 2.2-second overlay whose progress ring

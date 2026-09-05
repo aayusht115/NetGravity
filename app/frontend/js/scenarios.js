@@ -16,7 +16,7 @@ import { initMap, renderScenarioDigitalTwin, invalidateMapSize,
          revealMap } from './map.js';
 import { scenarioService } from './integration/services/scenario-service.js';
 import {
-  startRun, stepStart, stepDone, stepFail, finishRun,
+  startRun, stepStart, stepDone, stepFail, finishRun, note,
 } from './agent-activity.js';
 import { mountAgentLoading, dismissAgentLoading } from './agent-loading.js';
 import {
@@ -2139,6 +2139,7 @@ async function runScenarioCreation() {
   });
 
   let solved;
+  const dispatchedAt = Date.now();
   try {
     stepStart('simulate');
     solved = await scenarioService.simulateScenario(body);
@@ -2147,16 +2148,45 @@ async function runScenarioCreation() {
       executionId: solved && solved.execution_id,
     });
   } catch (err) {
-    // Explicit failure. No scenario is added, and nothing is fabricated to
-    // fill the gap.
-    const message = err && err.message
-      ? `The scenario could not be solved: ${err.message}`
-      : 'The scenario could not be solved.';
-    stepFail('simulate', { error: message });
-    finishRun({ error: message });
-    dismissAgentLoading(2600);
-    showCreationError(message);
-    return;
+    // A TIMEOUT is a statement about how long this client waited. It is not a
+    // statement about the solve, which is still running: aborting a fetch does
+    // not abort the optimiser. Measured on a 20-facility network, the first
+    // scenario took 5m19s against a 5m limit — the server finished, stored the
+    // scenario and answered 201 into a connection nobody was listening on,
+    // while the screen said "The scenario could not be solved".
+    //
+    // So look for it before saying anything.
+    if (err && err.code === 'TIMEOUT') {
+      note('scenario', [
+        'Still solving — this client stopped waiting, the solver did not',
+        'Watching for the finished scenario',
+      ]);
+      solved = await scenarioService.findScenarioCreatedSince(
+        body.name, dispatchedAt, { projectId: body.project_id });
+    }
+
+    if (!solved) {
+      // Now it can be reported, and only as much as is known: this client
+      // never saw a result. Whether the run failed or is simply still going is
+      // exactly what a timeout cannot tell us, so it is not claimed either way.
+      const message = (err && err.code === 'TIMEOUT')
+        ? 'This scenario is taking longer than this page will wait. The solve '
+          + 'is still running on the server — reopen Scenario Planning in a few '
+          + 'minutes and it will be listed if it completed.'
+        : (err && err.message
+            ? `The scenario could not be solved: ${err.message}`
+            : 'The scenario could not be solved.');
+      stepFail('simulate', { error: message });
+      finishRun({ error: message });
+      dismissAgentLoading(2600);
+      showCreationError(message);
+      return;
+    }
+
+    stepDone('simulate', {
+      detail: 'Solved on the server, collected after this page stopped waiting',
+      executionId: solved.execution_id,
+    });
   }
 
   stepStart('compare');
