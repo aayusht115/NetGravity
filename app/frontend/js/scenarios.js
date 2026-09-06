@@ -359,6 +359,17 @@ export function initScenarios() {
       zoom: 4.2,
       center: [22.5, 79.5],
       isCompact: true,
+      // The same zoom the Digital Twin page has, which is the source of
+      // truth for how a map in this product behaves: wheel, +/-, fit,
+      // double-click, box-zoom, keyboard — all live from the start.
+      //
+      // `isCompact` used to turn the wheel off here, and the click-to-arm
+      // step that replaced it was a guard against this card swallowing the
+      // page's scroll. Measured: the Scenario Planning page's scroll height
+      // equals its client height — the page does not scroll — so the guard
+      // was protecting against something that does not happen, at the cost
+      // of behaving unlike every other map.
+      scrollWheelZoom: true,
       initialScenario: mapActiveId,
       mode: mapActiveId === BASELINE_SCENARIO_ID ? 'baseline' : 'scenario',
     });
@@ -685,13 +696,13 @@ function renderMultiScenarioTable() {
   const selected = multiSelectedIds.map((id) => SCENARIOS.find((s) => s.id === id)).filter(Boolean);
 
   if (!baseline) {
-    container.innerHTML = '<div class="text-xs text-muted" style="padding:18px">'
+    container.innerHTML = '<div class="scn-empty-note">'
       + 'This network has not been solved, so there is no baseline to compare '
       + 'scenarios against.</div>';
     return;
   }
   if (!selected.length) {
-    container.innerHTML = '<div class="text-xs text-muted" style="padding:18px">'
+    container.innerHTML = '<div class="scn-empty-note">'
       + 'No scenario selected. Create one with <strong>Create New Scenario</strong>, '
       + 'or add an existing one from <strong>+ Add scenario to compare</strong>.'
       + '</div>';

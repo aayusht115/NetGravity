@@ -6,11 +6,16 @@ THE CARD YOU COULD NOT ZOOM
 Every map in this product is the same Leaflet map with the same controls,
 except one: the scenario planner's "Digital Twin — Visual Context" card is
 built with `isCompact: true`, and that flag turned the wheel off and never
-turned it back on. It was turned off for a real reason — the card is the
-bottom row of a page that scrolls, and a map that takes the wheel the moment
-the pointer crosses it swallows the page scroll. So the wheel is now *armed*
-by a click and handed back when the pointer leaves, which gives the card the
-twin page's zoom without taking the page's scroll.
+turned it back on.
+
+It was first given a click-to-arm wheel, on the reasoning that a map taking
+the wheel on hover would swallow the scroll of the page it sits at the bottom
+of. Measured afterwards: the Scenario Planning page's scroll height equals its
+client height — it does not scroll — so that guard cost the card its likeness
+to every other map to protect against something that does not happen. The
+Digital Twin page is the source of truth, and the card now behaves exactly
+like it. `armCompactZoom` is kept, and is still the right answer for a
+compact map on a page that does scroll.
 
 THE HERO THAT LOOKED PRINTED
 ----------------------------
@@ -61,11 +66,37 @@ class TestTheScenarioTwinCanBeZoomed:
         assert "mouseleave" in fn, fn
         assert "map.scrollWheelZoom.disable()" in fn, fn
 
-    def test_it_is_the_compact_maps_that_get_it(self):
+    def test_arming_is_only_for_a_map_whose_wheel_is_actually_off(self):
+        """
+        SUPERSEDED: every compact map was armed. The Digital Twin page is the
+        reference for how a map in this product behaves, and its wheel is on
+        from the start — so the scenario card now asks for the wheel too
+        (scenarios.js), and arming a map that already zooms would put "Click
+        the map to zoom" over one that just zoomed.
+
+        The mechanism is kept rather than deleted: it is the right answer for
+        any compact map that ends up on a page which does scroll.
+        """
         js = _without_comments(_asset("js", "map.js"))
         init = js[js.index("export function initMap("):]
         init = init[:init.index("\n}\n")]
-        assert "if (options.isCompact) armCompactZoom(map, container);" in init, init
+        assert "if (options.isCompact && !scrollWheelZoom) armCompactZoom(map, container);" \
+            in init, init
+        scn = _without_comments(_asset("js", "scenarios.js"))
+        assert "scrollWheelZoom: true," in scn, scn
+
+    def test_the_scenario_card_zooms_like_the_twin_page(self):
+        """
+        One behaviour on every map. The twin page passes no options at all,
+        so its wheel is on by the `!options.isCompact` default; the scenario
+        card asks for the same thing explicitly.
+        """
+        js = _without_comments(_asset("js", "map.js"))
+        init = js[js.index("export function initMap("):]
+        init = init[:init.index("\n}\n")]
+        assert "options.scrollWheelZoom !== undefined" in init, init
+        assert "L.control.zoom({ position: 'bottomleft' }).addTo(map);" in init, init
+        assert "addFitControl(map, containerId);" in init, init
 
     def test_an_unarmed_wheel_says_why_nothing_happened(self):
         """Nielsen #1. A map that silently ignores the wheel reads as broken."""
@@ -111,8 +142,8 @@ class TestTheScenarioTwinCanBeZoomed:
         init = js[js.index("export function initMap("):]
         init = init[:init.index("\n}\n")]
         assert "addFitControl(map, containerId);" in init, init
-        # Unconditional: not inside the isCompact branch.
-        assert init.index("addFitControl") < init.index("if (options.isCompact)")
+        # Unconditional: not inside the compact branch.
+        assert init.index("addFitControl") < init.index("if (options.isCompact")
         fn = js[js.index("function addFitControl("):]
         fn = fn[:fn.index("\n}\n")]
         assert "fitToNetwork(containerId, { sites: true })" in fn, fn
@@ -204,7 +235,31 @@ class TestTheLandingHeroMoves:
         fn = js[js.index("function packetMarkup()"):]
         fn = fn[:fn.index("\n}\n")]
         assert "Math.hypot" in fn, fn
-        assert "Math.min(13, Math.max(5.5," in fn, fn
+        # SUPERSEDED BOUNDS: 5.5-13s, from a 78 px/s speed. Slowed to 58 px/s
+        # — at the old speed the eye tracked individual packets across the
+        # map, which is a thing to watch rather than a thing happening behind
+        # a sign-in form.
+        assert "Math.min(17, Math.max(7.5," in fn, fn
+        assert "/ 58)" in fn, fn
+
+    def test_a_packet_fades_in_and_out_rather_than_popping(self):
+        """
+        Linear motion is right for a loop — easing would decelerate into the
+        hub and then snap back to the far end — but a packet appearing and
+        vanishing at full brightness pops just as hard. The fade runs on the
+        SAME SMIL clock as the motion (identical dur and begin), which two
+        CSS animations on one element would not be guaranteed to keep.
+        """
+        js = _without_comments(_asset("js", "landing.js"))
+        fn = js[js.index("function packetMarkup()"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert 'attributeName="opacity"' in fn, fn
+        assert 'values="0;1;1;0"' in fn, fn
+        # Same clock as the motion: both read the same two expressions.
+        assert fn.count('${dur.toFixed(2)}s') == 2, fn
+        assert fn.count('${begin.toFixed(2)}s') == 2, fn
+        # Eased at the ends, so the fade itself does not have a corner in it.
+        assert 'calcMode="spline"' in fn, fn
 
     def test_the_hubs_carry_two_rings_at_different_speeds(self):
         js = _asset("js", "landing.js")
@@ -213,9 +268,15 @@ class TestTheLandingHeroMoves:
         assert "@keyframes hubPulseRingWide" in css
         rule = css[css.index("#landing-page .lw-hub-pulse-slow {"):]
         rule = rule[:rule.index("}")]
-        assert "animation-duration: 5.4s" in rule, rule
-        # Not a multiple of the fast ring's 3.2s, so they never land together.
-        assert "3.2s" not in rule
+        # SUPERSEDED SPEEDS: 3.2s and 5.4s. Six hubs on a 3.2s cycle put a
+        # ring restarting somewhere on the map about twice a second, which
+        # reads as blinking rather than as a signal.
+        assert "animation-duration: 7.3s" in rule, rule
+        fast = css[css.index(".minimal-hub-pulse {"):]
+        fast = fast[:fast.index("}")]
+        assert "hubPulseRing 4.8s" in fast, fast
+        # Still not a multiple of each other, so the two never land together.
+        assert 7.3 % 4.8 > 0.5
 
     def test_none_of_it_runs_for_someone_who_asked_for_less_motion(self):
         """

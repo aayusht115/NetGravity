@@ -318,10 +318,11 @@ export function initMap(containerId, options = {}) {
 
   const zoom = options.zoom || (options.isCompact ? 4.2 : 5);
   const center = options.center || [22.5, 79.5];
-  // A compact map starts with the wheel disabled and EARNS it on click — see
-  // `armCompactZoom`. It used to be disabled outright and never re-enabled,
-  // which is why the scenario planner's twin card was the one map in the
-  // product you could not zoom into.
+  // The Digital Twin page is the reference: its map has the wheel on from
+  // the start, and every other map in this product is meant to behave the
+  // same way. `isCompact` still decides the default for anything that does
+  // not say otherwise, but a caller that asks for the wheel gets it — see
+  // scenarios.js, which does.
   const scrollWheelZoom = options.scrollWheelZoom !== undefined
     ? options.scrollWheelZoom : !options.isCompact;
 
@@ -339,7 +340,9 @@ export function initMap(containerId, options = {}) {
   });
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
   addFitControl(map, containerId);
-  if (options.isCompact) armCompactZoom(map, container);
+  // Only for a map whose wheel is genuinely off. Arming a map that already
+  // zooms would show "Click the map to zoom" over one that just zoomed.
+  if (options.isCompact && !scrollWheelZoom) armCompactZoom(map, container);
 
   maps[containerId] = map;
   // Read-only handle for diagnostics: "where is the map looking" is otherwise

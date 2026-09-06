@@ -1464,21 +1464,19 @@ function sizePageToWindow(selector, varName) {
 
 function sizeOverviewToWindow() {
   sizePageToWindow('#tab-home.active .ov-main', '--ov-main-top');
-  // The KPI strip's real height, so `.ov-main` can leave room for it. The
-  // strip is Home's bottom row and it must be ON the first screen: measured
-  // rather than assumed, because its height follows the type scale and the
-  // sidebar's width, neither of which this file can know.
+  // SUPERSEDED: this also measured the KPI strip and wrote `--ov-strip-h`,
+  // which `.ov-main` subtracted so the strip landed on the first screen.
+  // The findings are what this page is for, and buying the strip 95px cost
+  // the attention card the height its recommendation needed. The strip is
+  // now the first thing below the fold; nothing measures it any more, and
+  // the stale variable is cleared so a cached stylesheet cannot keep
+  // subtracting a height nobody is writing.
   const strip = document.querySelector('#tab-home.active .home2-kpi-strip');
   const shell = document.querySelector('.main-content');
   if (!shell) return;
-  if (!strip || strip.offsetParent === null) {
-    shell.style.removeProperty('--ov-strip-h');
-    return;
-  }
+  shell.style.removeProperty('--ov-strip-h');
+  if (!strip) return;
   const box = strip.getBoundingClientRect();
-  const gap = parseFloat(getComputedStyle(strip).marginTop) || 0;
-  const total = Math.round(box.height + gap);
-  if (total > 0) shell.style.setProperty('--ov-strip-h', total + 'px');
 
   // How much of the strip's right end the "Ask Netgravity" button covers.
   //
@@ -1497,9 +1495,16 @@ function sizeOverviewToWindow() {
   // button has a zero-width rect, which is the thing actually being asked.
   const fab = document.getElementById('floating-chatbot-fab');
   const fabBox = fab ? fab.getBoundingClientRect() : null;
-  const overlaps = fabBox && fabBox.width > 0
-                   && fabBox.top < box.bottom && fabBox.bottom > box.top;
-  const reserve = overlaps ? Math.max(0, Math.round(box.right - fabBox.left) + 16) : 0;
+  // No vertical test any more. It used to check whether the two currently
+  // share a band of screen, which was true when the strip was on the first
+  // screen and is false the moment it is measured below the fold — so the
+  // gutter came out 0 and the button landed under the chat bubble as soon
+  // as the reader scrolled down to it. The chat button is fixed to the
+  // bottom of the VIEWPORT and the strip is the last row of the page:
+  // scrolling to one always brings the other alongside. What is left to
+  // measure is how much of the strip's right end it covers.
+  const reserve = (fabBox && fabBox.width > 0)
+    ? Math.max(0, Math.round(box.right - fabBox.left) + 16) : 0;
   strip.style.setProperty('--ov-fab-reserve', reserve + 'px');
 }
 

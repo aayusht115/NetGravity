@@ -748,6 +748,37 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   z-index: 90;
 }
 
+/* The band the bar could not cover.
+   `.main-content` is the scroll container and carries `padding: var(--space-lg)`.
+   A sticky child pins to the top of the SCROLLPORT, which is the padding box —
+   so this bar docks 24px below the container's visible top edge, and the
+   content scrolling underneath passes through those 24px in full view before
+   it reaches the bar. Measured on the KPI dashboard at scrollTop 150 and 600:
+   `#dash-facility-name`, `.facility-toolbar` and two chart canvases were all
+   painting in that band, above a bar whose whole job is to be in front of
+   them.
+
+   The band is real page, not a gap the bar could simply grow into: the tab
+   panels deliberately bleed out to the container's edges through the same
+   padding (see `#tab-facility-dashboard` and friends below), so removing the
+   container's padding would move every panel instead of fixing this.
+
+   So the bar covers it, with an opaque strip in its own background that is
+   part of the bar and therefore sticks with it. `left/right: 0` matches the
+   bar's own width, which is exactly the width content can occupy: each panel
+   pads its content back in by the same 24px it bled out by, so nothing can
+   ever appear beside the bar. */
+.app-global-topbar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: var(--space-lg);
+  background: var(--bg);
+  pointer-events: none;
+}
+
 .topbar-left-area {
   display: flex;
   align-items: center;
@@ -2046,6 +2077,20 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   border-radius: var(--r-lg);
   padding: 16px 20px;
   box-shadow: var(--shadow-sm);
+}
+
+/* The comparison table's empty state.
+   It used to carry an inline `padding: 18px` inside a card that already pads
+   16px/20px, so one sentence sat 34px in from the card's edge — out of line
+   with the "Comparison" heading directly above it — in a 972x134 box at 6%
+   ink coverage, the sparsest card in the product. Aligned to the heading,
+   and as tall as the sentence it holds. */
+.scn-empty-note {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+  padding: 2px 0 6px;
+  max-width: 78ch;
 }
 
 .scn-table-header-row {
