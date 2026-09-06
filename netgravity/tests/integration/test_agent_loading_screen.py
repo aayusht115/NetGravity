@@ -371,11 +371,13 @@ class TestEveryCallerReportsItsOwnRealWork:
         """
         js = _without_comments(_asset("js", "scenarios.js"))
         fn = js[js.index("async function runScenarioCreation()"):]
-        assert "const reportFailure = (step, message) =>" in fn
+        assert "const reportFailure = (step, message, diagnosis = null) =>" in fn
         assert "stepFail(step, { error: message })" in fn
         assert "finishRun({ error: message })" in fn
         # Named by the dispatch that stopped, not by a single hardcoded step.
-        assert "reportFailure('simulate', message)" in fn
+        # The call carries the solver's diagnosis with it now, so it spans
+        # two lines; matched on its opening.
+        assert "reportFailure('simulate', message," in fn
         assert "reportFailure('compare'," in fn
 
     def test_a_failure_the_reader_walked_away_from_still_reaches_them(self):
@@ -386,7 +388,7 @@ class TestEveryCallerReportsItsOwnRealWork:
         the flow where they are not looking.
         """
         js = _without_comments(_asset("js", "scenarios.js"))
-        fn = js[js.index("const reportFailure = (step, message) =>"):]
+        fn = js[js.index("const reportFailure = (step, message, diagnosis = null) =>"):]
         fn = fn[:fn.index("\n  };")]
         assert "if (backgrounded)" in fn
         assert "failBackgroundTask(taskId, message)" in fn
@@ -419,7 +421,8 @@ class TestEveryCallerReportsItsOwnRealWork:
         # Compared against the CALL, not the definition: `reportFailure` is
         # declared before the try block, and only its invocation declares
         # anything failed.
-        assert fn.index("findScenarioCreatedSince")             < fn.index("reportFailure('simulate', message)"), fn
+        assert fn.index("findScenarioCreatedSince") \
+            < fn.index("reportFailure('simulate', message,"), fn
         assert "if (!solved) {" in fn, fn
         # And what it then says does not claim the run failed.
         assert "could not be solved: ${err.message}" in fn, fn

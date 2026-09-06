@@ -2814,7 +2814,7 @@ function scenarioActionLabel(body) {
  * The name now defaults, so the form is runnable as it opens; this returns the
  * user to the exact input for every OTHER refusal rather than making them hunt.
  */
-function showCreationError(message, fieldId = null) {
+function showCreationError(message, fieldId = null, diagnosis = null) {
   const formBody = document.getElementById('toolbox-form-body');
   if (!formBody) return;
   // A refusal belongs beside the form that has to change, with the user's
@@ -2849,6 +2849,65 @@ function showCreationError(message, fieldId = null) {
     formBody.appendChild(banner);
   }
   banner.textContent = message;
+
+  // WHY, in figures, when the reason was that the network cannot serve what
+  // this scenario asks of it.
+  //
+  // A refused scenario used to be one line of red text saying no feasible
+  // solution exists — true, and nothing a planner can do anything with. The
+  // solver now diagnoses an infeasible solve and the numbers travel to here;
+  // this states the shortfall, names the markets, and names any site the
+  // client has proposed that the optimiser would build.
+  banner.appendChild(infeasibilityHtml(diagnosis));
+}
+
+/**
+ * The shortfall behind a refused scenario, as an element.
+ *
+ * Every figure is the backend's, from `OptimizationResult.infeasibility` — a
+ * diagnostic solve that was allowed to leave demand unserved. It is NOT a
+ * plan and carries no cost, which the backend's own summary says and this
+ * does not repeat.
+ *
+ * Returns an empty fragment when there is nothing to add, so the caller does
+ * not have to branch.
+ */
+function infeasibilityHtml(diagnosis) {
+  const frag = document.createDocumentFragment();
+  if (!diagnosis || !diagnosis.diagnosed) return frag;
+
+  const esc = (t) => String(t == null ? '' : t)
+    .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                                   '"': '&quot;', "'": '&#39;' }[c]));
+  const rows = [];
+  if (typeof diagnosis.unserved_demand === 'number') {
+    rows.push(['Cannot be served',
+      `<strong>${formatNumber(Math.round(diagnosis.unserved_demand))} units</strong>`
+      + (typeof diagnosis.unserved_rate === 'number'
+          ? ` · ${(diagnosis.unserved_rate * 100).toFixed(1)}% of the demand asked for`
+          : '')]);
+  }
+  const short = diagnosis.short_markets || [];
+  if (short.length) {
+    rows.push(['Short in', short.map((m) =>
+      `${esc(m.market_id)} (${formatNumber(Math.round(m.unserved))} units)`)
+      .join(', ')]);
+  }
+  const build = diagnosis.would_open_candidates || [];
+  if (build.length) {
+    rows.push(['Would build', `${build.map(esc).join(', ')} — `
+      + `${build.length === 1 ? 'a site you have' : 'sites you have'} proposed `
+      + 'but not built']);
+  }
+  if (!rows.length) return frag;
+
+  const box = document.createElement('div');
+  box.className = 'scn-infeasible-detail';
+  box.innerHTML = rows.map(([label, value]) =>
+    `<div class="scn-infeasible-row"><span>${label}</span><span>${value}</span></div>`)
+    .join('');
+  frag.appendChild(box);
+  return frag;
 }
 
 /**
@@ -3054,7 +3113,7 @@ async function runScenarioCreation() {
   // picks — so a branch cannot be written for the dialog and then forget that
   // the dialog may no longer be there. `step` is which dispatch stopped, which
   // the trace still records when the reader stayed to watch it.
-  const reportFailure = (step, message) => {
+  const reportFailure = (step, message, diagnosis = null) => {
     withdrawBackgroundExit();
     if (backgrounded) {
       failBackgroundTask(taskId, message);
@@ -3063,7 +3122,7 @@ async function runScenarioCreation() {
     stepFail(step, { error: message });
     finishRun({ error: message });
     dismissAgentLoading(2600);
-    showCreationError(message);
+    showCreationError(message, null, diagnosis);
   };
 
   let solved;
@@ -3104,7 +3163,10 @@ async function runScenarioCreation() {
         : (err && err.message
             ? `The scenario could not be solved: ${err.message}`
             : 'The scenario could not be solved.');
-      reportFailure('simulate', message);
+      // The solver's own diagnosis, when the refusal was an infeasible solve.
+      // `ApplicationError.details` now carries the error's `context`.
+      reportFailure('simulate', message,
+                    (err && err.details && err.details.infeasibility) || null);
       return;
     }
 

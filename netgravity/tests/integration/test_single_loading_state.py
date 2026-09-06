@@ -125,9 +125,14 @@ class TestOnlyOneLoadingScreen:
         assert "agent-execution-view" not in _without_comments(js)
         assert "showCreationError" in js
         # The refusal is written into the form, and the form is put back up.
-        fn = js[js.index("function showCreationError(message, fieldId = null)"):]
+        # It takes a third argument now — the solver's diagnosis of an
+        # infeasible solve, so a refusal can say how much demand the network
+        # could not serve rather than only that it could not be served.
+        fn = js[js.index(
+            "function showCreationError(message, fieldId = null, diagnosis = null)"):]
         fn = fn[:fn.index("\n}\n")]
         assert "formBody.appendChild(banner)" in fn, fn
+        assert "infeasibilityHtml(diagnosis)" in fn, fn
         assert "modal-create-toolbox" in fn, fn
         # And the swap that "Back to the form" existed to undo is gone with it.
         assert "scn-creation-back" not in js

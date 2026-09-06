@@ -38,6 +38,12 @@ export class ApplicationError extends Error {
       ErrorCode.BACKEND_ERROR
     );
     const message = err.message || `Request failed with status ${status}`;
-    return new ApplicationError(code, message, err.details || {});
+    // `context` as well as `details`. Every error this backend raises carries
+    // `context` — see `ApplicationError.to_payload` in
+    // app/backend/services/errors.py and every hand-built error body in the
+    // API blueprints — and reading only `details` discarded the structured
+    // half of every failure at the client boundary, on every screen.
+    return new ApplicationError(code, message,
+                                err.details || err.context || {});
   }
 }

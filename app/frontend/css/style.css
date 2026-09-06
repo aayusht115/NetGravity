@@ -4306,3 +4306,42 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   line-height: 1.45;
   color: var(--text-3);
 }
+
+
+/* The figures behind a refused scenario.
+
+   A run the solver could not solve used to be one line of red text. These are
+   the numbers from the diagnostic solve that says why — the shortfall, the
+   markets it falls in, and any proposed site the optimiser would build. Set
+   inside the error banner, quieter than the sentence above them, because the
+   sentence is the finding and these are its evidence. */
+.scn-infeasible-detail {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(220, 38, 38, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.scn-infeasible-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.scn-infeasible-row > span:first-child {
+  flex: 0 0 108px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.scn-infeasible-row > span:last-child {
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}

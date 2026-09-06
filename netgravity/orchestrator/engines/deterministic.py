@@ -104,9 +104,10 @@ class OptimizationClient:
         cfg: OptimizationConfig,
         unserved: Optional[float],
         total: Optional[float],
+        reading: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """What a relaxed result carries so nothing downstream can mistake it."""
-        return {
+        note = {
             "solve_relaxation": "SHORTAGE_PERMITTED",
             "strict_solve_status": "INFEASIBLE",
             "relaxation_reason": (
@@ -119,6 +120,52 @@ class OptimizationClient:
             "total_demand": total,
             "shortage_penalty_per_unit": cfg.shortage_penalty,
         }
+        # WHERE the shortfall falls, and which proposed site the optimiser
+        # opened to get this far. Read off the plan this note describes — no
+        # second solve — because "you are short" is a fact and "Delhi is short,
+        # and it opened the Nagpur site you proposed" is a decision.
+        if reading:
+            note["short_markets"] = reading.get("short_markets") or []
+            note["would_open_candidates"] = reading.get("would_open_candidates") or []
+        return note
+
+    async def _diagnose(
+        self,
+        network: CanonicalNetwork,
+        cfg: OptimizationConfig,
+        scenario_id: Optional[str],
+        result: Any,
+    ) -> Any:
+        """
+        Why this solve proved infeasible — the shortfall, in units.
+
+        Costs ONE extra solve, and only on a path that otherwise returns an
+        empty network: an infeasible result carries no decisions and no KPIs,
+        so `kpis.unmet_demand` is 0.0, which means "not computed" and reads as
+        "nothing is short".
+
+        Skipped where shortage was already permitted — a diagnostic that asks
+        the same question again learns nothing, and would recurse.
+
+        Never raises. See `netgravity/optimization/infeasibility.py`.
+        """
+        from netgravity.optimization import infeasibility
+
+        if not getattr(cfg, "diagnose_infeasible", True):
+            return None
+        # A structural refusal returns before any model is built, so there is
+        # nothing to re-solve; the validator's own words are the diagnosis.
+        if not result.facility_decisions and result.solver.warnings and any(
+                w.startswith("[V-") for w in result.solver.warnings):
+            return infeasibility.structural_diagnosis(network, result)
+        if cfg.allow_shortage:
+            return None
+
+        def _solve(net, config, sid):
+            return milp_solve(net, config, sid)
+
+        return await _in_thread(
+            infeasibility.diagnose, network, cfg, scenario_id, _solve)
 
     async def _relaxed_shortage_result(
         self,
@@ -218,7 +265,11 @@ class OptimizationClient:
         # A field of its own. `state.metadata` is a typed `ModelMetadata` whose
         # consumers read it attribute by attribute (run_id, solver_status,
         # model_version), so replacing it with a dict breaks them.
-        state.solve_relaxation = self._relaxation_note(relaxed_cfg, unserved, total)
+        from netgravity.optimization import infeasibility
+
+        state.solve_relaxation = self._relaxation_note(
+            relaxed_cfg, unserved, total,
+            infeasibility.shortfall_from(network, relaxed))
         if state.mode_description:
             state.mode_description = (
                 f"{state.mode_description} (relaxed: unmet demand permitted "
@@ -260,20 +311,34 @@ class OptimizationClient:
             ) from exc
 
         if result.solver.status == SolverStatus.INFEASIBLE:
+            # The relaxation IS the diagnostic solve — same network, same
+            # costs, unmet demand permitted — so when it runs it answers the
+            # question and its note carries the shortfall. Only when it does
+            # not run does anything else have to solve.
             relaxed = await self._solve_relaxed_to_shortage(
                 network, cfg, scenario_id,
             )
             if relaxed is not None:
                 return relaxed
+
+            # Nothing else is going to answer. WHY, before the exception: this
+            # is the last place the network, the config and the failed result
+            # are all in scope, and after it the caller has a status, which is
+            # what an empty dashboard was made of.
+            diagnosis = await self._diagnose(network, cfg, scenario_id, result)
+            detail = (f" {diagnosis.summary}"
+                      if diagnosis and diagnosis.summary else "")
             raise SolverInfeasibleError(
                 "The MILP proved no feasible solution exists for this network "
                 "configuration. This is a mathematical outcome, not a transient "
-                "fault, so it is not retried.",
+                f"fault, so it is not retried.{detail}",
                 context={
                     "scenario_id": scenario_id,
                     "solver_status": result.solver.status.value,
                     "warnings": list(result.solver.warnings),
                     "optimization_mode": result.optimization_mode,
+                    "infeasibility": (diagnosis.model_dump(mode="json")
+                                      if diagnosis else None),
                 },
             )
 
@@ -345,11 +410,20 @@ class OptimizationClient:
                     result.kpis.total_demand if result.kpis else None,
                 )
             else:
+                # Same as the network solve above: the diagnosis is the only
+                # thing here that says what the scenario asked for that the
+                # network could not give.
+                diagnosis = await self._diagnose(
+                    scenario_network, cfg, scenario_id, result)
+                detail = (f" {diagnosis.summary}"
+                          if diagnosis and diagnosis.summary else "")
                 raise SolverInfeasibleError(
                     f"Scenario '{scenario_id}' has no feasible solution. The network cannot "
-                    f"absorb these changes under the current constraints.",
+                    f"absorb these changes under the current constraints.{detail}",
                     context={"scenario_id": scenario_id,
-                             "solver_status": result.solver.status.value},
+                             "solver_status": result.solver.status.value,
+                             "infeasibility": (diagnosis.model_dump(mode="json")
+                                               if diagnosis else None)},
                 )
 
         if not result.is_solved:

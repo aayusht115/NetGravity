@@ -110,11 +110,14 @@ class TestALongSolveCanBeLeftRunning:
         place — otherwise a branch gets written for the dialog and forgets that
         the dialog may not be there.
         """
-        block = scenarios_js[scenarios_js.index("const reportFailure = (step, message)"):]
+        block = scenarios_js[scenarios_js.index(
+            "const reportFailure = (step, message, diagnosis = null)"):]
         block = block[:block.index("\n  };")]
         assert "if (backgrounded)" in block
         assert "failBackgroundTask(taskId, message)" in block
-        assert "showCreationError(message)" in block
+        # It carries the solver's diagnosis to the form as well, so a refused
+        # run can say how much demand the network could not serve.
+        assert "showCreationError(message, null, diagnosis)" in block
 
     def test_a_failure_that_happened_offscreen_is_still_reported(self, scenarios_js):
         # Both terminal branches route through it: the solve that never

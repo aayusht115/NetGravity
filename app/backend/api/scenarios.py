@@ -1308,6 +1308,17 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
                        for e in (response.errors or [])]
             detail = reasons[0] if reasons else (
                 response.summary or "the scenario engine produced no scenario state")
+            # WHY it could not be run, in units, when the reason was that the
+            # network cannot serve the demand this scenario asks of it.
+            #
+            # An infeasible scenario used to come back as "no feasible solution
+            # exists" and nothing else — true, and unactionable. The solver now
+            # attaches a diagnosis (`milp._diagnose_infeasible`) and it travels
+            # here on the failing step's own context.
+            diagnosis = next(
+                (dict((e.get("context") or {}).get("infeasibility") or {})
+                 for e in (response.errors or [])
+                 if (e.get("context") or {}).get("infeasibility")), None)
             logger.info(
                 "scenario.simulate.rejected project_id=%s action=%s reason=%s",
                 project_id, action_str, detail,
@@ -1318,7 +1329,11 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
                     "message": f"This scenario could not be run: {detail}",
                     "context": {"action": action_str,
                                 "execution_id": response.execution_id,
-                                "orchestrator_status": str(response.status)},
+                                "orchestrator_status": str(response.status),
+                                # Structured, so the screen can state the
+                                # shortfall rather than print a paragraph. None
+                                # when the failure was not an infeasible solve.
+                                "infeasibility": diagnosis},
                 }
             }), 422
 

@@ -14,11 +14,18 @@ The answers, pinned here so they cannot quietly change:
   * At +75% existing capacity is genuinely short, and the solver opens one on
     its own. This is the behaviour the demo could not demonstrate.
   * Past the point where the REACHABLE network can serve the demand at all,
-    the solve comes back INFEASIBLE with every KPI zeroed — no shortfall, no
-    diagnosis, and in particular no statement that more capacity is needed.
-    That is what a demo sees, and it is a reporting gap rather than a solver
-    one: the same network with shortage allowed opens a candidate and reports
-    exactly how much demand it could not serve.
+    the ENGINE CALL below comes back INFEASIBLE with every KPI zeroed — no
+    shortfall and no diagnosis. That is still true of `milp.solve()` and is
+    deliberate: `milp.py` is the formulation, it is guarded against incidental
+    edits, and a second solve is not part of the model.
+
+    It is no longer what anyone sees. Every product path goes through
+    `OptimizationClient`, which already decided what to do with an infeasible
+    solve and now also diagnoses it — the shortfall in units, the markets it
+    falls in, and any CANDIDATE the optimiser would open. See
+    `netgravity/optimization/infeasibility.py`, and
+    `tests/integration/test_infeasibility_diagnosis.py` for the whole path
+    from the solver to the screen.
 
 The fixture is used rather than a client dataset because it is the only network
 in the repository that genuinely carries CANDIDATE facilities with lanes.
@@ -119,13 +126,19 @@ class TestUnservableDemandIsReportedRatherThanZeroed:
     behaviours so a change to either is deliberate.
     """
 
-    def test_unservable_demand_returns_infeasible_with_no_diagnosis(self, base):
+    def test_the_raw_engine_call_reports_only_what_it_solved(self, base):
         """
-        Current behaviour, recorded rather than endorsed.
+        The engine's own contract, and the half that must never change.
 
         `allow_shortage=False` asks the solver to serve everything, so when it
-        cannot it reports INFEASIBLE — and every KPI comes back zero. A screen
-        rendering this shows an empty network, not "you are short of capacity".
+        cannot it reports INFEASIBLE — and no cost, no plan and no served
+        volume, because none was computed. `unmet_demand` of 0.0 here means
+        "not computed", NOT "nothing is short".
+
+        The reason a reader needs is added one layer up, by
+        `OptimizationClient`, which every product path goes through. Nothing
+        here may become a KPI: the diagnostic model is priced at 1e6 per
+        unserved unit and its objective is not money.
         """
         network = grow(base, 2.0)
         result = solve(network)
