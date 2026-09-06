@@ -1062,6 +1062,133 @@ class ReasoningAgent:
         )]
 
     @staticmethod
+    def _forecast_insights(forecast: Dict[str, Any], refs_for) -> List[KPIInsight]:
+        """
+        What the demand projection says, for a reader who has to plan against it.
+
+        Emitted only from figures the forecaster produced. `growth_pct` is None
+        — not zero — when no comparable observed window exists, and that case
+        produces no growth sentence at all rather than "demand is flat", which
+        is a claim nobody made.
+        """
+        if not forecast:
+            return []
+
+        insights: List[KPIInsight] = []
+        growth = forecast.get("growth_pct")
+        total = forecast.get("total_forecast_units")
+        horizon = forecast.get("horizon")
+
+        if isinstance(growth, (int, float)) and isinstance(total, (int, float)):
+            direction = "above" if growth >= 0 else "below"
+            insights.append(KPIInsight(
+                theme="Demand outlook",
+                headline=("Demand is projected to grow" if growth >= 0
+                          else "Demand is projected to fall"),
+                severity=(InsightSeverity.RISK if growth >= 10
+                          else InsightSeverity.INFORMATION),
+                narrative=(
+                    f"I see {total:,.0f} units of demand over the next "
+                    f"{horizon} periods, {abs(growth):.1f}% {direction} the same "
+                    f"number of periods just observed. That is the volume the "
+                    f"current footprint would have to carry."
+                ),
+                metric_refs=refs_for("forecast.growth_pct"),
+            ))
+        elif isinstance(total, (int, float)):
+            insights.append(KPIInsight(
+                theme="Demand outlook",
+                headline="A demand projection is available for this network",
+                narrative=(
+                    f"I see {total:,.0f} units of demand over the next "
+                    f"{horizon} periods. There is no comparable observed window "
+                    f"to measure growth against, so I do not state a rate."
+                ),
+                metric_refs=refs_for("forecast.total_forecast_units"),
+            ))
+
+        movers = forecast.get("fastest_growing") or []
+        named = [m for m in movers
+                 if isinstance(m.get("growth_pct"), (int, float))
+                 and m["growth_pct"] > 0]
+        if named:
+            top = named[0]
+            insights.append(KPIInsight(
+                theme="Where the growth is",
+                headline="The growth is not spread evenly across the network",
+                narrative=(
+                    f"I see the largest increase at {top['market_id']} for "
+                    f"{top['product_id']}: {top['forecast_units']:,.0f} units "
+                    f"projected against {top['recent_units']:,.0f} observed, "
+                    f"{top['growth_pct']:+.1f}%. Growth stated for the whole "
+                    f"network loads every site; growth stated where it is "
+                    f"happening loads the ones that will actually feel it."
+                ),
+                metric_refs=refs_for("forecast.fastest_growing"),
+            ))
+
+        breaks = forecast.get("n_structural_breaks") or 0
+        if breaks:
+            insights.append(KPIInsight(
+                theme="History that changed",
+                headline="Part of this history changed level partway through",
+                severity=InsightSeverity.RISK,
+                narrative=(
+                    f"I see a structural break detected in {breaks} of the "
+                    f"series. Where one is found the forecast is built from the "
+                    f"period after it rather than from the whole history, "
+                    f"because the earlier level is describing a network that no "
+                    f"longer exists."
+                ),
+                metric_refs=refs_for("forecast.structural_breaks"),
+            ))
+
+        applied = forecast.get("n_signal_adjustments") or 0
+        if applied:
+            insights.append(KPIInsight(
+                theme="External signals",
+                headline="External signals moved part of this forecast",
+                narrative=(
+                    f"I see {applied} adjustment(s) applied from the market "
+                    f"intelligence supplied with this network. These are "
+                    f"declared assumptions, not measured effects — the rule "
+                    f"that fired is recorded against each one so it can be "
+                    f"argued with."
+                ),
+                metric_refs=refs_for("forecast.signal_adjustments"),
+            ))
+        return insights
+
+    @staticmethod
+    def _forecast_recommendation(forecast: Dict[str, Any]) -> str:
+        """
+        The next step a forecast actually supports.
+
+        NOT "monitor demand", which is what a briefing says when it has nothing
+        to suggest. This application can test the network against the demand
+        the forecaster produced, and the growth rate to test at is a figure the
+        forecaster already computed — so the recommendation names it, and the
+        screen turns it into a scenario.
+        """
+        growth = forecast.get("growth_pct")
+        if not isinstance(growth, (int, float)):
+            return ("Read this projection beside the network's own capacity "
+                    "before planning against it: the forecast says what is "
+                    "coming, not whether the current footprint can carry it.")
+        if growth <= 0:
+            return ("Consider testing the network at this lower volume: a "
+                    "footprint sized for the demand just observed carries fixed "
+                    "cost that falling demand does not pay for.")
+        movers = [m for m in (forecast.get("fastest_growing") or [])
+                  if isinstance(m.get("growth_pct"), (int, float))
+                  and m["growth_pct"] > 0]
+        where = (f", and scope it to {movers[0]['market_id']} where the increase "
+                 f"is concentrated" if movers else "")
+        return (f"Consider running a demand scenario at {growth:+.1f}% to see "
+                f"whether the current footprint carries this{where}. The "
+                f"forecast says what is coming; only a solve says what it costs.")
+
+    @staticmethod
     def _comparison_insights(comparison: Dict[str, Any],
                              alternatives: List[Dict[str, Any]],
                              refs_for) -> List[KPIInsight]:
@@ -1282,6 +1409,10 @@ class ReasoningAgent:
         # cost/utilisation branches below simply find nothing and say nothing.
         comparison_block = payload.get("comparison") or {}
         comparison_alternatives = payload.get("comparison_alternatives") or []
+        # The forecast's own evidence. Absent on every run that is not a
+        # forecast, in which case every branch below finds nothing and says
+        # nothing — the same contract as the comparison block above.
+        forecast_block = payload.get("forecast") or {}
 
         infeasible = self._is_infeasible(payload)
 
@@ -1390,6 +1521,11 @@ class ReasoningAgent:
             # and states no figure that is not in the evidence pack — so an
             # absent metric produces an absent insight rather than a confident
             # sentence about a number nobody measured.
+            # FIRST on a forecast run, for the same reason the scenario
+            # impact leads a what-if: `card_from_briefing` leads with
+            # `kpi_insights[0]`, and on a demand projection the reader came
+            # for the projection, not for what the network costs today.
+            insights.extend(self._forecast_insights(forecast_block, refs_for))
             insights.extend(self._service_insights(state, refs_for))
             insights.extend(self._utilization_insights(state, payload, refs_for))
             insights.extend(self._cost_structure_insights(state, refs_for))
@@ -1569,6 +1705,12 @@ class ReasoningAgent:
             self._comparison_recommendation(comparison_block,
                                             comparison_alternatives)
             if comparison_block
+            # A forecast's next step is to test the network against the demand
+            # it projects, at the rate it projects. The generic recommendation
+            # below is about a solved network and has nothing to say about a
+            # projection.
+            else self._forecast_recommendation(forecast_block)
+            if forecast_block
             else self._recommendation(
                 infeasible=infeasible,
                 state=state,

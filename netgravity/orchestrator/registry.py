@@ -22,6 +22,10 @@ from netgravity.orchestrator.agents.intent_agent import IntentAgent
 from netgravity.orchestrator.agents.llm_gateway import LLMGateway
 from netgravity.orchestrator.agents.reasoning_agent import ReasoningAgent
 from netgravity.forecasting.service import ForecastingService
+
+#: How many market-product pairs an outlook names before it stops listing
+#: them. A briefing that names forty pairs has named none of them.
+_OUTLOOK_ROWS = 5
 from netgravity.orchestrator.audit import events
 from netgravity.orchestrator.audit.audit_logger import AuditLogger
 from netgravity.orchestrator.core.execution_context import ExecutionContext
@@ -502,6 +506,98 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             )
         return output
 
+    # ---- the outlook a forecast implies ----------------------------------
+
+    def _forecast_outlook(result: Any, matched: List[Any]) -> Dict[str, Any]:
+        """
+        What this forecast says is coming, against what was observed.
+
+        The forecast itself is a set of per-series cones; a planner reads it to
+        answer three questions it does not answer directly — is demand growing,
+        where, and by how much would I have to test the network. Those are
+        sums and ratios over the series the forecaster produced and the history
+        it was given, and they are computed once, here, so the reasoning
+        payload and the API cannot arrive at different numbers.
+
+        NOTHING IS FORECAST HERE. Every quantity is `sum()` or a ratio of two
+        sums; a series the engine could not forecast contributes to neither
+        side and is counted as unforecastable instead.
+
+        Returns {} when nothing can be compared — no successful series, or no
+        history to compare against — rather than a growth rate of zero, which
+        reads as "demand is flat" and would be a claim nobody made.
+        """
+        ok = [s for s in getattr(result, "series", [])
+              if getattr(s.status, "value", str(s.status)) == "OK" and s.points]
+        if not ok:
+            return {}
+
+        horizon = len(ok[0].points)
+        history_by_pair = {(m.market_id, m.product_id): m for m in matched}
+
+        rows = []
+        forecast_total = 0.0
+        recent_total = 0.0
+        for series in ok:
+            future = sum(p.mean for p in series.points if p.mean is not None)
+            forecast_total += future
+            source = history_by_pair.get((series.market_id, series.product_id))
+            observed = sorted(getattr(source, "history", []) or [],
+                              key=lambda x: x.period)[-horizon:] if source else []
+            recent = sum(p.quantity for p in observed if p.quantity is not None)
+            recent_total += recent
+            rows.append({
+                "market_id": series.market_id,
+                "product_id": series.product_id,
+                "forecast_units": round(future, 2),
+                # None, not 0.0: a pair with no comparable window has an
+                # UNKNOWN growth rate, and 0.0 would read as "flat".
+                "recent_units": round(recent, 2) if observed else None,
+                "growth_pct": (round((future - recent) / recent * 100.0, 2)
+                               if recent > 0 and observed else None),
+                "n_history_periods": getattr(series, "n_history_periods", 0),
+            })
+
+        growth_pct = (round((forecast_total - recent_total) / recent_total * 100.0, 2)
+                      if recent_total > 0 else None)
+
+        # The pairs a planner would look at first: biggest absolute increase,
+        # because a 300% rise on forty units is not where the network breaks.
+        movers = [r for r in rows if r["growth_pct"] is not None]
+        movers.sort(key=lambda r: -(r["forecast_units"] - (r["recent_units"] or 0)))
+
+        adjustments = [
+            {"signal_id": a.signal_id, "rule_id": a.rule_id,
+             "effect": getattr(a.effect, "value", str(a.effect)),
+             "mean_multiplier": a.mean_multiplier,
+             "market_id": series.market_id, "product_id": series.product_id}
+            for series in ok for a in getattr(series, "signal_adjustments", [])
+        ]
+
+        breaks = [
+            {"market_id": s.market_id, "product_id": s.product_id,
+             "change_period": s.structural_break.change_period,
+             "magnitude": s.structural_break.magnitude}
+            for s in ok
+            if getattr(s, "structural_break", None) is not None
+            and s.structural_break.detected
+        ]
+
+        return {
+            "horizon": horizon,
+            "n_series_forecast": len(ok),
+            "n_series_total": len(getattr(result, "series", [])),
+            "total_forecast_units": round(forecast_total, 2),
+            "comparable_recent_units": round(recent_total, 2) if recent_total else None,
+            "growth_pct": growth_pct,
+            "fastest_growing": movers[:_OUTLOOK_ROWS],
+            "shrinking": [r for r in reversed(movers) if r["growth_pct"] < 0][:_OUTLOOK_ROWS],
+            "signal_adjustments": adjustments[:_OUTLOOK_ROWS],
+            "n_signal_adjustments": len(adjustments),
+            "structural_breaks": breaks[:_OUTLOOK_ROWS],
+            "n_structural_breaks": len(breaks),
+        }
+
     # ---- forecast.demand -------------------------------------------------
     async def forecast_demand(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
         """
@@ -578,6 +674,11 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
 
         routing = svc["signal_router"].route_for_forecast(
             offered,
+            # Every node, markets included: a market is a FACILITY with role
+            # MARKET (`Network.get_markets` filters this same list), so a
+            # demand signal naming M001 is in scope here. Worth stating,
+            # because "facilities" reads as sites-we-operate and the entity a
+            # market-intelligence signal names is usually a market.
             known_entity_ids={f.id for f in snapshot.network.facilities},
         )
         ctx.signal_routing = routing
@@ -634,7 +735,13 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
                 signals_applied=result.provenance.signal_ids,
                 model_version=result.provenance.model_version,
             )
-        return flatten_forecast_result(result)
+        flattened = flatten_forecast_result(result)
+        # What the forecast IMPLIES, computed once and read by two consumers:
+        # the reasoning payload (`synthesise`) and `/api/forecast`. Computing
+        # it in either place alone would give the screen and the briefing two
+        # sets of numbers for the same question.
+        flattened["outlook"] = _forecast_outlook(result, matched)
+        return flattened
 
     # ---- external.interpret_signal --------------------------------------
     async def interpret_signal(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
@@ -850,6 +957,12 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             return ReasoningScope.COMPARISON
         if ctx.scenario_id:
             return ReasoningScope.SCENARIO
+        # A forecast run solves nothing and is not about the network as it
+        # stands; it is about the demand coming at it. Scoped NETWORK, its
+        # briefing was captioned as a statement about the current network on a
+        # screen showing a projection.
+        if ctx.forecast_result is not None and ctx.output_of("forecast.demand"):
+            return ReasoningScope.FORECAST
         return ReasoningScope.NETWORK
 
     async def synthesise(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
@@ -870,6 +983,22 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
             payload["kpis"] = ctx.output_of("kpi.summarise")
         if ctx.output_of("resilience.assess"):
             payload["rei"] = ctx.output_of("resilience.assess")
+        # THE FORECAST'S OWN EVIDENCE.
+        #
+        # `_build_forecast` has always ended with `_reason_and_govern`, so the
+        # reasoning step ran on every forecast — over a payload that contained
+        # nothing about the forecast. The agent produced a briefing about the
+        # network in general, and the Forecast screen, having nothing of its
+        # own, drew Home's attention card a second time.
+        #
+        # The compact OUTLOOK rather than the raw projection: a network with
+        # forty market-product pairs produces forty cones of six points each,
+        # which is thousands of numbers no briefing can use and which would
+        # spend the whole evidence budget (`_bounded_evidence`) before the
+        # first sentence.
+        forecast_out = ctx.output_of("forecast.demand") or {}
+        if forecast_out.get("outlook"):
+            payload["forecast"] = forecast_out["outlook"]
         # mode="json" so enums serialise to their values — these strings reach
         # the narrative, and "EventSeverity.SEVERE" is not something to show a
         # reader.

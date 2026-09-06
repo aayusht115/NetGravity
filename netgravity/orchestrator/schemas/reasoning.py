@@ -21,6 +21,10 @@ class ReasoningScope(str, Enum):
     COMPARISON = "COMPARISON"
     RESILIENCE = "RESILIENCE"
     INGESTION = "INGESTION"
+    #: A projection of demand, not a statement about the network as it stands.
+    #: Its absence is why the Forecast screen showed the NETWORK briefing —
+    #: correct about the network, and captioning the wrong picture.
+    FORECAST = "FORECAST"
 
 
 class EvidenceCompleteness(str, Enum):

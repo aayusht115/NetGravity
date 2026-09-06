@@ -16,7 +16,8 @@ import {
   isDCFacility, isPlantFacility, facilityRole, clearNetworkModel,
   perPeriodLabel, SOLVE_HORIZON, horizonLabel,
   formatCurrencyExact, currencySymbol, currencyLabel, NETWORK_GEOGRAPHY,
-  getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries, withCurrency
+  getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries, withCurrency,
+  FORECAST_BRIEFING
 } from './data.js';
 import { initMap, setNetworkState, invalidateMapSize, refreshAllMaps,
          revealMap, renderMapLegendCounts } from './map.js';
@@ -301,13 +302,213 @@ function renderForecastSummary() {
  */
 function renderForecastPage() {
   renderOverviewAlert('fc-alert');
-  renderHomeAttentionFeed('fc-attn-body');
+  // NOT `renderHomeAttentionFeed`. That drew Home's NETWORK-scoped card into
+  // a second container — the same finding, twice, on two screens. This screen
+  // asks a different question and now has its own grounded answer.
+  renderForecastAttention('fc-attn-body');
   renderHomeSignals('fc-signals-row');
   renderAnalysisTimestamp();
   renderForecastSummary();
   renderDataIntelligence();
   wireForecastPage();
   requestAnimationFrame(() => sizePageToWindow('.fc-main', '--fc-main-top'));
+}
+
+/**
+ * What this forecast means, and what to do about it.
+ *
+ * Every figure and every sentence is the BACKEND's: the briefing comes from
+ * the reasoning step the forecast workflow runs and has passed numeric
+ * grounding; the outlook is summed from the forecaster's own points by
+ * `_forecast_outlook`. This selects, formats and wires buttons. It computes no
+ * quantity and writes no finding.
+ *
+ * The actions are the point. A forecast briefing that ends "monitor demand"
+ * has told a planner nothing they can act on; this application can test the
+ * network against the demand the forecast projects, at the rate it projects,
+ * and that is one press.
+ */
+function renderForecastAttention(listId = 'fc-attn-body') {
+  const list = document.getElementById(listId);
+  if (!list) return;
+
+  const briefing = FORECAST_BRIEFING.explanation;
+  const card = (briefing && briefing.card) || null;
+  const outlook = FORECAST_BRIEFING.outlook || null;
+
+  if (!card && !outlook) {
+    list.innerHTML = `<div class="ov-attn-empty">No forecast has been produced
+      for this network yet, so there is nothing to read here. A forecast needs
+      observed demand history in the upload.</div>`;
+    return;
+  }
+
+  const rows = [];
+  if (outlook && typeof outlook.growth_pct === 'number') {
+    const up = outlook.growth_pct >= 0;
+    rows.push(['Demand ahead',
+      `<strong>${formatNumber(Math.round(outlook.total_forecast_units || 0))} units</strong>
+       over ${outlook.horizon} periods
+       <span class="fc-attn-delta ${up ? 'up' : 'down'}">${up ? '↑' : '↓'}
+       ${Math.abs(outlook.growth_pct).toFixed(1)}% vs the periods just observed</span>`]);
+  } else if (outlook && typeof outlook.total_forecast_units === 'number') {
+    rows.push(['Demand ahead',
+      `<strong>${formatNumber(Math.round(outlook.total_forecast_units))} units</strong>
+       over ${outlook.horizon} periods. No comparable observed window, so no
+       growth rate is stated.`]);
+  }
+
+  const top = ((outlook && outlook.fastest_growing) || [])
+    .filter((r) => typeof r.growth_pct === 'number' && r.growth_pct > 0);
+  if (top.length) {
+    rows.push(['Growing fastest', top.slice(0, 3).map((r) =>
+      `${escapeInsightText(r.market_id)} · ${escapeInsightText(r.product_id)}
+       <span class="fc-attn-delta up">+${r.growth_pct.toFixed(0)}%</span>`).join('<br>')]);
+  }
+
+  if (outlook && outlook.n_structural_breaks) {
+    rows.push(['History that changed',
+      `${outlook.n_structural_breaks} series changed level partway through, so the
+       forecast for ${outlook.n_structural_breaks === 1 ? 'it is' : 'those are'}
+       built from the period after the break rather than the whole history.`]);
+  }
+
+  const signals = FORECAST_BRIEFING.signals;
+  if (signals && typeof signals.attached === 'number' && signals.attached) {
+    rows.push(['External signals',
+      signals.series_adjusted
+        ? `${signals.attached} supplied · <strong>${signals.series_adjusted}
+           series moved</strong> by them`
+        : `${signals.attached} supplied · none changed a forecast — the router
+           applies a signal only where it names something this network contains`]);
+  }
+
+  const actions = forecastActions(outlook);
+
+  list.innerHTML = `
+    ${card && card.headline
+      ? `<div class="ov-attn-lead"><div class="ov-attn-section">
+           <div class="ov-attn-section-label tone-why">What the projection says</div>
+           <div class="ov-attn-section-text">${escapeInsightText(card.headline)}</div>
+         </div></div>` : ''}
+    ${rows.length ? `<dl class="fc-attn-facts">
+      ${rows.map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('')}
+    </dl>` : ''}
+    ${card && card.meaning
+      ? `<div class="ov-attn-section"><div class="ov-attn-section-label tone-impact">
+           What it means</div>
+         <div class="ov-attn-section-text">${escapeInsightText(card.meaning)}</div>
+       </div>` : ''}
+    ${card && card.warning
+      ? `<div class="fc-attn-warning">${escapeInsightText(card.warning)}</div>` : ''}
+    ${card && card.next_step ? `
+      <div class="ov-attn-next">
+        <span class="ov-attn-next-icon">${OV_ICONS.chart}</span>
+        <div class="ov-attn-next-text">
+          <div class="ov-attn-section-label tone-next">Recommended next step</div>
+          <div class="ov-attn-next-sub">${escapeInsightText(card.next_step)}</div>
+        </div>
+      </div>` : ''}
+    ${actions.length ? `
+      <div class="fc-attn-actions">
+        ${actions.map((a, i) => `
+          <button type="button" class="fc-attn-action${a.primary ? ' primary' : ''}"
+                  data-fc-action="${i}">
+            <span class="fc-attn-action-label">${escapeInsightText(a.label)}</span>
+            <span class="fc-attn-action-detail">${escapeInsightText(a.detail)}</span>
+          </button>`).join('')}
+      </div>` : ''}
+    <div class="text-xs text-muted" style="margin-top:10px;line-height:1.5">
+      ${card && card.source === 'llm'
+        ? 'Written by the model from the forecaster\'s own output.'
+        : 'Written by the deterministic template from the forecaster\'s own output.'}
+      Every figure here is the forecasting engine's.
+    </div>`;
+
+  list.querySelectorAll('[data-fc-action]').forEach((btn) => {
+    const item = actions[Number(btn.dataset.fcAction)];
+    if (item && typeof item.run === 'function') {
+      btn.addEventListener('click', item.run);
+    }
+  });
+}
+
+/**
+ * What a reader can DO about a forecast, from what the forecast found.
+ *
+ * Gated on the outlook's own figures, so a network whose demand is projected
+ * flat is never offered a growth scenario and one with no concentration is
+ * never told to scope it. Nothing here applies anything: each opens the
+ * scenario builder, filled in, for a person to run.
+ */
+function forecastActions(outlook) {
+  const actions = [];
+  if (!outlook) return actions;
+
+  const growth = outlook.growth_pct;
+  if (typeof growth === 'number' && Math.abs(growth) >= 1) {
+    const pct = growth.toFixed(0);
+    actions.push({
+      label: `Test the network at ${growth > 0 ? '+' : ''}${pct}% demand`,
+      detail: 'Opens the scenario builder with this forecast\'s own growth rate '
+        + 'filled in. The forecast says what is coming; only a solve says '
+        + 'whether the current footprint carries it.',
+      primary: true,
+      run: () => openScenarioFromForecast({ pct: Number(pct) }),
+    });
+  }
+
+  // Scoped growth, but only where the builder can actually scope it.
+  //
+  // The builder narrows a demand change by REGION or by product category. The
+  // outlook names a market and a product ID, and a product ID is neither — so
+  // passing it produced a button reading "Test M001 alone" that ran a
+  // network-wide scenario, the select having correctly ignored a value it did
+  // not offer. Markets carry a region, and region is one of the two, so that
+  // is what this scopes by. Where the upload states no region for the market,
+  // the action is not offered rather than offered and silently wrong.
+  const top = (outlook.fastest_growing || [])
+    .filter((r) => typeof r.growth_pct === 'number' && r.growth_pct > 0);
+  if (top.length) {
+    const row = top[0];
+    const market = MARKETS.find((m) => m.id === row.market_id) || null;
+    const region = (market && market.region) || '';
+    const where = (market && market.name) || row.market_id;
+    if (region) {
+      actions.push({
+        label: `Test ${region} alone, at +${row.growth_pct.toFixed(0)}%`,
+        detail: `${where} grows fastest in this projection, at `
+          + `+${row.growth_pct.toFixed(0)}%. Growth stated for the whole network `
+          + `loads every site; scoping it to ${region} loads the ones that will `
+          + 'actually feel it.',
+        run: () => openScenarioFromForecast({
+          pct: Number(row.growth_pct.toFixed(0)), region }),
+      });
+    }
+  }
+  return actions;
+}
+
+/**
+ * Open the scenario builder on the Scenario Planning tab, pre-filled.
+ *
+ * Navigates first: the builder is a modal on that page, and opening it over
+ * the Forecast screen would put a scenario form on a page with no scenarios.
+ * Nothing is submitted — every field stays editable, and the person presses
+ * Run.
+ */
+function openScenarioFromForecast({ pct, region = '' }) {
+  if (typeof window.navigateToTab === 'function') window.navigateToTab('scenarios');
+  setTimeout(() => {
+    if (typeof window.openScenarioBuilderWith !== 'function') return;
+    window.openScenarioBuilderWith('CHANGE_DEMAND', {
+      amount: pct,
+      region,
+      name: region
+        ? `Forecast demand ${pct > 0 ? '+' : ''}${pct}% in ${region}`
+        : `Forecast demand ${pct > 0 ? '+' : ''}${pct}%`,
+    });
+  }, 260);
 }
 
 /**
@@ -2900,14 +3101,30 @@ function renderHomeSignals(rowId = 'fc-signals-row') {
     return;
   }
 
+  // WHAT THE ROUTER ACTUALLY DID with this signal.
+  //
+  // This used to regex-match `sig.intendedUse`, which `loadStructure` sets to
+  // the constant "Recorded from your upload — not yet routed into a forecast"
+  // for every signal — so "Not yet applied" was the only outcome the chip
+  // could ever show, whatever the forecast had done with it. Signals ARE
+  // routed (`_uploaded_signals_for` -> `signal_router.route_for_forecast`);
+  // the chip had no way to know.
+  //
+  // `applied_signal_ids` is the routing's own answer, derived from the
+  // per-series `signal_adjustments` the enricher recorded.
+  const signalState = FORECAST_BRIEFING.signals || null;
+  const appliedIds = new Set((signalState && signalState.applied_signal_ids) || []);
+  const forecastRan = Boolean(signalState);
+
   // Three on the row, matching the mockup; the rest are behind "View all
   // signals", which is why that link is there rather than decorative.
   row.innerHTML = EXTERNAL_SIGNALS.slice(0, 3).map((sig) => {
-    const applied = /used in forecast/i.test(sig.intendedUse || '');
-    const context = /context/i.test(sig.intendedUse || '');
-    const tone = applied ? 'ok' : context ? 'info' : 'pending';
+    const applied = appliedIds.has(sig.id);
+    // Not "context only" — that was a guess dressed as a category. Either the
+    // forecast has not run, or it ran and this signal did not move it.
+    const tone = applied ? 'ok' : forecastRan ? 'info' : 'pending';
     const label = applied ? 'Used in forecast'
-      : context ? 'Context only' : 'Not yet applied';
+      : forecastRan ? 'Did not change the forecast' : 'No forecast run yet';
     return `
       <div class="ov-signal">
         <span class="ov-signal-icon">${signalIconSvg(sig.type)}</span>
@@ -2915,7 +3132,13 @@ function renderHomeSignals(rowId = 'fc-signals-row') {
           <div class="ov-signal-title" title="${escapeInsightText(sig.title)}">${escapeInsightText(sig.title)}</div>
           <div class="ov-signal-meta">Source: ${escapeInsightText(sig.source)}
             &nbsp;&middot;&nbsp; ${escapeInsightText(sig.publishedDate)}</div>
-          <span class="ov-signal-chip tone-${tone}">${OV_SIGNAL_CHIP[tone]}${label}</span>
+          <span class="ov-signal-chip tone-${tone}" title="${escapeInsightText(
+            applied
+              ? 'The forecaster applied an adjustment from this signal. The rule that fired is recorded against it.'
+              : forecastRan
+                ? 'This signal reached the router and did not adjust any series — usually because it names no market or facility in this network, or its confidence is below the guardrail.'
+                : 'No forecast has been produced for this network yet, so nothing has been routed.')}"
+                >${OV_SIGNAL_CHIP[tone]}${label}</span>
         </div>
       </div>`;
   }).join('');

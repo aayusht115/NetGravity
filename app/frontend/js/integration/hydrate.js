@@ -40,7 +40,7 @@ import {
   setForecastSeries, getOptimizedBaseCase, applyInsightResponse,
   applyActionsResponse,
   applyHorizon, SOLVE_HORIZON, setActiveCurrency, setNetworkGeography,
-  applySystemStatus, MARKETS, setForecastCatalogue,
+  applySystemStatus, MARKETS, setForecastCatalogue, setForecastBriefing,
 } from '../data.js';
 
 /** Read a KPIResult; a non-VALID status yields null, never 0. */
@@ -158,9 +158,15 @@ async function loadStructure(projectId) {
         : 'Not available',
       confidence: s.relevance || 'Not available',
       rationale: s.description || '',
-      // Nothing in this build routes an uploaded signal into a forecast, so
-      // the card must not claim it did.
-      intendedUse: 'Recorded from your upload — not yet routed into a forecast',
+      // What this signal is FOR, which is all the structure endpoint knows.
+      //
+      // This used to read "not yet routed into a forecast", and the signals
+      // card regex-matched it to decide whether the signal had been applied —
+      // so the answer was fixed before any forecast ran. Signals are routed
+      // (`_uploaded_signals_for` -> `signal_router.route_for_forecast`);
+      // whether THIS one moved anything is the forecast's answer, and the card
+      // reads it from `FORECAST_BRIEFING.signals` instead.
+      intendedUse: 'Supplied with your upload as market intelligence',
       type: (s.type || 'signal').toLowerCase(),
       icon: '📡',
       color: '#6B2FA0',
@@ -688,6 +694,10 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
       products: Object.fromEntries(
         ((structure && structure.products) || []).map((p2) => [p2.id, p2.name])),
     };
+    // The briefing, the outlook and what the router did with the uploaded
+    // signals. Set before the series, because `setForecastSeries` dispatches
+    // the event the forecast screen re-renders on and the card reads these.
+    setForecastBriefing(fc);
     const allSeries = reshapeAllForecastSeries(fc, names);
     const chosen = allSeries[0] || null;
     if (chosen) {
@@ -712,6 +722,7 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
         reason: fc.message || '',
       };
       publishForecastMeta(forecastReport);
+      setForecastBriefing(null);
       setForecastCatalogue([]);
       setForecastSeries({});
     }
@@ -720,6 +731,7 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
     // empty state and says why rather than drawing a fabricated cone.
     forecastReport = { status: 'UNAVAILABLE', series: 0, reason: e?.message || '' };
     publishForecastMeta(forecastReport);
+    setForecastBriefing(null);
     setForecastCatalogue([]);
     setForecastSeries({});
   }

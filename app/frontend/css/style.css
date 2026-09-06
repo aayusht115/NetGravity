@@ -4197,3 +4197,112 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   FORECAST — what the projection says, and what to do about it
+   ═══════════════════════════════════════════════════════════════
+
+   This card replaced a second copy of Home's "Needs your attention". The
+   finding there was correct and was the answer to a different question; a
+   reader on this screen is asking what the demand projection means.
+
+   Set to match the recommendation card's own glance block and action list —
+   the two screens now say two different things and should still look like one
+   application. */
+.fc-attn-facts {
+  margin: 12px 0 4px;
+  padding: 0;
+}
+
+.fc-attn-facts dt {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+
+.fc-attn-facts dd {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.fc-attn-facts dd:last-child { margin-bottom: 0; }
+
+/* The direction of the change, and never by colour alone — every one of these
+   is preceded by an arrow and followed by words. */
+.fc-attn-delta {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fc-attn-delta.up   { color: var(--amber); }
+.fc-attn-delta.down { color: var(--text-2); }
+
+.fc-attn-warning {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: var(--r-md);
+  background: var(--amber-bg);
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #92400e;
+}
+
+/* Each one opens the scenario builder filled in. None of them runs anything:
+   a forecast is a projection, and testing the network against it is a
+   decision a person makes. */
+.fc-attn-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.fc-attn-action {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 9px 11px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--purple-100);
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color .18s ease, background .18s ease;
+}
+
+.fc-attn-action:hover {
+  border-color: var(--purple-200);
+  background: #ffffff;
+}
+
+.fc-attn-action.primary {
+  border-color: var(--primary);
+  background: var(--purple-50);
+}
+
+.fc-attn-action:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.fc-attn-action-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.fc-attn-action-detail {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}

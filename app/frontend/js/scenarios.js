@@ -1203,6 +1203,35 @@ function openCreateToolboxWith(type, options = {}) {
       select.value = options.facilityId;
     }
   }
+  if (typeof options.amount === 'number' && Number.isFinite(options.amount)) {
+    const amount = document.getElementById('toolbox-amount');
+    if (amount) amount.value = String(options.amount);
+  }
+  if (options.productCategory) {
+    const category = document.getElementById('toolbox-demand-category');
+    // Same rule as the facility above: an unknown value would leave the
+    // select on "every category" while the label promised one.
+    if (category && [...category.options]
+        .some((o) => o.value === options.productCategory)) {
+      category.value = options.productCategory;
+    }
+  }
+  if (options.region) {
+    const region = document.getElementById('toolbox-demand-region');
+    if (region && [...region.options].some((o) => o.value === options.region)) {
+      region.value = options.region;
+    }
+  }
+}
+
+/* The builder, reachable from the screens that have a reason to open it.
+   The Forecast page recommends testing the network at the rate its own
+   projection implies, and that recommendation is worth nothing if acting on
+   it means navigating here and re-typing a number this application already
+   computed. Nothing is submitted — the form opens filled in and a person
+   presses Run. */
+if (typeof window !== 'undefined') {
+  window.openScenarioBuilderWith = openCreateToolboxWith;
 }
 
 function takeActionsHtml(actions) {

@@ -237,6 +237,30 @@ _FACT_SPEC: Dict[str, Tuple[ClaimKind, str]] = {
     "fill_gap_vs_recommended_pts": (ClaimKind.PERCENTAGE, "kpi_engine"),
     "n_compared":                (ClaimKind.COUNT, "kpi_engine"),
     "n_not_comparable":          (ClaimKind.COUNT, "kpi_engine"),
+    # Forecasting engine
+    #
+    # A projection, not a measurement — and citable for exactly the same reason
+    # every other fact here is: the figure is produced by a named engine, not
+    # by prose. `_forecast_outlook` sums `ForecastResult` points and the
+    # observed history the forecaster was given; it computes no forecast.
+    #
+    # Without these, every number in a forecast briefing was stripped as
+    # unsupported and the recommendation read "run a demand scenario at
+    # [UNSUPPORTED FIGURE REMOVED]".
+    "total_forecast_units":      (ClaimKind.UNITS, "forecasting_engine"),
+    "comparable_recent_units":   (ClaimKind.UNITS, "forecasting_engine"),
+    "forecast_units":            (ClaimKind.UNITS, "forecasting_engine"),
+    "recent_units":              (ClaimKind.UNITS, "forecasting_engine"),
+    "growth_pct":                (ClaimKind.PERCENTAGE, "forecasting_engine"),
+    "mean_multiplier":           (ClaimKind.RATIO, "forecasting_engine"),
+    "std_multiplier":            (ClaimKind.RATIO, "forecasting_engine"),
+    "magnitude":                 (ClaimKind.RATIO, "forecasting_engine"),
+    "horizon":                   (ClaimKind.COUNT, "forecasting_engine"),
+    "n_series_forecast":         (ClaimKind.COUNT, "forecasting_engine"),
+    "n_series_total":            (ClaimKind.COUNT, "forecasting_engine"),
+    "n_history_periods":         (ClaimKind.COUNT, "forecasting_engine"),
+    "n_signal_adjustments":      (ClaimKind.COUNT, "forecasting_engine"),
+    "n_structural_breaks":       (ClaimKind.COUNT, "forecasting_engine"),
     # Risk engine
     "risk_factor":               (ClaimKind.RATIO, "risk_engine"),
     "max_risk_factor":           (ClaimKind.RATIO, "risk_engine"),

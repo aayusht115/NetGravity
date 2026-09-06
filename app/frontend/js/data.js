@@ -97,6 +97,36 @@ export const FORECAST = {
   breachProjectedUtil: null,
 };
 
+/**
+ * What the forecast MEANS, from the forecast run's own reasoning step.
+ *
+ * `FORECAST` above is the cone the chart draws. This is the briefing beside
+ * it: the growth the projection implies, where it is concentrated, what the
+ * uploaded signals did to it, and the scenario a planner would run next.
+ *
+ * The Forecast screen used to have none of this and drew Home's "Needs your
+ * attention" card into a second container — the same NETWORK-scoped finding,
+ * twice, on two screens. The reasoning step was always running on a forecast
+ * (`_build_forecast` ends with `_reason_and_govern`); it was reasoning over a
+ * payload that contained nothing about the forecast, and the endpoint returned
+ * none of what it produced.
+ *
+ * `signals.appliedIds` is the routing's OWN answer to which uploaded signal
+ * moved this forecast. The card used to derive that from a hardcoded string.
+ */
+export const FORECAST_BRIEFING = {
+  explanation: null,
+  outlook: null,
+  signals: null,
+};
+
+/** Replace it wholesale — a forecast is current or it is not. */
+export function setForecastBriefing(response) {
+  FORECAST_BRIEFING.explanation = (response && response.explanation) || null;
+  FORECAST_BRIEFING.outlook = (response && response.outlook) || null;
+  FORECAST_BRIEFING.signals = (response && response.signals) || null;
+}
+
 // ─── EXTERNAL SIGNALS ───────────────────────────────────────
 // Signals that arrived with the upload, mapped in by `loadStructure()`.
 // Held the prototype's own ('North India GDP Growth Accelerating', RBI

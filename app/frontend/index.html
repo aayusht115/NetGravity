@@ -888,20 +888,19 @@
                row 0  what needs a decision, beside the forecast itself
                row 1  the external signals influencing this forecast
 
-             The left column is the SAME alert and attention card the Overview
-             shows, drawn by the same two functions into a different container
-             — not a second copy. That is deliberate and it is what the mockup
-             asks for: the finding that matters and the step the reasoning
-             agent recommends are network-level facts, and they are as true
-             here, beside the demand that produced them, as they are on Home.
+             The left column WAS the same attention card the Overview shows,
+             drawn by the same function into a second container, on the
+             reasoning that a network-level finding is as true here as it is
+             on Home. It is — and it is the answer to a different question. A
+             reader here is asking what the demand projection means, and was
+             handed the paragraph they had just read on the Overview.
 
-             The reasoning agent has no FORECAST scope (NETWORK, FACILITY,
-             LANE, SCENARIO, COMPARISON, RESILIENCE, INGESTION — see
-             netgravity/orchestrator/schemas/reasoning.py), and
-             /api/forecast is a deterministic route with `llm_used: false`.
-             So there is no forecast-specific recommended action to show, and
-             this card says which scope its recommendation belongs to rather
-             than implying the agent wrote it about the chart. -->
+             It now shows the FORECAST's own briefing. The reasoning agent has
+             a FORECAST scope, the forecast workflow's reasoning step is given
+             the forecaster's own outlook to reason over (registry.synthesise),
+             and /api/forecast returns what it produced. The recommendation is
+             a scenario this application can run — demand at the rate the
+             forecast projects — and the card turns it into a button. -->
         <section class="tab-panel" id="tab-forecast">
 
           <!-- row 0 -->
