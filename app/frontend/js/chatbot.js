@@ -114,6 +114,54 @@ export function openChatbotModal() {
 }
 
 /**
+ * Open the assistant onto a briefing this application has already produced.
+ *
+ * `openChatbotModal` restores whatever thread the tab was last having, which
+ * is right when the reader opens the assistant themselves and wrong when they
+ * arrive from a specific result: the thing they pressed would be replaced by
+ * an unrelated conversation. So this starts a new thread on the subject named.
+ *
+ * NOTHING IS GENERATED HERE and no request is made. `html` is composed by the
+ * caller from values the backend already returned and already grounded — the
+ * assistant is being shown a briefing, not asked to write one. Follow-up
+ * questions typed from here go to `/orchestrator/chat` exactly as they always
+ * did.
+ *
+ * `html` is trusted markup: the caller escapes every value it interpolates,
+ * the same contract `askChatbotPrompt` uses when it renders a reply.
+ */
+export function openChatbotWithBriefing({ topic = '', html = '', question = '' } = {}) {
+  const overlay = document.getElementById('chatbot-modal-overlay');
+  if (!overlay) return;
+
+  overlay.classList.add('active');
+  overlay.style.display = 'flex';
+  if (typeof window.applyIdentity === 'function') window.applyIdentity();
+
+  // A new subject is a new thread. Keeping the id would post the reader's
+  // first follow-up into a conversation about something else, and the
+  // orchestrator would answer it with that thread's context.
+  storeConversationId(null);
+  chatMessages = [{ role: 'ai', topic: topic || 'BRIEFING', text: html }];
+  showConversation(true);
+  renderChatMessages();
+
+  // The follow-up, offered rather than sent. Putting a question in the box and
+  // leaving it there is the difference between suggesting one and asking it —
+  // and asking it would spend a request the reader did not ask for.
+  const input = document.getElementById('chatbot-modal-input');
+  if (input) {
+    if (question) input.value = question;
+    setTimeout(() => {
+      input.focus();
+      // Focusing a filled input puts the caret at the end, which scrolls a
+      // long question so the reader sees its tail and not what it is about.
+      if (question) input.setSelectionRange(0, 0);
+    }, 100);
+  }
+}
+
+/**
  * Close Ask Netgravity Modal
  */
 export function closeChatbotModal() {
@@ -548,6 +596,7 @@ if (typeof window !== 'undefined') {
   window.openChatbotModal = openChatbotModal;
   window.closeChatbotModal = closeChatbotModal;
   window.askChatbotPrompt = askChatbotPrompt;
+  window.openChatbotWithBriefing = openChatbotWithBriefing;
   window.resetChatbotView = resetChatbotView;
   window.sendChatbotInput = sendChatbotInput;
 }

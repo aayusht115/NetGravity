@@ -837,6 +837,21 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
         return finish(assessment)
 
     # ---- reasoning.synthesise ---------------------------------------------
+    def _reasoning_scope_for(ctx: ExecutionContext) -> Any:
+        """
+        SCENARIO for one what-if, COMPARISON for several, NETWORK otherwise.
+
+        Read off the execution rather than declared by the caller, so it
+        cannot disagree with what was actually solved.
+        """
+        from netgravity.orchestrator.schemas.reasoning import ReasoningScope
+
+        if len(ctx.scenario_ids or []) > 1:
+            return ReasoningScope.COMPARISON
+        if ctx.scenario_id:
+            return ReasoningScope.SCENARIO
+        return ReasoningScope.NETWORK
+
     async def synthesise(ctx: ExecutionContext, req: ToolRequest) -> Dict[str, Any]:
         """
         Explain the deterministic results that ARE available.
@@ -904,6 +919,27 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
                 # either. The figures were right and the answer was to a
                 # different question.
                 user_question=(ctx.raw_input or "").strip(),
+                # WHAT this briefing is about.
+                #
+                # It was always NETWORK, including on a scenario run — so a
+                # what-if produced an explanation of the network in general,
+                # and a screen showing it beside a scenario's numbers was
+                # captioning the wrong picture. The scope follows what the
+                # execution actually did.
+                scope=_reasoning_scope_for(ctx),
+                entity_id=ctx.scenario_id,
+                # ONE model request for this explanation, whatever the
+                # environment selects for the reasoning runtime. That runtime
+                # is an agent loop — its prompt tells the model to fetch each
+                # metric before citing it — so a briefing quoting six figures
+                # costs seven or more requests. Every result-screen flow is
+                # budgeted at one.
+                #
+                # Chat runs through this step too and is helped by it, not
+                # harmed: it spends one request explaining rather than N. Chat
+                # still costs a second request to UNDERSTAND the question,
+                # which is why it is treated separately.
+                single_request=True,
                 provenance={
                     "execution_id": ctx.execution_id,
                     "snapshot_id": ctx.baseline_snapshot_id or "",

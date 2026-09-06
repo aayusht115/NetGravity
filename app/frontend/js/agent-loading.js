@@ -226,6 +226,10 @@ function skeletonHtml() {
                 title="Show everything that has already happened, without waiting for it to be read out. This does not change the work.">
           Skip to latest
         </button>
+        <button type="button" class="agl-background" hidden
+                title="Give the workspace back and keep this running. The work is on the server and finishes whether or not this screen is watching; you are told the moment it lands.">
+          Continue in the background
+        </button>
       </div>
 
       <div class="agl-bar"><span></span></div>
@@ -298,10 +302,50 @@ function buildSkeleton(overlay) {
     finale: q('.agl-finale'),
     finaleTitle: q('.agl-finale-title'),
     finaleSub: q('.agl-finale-sub'),
+    background: q('.agl-background'),
   };
   els.skip.addEventListener('click', flush);
+  els.background.addEventListener('click', () => {
+    const handler = backgroundHandler;
+    // Cleared before calling, so a double press cannot hand off twice.
+    backgroundHandler = null;
+    els.background.hidden = true;
+    // Drain the pacing first. `dismissAgentLoading` waits for the queue to
+    // empty before it closes — right when a run has ENDED and its last lines
+    // still deserve reading, wrong here: the reader has asked for the screen
+    // back, and holding the scrim up for another few seconds of narration is
+    // the opposite of giving it to them.
+    flush();
+    if (handler) handler();
+  });
   phases = null;
   lastPlanKey = '';
+}
+
+/* Who takes the run over when the reader leaves. Null whenever no caller has
+   offered it, which is every run that is not worth leaving. */
+let backgroundHandler = null;
+
+/**
+ * Offer to hand this run over and give the workspace back.
+ *
+ * Only a caller that can genuinely SURVIVE the dialog closing may offer this
+ * — the run has to keep its own promise and report its own result — so it is
+ * opt-in per run rather than a permanent control. `startRun` does not enable
+ * it; the flows that can be left do.
+ *
+ * `onBackground` runs once, on press. Taking the overlay down is the caller's
+ * to do, because only it knows what it wants to leave on screen instead.
+ */
+export function offerBackgroundExit(onBackground) {
+  backgroundHandler = typeof onBackground === 'function' ? onBackground : null;
+  if (els && els.background) els.background.hidden = !backgroundHandler;
+}
+
+/** Withdraw the offer — the run ended, or it is no longer safe to leave. */
+export function withdrawBackgroundExit() {
+  backgroundHandler = null;
+  if (els && els.background) els.background.hidden = true;
 }
 
 /** The tree is rebuilt only when the RUN changes, never on a state change. */
@@ -742,6 +786,7 @@ export function dismissAgentLoading(holdMs = 0) {
   const deadline = Date.now() + MAX_DRAIN_MS;
   const close = () => {
     clearRun();
+    withdrawBackgroundExit();
     const overlay = document.getElementById(OVERLAY_ID);
     if (overlay) overlay.classList.remove('active');
   };

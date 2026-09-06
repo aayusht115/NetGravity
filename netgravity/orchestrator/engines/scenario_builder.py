@@ -71,7 +71,10 @@ class ScenarioBuilder:
                 spec.capacity_delta_units, spec.capacity_set_units,
             )
         elif spec.action == ScenarioActionType.CHANGE_DEMAND:
-            working, overrides = self._change_demand(working, spec.demand_multiplier)
+            working, overrides = self._change_demand(
+                working, spec.demand_multiplier,
+                spec.demand_region, spec.demand_product_category,
+            )
         elif spec.action == ScenarioActionType.SHIFT_VOLUME:
             working, overrides = self._shift_volume(
                 working, spec.facility_ids, spec.target_facility_id,
@@ -238,16 +241,69 @@ class ScenarioBuilder:
 
     @staticmethod
     def _change_demand(
-        network: CanonicalNetwork, multiplier: Optional[float],
+        network: CanonicalNetwork,
+        multiplier: Optional[float],
+        region: Optional[str] = None,
+        category: Optional[str] = None,
     ) -> Tuple[CanonicalNetwork, List[str]]:
+        """
+        Scale demand, optionally only where the client says it is growing.
+
+        With no region and no category this is exactly what it always was — a
+        multiplier on every demand row. Naming either narrows the rows it
+        touches; naming both narrows to their intersection. Rows outside the
+        scope are copied through untouched rather than scaled by 1.0, so a
+        scoped scenario and an unscoped one cannot be told apart only by
+        rounding.
+        """
         if multiplier is None:
             raise InvalidScenarioError("CHANGE_DEMAND requires a demand_multiplier.")
-        demands = [
-            d.model_copy(update={"quantity": d.quantity * multiplier})
-            for d in network.demands
-        ]
+
+        want_region = (region or "").strip().lower() or None
+        want_category = (category or "").strip().lower() or None
+
+        # Markets in the named region, and products in the named category. Both
+        # resolved from the network's own labels — nothing here infers that
+        # "North" contains Delhi, because the upload already said so.
+        in_region = None
+        if want_region is not None:
+            in_region = {
+                f.id for f in network.facilities
+                if (f.region or "").strip().lower() == want_region
+            }
+        in_category = None
+        if want_category is not None:
+            in_category = {
+                p.id for p in network.products
+                if (p.category or "").strip().lower() == want_category
+            }
+
+        def in_scope(d) -> bool:
+            if in_region is not None and d.market_id not in in_region:
+                return False
+            if in_category is not None and d.product_id not in in_category:
+                return False
+            return True
+
+        touched = 0
+        demands = []
+        for d in network.demands:
+            if in_scope(d):
+                touched += 1
+                demands.append(d.model_copy(update={"quantity": d.quantity * multiplier}))
+            else:
+                demands.append(d)
+
+        scope = "all"
+        if want_region and want_category:
+            scope = f"region={region} category={category}"
+        elif want_region:
+            scope = f"region={region}"
+        elif want_category:
+            scope = f"category={category}"
+
         return (network.model_copy(update={"demands": demands}),
-                [f"CHANGE_DEMAND all x{multiplier}"])
+                [f"CHANGE_DEMAND {scope} x{multiplier} ({touched} rows)"])
 
     def _add_facility(
         self,

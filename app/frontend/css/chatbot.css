@@ -465,6 +465,18 @@
   color: #111827;
 }
 
+/* A reply that arrives as several paragraphs — the scenario briefing the
+   recommendation card hands over — needs air between them. Orchestrator
+   answers are plain escaped text and carry no <p> at all, so this reaches only
+   the surface that needs it. */
+.chat-bubble-ai p {
+  margin: 0 0 10px;
+}
+
+.chat-bubble-ai p:last-child {
+  margin-bottom: 0;
+}
+
 .chat-bubble-ai .ai-badge-chip {
   display: inline-flex;
   align-items: center;

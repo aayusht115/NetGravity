@@ -77,6 +77,21 @@ UTILIZATION_THRESHOLDS: Dict = {
 }
 
 # ---------------------------------------------------------------------------
+# Service: when demand coverage is a finding in its own right
+# ---------------------------------------------------------------------------
+# The line below which a plan's demand coverage must be SAID, however good its
+# cost is. A cost ranking answers one question; a plan that costs less while
+# stranding demand is cheaper and not therefore better, and a card headed with
+# the cost alone invites exactly that reading.
+#
+# Declared here rather than in the screen that shows it, so the warning and
+# any engine check draw the line in the same place.
+
+SERVICE_THRESHOLDS: Dict = {
+    "fill_rate_floor": 0.95,   # < 95% of demand served => say so, prominently
+}
+
+# ---------------------------------------------------------------------------
 # Flow analytics: top-N defaults
 # ---------------------------------------------------------------------------
 

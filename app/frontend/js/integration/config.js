@@ -50,6 +50,18 @@ export const CONFIG = {
    * the server stored rather than by declaring the file unreadable.
    */
   PARSE_TIMEOUT_MS: 180000,
+
+  /**
+   * Timeout for a request whose slow part is one model call.
+   *
+   * The scenario comparison ranks already-solved scenarios — arithmetic — and
+   * then spends at most ONE request explaining the set. The shared gateway's
+   * own ceiling is 60 seconds, so this leaves room for it plus the round trip
+   * and no more. Nothing here retries: a client-side timeout says how long
+   * this page waited, not that the request failed, and re-sending would spend
+   * a second request from a shared budget to answer a question already asked.
+   */
+  LLM_TIMEOUT_MS: 90000,
   DEMO_MODE_FALLBACK: false, // Strict: never silently fall back to mock data in production path
 
   /**

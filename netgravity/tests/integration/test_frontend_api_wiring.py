@@ -212,7 +212,27 @@ class TestScenariosAPIWiring:
         assert "baseline_kpis" in data
         assert "scenario_kpis" in data
         assert "deltas" in data
+        # `llm_used` was a hardcoded False. It now reports the explanation
+        # connection, and this suite runs with no credential (see
+        # netgravity/tests/conftest.py), so False here is a measured fact
+        # about this run rather than a constant — and it is the fact that
+        # matters: the suite reached no model.
+        from netgravity.orchestrator.explanation_llm import explanations_llm_enabled
+
+        assert explanations_llm_enabled() is False, (
+            "a credential leaked into the test environment; this suite must "
+            "never spend a request from the shared gateway budget"
+        )
         assert data["provenance"]["llm_used"] is False
+
+        # And the scenario still carries its OWN explanation, written by the
+        # deterministic template. The card is what the recommendation panel
+        # renders; an empty one there is the defect this replaced.
+        card = (data.get("explanation") or {}).get("card") or {}
+        assert card.get("headline"), data.get("explanation")
+        assert card.get("source") == "template"
+        assert data["explanation"]["scope"] == "SCENARIO"
+        assert data["explanation"]["entity_id"], "the briefing must name its scenario"
 
     def test_simulate_rejects_unknown_action(self, client, auth):
         res = client.post(f"/api/scenarios/simulate?project_id={DEMO_PROJECT}", json={

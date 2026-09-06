@@ -359,10 +359,37 @@ class TestEveryCallerReportsItsOwnRealWork:
             assert absent not in fn, f"{absent} did not run and must not be lit"
 
     def test_a_failed_scenario_is_reported_as_failed(self):
+        """
+        Both terminal branches now route through one `reportFailure(step,
+        message)`, because a failure has two surfaces it can land on: the
+        loading dialog if the reader stayed with the run, and the background
+        tray if they left it running and went to another screen. Choosing
+        between them at each call site is how a branch gets written for one
+        and forgets the other.
+
+        The dialog is still told which dispatch failed and that the run ended.
+        """
         js = _without_comments(_asset("js", "scenarios.js"))
         fn = js[js.index("async function runScenarioCreation()"):]
-        assert "stepFail('simulate'" in fn
+        assert "const reportFailure = (step, message) =>" in fn
+        assert "stepFail(step, { error: message })" in fn
         assert "finishRun({ error: message })" in fn
+        # Named by the dispatch that stopped, not by a single hardcoded step.
+        assert "reportFailure('simulate', message)" in fn
+        assert "reportFailure('compare'," in fn
+
+    def test_a_failure_the_reader_walked_away_from_still_reaches_them(self):
+        """
+        The run can be left going (see `offerBackgroundExit`), and a failure
+        that clears itself, or that reports only into a dialog nobody is
+        looking at, is a failure the reader never learns about — in exactly
+        the flow where they are not looking.
+        """
+        js = _without_comments(_asset("js", "scenarios.js"))
+        fn = js[js.index("const reportFailure = (step, message) =>"):]
+        fn = fn[:fn.index("\n  };")]
+        assert "if (backgrounded)" in fn
+        assert "failBackgroundTask(taskId, message)" in fn
 
     def test_a_solve_this_client_stopped_waiting_for_is_not_called_failed(self):
         """
@@ -389,7 +416,10 @@ class TestEveryCallerReportsItsOwnRealWork:
         # …and answered by looking for what the server may have finished.
         assert "findScenarioCreatedSince" in fn, fn
         # A failure is only declared once that has come back with nothing.
-        assert fn.index("findScenarioCreatedSince") < fn.index("stepFail('simulate'"), fn
+        # Compared against the CALL, not the definition: `reportFailure` is
+        # declared before the try block, and only its invocation declares
+        # anything failed.
+        assert fn.index("findScenarioCreatedSince")             < fn.index("reportFailure('simulate', message)"), fn
         assert "if (!solved) {" in fn, fn
         # And what it then says does not claim the run failed.
         assert "could not be solved: ${err.message}" in fn, fn

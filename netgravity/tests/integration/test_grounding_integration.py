@@ -71,9 +71,14 @@ class TestReasoningReceivesRealEvidence:
 
         [prompt] = [p for c, p in zip(gateway.calls, gateway.prompts)
                     if c == "reasoning"]
-        assert '"business_network_cost": 1400.0' in prompt
-        assert '"business_cost_delta": 200.0' in prompt
-        assert '"business_cost_delta_pct": 16.666667' in prompt
+        # Matched on the figure, not on the spacing around it. The evidence
+        # is serialised compactly now — see `ReasoningAgent._bounded_evidence`,
+        # where the pretty-printing was costing the model the budget it needs
+        # to answer in — so `"business_network_cost": 1400.0` with its space no
+        # longer appears. What matters is that the authoritative value does.
+        assert '"business_network_cost":1400.0' in prompt
+        assert '"business_cost_delta":200.0' in prompt
+        assert '"business_cost_delta_pct":16.666667' in prompt
         assert "authoritative" in prompt.lower()
 
     def test_risk_evidence_reaches_the_agent_in_structured_form(self, planner_actor):
@@ -92,10 +97,11 @@ class TestReasoningReceivesRealEvidence:
                     if c == "reasoning"]
         payload = prompt[prompt.index("DETERMINISTIC RESULTS:"):]
 
-        assert '"risk_factor": 0.94' in payload
-        assert '"rei": 0.8' in payload
-        assert '"likelihood": 0.7' in payload
-        assert '"facility_id": "DC_DELHI"' in payload
+        # Compact separators; see the note in the test above.
+        assert '"risk_factor":0.94' in payload
+        assert '"rei":0.8' in payload
+        assert '"likelihood":0.7' in payload
+        assert '"facility_id":"DC_DELHI"' in payload
         assert "rei_registry:" in payload
         assert orch.snapshots.current_id in payload
 

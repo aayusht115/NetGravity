@@ -130,6 +130,7 @@ class ReasoningAgent:
         scope: ReasoningScope = ReasoningScope.NETWORK,
         entity_id: Optional[str] = None,
         user_question: str = "",
+        single_request: bool = False,
     ) -> ReasoningResult:
         """
         Explain a set of deterministic results.
@@ -145,6 +146,14 @@ class ReasoningAgent:
             provenance:           execution/snapshot/scenario ids, attached to
                                   every accepted numeric claim.
             allow_llm:            False forces the template path.
+            single_request:       True forbids the agent runtime, whatever the
+                                  environment selects. The runtime reaches the
+                                  model once per metric it decides to cite —
+                                  an agent loop, not a request — so a caller
+                                  that must spend exactly one model request
+                                  sets this and gets the gateway path, where
+                                  the whole evidence pack travels in the
+                                  prompt and `generate()` is called once.
 
         Returns:
             ReasoningResult. Never raises — reasoning is advisory, and its
@@ -167,7 +176,14 @@ class ReasoningAgent:
         # Preferred live path: one focused OpenAI Agent, typed output and only
         # read-only evidence tools. Runtime availability is explicit, so an
         # installed SDK alone can never trigger a paid call.
-        if allow_llm and self.runtime is not None and self.runtime.available:
+        #
+        # SKIPPED ENTIRELY under `single_request`. This runtime is an agent
+        # loop: its prompt instructs the model to call `get_evidence` before
+        # citing each metric, so a briefing quoting six figures costs at least
+        # seven model requests. A caller that promised one request cannot use
+        # it, however the environment is configured.
+        if (allow_llm and not single_request
+                and self.runtime is not None and self.runtime.available):
             try:
                 draft = self.runtime.run(evidence_pack)
                 violations = validate_reasoning_draft(draft, evidence_pack)
@@ -201,7 +217,8 @@ class ReasoningAgent:
             return self._ground(result, payload, provenance)
 
         try:
-            result = self._llm(payload, missing, user_question)
+            result = self._llm(payload, missing, user_question,
+                               scope=scope, entity_id=entity_id)
         except LLMFailureError as exc:
             logger.warning("orchestrator.reasoning.llm_failed code=%s", exc.code.value)
             fallback = self._template(payload, missing, scope, entity_id, evidence_pack)
@@ -333,13 +350,81 @@ class ReasoningAgent:
             source="openai_agents",
         )
 
+    #: Rows of any one list the prompt shows in full. A briefing cites one or
+    #: two facilities; a twenty-row list buys nothing and costs the model the
+    #: budget it needs to answer.
+    _EVIDENCE_LIST_ROWS = 8
+
+    #: Characters of evidence the prompt carries. Measured: the demo network's
+    #: payload is ~12k and answers; the Canadian network's was ~40k and
+    #: returned nothing twice. The bound is structural (see
+    #: `_bounded_evidence`) — this is the last resort, and a slice at this size
+    #: only happens on a payload the structural trim could not bring down.
+    _EVIDENCE_CHARS = 16_000
+
+    @classmethod
+    def _bounded_evidence(cls, payload: Dict[str, Any]) -> str:
+        """
+        The payload as the model sees it: complete in shape, bounded in size.
+
+        Three reductions, none of which removes a KIND of evidence:
+
+          * the solved state is serialised once. `synthesise` writes it under
+            both `scenario` and `optimization` because the template reads both
+            names; the second copy becomes a pointer;
+          * a list longer than `_EVIDENCE_LIST_ROWS` is cut to that many, with
+            a sibling entry stating how many were left out — so the model can
+            say "of twenty sites" without being handed twenty;
+          * compact separators. `indent=1` spent a newline and a space on every
+            leaf, for a reader that is not a person.
+
+        The deterministic template reads the ORIGINAL payload and is unaffected.
+        """
+        def trim_value(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {k: trim_value(v) for k, v in value.items()}
+            if isinstance(value, list):
+                if len(value) <= cls._EVIDENCE_LIST_ROWS:
+                    return [trim_value(v) for v in value]
+                kept = [trim_value(v) for v in value[: cls._EVIDENCE_LIST_ROWS]]
+                # Stated, not silently dropped: a narrative that says "three
+                # sites" about a network of twenty is worse than one that knows
+                # it was shown eight rows of twenty.
+                kept.append(
+                    f"...{len(value) - cls._EVIDENCE_LIST_ROWS} more rows not "
+                    f"shown here; {len(value)} in total")
+                return kept
+            return value
+
+        seen_state = None
+        bounded: Dict[str, Any] = {}
+        for key in sorted(payload):
+            value = payload[key]
+            # The duplicated solved state, by identity and then by content.
+            if key in ("scenario", "network_state", "optimization"):
+                if seen_state is None:
+                    seen_state = (key, value)
+                elif value is seen_state[1] or value == seen_state[1]:
+                    bounded[key] = f"same as '{seen_state[0]}' above"
+                    continue
+            bounded[key] = trim_value(value)
+
+        return json.dumps(bounded, default=str, sort_keys=True,
+                          separators=(",", ":"))[: cls._EVIDENCE_CHARS]
+
     def _llm(
         self, payload: Dict[str, Any], missing: Dict[str, Any],
         user_question: str = "",
+        scope: ReasoningScope = ReasoningScope.NETWORK,
+        entity_id: Optional[str] = None,
     ) -> Optional[ReasoningResult]:
         assert self.gateway is not None
-        # Bound the payload: gateway prompts cap at 100k characters.
-        evidence = json.dumps(payload, indent=1, default=str, sort_keys=True)[:40_000]
+        # Bound the payload. The gateway caps prompts at 100k characters, but
+        # that is not the binding constraint: the backing model bills its
+        # internal reasoning to a 2,000-token OUTPUT budget, and how much it
+        # deliberates scales with how much it is given. See
+        # `_bounded_evidence` for what was measured.
+        evidence = self._bounded_evidence(payload)
 
         missing_block = ""
         if missing:
@@ -416,16 +501,43 @@ class ReasoningAgent:
             "guessing.\n"
             f"{missing_block}"
             f"{ask_block}\n"
-            "Write figures the way a person would: thousands separated, "
-            "currency to the rupee, percentages to one decimal place.\n"
-            "Reply with ONLY this JSON, and keep every string short:\n"
-            '{"summary":"<2 sentences, first person (I/my), answering the '
-            'question rather than listing figures>",'
-            '"recommendation":"<1 sentence, one concrete next step>",'
+            # HOW TO WRITE. Every rule is here because its absence produced a
+            # specific defect on screen, and every one is stated in as few
+            # tokens as it can be — see the note above on the output budget.
+            #
+            #   no figures      the project's currency is applied afterwards,
+            #                   in one place. A model-written amount appears
+            #                   beside a table in another currency, and is
+            #                   then stripped by grounding, leaving a sentence
+            #                   with a hole in it;
+            #   third person    the screens read as a system narrating itself
+            #                   ("I see", "my models") rather than as a report;
+            #   real names      "Warehouse A" is a placeholder, and the results
+            #                   carry the actual site names;
+            #   cost + service  a plan that costs less while stranding demand
+            #                   is cheaper and not therefore better;
+            #   once            the same finding as headline, paragraph and
+            #                   recommendation reads as three findings.
+            "RULES: no figures, amounts, percentages or currency symbols. "
+            "Third person, never 'I' or 'my'. Plain business English, no "
+            "solver or model vocabulary. Name the real things the results "
+            "contain and never a placeholder; do not remark on the kinds "
+            "they do not contain. No urgency the results do not establish. "
+            "If cost improves but service or capacity does not, say both. "
+            "Say each thing once.\n"
+            "Reply with ONLY this JSON, every string short:\n"
+            '{"summary":"<conclusion in 1 sentence, then what it means in 1 '
+            'more>",'
+            '"recommendation":"<1 sentence, one next step>",'
             '"confidence":"LOW|MEDIUM|HIGH",'
             '"key_drivers":["<6 words>","<6 words>"],'
-            '"risks":["<6 words>"],'
-            '"evidence":["<one figure quoted from the results>"]}\n'
+            # No "evidence" field. It asked for "one figure quoted from the
+            # results" three lines under a rule forbidding figures — two
+            # instructions that cannot both be met, which a reasoning model
+            # spends its answer deliberating over. Grounding does not need it:
+            # `ground_narrative()` falls back to reading numbers out of the
+            # visible text, and under these rules there are none to read.
+            '"risks":["<the one thing not to miss, 12 words>"]}\n'
             "Set confidence to LOW if key results are missing or the network "
             "is infeasible; HIGH only when the results are complete.\n"
         )
@@ -456,15 +568,89 @@ class ReasoningAgent:
 
         structured = [c for c in (parsed.get("claims") or []) if isinstance(c, dict)][:20]
 
+        summary = str(parsed.get("summary", ""))[:2000]
+        drivers = as_list("key_drivers")
+        risks = as_list("risks")
+        recommendation = str(parsed.get("recommendation", ""))[:1000]
+
         return ReasoningResult(
-            summary=str(parsed.get("summary", ""))[:2000],
-            key_drivers=as_list("key_drivers"),
-            risks=as_list("risks"),
-            recommendation=str(parsed.get("recommendation", ""))[:1000],
+            summary=summary,
+            key_drivers=drivers,
+            risks=risks,
+            recommendation=recommendation,
             confidence=confidence,
             evidence=as_list("evidence"),
+            # A BRIEFING, like every other path returns.
+            #
+            # This path used to return None here, and `/api/insights` reads
+            # `result.briefing.kpi_insights` directly — so the moment a live
+            # call succeeded, the Overview raised AttributeError and 500ed.
+            # The failure was invisible while the LLM was off, because the
+            # template path always builds one.
+            briefing=self._briefing_from_parts(
+                summary=summary, drivers=drivers, risks=risks,
+                recommendation=recommendation,
+                # WHAT this briefing is about. Without it every gateway-written
+                # briefing came back NETWORK-scoped with no entity, including
+                # on a scenario run — so a screen could not tell a what-if's
+                # explanation from the network's, which is the exact confusion
+                # passing `scope` through was meant to end.
+                scope=scope, entity_id=entity_id),
             source="llm",
             grounded_claims=structured,
+        )
+
+    @staticmethod
+    def _briefing_from_parts(*, summary: str, drivers: List[str],
+                             risks: List[str], recommendation: str,
+                             scope: ReasoningScope = ReasoningScope.NETWORK,
+                             entity_id: Optional[str] = None) -> ExecutiveBriefing:
+        """
+        The gateway's one narrative, in the shape every consumer reads.
+
+        One `KPIInsight`, not none: the gateway path returns a single summary
+        rather than per-theme findings, and a briefing with an empty
+        `kpi_insights` renders as a blank card on screens that iterate it.
+        One insight carrying what the model actually said is the honest
+        representation — inventing themes to fill the list would not be.
+
+        The prompt asks for the conclusion in one sentence and what it means in
+        one more, so the two are separated here rather than run together: the
+        card leads with the conclusion, and a generic heading over it — "What
+        these results show" — pushes the conclusion into the body and heads the
+        card with a label instead.
+        """
+        from netgravity.orchestrator.reasoning.card import (
+            first_sentence,
+            rest_after_first_sentence,
+        )
+
+        #: The schema's own limit for `KPIInsight.headline`. A first sentence
+        #: longer than this is not a headline, whatever it is.
+        headline_limit = 140
+
+        insights: List[KPIInsight] = []
+        if summary:
+            lead = first_sentence(summary)
+            fits = len(lead) <= headline_limit
+            insights.append(KPIInsight(
+                theme="Summary",
+                # Empty when the conclusion will not fit: the card then derives
+                # a short lead from the narrative and shows the whole of it
+                # underneath, rather than a sentence chopped at 140 characters
+                # with its remainder nowhere.
+                headline=lead if fits else "",
+                narrative=((rest_after_first_sentence(summary) or summary)
+                           if fits else summary)[:700],
+            ))
+        return ExecutiveBriefing(
+            scope=scope,
+            entity_id=entity_id,
+            opening=summary[:500],
+            key_drivers=drivers[:4],
+            kpi_insights=insights,
+            recommendation=recommendation[:350],
+            limitation=(risks[0][:350] if risks else ""),
         )
 
     @staticmethod
@@ -876,6 +1062,102 @@ class ReasoningAgent:
         )]
 
     @staticmethod
+    def _comparison_insights(comparison: Dict[str, Any],
+                             alternatives: List[Dict[str, Any]],
+                             refs_for) -> List[KPIInsight]:
+        """
+        Why the recommended scenario is preferable to the ones beside it.
+
+        "Nagpur costs less" is a fact about Nagpur. "Nagpur costs less than
+        expanding Delhi while serving the same demand" is the comparison a
+        decision needs, and it is only said when the figures support BOTH
+        halves — a cost gap and a demand comparison that is genuinely equal.
+        Where demand differs, that is stated instead of glossed, because a
+        cheaper plan that serves less is not simply cheaper.
+        """
+        insights: List[KPIInsight] = []
+        winner = comparison.get("recommended_name")
+        if not winner or not alternatives:
+            return insights
+
+        comparable = [a for a in alternatives
+                      if a.get("cost_gap_vs_recommended") is not None]
+        for alt in comparable[:2]:
+            gap = alt["cost_gap_vs_recommended"]
+            fill_gap = alt.get("fill_gap_vs_recommended_pts")
+
+            if gap > 0:
+                lead = f"{winner} costs {gap:,.2f} less than {alt['name']}"
+            elif gap < 0:
+                lead = f"{winner} costs {abs(gap):,.2f} MORE than {alt['name']}"
+            else:
+                lead = f"{winner} and {alt['name']} cost the same"
+
+            # The service half of the trade-off, only where it is measurable.
+            if fill_gap is None:
+                service = ("Demand served cannot be compared between these two "
+                           "solves, so this is a cost comparison only.")
+            elif abs(fill_gap) < 0.05:
+                service = "Both serve the same demand."
+            elif fill_gap > 0:
+                service = (f"{alt['name']} serves {fill_gap:,.1f} points more of "
+                           f"demand, so the difference is not cost alone.")
+            else:
+                service = (f"{alt['name']} serves {abs(fill_gap):,.1f} points less "
+                           f"of demand.")
+
+            insights.append(KPIInsight(
+                theme="Trade-off",
+                headline=f"{winner} against {alt['name']}",
+                narrative=f"{lead}. {service}",
+                severity=(InsightSeverity.OPPORTUNITY if gap > 0
+                          else InsightSeverity.INFORMATION),
+                metric_refs=refs_for("cost_gap_vs_recommended", limit=2),
+            ))
+
+        not_comparable = comparison.get("n_not_comparable") or 0
+        if not_comparable:
+            insights.append(KPIInsight(
+                theme="Not compared",
+                headline=f"{not_comparable} of the compared produced no usable cost",
+                narrative=(
+                    f"{not_comparable} scenario(s) returned no cost the engine "
+                    f"could measure against the others, so they are listed but "
+                    f"take no position in this ranking."
+                ),
+                severity=InsightSeverity.RISK,
+                metric_refs=refs_for("n_not_comparable"),
+            ))
+        return insights
+
+    @staticmethod
+    def _comparison_recommendation(comparison: Dict[str, Any],
+                                   alternatives: List[Dict[str, Any]]) -> str:
+        """
+        The next step a comparison supports.
+
+        It never says "do this". The ranking is a finding; opening or closing
+        a site is classified HUMAN_ONLY by governance whatever the economics
+        say, and this sentence must not read as approval.
+        """
+        winner = comparison.get("recommended_name")
+        if not winner:
+            return ("I recommend re-running these scenarios: none of them "
+                    "produced a cost that can be compared, so there is nothing "
+                    "to choose between yet.")
+        close = [a for a in alternatives
+                 if a.get("cost_gap_vs_recommended") is not None
+                 and abs(a["cost_gap_vs_recommended"]) < 1]
+        if close:
+            return (f"I recommend deciding this on something other than cost: "
+                    f"{winner} and {close[0]['name']} are within rounding of each "
+                    f"other, so the choice rests on factors this comparison does "
+                    f"not measure.")
+        return (f"I recommend reviewing {winner} with the people who would have "
+                f"to carry it out. The comparison says which is cheaper; whether "
+                f"it is the right change is a decision, and not one I make.")
+
+    @staticmethod
     def _recommendation(*, infeasible: bool, state: Dict[str, Any],
                         payload: Dict[str, Any], negatives: List[Dict[str, Any]],
                         insights: List[KPIInsight]) -> str:
@@ -995,6 +1277,11 @@ class ReasoningAgent:
         # hand — as several tests do — is not silently ignored.
         market_raw = payload.get("market_evidence") or []
         market_signals = [market_raw] if isinstance(market_raw, dict) else list(market_raw)
+        # One more deterministic block, read exactly like the others. A
+        # COMPARISON-scope pack carries these and no network_state, so the
+        # cost/utilisation branches below simply find nothing and say nothing.
+        comparison_block = payload.get("comparison") or {}
+        comparison_alternatives = payload.get("comparison_alternatives") or []
 
         infeasible = self._is_infeasible(payload)
 
@@ -1018,7 +1305,15 @@ class ReasoningAgent:
                 span = _period_span(state)
                 insights.append(KPIInsight(
                     theme="Cost",
-                    headline="I see the current cost position clearly",
+                    # A STATEMENT, not "I see ... clearly".
+                    #
+                    # This headline now leads the recommendation card, and the
+                    # card removes the first person from everything a reader
+                    # sees — which left "The current cost position clearly", a
+                    # fragment, as the first line on the screen. The other
+                    # insight headlines survive that removal as sentences; this
+                    # one did not, so it is written as one.
+                    headline="The cost this network runs at today",
                     narrative=(
                         f"I see business network cost at {cost:,.2f}{span}. I use "
                         "this as the decision baseline for comparing any scenario."
@@ -1232,15 +1527,38 @@ class ReasoningAgent:
                     f"number."
                 )
 
+        if comparison_block:
+            comparison_insights = self._comparison_insights(
+                comparison_block, comparison_alternatives, refs_for)
+            insights.extend(comparison_insights)
+            for insight in comparison_insights:
+                parts.append(insight.narrative)
+            if comparison_block.get("verdict"):
+                # The backend's own finding, first. Everything above explains
+                # it rather than restating it.
+                parts.insert(0, comparison_block["verdict"])
+            recommended_cost = comparison_block.get("recommended_cost")
+            if recommended_cost is not None:
+                evidence.append(f"recommended_cost = {recommended_cost:,.2f}")
+            if comparison_block.get("n_not_comparable"):
+                risks.append(
+                    f"{comparison_block['n_not_comparable']} compared scenario(s) "
+                    f"produced no usable cost.")
+
         if not parts:
             parts.append("I could not find a deterministic result to explain for this request.")
 
-        recommendation = self._recommendation(
-            infeasible=infeasible,
-            state=state,
-            payload=payload,
-            negatives=negatives,
-            insights=insights,
+        recommendation = (
+            self._comparison_recommendation(comparison_block,
+                                            comparison_alternatives)
+            if comparison_block
+            else self._recommendation(
+                infeasible=infeasible,
+                state=state,
+                payload=payload,
+                negatives=negatives,
+                insights=insights,
+            )
         )
 
         completeness = (

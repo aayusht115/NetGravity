@@ -9,7 +9,8 @@
  * - Multi-Scenario Trade-off Analysis (Scenario Comparison)
  */
 
-import { SCENARIOS, DCS, PLANTS, MARKETS, formatNumber, formatCurrency,
+import { SCENARIOS, DCS, PLANTS, MARKETS, NETWORK_REGIONS, PRODUCT_CATEGORIES,
+         formatNumber, formatCurrency,
          SOLVE_HORIZON, currencyLabel, withCurrency } from './data.js';
 import { countriesContaining, loadAdmin1 } from './world-basemap.js';
 import { initMap, renderScenarioDigitalTwin, invalidateMapSize,
@@ -18,7 +19,10 @@ import { scenarioService } from './integration/services/scenario-service.js';
 import {
   startRun, stepStart, stepDone, stepFail, finishRun, note,
 } from './agent-activity.js';
-import { mountAgentLoading, dismissAgentLoading } from './agent-loading.js';
+import { mountAgentLoading, dismissAgentLoading, offerBackgroundExit,
+         withdrawBackgroundExit } from './agent-loading.js';
+import { startBackgroundTask, finishBackgroundTask,
+         failBackgroundTask } from './background-tasks.js';
 import {
   mapScenarioRecord, baselineFromScenarioRecord, BASELINE_SCENARIO_ID,
 } from './integration/mappers/scenario-mapper.js';
@@ -385,6 +389,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('authoritativeDataLoaded', () => {
     if (!document.getElementById('multi-scenario-table-wrap')) return;
     syncSelection();
+    invalidateComparison();
     renderScenarioSelector();
     renderMultiScenarioTable();
     renderMultiScenarioTakeCard();
@@ -420,6 +425,7 @@ function renderScenarioSelector() {
       const id = btn.dataset.removeId;
       multiSelectedIds = multiSelectedIds.filter((sid) => sid !== id);
       if (mapActiveId === id) mapActiveId = BASELINE_SCENARIO_ID;
+      invalidateComparison();
       // Without this, dropping a chip immediately re-added the same scenario:
       // `syncSelection` fills empty slots from the newest scenarios, and the
       // one just removed is usually the newest. Removing a chip means "stop
@@ -478,6 +484,7 @@ function renderScenarioSelector() {
 // Re-renders everything that depends on which scenarios are selected.
 function onSelectionChanged() {
   syncSelection();
+  invalidateComparison();
   renderScenarioSelector();
   renderMultiScenarioTable();
   renderMultiScenarioTakeCard();
@@ -798,40 +805,63 @@ function renderMultiScenarioTable() {
 
 // ─── "NetGravity's take" card ────────────────────────────────
 //
-// Rewritten from the scenarios that are actually on screen.
+// It used to RANK. `rankScenarios()` sorted the compared scenarios on cost,
+// picked a winner, and `renderMultiScenarioTakeCard()` wrote the sentence
+// recommending it — all in the browser, from figures the mapper had already
+// unwrapped. A decision made here is invisible to the audit trail, cannot be
+// asserted by the backend suite, and is free to disagree with the same numbers
+// in the table beside it.
 //
-// Every line of this card used to read a field the mapper does not produce —
-// `scn.highlight`, `scn.description`, `scn.aiAssessment.recommendation` — so
-// the headline and paragraph rendered the string "undefined", and the trade-off
-// line computed `undefined - undefined`. It also always described
-// `multiSelectedIds[0]`, which was the phantom `SCN_REBALANCE`, falling through
-// to `SCENARIOS[1]`: the card never changed when the user selected a different
-// scenario, and never updated when a new one was created.
+// It now READS a decision: `POST /api/scenarios/compare` ranks the set from the
+// authoritative KPI values and their statuses, names the scenario the numbers
+// favour, states the caveats, and returns the set's own grounded briefing. The
+// scenario's own SCENARIO-scoped explanation comes back on `/simulate`.
 //
-// It now RANKS the selected scenarios on their solved cost against the
-// baseline, names the best one, and says what it costs in service — with no
-// narrative that is not derived from two numbers.
+// Nothing on this card is calculated here. `formatCurrency` renders an amount
+// the backend supplied, in the currency the upload stated.
+
+//: The backend's verdict for the currently compared set, keyed on that set —
+//: so switching the map toggle, or re-rendering for any other reason, does not
+//: ask again. Cleared whenever the selection changes.
+let comparisonState = { key: '', status: 'idle', data: null, error: '' };
+
+function comparisonKey(ids) {
+  return [...ids].sort().join('|');
+}
+
+/** A different set of scenarios is a different analysis. */
+function invalidateComparison() {
+  comparisonState = { key: '', status: 'idle', data: null, error: '' };
+}
 
 /**
- * Rank the compared scenarios and pick one to recommend.
+ * Ask the backend to rank the compared set, once per set.
  *
- * Cheapest-first on business network cost, but a scenario that strands more
- * demand than the baseline is flagged rather than silently recommended: on this
- * engine the cheapest plan is frequently the one that serves least, and cost
- * alone would recommend closing the network.
+ * Never throws: the comparison table beside this card is perfectly good
+ * without a verdict, and the card says what it is missing rather than
+ * disappearing.
  */
-function rankScenarios(baseline, scenarios) {
-  return scenarios
-    .filter((s) => typeof s.totalCost === 'number')
-    .map((s) => {
-      const costDelta = typeof baseline.totalCost === 'number'
-        ? s.totalCost - baseline.totalCost : null;
-      const fillDelta = (typeof s.fillRate === 'number'
-                         && typeof baseline.fillRate === 'number')
-        ? s.fillRate - baseline.fillRate : null;
-      return { scenario: s, costDelta, fillDelta };
-    })
-    .sort((a, b) => (a.costDelta ?? Infinity) - (b.costDelta ?? Infinity));
+async function loadComparison(ids) {
+  const key = comparisonKey(ids);
+  if (comparisonState.key === key && comparisonState.status !== 'idle') return;
+  comparisonState = { key, status: 'loading', data: null, error: '' };
+  renderMultiScenarioTakeCard();
+  try {
+    const data = await scenarioService.compareScenarios(ids);
+    if (comparisonKey(ids) !== comparisonState.key) return;   // selection moved on
+    comparisonState = { key, status: 'ready', data, error: '' };
+  } catch (err) {
+    if (comparisonKey(ids) !== comparisonState.key) return;
+    // A TIMEOUT here is a statement about how long this page waited, not
+    // about the ranking. Nothing is retried: the one model request the
+    // explanation may spend comes from a shared budget, and re-sending would
+    // spend a second answering a question already asked.
+    comparisonState = {
+      key, status: 'failed', data: null,
+      error: (err && err.message) || 'the comparison could not be run',
+    };
+  }
+  renderMultiScenarioTakeCard();
 }
 
 function takeCheckItem(good, text) {
@@ -842,129 +872,712 @@ function takeCheckItem(good, text) {
     </div>`;
 }
 
+/** The card head, with where the words came from. Visibility of system status. */
+function takeHeadHtml(source, cached) {
+  const badge = !source ? ''
+    : source === 'llm'
+      ? `<span class="scn-take-source" title="${cached
+          ? 'Written once by the model for this analysis and saved against it — reopening it spends nothing.'
+          : 'Written by the model from the deterministic results. Every figure on this card is supplied by the engine, not by the model.'}">AI${cached ? ' · saved' : ''}</span>`
+      : '<span class="scn-take-source muted" title="Written by the deterministic template. No model was reached.">Rule-based</span>';
+  return `
+    <div class="scn-take-head">
+      <span class="scn-take-icon">✨</span>
+      <span class="scn-take-title">NetGravity's Recommendation</span>
+      ${badge}
+    </div>`;
+}
+
+/** Up to three supporting numbers, exactly as the backend supplied them. */
+function takeFiguresHtml(figures) {
+  const shown = (figures || []).slice(0, 3);
+  if (!shown.length) return '';
+  return `
+    <div class="scn-take-figures">
+      ${shown.map((f) => {
+        const value = f.format === 'currency'
+          ? (typeof f.amount === 'number' ? formatCurrency(f.amount) : 'Not available')
+          : (f.value || 'Not available');
+        return `
+        <div class="scn-take-figure">
+          <div class="scn-take-figure-label">${f.label}</div>
+          <div class="scn-take-figure-value">${value}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+/**
+ * What a reader can actually DO about this scenario, given what it found.
+ *
+ * Every item maps to something this application performs. None of them
+ * approves anything: opening or closing a site is classified HUMAN_ONLY by
+ * governance whatever the economics say, and the backend says so on the
+ * comparison — so the actions offered are ways to examine, test and ask,
+ * which is what a what-if screen supports.
+ *
+ * The list is context-specific in the strict sense: each entry is gated on a
+ * FINDING in this scenario's own solved result, so a scenario that stranded no
+ * demand is never offered "test more capacity", and a scenario that changed no
+ * topology is never labelled a structural decision.
+ */
+function recommendedActions(scn, comparison) {
+  const actions = [];
+  if (!scn) return actions;
+
+  // The governance verdict is NOT here. Opening or closing a site is a human
+  // decision whatever the economics say, and that is a statement about the
+  // change rather than something a reader can press — see `governanceHtml`.
+  const row = ((comparison && comparison.ranked) || [])
+    .find((r) => r.scenario_id === scn.id) || {};
+  const action = (scn.request && scn.request.action) || '';
+
+  // Always first: read what the solver actually did before acting on it.
+  actions.push({
+    label: 'Review the proposed changes',
+    detail: 'Sites, corridors and cost, component by component, from this solve.',
+    primary: true,
+    run: () => openScenarioDrawer(scn.id),
+  });
+
+  // What the change asks of the network, and what can be done about it.
+  //
+  // These used to be one generic entry — "Test more capacity at the busiest
+  // site", which named no site and opened an empty capacity form. The backend
+  // now says WHICH sites the plan fills, how much extra each carries, what
+  // capacity was left closed and which regions have nothing left, so each
+  // action can name its target and open the builder already pointed at it.
+  const cap = scn.capacityResponse || null;
+  const unserved = readKpiValue(scn.scenarioKpis, 'unserved_demand');
+  const full = (cap && cap.at_ceiling) || [];
+  const idle = (cap && cap.idle) || [];
+  const regions = (cap && cap.regions_without_room) || [];
+
+  // Reopening beats building, so it is offered first when both are available.
+  if (idle.length && (typeof unserved !== 'number' || unserved > 0)) {
+    const site = idle[0];
+    actions.push({
+      label: `Test reopening ${site.name}`,
+      detail: `This plan left ${formatNumber(Math.round(site.capacity || 0))} units `
+        + `of capacity closed at ${site.name}`
+        + `${site.region ? ` in ${site.region}` : ''}. Opens a scenario that holds `
+        + 'it open, to see what the network does with it.',
+      run: () => openCreateToolboxWith('OPEN_FACILITY',
+        { facilityId: site.id, openMode: 'EXISTING',
+          name: `Reopen ${site.name}` }),
+    });
+  }
+
+  if (full.length) {
+    const site = full[0];
+    const at = typeof site.util_pct === 'number' ? `${site.util_pct.toFixed(0)}%` : 'its ceiling';
+    actions.push({
+      label: `Add capacity at ${site.name}`,
+      detail: `${site.name} runs at ${at} in this plan`
+        + `${typeof site.added_units === 'number' && site.added_units > 0
+            ? `, carrying ${formatNumber(Math.round(site.added_units))} units more `
+              + 'than it does today' : ''}`
+        + '. Opens a capacity scenario on that site — it tests the idea, it does '
+        + 'not apply it.',
+      run: () => openCreateToolboxWith('CHANGE_CAPACITY', { facilityId: site.id }),
+    });
+  } else if (typeof unserved === 'number' && unserved > 0) {
+    actions.push({
+      label: 'Test more capacity at the busiest site',
+      detail: `This plan leaves ${formatNumber(Math.round(unserved))} units unserved. `
+        + 'Opens a capacity scenario — it tests the idea, it does not apply it.',
+      run: () => openCreateToolboxWith('CHANGE_CAPACITY'),
+    });
+  } else if (String(scn.capacityRisk || '').toLowerCase() === 'high') {
+    actions.push({
+      label: 'Test more capacity at the busiest site',
+      detail: 'Capacity risk stays high in this plan. Opens a capacity scenario '
+        + 'to see what relieving it costs.',
+      run: () => openCreateToolboxWith('CHANGE_CAPACITY'),
+    });
+  }
+
+  // A new site is proposed only where the backend found a region with sites at
+  // their ceiling, nothing closed to reopen, and no headroom on anything open.
+  // Anything weaker recommends building where a reopening would have done.
+  if (regions.length) {
+    const region = regions[0].region;
+    actions.push({
+      label: `Site a new facility in ${region}`,
+      detail: `Every site in ${region} is at its ceiling in this plan and none `
+        + 'is closed, so more demand there has nowhere to go. Opens the '
+        + 'greenfield form — you supply the location, capacity and costs.',
+      run: () => openCreateToolboxWith('OPEN_FACILITY',
+        { openMode: 'NEW', name: `New site in ${region}` }),
+    });
+  }
+
+  // Growth stated for the whole network, on an upload that names regions.
+  // Loading every warehouse with growth happening in one region overstates the
+  // case for expanding the ones that are not.
+  const scoped = scn.request
+    && (scn.request.demand_region || scn.request.demand_product_category);
+  if (action === 'CHANGE_DEMAND' && !scoped
+      && (NETWORK_REGIONS.length || PRODUCT_CATEGORIES.length)) {
+    actions.push({
+      label: 'Re-run this growth for one region or category',
+      detail: 'This scenario grew every demand row. Your upload states '
+        + `${NETWORK_REGIONS.length ? `${NETWORK_REGIONS.length} regions` : ''}`
+        + `${NETWORK_REGIONS.length && PRODUCT_CATEGORIES.length ? ' and ' : ''}`
+        + `${PRODUCT_CATEGORIES.length ? `${PRODUCT_CATEGORIES.length} product categories` : ''}`
+        + ', so the growth can be scoped to where it is actually happening.',
+      run: () => openCreateToolboxWith('CHANGE_DEMAND'),
+    });
+  }
+
+  // The change moved nothing: the solver reaches the same plan without it.
+  if (typeof row.change_effect === 'number' && Math.abs(row.change_effect) < 1
+      && typeof row.reoptimisation_effect === 'number'
+      && Math.abs(row.reoptimisation_effect) >= 1) {
+    actions.push({
+      label: 'Look at the redesign on its own',
+      detail: 'The whole difference here comes from re-optimising the footprint '
+        + 'you already have — this change adds nothing to it.',
+      run: () => openScenarioDrawer(scn.id),
+    });
+  }
+
+  // Evidence the briefing itself says it did not have.
+  const missing = (scn.explanation && scn.explanation.missing_information) || [];
+  if (missing.length) {
+    actions.push({
+      label: 'Request the missing data',
+      detail: `${missing.length} input this scenario needed was not in the upload. `
+        + 'Opens the action list, where a request can be sent to whoever owns it.',
+      run: () => {
+        if (typeof window.navigateToTab === 'function') window.navigateToTab('home');
+      },
+    });
+  }
+
+  // Always last: ask about it in words.
+  //
+  // This used to call `askChatbotPrompt` alone, which renders into an overlay
+  // it does not open: the button did nothing visible and sent a question to
+  // the orchestrator anyway. And the question was unanswerable as asked — the
+  // chat layer knows nothing about a saved scenario, so it would have analysed
+  // the baseline network and answered about that, minutes later.
+  actions.push({
+    label: 'Chat with Netgravity about this scenario',
+    detail: 'Opens the assistant on this scenario\'s own briefing — its cost, '
+      + 'what it leaves unserved, and what it asks of each site — and you can '
+      + 'ask from there.',
+    run: () => openChatAboutScenario(scn, comparison),
+  });
+
+  return actions;
+}
+
+/**
+ * Open the assistant on this scenario, with what is already known about it.
+ *
+ * Every line below is a value the BACKEND returned: the scenario's own
+ * SCENARIO-scoped briefing from `/simulate`, the ranking's verdict from
+ * `/compare`, and the capacity account derived from the authoritative
+ * per-facility KPIs. Nothing is computed here, nothing is asked of a model,
+ * and a field the backend did not supply is left out rather than filled in.
+ *
+ * The scenario is named in the box as a follow-up question so the reader's
+ * next message carries the subject with it — the chat endpoint answers about
+ * the network, and a question that does not say which scenario it means would
+ * get an answer about a different one.
+ */
+function openChatAboutScenario(scn, comparison) {
+  if (typeof window.openChatbotWithBriefing !== 'function') return;
+
+  const esc = (t) => String(t == null ? '' : t)
+    .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                                   '"': '&quot;', "'": '&#39;' }[c]));
+
+  const name = scenarioDisplayName(scn);
+  const card = (scn.explanation && scn.explanation.card) || null;
+  const cap = scn.capacityResponse || null;
+  const parts = [];
+
+  parts.push(`<p><strong>${esc(name)}</strong></p>`);
+
+  // The ranking's verdict, when this is the scenario it is about.
+  if (comparison && comparison.verdict
+      && comparison.recommended_scenario_id === scn.id) {
+    parts.push(`<p>${esc(comparison.verdict)}</p>`);
+  }
+  if (card && card.headline) parts.push(`<p>${esc(card.headline)}</p>`);
+  if (card && card.meaning) parts.push(`<p>${esc(card.meaning)}</p>`);
+
+  // The three figures the card shows, in the same words and the same currency.
+  const figures = (card && card.figures) || [];
+  if (figures.length) {
+    parts.push(`<p>${figures.map((f) => {
+      const value = f.format === 'currency'
+        ? (typeof f.amount === 'number' ? formatCurrency(f.amount) : 'not available')
+        : (f.value || 'not available');
+      return `${esc(f.label)}: <strong>${esc(value)}</strong>`;
+    }).join(' · ')}</p>`);
+  }
+
+  if (cap && cap.verdict) parts.push(`<p>${esc(cap.verdict)}</p>`);
+  const full = (cap && cap.at_ceiling) || [];
+  if (full.length) {
+    parts.push(`<p>At their ceiling: ${full.map((r) => {
+      const at = typeof r.util_pct === 'number' ? `${r.util_pct.toFixed(0)}%` : '—';
+      return `${esc(r.name)} (${at}${r.region ? `, ${esc(r.region)}` : ''})`;
+    }).join(', ')}.</p>`);
+  }
+  if (cap && (cap.idle || []).length) {
+    parts.push(`<p>Left closed: ${cap.idle.map((r) => esc(r.name)).join(', ')} — `
+      + `${formatNumber(Math.round(cap.idle_capacity_units || 0))} units of `
+      + 'capacity this plan does not use.</p>');
+  }
+
+  if (card && card.warning) parts.push(`<p>${esc(card.warning)}</p>`);
+  if (card && card.next_step) parts.push(`<p>${esc(card.next_step)}</p>`);
+
+  // Where the words came from. The card says it above the fold and the
+  // assistant must say it too — a briefing that reads as the model's when the
+  // template wrote it is the one thing this surface must not do.
+  parts.push('<p class="text-xs text-muted">'
+    + (card && card.source === 'llm'
+        ? 'Written by the model from this scenario\'s solved results; every '
+          + 'figure is the engine\'s.'
+        : 'Written by the deterministic template — no model was reached for '
+          + 'this scenario.')
+    + ' Ask a follow-up below and I will answer it from your network.</p>');
+
+  window.openChatbotWithBriefing({
+    topic: 'SCENARIO BRIEFING',
+    html: parts.join(''),
+    question: `In the scenario "${name}", what would it take to serve the `
+      + 'demand this plan leaves unserved?',
+  });
+}
+
+/** One authoritative KPI value, or null when its status refuses it. */
+function readKpiValue(kpis, metricId) {
+  const result = (kpis || {})[metricId];
+  if (!result || result.status !== 'VALID') return null;
+  return typeof result.value === 'number' ? result.value : null;
+}
+
+/**
+ * Open the builder pre-set to one scenario type, so the action lands somewhere.
+ *
+ * `options` points it at the specific thing the action named. An action that
+ * says "add capacity at Nagpur DC" and then opens an empty form with the first
+ * site in the list selected has told the reader to do the work again, and has
+ * invited them to run it against the wrong site.
+ *
+ * Only fields the chosen type actually renders are set; the rest are ignored,
+ * and every value stays editable. Nothing is submitted here.
+ */
+function openCreateToolboxWith(type, options = {}) {
+  openCreateToolbox();
+  document.querySelectorAll('.scn-type-card').forEach((card) => {
+    card.classList.toggle('active', card.dataset.type === type);
+  });
+  renderToolboxDynamicFields(type);
+
+  if (options.name) {
+    const nameInput = document.getElementById('toolbox-scenario-name');
+    if (nameInput) nameInput.value = options.name;
+  }
+  // OPEN_FACILITY renders "keep an existing site open" and "propose a new one"
+  // as two panels behind a mode select, so the mode is set before the facility.
+  if (options.openMode) {
+    const mode = document.getElementById('toolbox-open-mode');
+    if (mode) {
+      mode.value = options.openMode;
+      mode.dispatchEvent(new Event('change'));
+    }
+  }
+  if (options.facilityId) {
+    const select = document.getElementById('toolbox-facility');
+    // Only if the option is really there. Assigning an unknown value to a
+    // <select> silently leaves it on whatever was selected before, which is
+    // how an action naming one site would run against another.
+    if (select && [...select.options].some((o) => o.value === options.facilityId)) {
+      select.value = options.facilityId;
+    }
+  }
+}
+
+function takeActionsHtml(actions) {
+  if (!actions.length) return '';
+  // Actions now name the sites they are about — "Add capacity at Toronto DC" —
+  // and those names came out of an uploaded spreadsheet. Nothing here has ever
+  // carried markup deliberately, so escaping costs nothing and closes the way
+  // in.
+  const esc = (t) => String(t == null ? '' : t)
+    .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                                   '"': '&quot;', "'": '&#39;' }[c]));
+  return `
+    <div class="scn-take-section-title" style="margin-top:14px">Recommended actions</div>
+    <div class="scn-take-actions">
+      ${actions.map((a, i) => `
+        <button type="button" class="scn-take-action${a.primary ? ' primary' : ''}"
+                data-action-index="${i}">
+          <span class="scn-take-action-label">${esc(a.label)}</span>
+          <span class="scn-take-action-detail">${esc(a.detail)}</span>
+        </button>`).join('')}
+    </div>`;
+}
+
+/**
+ * What the change asks of the sites that have to absorb it.
+ *
+ * The question a demand scenario is actually asking, and the one the card did
+ * not answer: raising demand by half produced the same cost narration as
+ * raising it by five percent. Which sites the plan fills, how hard the rest
+ * have to run, what capacity is sitting closed, and where the network has
+ * nothing left — those are the parts that differ.
+ *
+ * Every figure and the verdict sentence are the backend's, from
+ * `capacity_response`. This formats them; the only arithmetic here is
+ * `formatNumber` on a unit count and `formatCurrency` on nothing at all.
+ */
+function capacityResponseHtml(scn, { title = true, rows = 5 } = {}) {
+  const cr = scn && scn.capacityResponse;
+  if (!cr) return '';
+
+  // The card shows fewer than the drawer does. It already carries the
+  // verdict, the figures, the trade-off band and the actions, and a
+  // recommendation whose primary action has been pushed below the fold by its
+  // own supporting detail is a recommendation nobody acts on. The count that
+  // is NOT shown is still stated, so a truncated list never reads as a
+  // complete one.
+  const full = (cr.at_ceiling || []).slice(0, rows);
+  const harder = (cr.working_harder || []).slice(0, rows);
+  const idle = (cr.idle || []).slice(0, rows);
+  const regions = cr.regions_without_room || [];
+  if (!cr.verdict && !full.length && !harder.length && !idle.length) return '';
+
+  const units = (n) => (typeof n === 'number' ? formatNumber(Math.round(n)) : '—');
+  const pct = (n) => (typeof n === 'number' ? `${n.toFixed(1)}%` : '—');
+  // Site and region names came out of a spreadsheet somebody uploaded, and
+  // this block is written with innerHTML.
+  const esc = (t) => String(t == null ? '' : t)
+    .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                                   '"': '&quot;', "'": '&#39;' }[c]));
+
+  // What kind of site, and where. Whether the ceiling is a PLANT's or a
+  // warehouse's is the difference between "we cannot make enough" and "we
+  // cannot move enough", and they are not the same problem.
+  const where = (row) => {
+    const bits = [row.role, row.region].filter(Boolean).map(esc);
+    return bits.length
+      ? `<span class="scn-cap-region">${bits.join(' · ')}</span>` : '';
+  };
+
+  // One site's line: what it must run at, and how much of that is new.
+  const load = (row, tag) => `
+    <div class="scn-cap-row">
+      <span class="scn-cap-site">
+        ${esc(row.name)}${where(row)}
+      </span>
+      <span class="scn-cap-util ${tag}">${pct(row.util_pct)}</span>
+      <span class="scn-cap-delta">${
+        typeof row.baseline_util_pct === 'number'
+          ? `from ${pct(row.baseline_util_pct)}` : ''}${
+        typeof row.added_units === 'number' && row.added_units > 0
+          ? ` · +${units(row.added_units)} units` : ''}</span>
+    </div>`;
+
+  const more = (shown, total) => (total > shown.length
+    ? `<div class="scn-cap-more">and ${total - shown.length} more</div>` : '');
+
+  return `
+    ${title ? `<div class="scn-take-section-title" style="margin-top:14px">
+      What this asks of the network
+    </div>` : ''}
+    ${cr.verdict ? `<p class="scn-take-para">${cr.verdict}</p>` : ''}
+    ${full.length ? `
+      <div class="scn-cap-group-label">Run to their ceiling — no room left</div>
+      ${full.map((r) => load(r, 'full')).join('')}
+      ${more(full, cr.at_ceiling_count || full.length)}` : ''}
+    ${harder.length ? `
+      <div class="scn-cap-group-label">Working harder, still with room</div>
+      ${harder.map((r) => load(r, 'hot')).join('')}
+      ${more(harder, cr.working_harder_count || harder.length)}` : ''}
+    ${idle.length ? `
+      <div class="scn-cap-group-label">
+        Left closed — ${units(cr.idle_capacity_units)} units of capacity unused
+      </div>
+      ${idle.map((r) => `
+        <div class="scn-cap-row">
+          <span class="scn-cap-site">
+            ${esc(r.name)}${where(r)}
+          </span>
+          <span class="scn-cap-util idle">closed</span>
+          <span class="scn-cap-delta">${units(r.capacity)} units of capacity</span>
+        </div>`).join('')}
+      ${more(idle, cr.idle_count || idle.length)}` : ''}
+    ${regions.length ? `
+      <p class="scn-take-para" style="margin-top:8px">
+        <strong>${regions.map((r) => esc(r.region)).join(', ')}</strong>
+        ${regions.length === 1 ? 'has' : 'have'} no room left at all — every site
+        there is at its ceiling and none is closed, so serving more demand from
+        within ${regions.length === 1 ? 'that region' : 'those regions'} means a
+        new site.
+      </p>` : ''}
+    ${!cr.regions_known && full.length ? `
+      <p class="scn-take-para text-muted" style="margin-top:8px">
+        Your upload does not state a region for its sites, so this cannot say
+        which region a new facility belongs in. Add a region column and it will.
+      </p>` : ''}`;
+}
+
+/**
+ * Where the difference against today comes from, in this project's currency.
+ *
+ * The backend supplies two AMOUNTS and no sentence: it ranks and it measures,
+ * but the currency belongs to the upload and is applied in exactly one place
+ * (`formatCurrency`). Composing this sentence on the server printed
+ * "167,846,924.60" beside a card whose every other figure read "C$167.85M".
+ *
+ * This is the line that stops a demand INCREASE reading as a saving: the
+ * baseline pins the footprint open and a scenario may close sites, so most of
+ * the gap is the redesign, not the change.
+ */
+function attributionHtml(attribution) {
+  if (!attribution || typeof attribution.reoptimisation_amount !== 'number') return '';
+  const reopt = formatCurrency(Math.abs(attribution.reoptimisation_amount));
+  if (attribution.change_direction === 'none') {
+    return `<p class="scn-take-para"><strong>The change itself moves nothing.</strong>
+      All ${reopt} of the difference comes from re-optimising the footprint you
+      already have — the solver reaches the same plan with or without this
+      change, and that saving is available without this scenario.</p>`;
+  }
+  const change = formatCurrency(Math.abs(attribution.change_amount));
+  const verb = attribution.change_direction === 'adds'
+    ? `<strong>adds ${change}</strong> back on top of it`
+    : `<strong>saves a further ${change}</strong> on top of it`;
+  return `<p class="scn-take-para">Of the difference against the network you run
+    today, <strong>${reopt}</strong> comes from re-optimising the footprint you
+    already have — available without this scenario — and the change itself
+    ${verb}.</p>`;
+}
+
+/**
+ * The one thing not to miss, in one band.
+ *
+ * Two sources reach here and they say different things: the RANKING's warning
+ * is about the trade-off it just made (cheapest, but service or capacity is
+ * not acceptable), and the BRIEFING's is the risk the reasoning found. Both
+ * matter, so neither is dropped — but two stacked amber blocks read as an
+ * alarm rather than as a caveat, so they share one band.
+ */
+function warningBandHtml(rankingWarning, briefingWarning) {
+  const lines = [rankingWarning, briefingWarning]
+    .map((t) => (t || '').trim())
+    .filter((t, i, all) => t && all.indexOf(t) === i);
+  if (!lines.length) return '';
+  return `
+    <div class="scn-take-tradeoff">
+      <span class="scn-take-tradeoff-icon">⚠️</span>
+      <span>${lines.map((t) => `<span class="scn-take-tradeoff-line">${t}</span>`).join('')}</span>
+    </div>`;
+}
+
+/**
+ * Whether two sentences state the same finding.
+ *
+ * The card leads with the ENGINE's verdict and then the model's headline about
+ * the same ranking, and on a live run those were: "Freight +15% costs less than
+ * the network you run today, and less than the 1 other option compared" and
+ * "Freight +15% costs less than the network the business runs today and less
+ * than Demand +30%". One message printed twice, in two voices — and the second
+ * copy pushed the recommended actions down behind the chat button.
+ *
+ * Compared on the first six significant words, which is where a sentence makes
+ * its claim. An exact-string check caught none of this.
+ */
+function saysTheSameThing(a, b) {
+  const lead = (text) => String(text || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9%+\-\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(' ');
+  const left = lead(a);
+  const right = lead(b);
+  return Boolean(left) && left === right;
+}
+
+/**
+ * The governance verdict, where the other statements about this recommendation
+ * are — not in the action list.
+ *
+ * It was a disabled button at the head of "Recommended actions": a control
+ * that does nothing, above the controls that do. Opening or closing a site is
+ * classified HUMAN_ONLY by the backend whatever the economics say, and that is
+ * a fact about the change, not something a reader can press.
+ */
+function governanceHtml(comparison, focus) {
+  const governance = comparison && comparison.governance;
+  if (!governance || governance.classification !== 'HUMAN_ONLY') return '';
+  if (comparison.recommended_scenario_id !== focus.id) return '';
+  return `
+    <div class="scn-take-governance">
+      <span class="scn-take-governance-tag">Human decision</span>
+      <span>${governance.note}</span>
+    </div>`;
+}
+
+/** The technical account, collapsed. One conclusion is said once above it. */
+function takeDetailsHtml(lines) {
+  const items = (lines || []).filter(Boolean);
+  if (!items.length) return '';
+  return `
+    <details class="scn-take-details">
+      <summary>How this was decided</summary>
+      <ul>${items.map((d) => `<li>${d}</li>`).join('')}</ul>
+    </details>`;
+}
+
 function renderMultiScenarioTakeCard() {
   const container = document.getElementById('scn-multi-take-card');
   if (!container) return;
 
   const baseline = baselineScenario();
   const selected = multiSelectedIds
-    .map((id) => SCENARIOS.find((s) => s.id === id)).filter(Boolean);
+    .map((id) => SCENARIOS.find((s) => s.id === id))
+    .filter((s) => s && s.id !== BASELINE_SCENARIO_ID);
 
   if (!baseline || !selected.length) {
-    container.innerHTML = `
-      <div class="scn-take-head">
-        <span class="scn-take-icon">✨</span>
-        <span class="scn-take-title">NetGravity's Recommendation</span>
-      </div>
-      <div class="text-xs text-muted" style="padding:10px 0;line-height:1.6">
+    container.innerHTML = takeHeadHtml('', false) + `
+      <div class="scn-empty-note">
         ${baseline
           ? 'No scenario is selected, so there is nothing to recommend. Create '
-            + 'one and it will be compared against your solved network.'
+            + 'one and it will be ranked against your solved network.'
           : 'This network has not been solved, so there is no baseline to judge '
             + 'a scenario against.'}
       </div>`;
     return;
   }
 
-  const ranked = rankScenarios(baseline, selected);
-  if (!ranked.length) {
-    container.innerHTML = `
-      <div class="scn-take-head">
-        <span class="scn-take-icon">✨</span>
-        <span class="scn-take-title">NetGravity's Recommendation</span>
-      </div>
-      <div class="text-xs text-muted" style="padding:10px 0;line-height:1.6">
-        None of the selected scenarios produced a cost the engine could report,
-        so there is nothing to rank. Open a scenario to see why.
+  const ids = selected.map((s) => s.id);
+  const key = comparisonKey(ids);
+  if (comparisonState.key !== key) {
+    // Fired without awaiting: it re-renders this card when it lands.
+    loadComparison(ids);
+  }
+  const state = comparisonState.key === key ? comparisonState : { status: 'loading' };
+
+  if (state.status === 'loading' || state.status === 'idle') {
+    container.innerHTML = takeHeadHtml('', false) + `
+      <div class="scn-empty-note">
+        Ranking ${selected.length === 1 ? 'this scenario' : `these ${selected.length} scenarios`}
+        against your solved network…
       </div>`;
     return;
   }
 
-  const best = ranked[0];
-  const scn = best.scenario;
-  const saves = best.costDelta !== null && best.costDelta < 0;
-  const changes = describeScenarioChanges(scn);
+  if (state.status === 'failed') {
+    // Say what is missing and what still stands. The table beside this card
+    // is unaffected, and saying so is the difference between a degraded panel
+    // and a screen the reader stops trusting.
+    container.innerHTML = takeHeadHtml('', false) + `
+      <div class="scn-empty-note">
+        The ranking could not be produced — ${state.error}. The comparison table
+        beside this is unaffected: those figures come from each scenario's own
+        solve. Reopen this tab to try again.
+      </div>`;
+    return;
+  }
 
-  const headline = best.costDelta === null
-    ? `${scenarioDisplayName(scn)} — no comparable baseline cost`
-    : saves
-      ? `${scenarioDisplayName(scn)} is the cheapest of the ${ranked.length} compared, `
-        + `at ${formatCurrency(Math.abs(best.costDelta))} below your current network`
-      : `None of the ${ranked.length} compared beats your current network on cost; `
-        + `${scenarioDisplayName(scn)} is the closest, at `
-        + `${formatCurrency(Math.abs(best.costDelta))} above it`;
+  const comparison = state.data || {};
+  const ranked = comparison.ranked || [];
+  const recommendedId = comparison.recommended_scenario_id;
 
-  // Attribute the saving honestly.
+  // WHICH scenario the actions are about: the one the map toggle is showing,
+  // falling back to the one the backend recommends. Taking "whichever is
+  // first" instead meant switching the map to another scenario left the
+  // actions describing the previous one.
+  const focus = selected.find((s) => s.id === mapActiveId)
+    || selected.find((s) => s.id === recommendedId)
+    || selected[0];
+
+  // WHICH briefing explains what is on screen.
   //
-  // Most of the headline reduction on this kind of network is not the change at
-  // all — it is the value of letting the solver re-optimise a footprint the
-  // baseline holds fixed. Reporting the whole gap as the scenario's doing is
-  // how three unrelated changes come to read as "-47%" apiece.
-  const reoptEffect = (typeof scn.referenceCost === 'number'
-                       && typeof baseline.totalCost === 'number')
-    ? scn.referenceCost - baseline.totalCost : null;
-  const attribution = (reoptEffect === null || scn.changeEffect === null)
-    ? ''
-    : Math.abs(scn.changeEffect) < 1
-      ? `<p class="scn-take-para"><strong>The change itself moves nothing.</strong> `
-        + `All ${formatCurrency(Math.abs(reoptEffect))} of the difference comes from `
-        + `re-optimising the footprint you already have — the solver reaches the `
-        + `same plan with or without this change.</p>`
-      : `<p class="scn-take-para">Of that difference, `
-        + `<strong>${formatCurrency(Math.abs(reoptEffect))}</strong> comes from `
-        + `re-optimising the footprint you already have, and `
-        + `<strong>${scn.changeEffect < 0 ? 'a further ' : ''}`
-        + `${formatCurrency(Math.abs(scn.changeEffect))}</strong> from this change `
-        + `${scn.changeEffect < 0 ? 'on top of it' : 'against it'}.</p>`;
+  // Comparing several, the question is "why this one rather than those" — and
+  // that is the COMPARISON's own briefing, about the set. Comparing one, there
+  // is nothing to weigh it against, and the scenario's own SCENARIO-scoped
+  // briefing is the answer; the backend produces no comparison briefing for a
+  // set of one, so there is nothing to fall back from.
+  //
+  // Rendering the scenario's card under a set of three was the failure this
+  // avoids: an explanation of one scenario beneath a verdict about three.
+  const comparisonCard = (comparison.explanation && comparison.explanation.card) || null;
+  const scenarioCard = (focus.explanation && focus.explanation.card) || null;
+  const card = (selected.length > 1 && comparisonCard) ? comparisonCard : scenarioCard;
+  const aboutTheSet = card === comparisonCard && Boolean(comparisonCard);
+  // The briefing the card came from, so the grounding notes below belong to
+  // the words above them rather than to the other one.
+  const briefing = aboutTheSet ? comparison.explanation : focus.explanation;
+  const cached = Boolean(card && card.cached);
+  const source = (card && card.source) || '';
 
-  // The service trade-off is stated even when it is bad — especially when it is
-  // bad. A cheaper plan that strands more demand is not a saving.
-  const fillLine = best.fillDelta === null
-    ? 'Fill rate is not comparable between these two solves.'
-    : best.fillDelta < -0.05
-      ? `It serves <strong>${Math.abs(best.fillDelta).toFixed(1)} points less</strong> of demand than today — the saving is partly a smaller promise.`
-      : best.fillDelta > 0.05
-        ? `It also serves <strong>${best.fillDelta.toFixed(1)} points more</strong> of demand.`
-        : 'Demand served is essentially unchanged.';
+  // The verdict is the backend's sentence, not one composed here.
+  const verdict = comparison.verdict || '';
+  const caveats = comparison.caveats || [];
+  const warning = comparison.warning || '';
 
-  const rest = ranked.slice(1).map((r) => `
+  const rest = ranked
+    .filter((r) => r.scenario_id !== focus.id)
+    .map((r) => `
     <div class="flex items-center justify-between text-xs" style="padding:4px 0;border-bottom:1px solid var(--border-light)">
-      <span>${scenarioDisplayName(r.scenario)}</span>
-      <span style="font-weight:700;color:${(r.costDelta ?? 0) < 0 ? 'var(--green)' : 'var(--red)'}">
-        ${r.costDelta === null ? '—' : `${r.costDelta < 0 ? '↓' : '↑'} ${formatCurrency(Math.abs(r.costDelta))}`}
+      <span>${r.name || r.scenario_id}${r.scenario_id === recommendedId ? ' <span class="tag tag-success" style="font-size:9px">ranked first</span>' : ''}</span>
+      <span style="font-weight:700;color:${(r.cost_delta ?? 0) < 0 ? 'var(--green)' : 'var(--red)'}">
+        ${r.cost_delta === null || r.cost_delta === undefined
+          ? '—' : `${r.cost_delta < 0 ? '↓' : '↑'} ${formatCurrency(Math.abs(r.cost_delta))}`}
       </span>
     </div>`).join('');
 
-  container.innerHTML = `
-    <div class="scn-take-head">
-      <span class="scn-take-icon">✨</span>
-      <span class="scn-take-title">NetGravity's Recommendation</span>
-    </div>
-    <div class="scn-take-headline">${headline}</div>
-    ${attribution}
-    <p class="scn-take-para">${fillLine}</p>
-    <div class="scn-take-section-title">What it does</div>
-    <div class="scn-take-checklist">
-      ${changes.length
-        ? changes.map((c) => takeCheckItem(c.kind !== 'declined', c.text)).join('')
-        : takeCheckItem(null, 'The solver reached the same plan as the baseline — this change moved nothing.')}
-      ${takeCheckItem(saves, `Total network cost <strong>${formatCurrency(scn.totalCost)}</strong> vs <strong>${formatCurrency(baseline.totalCost)}</strong> today`)}
-      ${takeCheckItem(
-        baseline.capacityRisk === scn.capacityRisk ? null
-          : riskRank(scn.capacityRisk) < riskRank(baseline.capacityRisk),
-        `Capacity risk <strong>${baseline.capacityRisk} → ${scn.capacityRisk}</strong>`)}
-    </div>
-    ${rest ? `
-      <div class="scn-take-section-title" style="margin-top:12px">Also compared</div>
-      ${rest}` : ''}
-    <div class="text-xs text-muted" style="margin-top:12px;line-height:1.5">
-      Ranked on solved network cost from the MILP. No figure on this card is
-      estimated.
-    </div>
-    <button type="button" class="scn-take-review-btn" data-take-review>Review proposed changes <span>→</span></button>
-  `;
-  container.querySelector('[data-take-review]')
-    ?.addEventListener('click', () => openScenarioDrawer(scn.id));
+  const actions = recommendedActions(focus, comparison);
+
+  container.innerHTML = takeHeadHtml(source, cached)
+    + `<div class="scn-take-headline">${verdict}</div>`
+    + (card && card.headline && !saysTheSameThing(card.headline, verdict)
+        ? `<p class="scn-take-para" style="margin-bottom:10px"><strong>${
+            aboutTheSet ? 'Across the ' + selected.length + ' compared'
+                        : scenarioDisplayName(focus)}:</strong> ${card.headline}</p>` : '')
+    + (card && card.meaning ? `<p class="scn-take-para">${card.meaning}</p>` : '')
+    + attributionHtml(comparison.attribution)
+    + takeFiguresHtml(card && card.figures)
+    + capacityResponseHtml(focus, { rows: 3 })
+    + warningBandHtml(warning, card && card.warning)
+    + governanceHtml(comparison, focus)
+    + (card && card.next_step
+        ? `<div class="scn-take-section-title">Next step</div>
+           <div class="scn-take-checklist">${takeCheckItem(null, card.next_step)}</div>` : '')
+    + takeActionsHtml(actions)
+    + (rest ? `
+      <div class="scn-take-section-title" style="margin-top:14px">Also compared</div>
+      ${rest}` : '')
+    + takeDetailsHtml([
+        ...caveats,
+        ...((card && card.details) || []),
+        // Why these words are the deterministic template's rather than the
+        // model's, when they are. The fallback is meant to be seamless, and
+        // that is exactly what made it invisible: the reasoning degraded for
+        // the whole life of the server and nothing said so.
+        ...((briefing && briefing.grounding && briefing.grounding.warnings) || []),
+      ])
+    + `<div class="text-xs text-muted" style="margin-top:12px;line-height:1.5">
+        Ranked by the engine on solved network cost from the MILP. No figure on
+        this card is estimated.
+      </div>`;
+
+  container.querySelectorAll('[data-action-index]').forEach((btn) => {
+    const item = actions[Number(btn.dataset.actionIndex)];
+    if (!item || typeof item.run !== 'function') return;
+    btn.addEventListener('click', item.run);
+  });
 }
 
 // ─── Open Scenario Detail Drawer ────────────────────────────
@@ -1113,6 +1726,19 @@ export function openScenarioDrawer(scenarioId) {
           </tbody>
         </table>` : ''}
     </div>
+
+    <!-- What the change asks of the sites that absorb it.
+
+         The section above says which corridors moved volume, which is the
+         audit of what happened and the wrong grain for "we raised demand by
+         half": a planner is asking which sites have to carry it and what
+         happens where they cannot. Same figures as the recommendation card,
+         from the same backend block, so the two cannot disagree. -->
+    ${scn.capacityResponse ? `
+    <div class="scn-section-box">
+      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:8px">What this asks of the network</h4>
+      ${capacityResponseHtml(scn, { title: false })}
+    </div>` : ''}
 
     <!-- Cost decomposition, both sides -->
     <div class="scn-section-box">
@@ -1421,9 +2047,19 @@ function facilityOptionsHtml({ includePlants = false, includeAll = false } = {})
   }
   const all = includeAll
     ? '<option value="" selected>Every lane in the network</option>' : '';
+  // A candidate is a site the client gave us as a PROPOSAL. It belongs in this
+  // list — "pin it open" is exactly how you ask the model to commit to one, and
+  // it is the only way to test a site the client has actually screened rather
+  // than a point invented on the map. But it must be labelled: unlabelled, a
+  // proposed DC sat in a dropdown headed "one of my existing sites" and read as
+  // somewhere the client already operates.
   return all + source
-    .map((f, i) => `<option value="${f.id}"${(i === 0 && !includeAll) ? ' selected' : ''}>`
-      + `${f.name || f.id}</option>`)
+    .map((f, i) => {
+      const isCandidate = String(f.status || '').toUpperCase() === 'CANDIDATE';
+      const label = `${f.name || f.id}${isCandidate ? ' — proposed site' : ''}`;
+      return `<option value="${f.id}"${(i === 0 && !includeAll) ? ' selected' : ''}>`
+        + `${label}</option>`;
+    })
     .join('');
 }
 
@@ -1694,8 +2330,8 @@ function renderToolboxDynamicFields(type) {
     // keep open — so choosing one asked a question with a known answer. There
     // was no way to ask about a site that does not exist yet.
     setHeader('Open a Facility',
-      'Commit to keeping an existing site open, or propose a new one anywhere '
-      + 'on the map.');
+      'Commit to a site already in your data — including one you supplied as a '
+      + 'proposal — or put a new one anywhere on the map.');
     const handling = medianOf(DCS.map((d) => d.handlingCost));
     const fixed = medianOf(DCS.map((d) => d.fixedCostPerYear));
     const capacity = medianOf(DCS.map((d) => d.capacity));
@@ -1709,7 +2345,7 @@ function renderToolboxDynamicFields(type) {
         <label class="form-label">What kind of site?</label>
         <select class="form-select" id="toolbox-open-mode">
           <option value="NEW" selected>A new site — anywhere on the map</option>
-          <option value="EXISTING">One of my existing sites, pinned open</option>
+          <option value="EXISTING">One of the sites already in my data</option>
         </select>
       </div>
 
@@ -1722,7 +2358,8 @@ function renderToolboxDynamicFields(type) {
           <div class="text-xs text-muted" style="margin-top:4px">
             Pins this site open for the whole solve. Useful when a contract or a
             commitment means it cannot be closed, even if closing it would be
-            cheaper.
+            cheaper — and the way to test a site marked "proposed site", which
+            the client supplied as a candidate but the optimiser has not taken.
           </div>
         </div>
       </div>
@@ -1818,23 +2455,59 @@ function renderToolboxDynamicFields(type) {
     // form must not ask for one. It used to fall into a generic branch that
     // rendered no facility field at all, while the submit path refused to run
     // without one. The scenario was unreachable from this modal.
+    // Growth arrives from a client as a figure for a part of their business —
+    // "chilled is up 20% in the South" — and the scope field here used to be a
+    // disabled box reading "Every market and product". A single network-wide
+    // multiplier is the wrong question: it loads every warehouse in the country
+    // with growth that is happening in one region, which overstates the case
+    // for expanding the ones that are not.
+    //
+    // The two selects offer only labels THIS upload states. Where it states
+    // none the select is not rendered at all, and the note says why, rather
+    // than offering a list of regions the data cannot be filtered by.
     setHeader('Change Demand',
-      'Scale every demand row up or down and re-solve. Useful for a peak-season '
-      + 'or a downturn case.');
+      'Scale demand up or down and re-solve — for the whole network, or for one '
+      + 'region or product category the client says is growing.');
+    const regionOpts = NETWORK_REGIONS
+      .map((r) => `<option value="${r}">${r}</option>`).join('');
+    const categoryOpts = PRODUCT_CATEGORIES
+      .map((c) => `<option value="${c}">${c}</option>`).join('');
+    const scopeNotes = [];
+    if (!NETWORK_REGIONS.length) {
+      scopeNotes.push('This upload states no region for its markets, so growth '
+        + 'cannot be scoped by region.');
+    }
+    if (!PRODUCT_CATEGORIES.length) {
+      scopeNotes.push('This upload states no product category, so growth cannot '
+        + 'be scoped by category.');
+    }
     container.innerHTML = `
-      <div class="grid-2" style="gap:var(--space-sm)">
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
         <div class="form-group">
           <label class="form-label">Demand change (%)</label>
           <input type="number" class="form-input" id="toolbox-amount" value="15" min="-90" max="200" step="5">
         </div>
+        ${NETWORK_REGIONS.length ? `
         <div class="form-group">
-          <label class="form-label">Scope</label>
-          <input type="text" class="form-input" value="Every market and product" disabled>
-        </div>
+          <label class="form-label">Region</label>
+          <select class="form-select" id="toolbox-demand-region">
+            <option value="" selected>Every region</option>
+            ${regionOpts}
+          </select>
+        </div>` : ''}
       </div>
+      ${PRODUCT_CATEGORIES.length ? `
+      <div class="form-group">
+        <label class="form-label">Product category</label>
+        <select class="form-select" id="toolbox-demand-category">
+          <option value="" selected>Every product</option>
+          ${categoryOpts}
+        </select>
+      </div>` : ''}
       <div class="text-xs text-muted" style="margin-top:6px">
-        Applies to all demand rows in the network. Per-market demand changes are
-        not exposed here.
+        Rows outside the chosen scope are left exactly as they are, not scaled by
+        zero. Naming both a region and a category narrows to their overlap.
+        ${scopeNotes.join(' ')}
       </div>
     `;
   } else if (type === 'CHANGE_TRANSPORT_COST') {
@@ -2074,6 +2747,12 @@ function readScenarioForm() {
     }
     // The form captures a percentage; the engine takes a multiplier.
     body.demand_multiplier = 1 + (amount / 100);
+    // Empty means "every one of them", which is what this form always did.
+    // Sent only when set, so an unscoped run is byte-identical to before.
+    const demandRegion = (document.getElementById('toolbox-demand-region')?.value || '').trim();
+    const demandCategory = (document.getElementById('toolbox-demand-category')?.value || '').trim();
+    if (demandRegion) body.demand_region = demandRegion;
+    if (demandCategory) body.demand_product_category = demandCategory;
 
   } else if (type === 'CHANGE_TRANSPORT_COST') {
     if (amount <= -100) {
@@ -2149,6 +2828,46 @@ async function runScenarioCreation() {
     ],
   });
 
+  // The way out of a wait that can be a quarter of an hour.
+  //
+  // A measured run — demand raised across every region for one product
+  // category — took over 700 seconds behind a scrim with no exit. Nothing
+  // below needs the dialog to be on screen: this function is awaiting one
+  // promise, the solve is on the server, and the server finishes and stores
+  // the scenario whether or not anybody is listening (which is what
+  // `findScenarioCreatedSince` was written for). So the dialog can go and the
+  // run cannot notice.
+  //
+  // `backgrounded` decides only WHERE each branch below reports: the dialog
+  // if the reader stayed, the tray if they left. Neither changes the work.
+  const taskId = `scn_${Date.now().toString(36)}`;
+  let backgrounded = false;
+  const scenarioLabel = body.name || 'your scenario';
+  offerBackgroundExit(() => {
+    backgrounded = true;
+    dismissAgentLoading(0);
+    // The title names the scenario, not what is being done to it: this row
+    // outlives the solve, and "Solving ..." under a green tick is a card
+    // arguing with itself.
+    startBackgroundTask({ id: taskId, title: scenarioLabel });
+  });
+
+  // Everything from here reports to one of two places, and `reportFailure`
+  // picks — so a branch cannot be written for the dialog and then forget that
+  // the dialog may no longer be there. `step` is which dispatch stopped, which
+  // the trace still records when the reader stayed to watch it.
+  const reportFailure = (step, message) => {
+    withdrawBackgroundExit();
+    if (backgrounded) {
+      failBackgroundTask(taskId, message);
+      return;
+    }
+    stepFail(step, { error: message });
+    finishRun({ error: message });
+    dismissAgentLoading(2600);
+    showCreationError(message);
+  };
+
   let solved;
   const dispatchedAt = Date.now();
   try {
@@ -2187,10 +2906,7 @@ async function runScenarioCreation() {
         : (err && err.message
             ? `The scenario could not be solved: ${err.message}`
             : 'The scenario could not be solved.');
-      stepFail('simulate', { error: message });
-      finishRun({ error: message });
-      dismissAgentLoading(2600);
-      showCreationError(message);
+      reportFailure('simulate', message);
       return;
     }
 
@@ -2203,16 +2919,16 @@ async function runScenarioCreation() {
   stepStart('compare');
   const mapped = mapScenarioRecord(solved);
   if (!mapped) {
-    const message = 'The solver returned no usable result for this scenario.';
-    stepFail('compare', { error: message });
-    finishRun({ error: message });
-    dismissAgentLoading(2600);
-    showCreationError(message);
+    reportFailure('compare',
+                  'The solver returned no usable result for this scenario.');
     return;
   }
-  stepDone('compare', { detail: 'Measured against the baseline' });
-  finishRun({});
-  dismissAgentLoading(500);
+  withdrawBackgroundExit();
+  if (!backgrounded) {
+    stepDone('compare', { detail: 'Measured against the baseline' });
+    finishRun({});
+    dismissAgentLoading(500);
+  }
 
   // Install the baseline if this is the first scenario of the session.
   //
@@ -2244,6 +2960,31 @@ async function runScenarioCreation() {
   renderMultiScenarioTakeCard();
   renderScenarioMapToggle();
   updateScenarioMap();
+
+  // Tell whoever walked away, wherever they walked to.
+  //
+  // Not a modal. The reader left this run precisely so they could work
+  // somewhere else, and taking that screen away from them the moment the
+  // solve lands would undo the thing they asked for. The card names the
+  // scenario and carries the one action that follows from it; it stays until
+  // it is read.
+  if (backgrounded) {
+    finishBackgroundTask(taskId, {
+      message: 'Solved and measured against your baseline.',
+      openLabel: 'View results',
+      onOpen: () => {
+        mapActiveId = mapped.id;
+        if (typeof window.navigateToTab === 'function') {
+          window.navigateToTab('scenarios');
+        }
+        renderScenarioSelector();
+        renderMultiScenarioTable();
+        renderMultiScenarioTakeCard();
+        renderScenarioMapToggle();
+        updateScenarioMap();
+      },
+    });
+  }
 }
 
 // ─── Customize Metrics Popover ───────────────────────────────
