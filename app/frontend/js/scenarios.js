@@ -1227,6 +1227,149 @@ function takeActionsHtml(actions) {
 }
 
 /**
+ * The whole recommendation in four lines, before any prose.
+ *
+ * A reader deciding whether to act needs four things: what was changed, what
+ * it costs against today, what it does to service, and whether the network
+ * can physically carry it. Those were spread across a verdict sentence, three
+ * paragraphs of narration, a figure strip and a capacity section — all true,
+ * none of it answering the question in one place.
+ *
+ * EVERY VALUE HERE IS THE BACKEND'S. The cost and the deltas come from the
+ * ranking (`/compare`), the service figures from the scenario's own
+ * authoritative KPIs, the capacity counts from `capacity_response`. This
+ * formats and lays out; it does not decide, and it does not compute a
+ * business value. A figure the backend did not supply is left out — never
+ * shown as a dash that reads like a zero.
+ */
+function atAGlanceHtml(scn, comparison) {
+  const row = ((comparison && comparison.ranked) || [])
+    .find((r) => r.scenario_id === scn.id) || {};
+  const cap = scn.capacityResponse || null;
+  const rows = [];
+
+  // 1. WHAT YOU CHANGED — from the request the user actually submitted, so it
+  //    is their own words back, not an interpretation of them.
+  const asked = requestSummary(scn);
+  if (asked) rows.push(['You changed', asked]);
+
+  // 2. WHAT IT COSTS — the figure and its distance from today, together. They
+  //    were a tile and a paragraph, and a reader had to hold one while
+  //    reading the other.
+  const cost = readKpiValue(scn.scenarioKpis, 'business_network_cost');
+  if (typeof cost === 'number') {
+    const delta = row.cost_delta;
+    const vsToday = typeof delta === 'number'
+      ? ` <span class="scn-glance-delta ${delta < 0 ? 'good' : 'bad'}">${
+          delta < 0 ? '↓' : '↑'} ${formatCurrency(Math.abs(delta))} vs today</span>`
+      : '';
+    rows.push(['Cost', `<strong>${formatCurrency(cost)}</strong>${vsToday}`]);
+  }
+
+  // 3. HOW MUCH OF THAT IS THE CHANGE. The single most misread thing on this
+  //    screen: the baseline pins today's footprint open and a scenario may
+  //    close sites, so most of the gap is usually the redesign — which means
+  //    "demand +50%" can read as a saving. Said in one line, in the currency.
+  const attribution = (comparison && comparison.attribution) || null;
+  if (attribution && typeof attribution.reoptimisation_amount === 'number') {
+    const reopt = formatCurrency(Math.abs(attribution.reoptimisation_amount));
+    if (attribution.change_direction === 'none') {
+      rows.push(['Of which', `all ${reopt} is re-optimising today's footprint —
+        <strong>the change itself moves nothing</strong>`]);
+    } else if (typeof attribution.change_amount === 'number') {
+      const change = formatCurrency(Math.abs(attribution.change_amount));
+      rows.push(['Of which', `${reopt} is re-optimising today's footprint;
+        <strong>the change itself ${
+          attribution.change_direction === 'adds' ? 'adds' : 'saves'} ${change}</strong>`]);
+    }
+  }
+
+  // 4. SERVICE. A cost ranking's blind spot, so it is never optional here.
+  const fill = readKpiValue(scn.scenarioKpis, 'demand_fill_rate');
+  const unserved = readKpiValue(scn.scenarioKpis, 'unserved_demand');
+  if (typeof fill === 'number' || typeof unserved === 'number') {
+    const served = typeof fill === 'number'
+      ? `<strong>${(fill * 100).toFixed(1)}% of demand served</strong>` : '';
+    const missed = typeof unserved === 'number' && unserved > 0
+      ? `${served ? ' · ' : ''}<span class="scn-glance-delta bad">${
+          formatNumber(Math.round(unserved))} units nobody can reach</span>`
+      : (served ? ' · all of it reachable' : '');
+    rows.push(['Service', `${served}${missed}`]);
+  }
+
+  // 5. CAPACITY. Whether the network can physically carry it, and what is
+  //    left to carry it with.
+  if (cap) {
+    const bits = [];
+    if (cap.at_ceiling_count) {
+      bits.push(`<strong>${cap.at_ceiling_count} site${
+        cap.at_ceiling_count === 1 ? '' : 's'} at their ceiling</strong>`);
+    }
+    if (cap.idle_count && cap.idle_capacity_units) {
+      bits.push(`${formatNumber(Math.round(cap.idle_capacity_units))} units left closed`);
+    }
+    if (!bits.length && typeof cap.open_headroom_units === 'number') {
+      bits.push(`${formatNumber(Math.round(cap.open_headroom_units))} units of room to spare`);
+    }
+    if (bits.length) rows.push(['Capacity', bits.join(' · ')]);
+  }
+
+  if (!rows.length) return '';
+  return `
+    <dl class="scn-glance">
+      ${rows.map(([label, value]) => `
+        <dt>${label}</dt>
+        <dd>${value}</dd>`).join('')}
+    </dl>`;
+}
+
+/**
+ * The change the user asked for, in their own terms.
+ *
+ * Read from `scn.request` — the body this screen submitted — rather than from
+ * the solved result, because "what did I ask for" and "what did the solver do
+ * with it" are two different questions and the card answers the second one
+ * everywhere else.
+ */
+function requestSummary(scn) {
+  const req = scn.request || {};
+  const esc = (t) => String(t == null ? '' : t)
+    .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                                   '"': '&quot;', "'": '&#39;' }[c]));
+  const scope = [req.demand_region, req.demand_product_category]
+    .filter(Boolean).map(esc).join(', ');
+
+  if (typeof req.demand_multiplier === 'number') {
+    const pct = (req.demand_multiplier - 1) * 100;
+    return `Demand ${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%`
+      + (scope ? ` on ${scope}` : ' across the whole network');
+  }
+  if (typeof req.transport_cost_multiplier === 'number') {
+    const pct = (req.transport_cost_multiplier - 1) * 100;
+    return `Freight rates ${pct >= 0 ? '+' : ''}${pct.toFixed(0)}%`;
+  }
+  if (typeof req.capacity_delta_units === 'number' && req.capacity_delta_units) {
+    return `Capacity ${req.capacity_delta_units > 0 ? '+' : '−'}`
+      + `${formatNumber(Math.abs(req.capacity_delta_units))} units at `
+      + `${esc((req.facility_ids || []).join(', ')) || 'the named site'}`;
+  }
+  if (typeof req.sla_days_delta === 'number' && req.sla_days_delta) {
+    return `Delivery promise ${req.sla_days_delta > 0 ? '+' : ''}`
+      + `${req.sla_days_delta} day${Math.abs(req.sla_days_delta) === 1 ? '' : 's'}`;
+  }
+  if (req.new_facility && req.new_facility.name) {
+    return `A new site at ${esc(req.new_facility.name)}`;
+  }
+  if (req.action === 'CLOSE_FACILITY') {
+    return `Close ${esc((req.facility_ids || []).join(', ')) || 'the named site'}`;
+  }
+  if (req.action === 'OPEN_FACILITY') {
+    return `Hold ${esc((req.facility_ids || []).join(', ')) || 'the named site'} open`;
+  }
+  return '';
+}
+
+/**
  * What the change asks of the sites that have to absorb it.
  *
  * The question a demand scenario is actually asking, and the one the card did
@@ -1330,36 +1473,13 @@ function capacityResponseHtml(scn, { title = true, rows = 5 } = {}) {
       </p>` : ''}`;
 }
 
-/**
- * Where the difference against today comes from, in this project's currency.
- *
- * The backend supplies two AMOUNTS and no sentence: it ranks and it measures,
- * but the currency belongs to the upload and is applied in exactly one place
- * (`formatCurrency`). Composing this sentence on the server printed
- * "167,846,924.60" beside a card whose every other figure read "C$167.85M".
- *
- * This is the line that stops a demand INCREASE reading as a saving: the
- * baseline pins the footprint open and a scenario may close sites, so most of
- * the gap is the redesign, not the change.
- */
-function attributionHtml(attribution) {
-  if (!attribution || typeof attribution.reoptimisation_amount !== 'number') return '';
-  const reopt = formatCurrency(Math.abs(attribution.reoptimisation_amount));
-  if (attribution.change_direction === 'none') {
-    return `<p class="scn-take-para"><strong>The change itself moves nothing.</strong>
-      All ${reopt} of the difference comes from re-optimising the footprint you
-      already have — the solver reaches the same plan with or without this
-      change, and that saving is available without this scenario.</p>`;
-  }
-  const change = formatCurrency(Math.abs(attribution.change_amount));
-  const verb = attribution.change_direction === 'adds'
-    ? `<strong>adds ${change}</strong> back on top of it`
-    : `<strong>saves a further ${change}</strong> on top of it`;
-  return `<p class="scn-take-para">Of the difference against the network you run
-    today, <strong>${reopt}</strong> comes from re-optimising the footprint you
-    already have — available without this scenario — and the change itself
-    ${verb}.</p>`;
-}
+/* The attribution paragraph that stood here is gone, not the attribution.
+   It said the same thing as the glance block's "Of which" row directly above
+   it AND as the backend's own sentence in the collapsed technical detail
+   (`_scenario_explanation` passes `attribution["text"]` into `card.details`).
+   Three copies of the one point that stops a demand INCREASE reading as a
+   saving: the row carries it above the fold in the project's currency, the
+   backend's sentence spells it out for whoever opens the detail. */
 
 /**
  * The one thing not to miss, in one band.
@@ -1426,6 +1546,48 @@ function governanceHtml(comparison, focus) {
       <span class="scn-take-governance-tag">Human decision</span>
       <span>${governance.note}</span>
     </div>`;
+}
+
+/**
+ * The words the reasoning wrote, under one heading, below the answer.
+ *
+ * These were the second and third things on the card and they are the fourth
+ * and fifth thing a reader needs: the verdict and the figures say what
+ * happened, this says why it happened and what it means. Keeping it above the
+ * actions meant the primary control sat under three paragraphs.
+ *
+ * It is NOT collapsed. The AI briefing is the thing the reader asked for, and
+ * a recommendation folded behind a disclosure triangle is one nobody reads —
+ * this is a reordering, not a demotion.
+ */
+function narrativeHtml(card, verdict, aboutTheSet, comparedCount, focus) {
+  let headline = card && card.headline
+    && !saysTheSameThing(card.headline, verdict) ? card.headline : '';
+  const meaning = (card && card.meaning) || '';
+
+  // ONE SENTENCE, ONCE. The headline is capped at 140 characters and the
+  // model writes longer ones, so a single finding arrived as a truncated
+  // headline followed by the whole of itself:
+  //
+  //   "...while maintaining a high demand fill rate…"
+  //   "...while maintaining a high demand fill rate and service within SLA."
+  //
+  // `card_from_briefing` skips its own duplication guard when the headline is
+  // truncated — correctly, since dropping the BODY would lose the rest of the
+  // sentence. Dropping the truncated copy loses nothing at all.
+  if (headline && meaning) {
+    const stem = headline.replace(/[\u2026.]+$/, '').trim().toLowerCase();
+    if (stem && meaning.trim().toLowerCase().startsWith(stem)) headline = '';
+  }
+  if (!headline && !meaning) return '';
+  return `
+    <div class="scn-take-section-title" style="margin-top:16px">
+      ${card && card.source === 'llm' ? 'What this means' : 'What the figures say'}
+    </div>
+    ${headline ? `<p class="scn-take-para" style="margin-bottom:8px"><strong>${
+      aboutTheSet ? `Across the ${comparedCount} compared`
+                  : scenarioDisplayName(focus)}:</strong> ${headline}</p>` : ''}
+    ${meaning ? `<p class="scn-take-para">${meaning}</p>` : ''}`;
 }
 
 /** The technical account, collapsed. One conclusion is said once above it. */
@@ -1540,22 +1702,29 @@ function renderMultiScenarioTakeCard() {
 
   const actions = recommendedActions(focus, comparison);
 
+  // THE ORDER A READER NEEDS, not the order the pieces were built in.
+  //
+  // Verdict → the four facts at a glance → the risk → what to do → the
+  // reasoning behind it. Previously the prose came second and third, the
+  // figures fourth, the capacity account fifth and the actions ninth, so the
+  // question this screen exists to answer was below the fold under three
+  // paragraphs that restated the figures in a different format.
+  //
+  // Nothing is dropped. The narration moves under "Why this, in full", which
+  // is open by default when a model wrote it — that IS the AI recommendation
+  // and hiding it would be answering a different complaint.
   container.innerHTML = takeHeadHtml(source, cached)
     + `<div class="scn-take-headline">${verdict}</div>`
-    + (card && card.headline && !saysTheSameThing(card.headline, verdict)
-        ? `<p class="scn-take-para" style="margin-bottom:10px"><strong>${
-            aboutTheSet ? 'Across the ' + selected.length + ' compared'
-                        : scenarioDisplayName(focus)}:</strong> ${card.headline}</p>` : '')
-    + (card && card.meaning ? `<p class="scn-take-para">${card.meaning}</p>` : '')
-    + attributionHtml(comparison.attribution)
-    + takeFiguresHtml(card && card.figures)
-    + capacityResponseHtml(focus, { rows: 3 })
+    + atAGlanceHtml(focus, comparison)
     + warningBandHtml(warning, card && card.warning)
     + governanceHtml(comparison, focus)
     + (card && card.next_step
         ? `<div class="scn-take-section-title">Next step</div>
            <div class="scn-take-checklist">${takeCheckItem(null, card.next_step)}</div>` : '')
     + takeActionsHtml(actions)
+    + narrativeHtml(card, verdict, aboutTheSet, selected.length, focus)
+    + capacityResponseHtml(focus, { rows: 3 })
+    + takeFiguresHtml(card && card.figures)
     + (rest ? `
       <div class="scn-take-section-title" style="margin-top:14px">Also compared</div>
       ${rest}` : '')

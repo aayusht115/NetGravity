@@ -320,6 +320,10 @@ def api_status():
         # and that is invisible until someone needs one — so it is stated here
         # rather than discovered on the day it matters.
         "reset_delivery": _reset_delivery_status(),
+        # And the same question for the other thing this application sends: a
+        # data request to whoever owns a missing column. Invisible until the
+        # day somebody presses send, so it is stated here instead.
+        "outbound_email": _outbound_email_status(),
     })
 
 
@@ -329,6 +333,16 @@ def _reset_delivery_status():
         return password_reset_delivery.describe()
     except Exception as exc:  # noqa: BLE001
         return {"channel": None, "configured": False, "reason": str(exc)}
+
+
+def _outbound_email_status():
+    """Whether a data request can actually reach the person who owns the data."""
+    try:
+        from netgravity.action_agent.email_sender import get_sender
+        return get_sender().describe()
+    except Exception as exc:  # noqa: BLE001
+        return {"channel": None, "configured": False, "severity": "error",
+                "reason": str(exc)}
 
 
 # ---------------------------------------------------------------------------

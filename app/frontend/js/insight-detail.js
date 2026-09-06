@@ -848,45 +848,106 @@ function recipientsHtml() {
 }
 
 /**
- * What happened the last time this was sent, and what will happen this time.
+ * What will happen when this button is pressed, in the reader's own terms.
  *
  * `stub` is the state this build ships in — no outbound credential is
  * configured, so `EmailSender` logs the message and returns a labelled stub.
- * Saying so on the button is not a disclaimer; it is the difference between
- * a feature and a lie about one.
+ * Saying so is not a disclaimer; it is the difference between a feature and a
+ * lie about one.
+ *
+ * What it does NOT do is name an environment variable. This screen is read by
+ * whoever owns the network, not by whoever deploys it: they cannot set
+ * `NETGRAVITY_SMTP_HOST`, should not have to know it exists, and telling them
+ * to is an instruction addressed to somebody who is not in the room. The
+ * person who CAN set it reads `/api/status`, where `outbound_email` names the
+ * variable and the reason.
  */
 function deliveryNoteHtml() {
   if (EMAIL_DELIVERY.mode !== 'stub') return '';
   return `
     <p class="insd-delivery-note">
       ${ICON.info}
-      <span>No outbound mail server is configured on this deployment, so
-        sending will record the request and log the message without delivering
-        it. Set <code>NETGRAVITY_SMTP_HOST</code> to send for real.</span>
+      <span><strong>Email is not switched on for this workspace yet.</strong>
+        Pressing send will save the request and record who it is for, so the
+        wording and the audit trail are ready — but the message will not leave
+        this system. Ask whoever administers your NetGravity deployment to
+        connect a mail server, and you can copy the message below in the
+        meantime.</span>
     </p>`;
 }
 
+/** A moment a person can place, from a timestamp only a machine can. */
+function insdWhen(value) {
+  const at = new Date(value);
+  if (!value || Number.isNaN(at.getTime())) return '';
+  const sameDay = new Date().toDateString() === at.toDateString();
+  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return sameDay ? `today at ${time}`
+    : `on ${at.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${time}`;
+}
+
+/** "a@b.com and c@d.com", "a@b.com, c@d.com and e@f.com" — never "a, b, c". */
+function insdList(values) {
+  const items = (values || []).filter(Boolean);
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/**
+ * What happened just now, or what happened last time.
+ *
+ * Four outcomes, not three. `partial` is the one that was missing and the one
+ * that matters most: `SMTP.send_message` raises only when it rejects EVERY
+ * address, so a mistyped address in a list of four used to come back as a
+ * clean send and that person was never asked. It names them.
+ */
 function outcomeHtml() {
   const item = insdAction.item;
   const outcome = insdAction.outcome;
   const previous = item && item.lastSent;
 
   if (outcome) {
+    const delivered = insdList(outcome.delivered && outcome.delivered.length
+      ? outcome.delivered : outcome.recipients);
+    const refused = insdList(outcome.refused);
     const tone = outcome.delivery === 'sent' ? 'good'
       : outcome.delivery === 'stubbed' ? 'info' : 'bad';
-    const said = outcome.delivery === 'sent'
-      ? `Sent to ${outcome.recipients.join(', ')}.`
-      : outcome.delivery === 'stubbed'
-        ? `Recorded for ${outcome.recipients.join(', ')} — not delivered, because
-           this deployment has no mail server configured.`
-        : `Not sent. ${outcome.notes || 'The mail server rejected the message.'}`;
+    let said;
+    if (outcome.delivery === 'sent') {
+      said = `Sent to ${delivered}.`;
+    } else if (outcome.delivery === 'partial') {
+      said = `Sent to ${delivered}, but the mail server would not accept `
+        + `${refused} — so they have not been asked. Check the address and `
+        + `send again to them alone.`;
+    } else if (outcome.delivery === 'stubbed') {
+      said = `Saved for ${delivered}. Nothing was delivered — email is not `
+        + 'switched on for this workspace yet.';
+    } else {
+      // The real reason, which the endpoint used to swallow: a configured
+      // mail server that rejected the message was reported as "no mail server
+      // is configured", and the SMTP error went nowhere.
+      said = `Not sent. ${outcome.notes || 'The mail server rejected the message.'}`;
+    }
     return `<div class="insd-outcome tone-${tone}">${insdEsc(said)}</div>`;
   }
   if (previous) {
-    const when = String(previous.sent_at || '').replace('T', ' ').replace('+00:00', ' UTC');
-    return `<div class="insd-outcome tone-info">Already requested on ${insdEsc(when)}
-      from ${insdEsc((previous.recipients || []).join(', '))}
-      (${insdEsc(previous.result || '')}).</div>`;
+    // TO, not from — the one word in this sentence that says which direction
+    // the request went, and it was the wrong one.
+    const when = insdWhen(previous.sent_at);
+    const who = insdList(previous.recipients || []);
+    // The VERB follows the outcome. "Already sent to X ... It was saved but
+    // not delivered" contradicts itself in its own second clause, and a
+    // reader who stops at the first full stop has been told something false.
+    const said = previous.result === 'stubbed'
+      ? `Already saved for ${who}${when ? ` ${when}` : ''} — not delivered, `
+        + 'because email is not switched on for this workspace yet.'
+      : previous.result === 'failed'
+        ? `Last attempt to reach ${who}${when ? ` ${when}` : ''} did not get through.`
+        : previous.result === 'partial'
+          ? `Already sent to some of ${who}${when ? ` ${when}` : ''} — the mail `
+            + 'server refused the rest.'
+          : `Already sent to ${who}${when ? ` ${when}` : ''}.`;
+    return `<div class="insd-outcome tone-info">${insdEsc(said)}</div>`;
   }
   return '';
 }
@@ -925,7 +986,8 @@ function requestPanelHtml(item) {
       ${outcomeHtml()}
 
       <button type="button" class="insd-btn-primary insd-send-btn" id="insd-send">
-        ${ICON.mail}<span>Send request</span>
+        ${ICON.mail}<span>${EMAIL_DELIVERY.mode === 'stub'
+          ? 'Save request' : 'Send request'}</span>
       </button>
     </div>`;
 }
@@ -1070,7 +1132,10 @@ async function sendRequest() {
   const btn = document.getElementById('insd-send');
   insdAction.sending = true;
   refreshSendState();
-  if (btn) btn.querySelector('span').textContent = 'Sending\u2026';
+  if (btn) {
+    btn.querySelector('span').textContent =
+      EMAIL_DELIVERY.mode === 'stub' ? 'Saving\u2026' : 'Sending\u2026';
+  }
 
   const subject = document.getElementById('insd-subject')?.value || '';
   const body = document.getElementById('insd-message')?.value || '';
@@ -1081,13 +1146,19 @@ async function sendRequest() {
     insdAction.outcome = {
       delivery: res.delivery,
       recipients: (res.dispatch && res.dispatch.recipients) || to,
+      // Who actually took the message and who the server turned away. A list
+      // of four with one address refused is one person still waiting to be
+      // asked, and only naming them makes that something anyone can act on.
+      delivered: res.delivered || [],
+      refused: res.refused || [],
       notes: res.notes || '',
     };
     item.lastSent = res.dispatch || item.lastSent;
   } catch (err) {
     // A failed send says so. The one thing this must never do is go quiet
     // and leave the reader believing a request went out.
-    insdAction.outcome = { delivery: 'failed', recipients: to, notes: err.message };
+    insdAction.outcome = { delivery: 'failed', recipients: to,
+                           delivered: [], refused: [], notes: err.message };
   } finally {
     insdAction.sending = false;
     renderActionDetail();

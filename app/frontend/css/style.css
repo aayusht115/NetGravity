@@ -2048,6 +2048,60 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   overflow-wrap: anywhere;
 }
 
+/* THE ANSWER, ABOVE EVERYTHING ELSE.
+
+   Four or five label/value pairs — what you changed, what it costs, how much
+   of that is the change itself, what it does to service, what it asks of
+   capacity. This sat across a verdict sentence, three paragraphs of narration,
+   a figure strip and a capacity section, all of it true and none of it in one
+   place, with the recommended actions below the lot.
+
+   A <dl> because these are definitions: a screen reader gets the pairing for
+   free, which a grid of divs does not give it.
+
+   Stacked, not two columns. On a card this narrow a label column would leave
+   the values about 180px and wrap every one — and these are read down, one
+   after another, not compared across. */
+.scn-glance {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--purple-100);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.scn-glance dt {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+
+.scn-glance dd {
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.scn-glance dd:last-child { margin-bottom: 0; }
+
+.scn-glance strong { font-weight: 800; }
+
+/* The distance from today, and its direction. Colour is not the only carrier —
+   every one of these is preceded by an arrow and followed by words. */
+.scn-glance-delta {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.scn-glance-delta.good { color: var(--green); }
+.scn-glance-delta.bad  { color: var(--red); }
+
 /* What the change asks of the network: which sites are full, which are working
    harder, what was left closed. Rows rather than tiles — there can be five of
    them, and a tile grid at that count stops being scannable.

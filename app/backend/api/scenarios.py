@@ -1374,6 +1374,14 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
                 "facility_ids": list(facility_ids),
                 "capacity_delta_units": cap_delta,
                 "demand_multiplier": demand_scale,
+                # WHERE the growth was applied. These reach the solver through
+                # `ScenarioIntentSpec` and were dropped from the record, so a
+                # run scoped to one product category read back — on the
+                # drawer, and on the card's summary of what was asked — as a
+                # change applied to every demand row in the network. The
+                # figures were always right; the description of them was not.
+                "demand_region": spec.demand_region,
+                "demand_product_category": spec.demand_product_category,
                 "transport_cost_multiplier": transport_mult,
                 "sla_days_delta": sla_delta,
                 "new_facility": site.model_dump(mode="json") if site else None,

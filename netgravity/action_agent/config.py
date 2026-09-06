@@ -25,6 +25,11 @@ ENVIRONMENT VARIABLES
     NETGRAVITY_SMTP_USE_TLS
         "false" to disable STARTTLS (e.g. against a local test relay that
         has no TLS at all). Defaults true — real providers require it.
+    NETGRAVITY_SMTP_TIMEOUT_SECONDS
+        How long to wait on the SMTP conversation before giving up. Defaults
+        to 20. A relay that black-holes packets rather than refusing them
+        would otherwise hold the request thread for the OS TCP timeout, with
+        a user watching a button that never comes back.
     NETGRAVITY_SMTP_FROM_ADDRESS
         The From: header. Falls back to NETGRAVITY_SMTP_USERNAME, then to
         a placeholder — set this explicitly when it differs from the login
@@ -60,6 +65,12 @@ class ActionAgentConfig:
     smtp_username: Optional[str] = field(default_factory=lambda: _env("NETGRAVITY_SMTP_USERNAME"))
     smtp_password: Optional[str] = field(default_factory=lambda: _env("NETGRAVITY_SMTP_PASSWORD"))
     smtp_use_tls: bool = field(default_factory=lambda: _flag("NETGRAVITY_SMTP_USE_TLS", True))
+    #: Seconds to wait on the SMTP conversation. A hosted provider under load,
+    #: or a relay behind a firewall that black-holes rather than refuses, will
+    #: otherwise hold a request thread for the operating system's own TCP
+    #: timeout — minutes — with the user watching a button that never returns.
+    smtp_timeout_seconds: int = field(
+        default_factory=lambda: int(_env("NETGRAVITY_SMTP_TIMEOUT_SECONDS", "20") or 20))
     smtp_from_address: Optional[str] = field(
         default_factory=lambda: _env("NETGRAVITY_SMTP_FROM_ADDRESS"))
     email_api_key: Optional[str] = field(default_factory=lambda: _env("NETGRAVITY_EMAIL_API_KEY"))

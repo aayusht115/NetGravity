@@ -1339,9 +1339,26 @@ class ReasoningAgent:
                 )
                 evidence.append(f"business_cost_delta = {delta:,.2f}")
                 drivers.append(f"Cost {direction} of {abs(delta):,.2f} versus baseline")
-                insights.append(KPIInsight(
+                # FIRST, on a run that has one.
+                #
+                # `card_from_briefing` leads with `kpi_insights[0]`, and on a
+                # what-if that was the Cost insight above — a sentence about
+                # the baseline, ending "the decision baseline for comparing any
+                # scenario", printed under the scenario's own name. What the
+                # change DID is the finding; what the network costs is the
+                # context for it.
+                #
+                # Ordered here rather than in the card because every consumer
+                # of `kpi_insights` had the same problem.
+                insights.insert(0, KPIInsight(
                     theme="Scenario impact",
-                    headline=f"I see business cost {direction} versus baseline",
+                    # A STATEMENT. This was "I see business cost {direction}
+                    # versus baseline", and the card removes the first person
+                    # from everything a reader sees — which left "business cost
+                    # increases versus baseline", a fragment beginning
+                    # lowercase, as the first line on the screen. Exactly the
+                    # defect already fixed on the Cost headline above.
+                    headline=(f"This change {direction} what the network costs"),
                     narrative=(
                         f"I see an incremental change of {abs(delta):,.2f}{pct}. "
                         "This tells me the price of the tested network choice before "

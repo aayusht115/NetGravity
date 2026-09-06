@@ -38,6 +38,20 @@ message and returns a labelled stub result. This endpoint passes that label
 straight through as `delivery: "stubbed"`, and the UI says so on the button
 that was just pressed. A stub reported as a send is the one outcome that
 would make this feature worse than not having it.
+
+AND NEITHER IS A REAL FAILURE
+-----------------------------
+Which is what this endpoint got wrong. It rebuilt the three-way verdict from
+the sender's flags, testing `stubbed` before `failed` — and a degraded live
+failure sets both. So a configured mail server that rejected the message was
+reported as "no mail server is configured": the operator is sent to set a
+variable that is already set, and the SMTP error nobody saw is the one thing
+that would have told them what was wrong. The verdict now comes from
+`EmailSendResult.outcome`, derived once, on the result.
+
+`partial` is the fourth state and a real one: `SMTP.send_message` raises only
+when it rejects EVERY address, so one mistyped address in a list of four came
+back as a clean send. Whoever was refused is named.
 """
 
 from __future__ import annotations
@@ -70,6 +84,23 @@ def _storage():
 
 def _valid_email(value: str) -> bool:
     return bool(_EMAIL_RE.match((value or "").strip()))
+
+
+def _email_delivery_state() -> Dict[str, Any]:
+    """
+    Whether mail can leave this deployment, and if not, why — in one object.
+
+    Never raises: the actions list is useful without it, and a screen that
+    fails to load because it could not describe its mail configuration would
+    be a worse outcome than the misconfiguration it was describing.
+    """
+    try:
+        from netgravity.action_agent.email_sender import get_sender
+        return get_sender().describe()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("actions.email_delivery.describe_failed error=%s", exc)
+        return {"channel": None, "configured": False, "severity": "error",
+                "reason": "The outbound email configuration could not be read."}
 
 
 def _group_gaps(gaps: List[Dict[str, Any]], severity: str) -> List[Dict[str, Any]]:
@@ -267,6 +298,11 @@ def create_actions_blueprint(url_prefix: str = "/api/actions") -> Blueprint:
             # The UI states this on the send button. A stub reported as a
             # send is the one outcome that makes this worse than nothing.
             "email_mode": "stub" if load_config().stub_mode else "live",
+            # The same thing with its reason attached, so the screen can say
+            # WHAT is wrong rather than reciting an environment variable at a
+            # user who has no way to set one. `email_mode` stays for the
+            # clients that already read it.
+            "email_delivery": _email_delivery_state(),
         }), 200
 
     @bp.route("/recipients", methods=["GET"])
@@ -350,12 +386,17 @@ def create_actions_blueprint(url_prefix: str = "/api/actions") -> Blueprint:
             for email in recipients:
                 store.add(email)
 
+        # One verdict, derived on the result itself. This was reconstructed
+        # here from the flags in the order `stubbed` first — and a degraded
+        # live failure sets both `stubbed` and `failed`, so a configured mail
+        # server that rejected the message was reported as no mail server at
+        # all. See `EmailSendResult.outcome`.
         record = DispatchRecord(
             trigger_type="manual_request",
             reference_id=f"{project_id}:{action_id}",
             recipients=recipients,
             subject=subject,
-            result="stubbed" if result.stubbed else ("failed" if result.failed else "sent"),
+            result=result.outcome,
         )
         DispatchLogStore(_storage()).record(record)
         logger.info("actions.dispatched project_id=%s action=%s result=%s recipients=%d",
@@ -364,9 +405,15 @@ def create_actions_blueprint(url_prefix: str = "/api/actions") -> Blueprint:
         return jsonify({
             "dispatch": record.as_dict(),
             # Reported exactly as the sender reported it. "stubbed" means no
-            # message left this machine.
+            # message left this machine; "partial" means some of these people
+            # were asked and some were not.
             "delivery": record.result,
             "notes": result.notes,
+            # Named, both ways. A list of four with one address refused is one
+            # person still waiting to be asked, and only naming them makes that
+            # something anyone can act on.
+            "delivered": result.delivered,
+            "refused": result.refused,
             "recipients": [r.as_dict() for r in _recipient_store(project_id).list()],
         }), 200
 

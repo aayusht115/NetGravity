@@ -739,8 +739,35 @@ class TestTheSharedBudgetIsSpentOnlyWhereItBuysSomething:
         """
         js = _asset("scenarios.js")
         assert "function saysTheSameThing(" in js
-        block = js[js.index("function renderMultiScenarioTakeCard()"):]
+        # The guard travelled with the paragraph it guards: the model's
+        # headline is rendered by `narrativeHtml` now, below the answer rather
+        # than second on the card.
+        block = js[js.index("function narrativeHtml("):]
+        block = block[:block.index("\n}\n")]
         assert "!saysTheSameThing(card.headline, verdict)" in block
+
+    def test_the_answer_comes_before_the_reasoning_about_it(self):
+        """
+        Measured on the +50% demand run: the reader met the verdict, then the
+        model's headline, then a paragraph restating the cost in a different
+        format, then the attribution arithmetic, then a figure strip, then the
+        capacity account, then two warnings — and the recommended actions
+        ninth, below the fold.
+
+        Every one of those was true. The order was the defect.
+        """
+        js = _asset("scenarios.js")
+        block = js[js.index("container.innerHTML = takeHeadHtml("):]
+        block = block[:block.index("container.querySelectorAll(")]
+        order = [block.index(part) for part in (
+            "scn-take-headline",          # the verdict
+            "atAGlanceHtml(",             # the four facts
+            "warningBandHtml(",           # what not to miss
+            "takeActionsHtml(",           # what to do
+            "narrativeHtml(",             # why
+        )]
+        assert order == sorted(order), (
+            "the card must read verdict -> facts -> risk -> action -> reasoning")
 
     def test_the_screen_renders_whichever_briefing_it_asked_for(self):
         """
