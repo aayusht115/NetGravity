@@ -493,6 +493,12 @@ class ProductRecord(BaseModel):
     """
     id:            str
     name:          str
+    #: The client's own grouping for this SKU ("Ambient", "Chilled", "Category
+    #: A"). Read from the upload, never inferred. Demand growth is stated by
+    #: category far more often than by SKU, so a scenario needs to be able to
+    #: name one; without this field the extractor's `category` value was parsed
+    #: and discarded before the network was built.
+    category:      Optional[str] = None
     unit:          str   = "units"       # base unit of measure
     weight_kg:     float = 1.0           # kg per base unit
     volume_m3:     float = 0.001         # m³ per base unit
@@ -704,6 +710,23 @@ class OptimizationConfig(BaseModel):
     # metadata["solve_relaxation"] and a non-zero unserved_demand, so nothing
     # downstream can mistake it for a fully-served plan.
     relax_to_shortage_when_infeasible: bool = False
+
+    # When a solve proves infeasible, run ONE diagnostic re-solve with unmet
+    # demand permitted and attach `OptimizationResult.infeasibility` — how much
+    # demand the network could not reach, which markets, and which sites the
+    # optimiser would open.
+    #
+    # ON by default, and distinct from the flag above. That one SUBSTITUTES a
+    # relaxed plan for the answer, which is a real change to what was asked and
+    # is rightly opt-in. This one substitutes nothing: the result stays
+    # INFEASIBLE with no cost, no plan and no KPIs. It only stops the answer
+    # being "no" with no reason attached — measured on the case-16 fixture at
+    # 2x demand, an infeasible solve returned zero warnings, zero cost and
+    # `unmet_demand = 0.0`, which means "not computed" and reads as "nothing is
+    # short".
+    #
+    # Costs one extra solve, on a path that otherwise returns nothing usable.
+    diagnose_infeasible: bool = True
 
     # --- Service ---
     service_metric:       ServiceMetric   = ServiceMetric.TRANSIT_TIME

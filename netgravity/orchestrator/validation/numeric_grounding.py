@@ -220,6 +220,47 @@ _FACT_SPEC: Dict[str, Tuple[ClaimKind, str]] = {
     "performance_impact":        (ClaimKind.CURRENCY, "rei_engine"),
     "cost_impact_pct":           (ClaimKind.PERCENTAGE, "rei_engine"),
     "service_loss":              (ClaimKind.RATIO, "rei_engine"),
+    # Scenario comparison
+    #
+    # A comparison's figures are DIFFERENCES between two solved scenarios, and
+    # the difference is the whole point: "Nagpur costs less than expanding
+    # Delhi" cannot be said without citing the gap. Each is derived from two
+    # authoritative costs by subtraction only — see
+    # orchestrator/reasoning/comparison_evidence.py, which re-ranks nothing
+    # and decides nothing.
+    "recommended_cost":          (ClaimKind.CURRENCY, "kpi_engine"),
+    "recommended_cost_delta":    (ClaimKind.CURRENCY, "kpi_engine"),
+    "baseline_cost":             (ClaimKind.CURRENCY, "kpi_engine"),
+    "cost_gap_vs_recommended":   (ClaimKind.CURRENCY, "kpi_engine"),
+    "recommended_fill_rate":     (ClaimKind.RATIO, "kpi_engine"),
+    "fill_rate":                 (ClaimKind.RATIO, "kpi_engine"),
+    "fill_gap_vs_recommended_pts": (ClaimKind.PERCENTAGE, "kpi_engine"),
+    "n_compared":                (ClaimKind.COUNT, "kpi_engine"),
+    "n_not_comparable":          (ClaimKind.COUNT, "kpi_engine"),
+    # Forecasting engine
+    #
+    # A projection, not a measurement — and citable for exactly the same reason
+    # every other fact here is: the figure is produced by a named engine, not
+    # by prose. `_forecast_outlook` sums `ForecastResult` points and the
+    # observed history the forecaster was given; it computes no forecast.
+    #
+    # Without these, every number in a forecast briefing was stripped as
+    # unsupported and the recommendation read "run a demand scenario at
+    # [UNSUPPORTED FIGURE REMOVED]".
+    "total_forecast_units":      (ClaimKind.UNITS, "forecasting_engine"),
+    "comparable_recent_units":   (ClaimKind.UNITS, "forecasting_engine"),
+    "forecast_units":            (ClaimKind.UNITS, "forecasting_engine"),
+    "recent_units":              (ClaimKind.UNITS, "forecasting_engine"),
+    "growth_pct":                (ClaimKind.PERCENTAGE, "forecasting_engine"),
+    "mean_multiplier":           (ClaimKind.RATIO, "forecasting_engine"),
+    "std_multiplier":            (ClaimKind.RATIO, "forecasting_engine"),
+    "magnitude":                 (ClaimKind.RATIO, "forecasting_engine"),
+    "horizon":                   (ClaimKind.COUNT, "forecasting_engine"),
+    "n_series_forecast":         (ClaimKind.COUNT, "forecasting_engine"),
+    "n_series_total":            (ClaimKind.COUNT, "forecasting_engine"),
+    "n_history_periods":         (ClaimKind.COUNT, "forecasting_engine"),
+    "n_signal_adjustments":      (ClaimKind.COUNT, "forecasting_engine"),
+    "n_structural_breaks":       (ClaimKind.COUNT, "forecasting_engine"),
     # Risk engine
     "risk_factor":               (ClaimKind.RATIO, "risk_engine"),
     "max_risk_factor":           (ClaimKind.RATIO, "risk_engine"),
@@ -386,20 +427,76 @@ def _is_policeable(claim: NumericClaim) -> bool:
     return False   # bare COUNT
 
 
-def extract_numeric_claims(text: str) -> List[NumericClaim]:
+def _proper_names(payload: Dict[str, Any]) -> List[str]:
+    """
+    The names the payload itself supplies, where they contain a digit.
+
+    A user names a scenario "Freight +15%" and a client names a site "DC 2".
+    Referring to one of those asserts nothing about a computed result, but the
+    digits inside it look exactly like a claim to an extractor reading prose.
+
+    Only `name`-shaped keys, and only values with a digit in them: everything
+    else is either not a name or cannot be mistaken for a figure.
+    """
+    found: List[str] = []
+
+    def walk(node: Any) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                lowered = str(key).lower()
+                if (isinstance(value, str) and value.strip()
+                        and (lowered == "name" or lowered.endswith("_name"))
+                        and any(ch.isdigit() for ch in value)):
+                    found.append(value.strip())
+                else:
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(payload)
+    # Longest first, so "Demand +30% East" is masked before "Demand +30%".
+    return sorted(set(found), key=len, reverse=True)
+
+
+def _mask_names(text: str, names: List[str]) -> str:
+    """
+    Blank out each name, keeping every other character in place.
+
+    Same length, so a span found in the masked copy still indexes the original
+    — the claim's own raw text is read from the real narrative.
+    """
+    masked = text
+    for name in names:
+        if name in masked:
+            masked = masked.replace(name, " " * len(name))
+    return masked
+
+
+def extract_numeric_claims(
+    text: str, protected_names: Optional[List[str]] = None,
+) -> List[NumericClaim]:
     """
     Extract numeric claims from free-form narrative.
 
     Secondary mechanism: the reasoning agent is asked for STRUCTURED claims
     first (see `ReasoningAgent`). This covers the case where it returns prose
     anyway, which a prompt-only gateway cannot prevent.
+
+    `protected_names` are proper names the payload supplied — a scenario or a
+    site whose name contains a digit. Numbers inside them are part of a name,
+    not assertions about results, and policing them struck a scenario's own
+    title out of the sentence that named it.
     """
     if not text:
         return []
 
     claims: List[NumericClaim] = []
+    # Searched in a copy with the names blanked; every span still indexes the
+    # ORIGINAL, so a claim's raw text is what the reader would have seen.
+    haystack = _mask_names(text, protected_names or [])
 
-    for match in _NUMBER_PATTERN.finditer(text):
+    for match in _NUMBER_PATTERN.finditer(haystack):
         start, end = match.span()
         token = match.group(0)
         trailing = text[end:end + 24]
@@ -686,7 +783,7 @@ def ground_narrative(
                 value=value, kind=kind,
             ))
 
-    claims.extend(extract_numeric_claims(text))
+    claims.extend(extract_numeric_claims(text, _proper_names(payload)))
     return ground_claims(claims, facts, provenance=provenance)
 
 

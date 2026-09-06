@@ -820,14 +820,18 @@ body:has(#landing-page:not(.hidden)) {
 .minimal-hub-pulse {
   transform-box: fill-box;
   transform-origin: center;
-  animation: hubPulseRing 3.2s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  /* 3.2s across six hubs put a ring restarting somewhere on the map about
+     twice a second. Slower, and the map settles. */
+  animation: hubPulseRing 4.8s cubic-bezier(0.25, 1, 0.5, 1) infinite;
 }
 
 /* The second ring: wider and half again as slow, so the two never land
    together and the hub reads as transmitting rather than blinking. */
 #landing-page .lw-hub-pulse-slow {
   animation-name: hubPulseRingWide;
-  animation-duration: 5.4s;
+  /* Not a multiple of the fast ring's 4.8s, so the two never land together
+     and the hub reads as transmitting rather than blinking. */
+  animation-duration: 7.3s;
 }
 
 @keyframes hubPulseRingWide {
@@ -865,15 +869,20 @@ body:has(#landing-page:not(.hidden)) {
 }
 
 /* Minimal Flow Pulse Beams */
+/* Was `6 36` over 4s. A six-pixel dash crossing a screen-wide arc every four
+   seconds reads as a stutter — the eye catches each dash as a separate
+   object. A longer dash on a longer cycle reads as one thing flowing.
+   `stroke-dashoffset` must still be an exact multiple of the pattern's
+   period (18 + 54 = 72) or the loop restarts mid-dash and jumps. */
 .minimal-route-beam {
-  stroke-dasharray: 6 36;
+  stroke-dasharray: 18 54;
   stroke-dashoffset: 0;
-  animation: routeBeamFlow 4s linear infinite;
+  animation: routeBeamFlow 7s linear infinite;
 }
 
 @keyframes routeBeamFlow {
   from {
-    stroke-dashoffset: 84;
+    stroke-dashoffset: 144;
   }
   to {
     stroke-dashoffset: 0;

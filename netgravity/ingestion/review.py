@@ -62,6 +62,12 @@ from netgravity.ingestion.schemas.field_mapping import (
 KIND_COLUMN = "column_mapping"
 KIND_CONTENT_TYPE = "content_type"
 KIND_UNFAMILIAR = "unfamiliar_field"
+#: Informational only — a data-completeness gap (netgravity/ingestion/
+#: completeness.py), never blocking. Required-field gaps block finalize()
+#: via report.network_assembled when that is switched on, never via this
+#: item's `blocking` flag, so a reviewer answering or dismissing these is
+#: never what unblocks anything.
+KIND_MISSING_DATA = "missing_data"
 
 #: Sentinel a reviewer sends back to say "this column maps to nothing".
 NOT_NEEDED = "__not_needed__"
@@ -142,6 +148,9 @@ class ReviewItem:
         elif self.kind == KIND_CONTENT_TYPE:
             actions = ["ask_ai", "choose_content_type"]
             section = "required_review"
+        elif self.kind == KIND_MISSING_DATA:
+            actions = ["acknowledge"]
+            section = "missing_data"
         else:
             actions = ["ask_ai", "confirm_recommendation", "choose_alternative"]
             section = "required_review"
@@ -392,6 +401,42 @@ def _unfamiliar_options() -> List[ReviewOption]:
 def item_id_for(record_key: str, column: Optional[str] = None) -> str:
     """Stable id so an answer can be matched back to its question."""
     return f"{record_key}::{column}" if column else f"{record_key}::__content_type__"
+
+
+def build_missing_data_items(missing_required: Sequence[Dict[str, Any]],
+                             missing_optional: Sequence[Dict[str, Any]]) -> List[ReviewItem]:
+    """
+    Turn a completeness.py report into review items so the missing-data
+    email's resume link has a real screen to land on. Separate from
+    build_request()/ReviewRequest.items on purpose: these never participate
+    in has_blocking, so a reviewer answering or dismissing one of them can
+    never be what unblocks finalization.
+    """
+    items: List[ReviewItem] = []
+    for idx, field_gap in enumerate(missing_required):
+        items.append(ReviewItem(
+            item_id=f"missing_required_{idx}",
+            kind=KIND_MISSING_DATA,
+            question=(f"{field_gap.get('entity_type', '')}: "
+                     f"{field_gap.get('entity_name', '')} — "
+                     f"{field_gap.get('display_label', '')} not provided"),
+            record_key=str(field_gap.get("entity_name", "")),
+            source_id="",
+            context={"severity": "required", **field_gap},
+            blocking=False,
+        ))
+    for idx, field_gap in enumerate(missing_optional):
+        items.append(ReviewItem(
+            item_id=f"missing_optional_{idx}",
+            kind=KIND_MISSING_DATA,
+            question=(f"{field_gap.get('display_label', '')} not provided — "
+                     f"{field_gap.get('what_it_unlocks', '')}"),
+            record_key=str(field_gap.get("display_label", "")),
+            source_id="",
+            context={"severity": "optional", **field_gap},
+            blocking=False,
+        ))
+    return items
 
 
 # ---------------------------------------------------------------------------

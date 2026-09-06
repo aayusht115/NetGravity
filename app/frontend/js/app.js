@@ -16,7 +16,8 @@ import {
   isDCFacility, isPlantFacility, facilityRole, clearNetworkModel,
   perPeriodLabel, SOLVE_HORIZON, horizonLabel,
   formatCurrencyExact, currencySymbol, currencyLabel, NETWORK_GEOGRAPHY,
-  getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries, withCurrency
+  getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries, withCurrency,
+  FORECAST_BRIEFING
 } from './data.js';
 import { initMap, setNetworkState, invalidateMapSize, refreshAllMaps,
          revealMap, renderMapLegendCounts } from './map.js';
@@ -301,13 +302,213 @@ function renderForecastSummary() {
  */
 function renderForecastPage() {
   renderOverviewAlert('fc-alert');
-  renderHomeAttentionFeed('fc-attn-body');
+  // NOT `renderHomeAttentionFeed`. That drew Home's NETWORK-scoped card into
+  // a second container — the same finding, twice, on two screens. This screen
+  // asks a different question and now has its own grounded answer.
+  renderForecastAttention('fc-attn-body');
   renderHomeSignals('fc-signals-row');
   renderAnalysisTimestamp();
   renderForecastSummary();
   renderDataIntelligence();
   wireForecastPage();
   requestAnimationFrame(() => sizePageToWindow('.fc-main', '--fc-main-top'));
+}
+
+/**
+ * What this forecast means, and what to do about it.
+ *
+ * Every figure and every sentence is the BACKEND's: the briefing comes from
+ * the reasoning step the forecast workflow runs and has passed numeric
+ * grounding; the outlook is summed from the forecaster's own points by
+ * `_forecast_outlook`. This selects, formats and wires buttons. It computes no
+ * quantity and writes no finding.
+ *
+ * The actions are the point. A forecast briefing that ends "monitor demand"
+ * has told a planner nothing they can act on; this application can test the
+ * network against the demand the forecast projects, at the rate it projects,
+ * and that is one press.
+ */
+function renderForecastAttention(listId = 'fc-attn-body') {
+  const list = document.getElementById(listId);
+  if (!list) return;
+
+  const briefing = FORECAST_BRIEFING.explanation;
+  const card = (briefing && briefing.card) || null;
+  const outlook = FORECAST_BRIEFING.outlook || null;
+
+  if (!card && !outlook) {
+    list.innerHTML = `<div class="ov-attn-empty">No forecast has been produced
+      for this network yet, so there is nothing to read here. A forecast needs
+      observed demand history in the upload.</div>`;
+    return;
+  }
+
+  const rows = [];
+  if (outlook && typeof outlook.growth_pct === 'number') {
+    const up = outlook.growth_pct >= 0;
+    rows.push(['Demand ahead',
+      `<strong>${formatNumber(Math.round(outlook.total_forecast_units || 0))} units</strong>
+       over ${outlook.horizon} periods
+       <span class="fc-attn-delta ${up ? 'up' : 'down'}">${up ? '↑' : '↓'}
+       ${Math.abs(outlook.growth_pct).toFixed(1)}% vs the periods just observed</span>`]);
+  } else if (outlook && typeof outlook.total_forecast_units === 'number') {
+    rows.push(['Demand ahead',
+      `<strong>${formatNumber(Math.round(outlook.total_forecast_units))} units</strong>
+       over ${outlook.horizon} periods. No comparable observed window, so no
+       growth rate is stated.`]);
+  }
+
+  const top = ((outlook && outlook.fastest_growing) || [])
+    .filter((r) => typeof r.growth_pct === 'number' && r.growth_pct > 0);
+  if (top.length) {
+    rows.push(['Growing fastest', top.slice(0, 3).map((r) =>
+      `${escapeInsightText(r.market_id)} · ${escapeInsightText(r.product_id)}
+       <span class="fc-attn-delta up">+${r.growth_pct.toFixed(0)}%</span>`).join('<br>')]);
+  }
+
+  if (outlook && outlook.n_structural_breaks) {
+    rows.push(['History that changed',
+      `${outlook.n_structural_breaks} series changed level partway through, so the
+       forecast for ${outlook.n_structural_breaks === 1 ? 'it is' : 'those are'}
+       built from the period after the break rather than the whole history.`]);
+  }
+
+  const signals = FORECAST_BRIEFING.signals;
+  if (signals && typeof signals.attached === 'number' && signals.attached) {
+    rows.push(['External signals',
+      signals.series_adjusted
+        ? `${signals.attached} supplied · <strong>${signals.series_adjusted}
+           series moved</strong> by them`
+        : `${signals.attached} supplied · none changed a forecast — the router
+           applies a signal only where it names something this network contains`]);
+  }
+
+  const actions = forecastActions(outlook);
+
+  list.innerHTML = `
+    ${card && card.headline
+      ? `<div class="ov-attn-lead"><div class="ov-attn-section">
+           <div class="ov-attn-section-label tone-why">What the projection says</div>
+           <div class="ov-attn-section-text">${escapeInsightText(card.headline)}</div>
+         </div></div>` : ''}
+    ${rows.length ? `<dl class="fc-attn-facts">
+      ${rows.map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('')}
+    </dl>` : ''}
+    ${card && card.meaning
+      ? `<div class="ov-attn-section"><div class="ov-attn-section-label tone-impact">
+           What it means</div>
+         <div class="ov-attn-section-text">${escapeInsightText(card.meaning)}</div>
+       </div>` : ''}
+    ${card && card.warning
+      ? `<div class="fc-attn-warning">${escapeInsightText(card.warning)}</div>` : ''}
+    ${card && card.next_step ? `
+      <div class="ov-attn-next">
+        <span class="ov-attn-next-icon">${OV_ICONS.chart}</span>
+        <div class="ov-attn-next-text">
+          <div class="ov-attn-section-label tone-next">Recommended next step</div>
+          <div class="ov-attn-next-sub">${escapeInsightText(card.next_step)}</div>
+        </div>
+      </div>` : ''}
+    ${actions.length ? `
+      <div class="fc-attn-actions">
+        ${actions.map((a, i) => `
+          <button type="button" class="fc-attn-action${a.primary ? ' primary' : ''}"
+                  data-fc-action="${i}">
+            <span class="fc-attn-action-label">${escapeInsightText(a.label)}</span>
+            <span class="fc-attn-action-detail">${escapeInsightText(a.detail)}</span>
+          </button>`).join('')}
+      </div>` : ''}
+    <div class="text-xs text-muted" style="margin-top:10px;line-height:1.5">
+      ${card && card.source === 'llm'
+        ? 'Written by the model from the forecaster\'s own output.'
+        : 'Written by the deterministic template from the forecaster\'s own output.'}
+      Every figure here is the forecasting engine's.
+    </div>`;
+
+  list.querySelectorAll('[data-fc-action]').forEach((btn) => {
+    const item = actions[Number(btn.dataset.fcAction)];
+    if (item && typeof item.run === 'function') {
+      btn.addEventListener('click', item.run);
+    }
+  });
+}
+
+/**
+ * What a reader can DO about a forecast, from what the forecast found.
+ *
+ * Gated on the outlook's own figures, so a network whose demand is projected
+ * flat is never offered a growth scenario and one with no concentration is
+ * never told to scope it. Nothing here applies anything: each opens the
+ * scenario builder, filled in, for a person to run.
+ */
+function forecastActions(outlook) {
+  const actions = [];
+  if (!outlook) return actions;
+
+  const growth = outlook.growth_pct;
+  if (typeof growth === 'number' && Math.abs(growth) >= 1) {
+    const pct = growth.toFixed(0);
+    actions.push({
+      label: `Test the network at ${growth > 0 ? '+' : ''}${pct}% demand`,
+      detail: 'Opens the scenario builder with this forecast\'s own growth rate '
+        + 'filled in. The forecast says what is coming; only a solve says '
+        + 'whether the current footprint carries it.',
+      primary: true,
+      run: () => openScenarioFromForecast({ pct: Number(pct) }),
+    });
+  }
+
+  // Scoped growth, but only where the builder can actually scope it.
+  //
+  // The builder narrows a demand change by REGION or by product category. The
+  // outlook names a market and a product ID, and a product ID is neither — so
+  // passing it produced a button reading "Test M001 alone" that ran a
+  // network-wide scenario, the select having correctly ignored a value it did
+  // not offer. Markets carry a region, and region is one of the two, so that
+  // is what this scopes by. Where the upload states no region for the market,
+  // the action is not offered rather than offered and silently wrong.
+  const top = (outlook.fastest_growing || [])
+    .filter((r) => typeof r.growth_pct === 'number' && r.growth_pct > 0);
+  if (top.length) {
+    const row = top[0];
+    const market = MARKETS.find((m) => m.id === row.market_id) || null;
+    const region = (market && market.region) || '';
+    const where = (market && market.name) || row.market_id;
+    if (region) {
+      actions.push({
+        label: `Test ${region} alone, at +${row.growth_pct.toFixed(0)}%`,
+        detail: `${where} grows fastest in this projection, at `
+          + `+${row.growth_pct.toFixed(0)}%. Growth stated for the whole network `
+          + `loads every site; scoping it to ${region} loads the ones that will `
+          + 'actually feel it.',
+        run: () => openScenarioFromForecast({
+          pct: Number(row.growth_pct.toFixed(0)), region }),
+      });
+    }
+  }
+  return actions;
+}
+
+/**
+ * Open the scenario builder on the Scenario Planning tab, pre-filled.
+ *
+ * Navigates first: the builder is a modal on that page, and opening it over
+ * the Forecast screen would put a scenario form on a page with no scenarios.
+ * Nothing is submitted — every field stays editable, and the person presses
+ * Run.
+ */
+function openScenarioFromForecast({ pct, region = '' }) {
+  if (typeof window.navigateToTab === 'function') window.navigateToTab('scenarios');
+  setTimeout(() => {
+    if (typeof window.openScenarioBuilderWith !== 'function') return;
+    window.openScenarioBuilderWith('CHANGE_DEMAND', {
+      amount: pct,
+      region,
+      name: region
+        ? `Forecast demand ${pct > 0 ? '+' : ''}${pct}% in ${region}`
+        : `Forecast demand ${pct > 0 ? '+' : ''}${pct}%`,
+    });
+  }, 260);
 }
 
 /**
@@ -1464,21 +1665,19 @@ function sizePageToWindow(selector, varName) {
 
 function sizeOverviewToWindow() {
   sizePageToWindow('#tab-home.active .ov-main', '--ov-main-top');
-  // The KPI strip's real height, so `.ov-main` can leave room for it. The
-  // strip is Home's bottom row and it must be ON the first screen: measured
-  // rather than assumed, because its height follows the type scale and the
-  // sidebar's width, neither of which this file can know.
+  // SUPERSEDED: this also measured the KPI strip and wrote `--ov-strip-h`,
+  // which `.ov-main` subtracted so the strip landed on the first screen.
+  // The findings are what this page is for, and buying the strip 95px cost
+  // the attention card the height its recommendation needed. The strip is
+  // now the first thing below the fold; nothing measures it any more, and
+  // the stale variable is cleared so a cached stylesheet cannot keep
+  // subtracting a height nobody is writing.
   const strip = document.querySelector('#tab-home.active .home2-kpi-strip');
   const shell = document.querySelector('.main-content');
   if (!shell) return;
-  if (!strip || strip.offsetParent === null) {
-    shell.style.removeProperty('--ov-strip-h');
-    return;
-  }
+  shell.style.removeProperty('--ov-strip-h');
+  if (!strip) return;
   const box = strip.getBoundingClientRect();
-  const gap = parseFloat(getComputedStyle(strip).marginTop) || 0;
-  const total = Math.round(box.height + gap);
-  if (total > 0) shell.style.setProperty('--ov-strip-h', total + 'px');
 
   // How much of the strip's right end the "Ask Netgravity" button covers.
   //
@@ -1497,9 +1696,16 @@ function sizeOverviewToWindow() {
   // button has a zero-width rect, which is the thing actually being asked.
   const fab = document.getElementById('floating-chatbot-fab');
   const fabBox = fab ? fab.getBoundingClientRect() : null;
-  const overlaps = fabBox && fabBox.width > 0
-                   && fabBox.top < box.bottom && fabBox.bottom > box.top;
-  const reserve = overlaps ? Math.max(0, Math.round(box.right - fabBox.left) + 16) : 0;
+  // No vertical test any more. It used to check whether the two currently
+  // share a band of screen, which was true when the strip was on the first
+  // screen and is false the moment it is measured below the fold — so the
+  // gutter came out 0 and the button landed under the chat bubble as soon
+  // as the reader scrolled down to it. The chat button is fixed to the
+  // bottom of the VIEWPORT and the strip is the last row of the page:
+  // scrolling to one always brings the other alongside. What is left to
+  // measure is how much of the strip's right end it covers.
+  const reserve = (fabBox && fabBox.width > 0)
+    ? Math.max(0, Math.round(box.right - fabBox.left) + 16) : 0;
   strip.style.setProperty('--ov-fab-reserve', reserve + 'px');
 }
 
@@ -2126,6 +2332,10 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
   const insightItems = insights.map(ins => ({
     kind: 'insight',
     id: ins.id,
+    // The chip's words. An insight's chip has always shown its severity;
+    // actions need their own vocabulary in the same slot, so both carry it
+    // explicitly rather than one of them being inferred at render time.
+    label: ins.category || categorizeAttentionLabel(ins.impact),
     // `category` is set from the engine's severity when the record came from
     // `/api/insights`; the keyword fallback covers a record that predates it.
     category: ins.category || categorizeAttentionLabel(ins.impact),
@@ -2137,13 +2347,36 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
       ? ins.evidence[0].display_value : '',
   }));
 
+  // Action items are not findings. Nothing was solved to produce them — the
+  // completeness gate read the upload and reported a column that is not
+  // there — so they carry their own category and their own label rather
+  // than borrowing the severity vocabulary the Reasoning Agent's findings
+  // use. A missing column presented as a RISK the engine identified would
+  // be this application claiming an analysis it did not run.
+  //
+  // The record shape changed with the store: `expectedImpact` was a
+  // prototype field describing a cost and an SLA delta for a demo action,
+  // and no engine produces either for a missing column. The server sends a
+  // title and a sentence built from the gap itself; both are used as sent.
   const actionItems = HOME_ACTION_ITEMS
     .filter(act => !resolvedInsightIds.has(act.id))
-    .map(act => {
-      const impact = act.expectedImpact || {};
-      const subtitle = [impact.cost, impact.sla ? `SLA ${impact.sla}` : null].filter(Boolean).join(' · ');
-      return { kind: 'action', id: act.id, category: categorizeAttentionLabel(act.tag), title: act.title, subtitle };
-    });
+    .map(act => ({
+      kind: 'action',
+      id: act.id,
+      category: act.severity === 'REQUIRED' ? 'RISK' : 'OPPORTUNITY',
+      label: act.severity === 'REQUIRED' ? 'DATA NEEDED' : 'OPTIONAL DATA',
+      title: act.title,
+      subtitle: act.subtitle,
+      headline: '',
+      isAction: true,
+    }));
+
+  // Required data first: an analysis running without a field it needs is a
+  // more urgent thing to read than one that could have gone further. Both
+  // sit under the engine's own findings, because a finding is a conclusion
+  // about the network and an action is a request to a person — and the feed
+  // is read top-down.
+  actionItems.sort((a, b) => (a.category === 'RISK' ? 0 : 1) - (b.category === 'RISK' ? 0 : 1));
 
   const items = [...insightItems, ...actionItems];
 
@@ -2164,8 +2397,20 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
   //
   // The rest are not dropped: they are listed underneath, and every one still
   // opens its own deep dive.
-  const lead = items[0];
-  const rest = items.slice(1);
+  //
+  // ACTIONS COME FIRST in that list, ahead of the remaining findings. A
+  // finding is something to read; an action is something only a person can
+  // do, and it is holding up an analysis until they do it. Ordered the other
+  // way round — findings, then actions, which is where they landed when the
+  // two lists were simply concatenated — the four data requests on a real
+  // upload sat seventh to tenth inside a scrolling card, below the fold. A
+  // request nobody scrolls to has not been raised.
+  //
+  // The LEAD stays the top-ranked finding when there is one: it is the
+  // engine's own answer to "what should I look at", and an action item is
+  // not ranked against it by anything.
+  const lead = insightItems[0] || actionItems[0] || items[0];
+  const rest = [...actionItems, ...insightItems].filter((it) => it !== lead);
   const rec = getNetworkRecommendation();
 
   /* The finding's figure and its sentence, without saying the figure twice.
@@ -2173,6 +2418,19 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
      see 452,610 units of 1,435,985 units of demand left unserved" already
      contains "452,610" — so printing the headline in front of it produced
      "452,610 units I see 452,610 units of ... left unserved". */
+  /* "3 further findings" was true when the feed held only findings. It now
+     holds two different kinds of thing — conclusions the engine reached, and
+     requests it needs a person to make — and counting an action as a finding
+     asserts an analysis that did not happen. Both are named, or neither is. */
+  function restSummary(list) {
+    const actions = list.filter((it) => it.isAction).length;
+    const findings = list.length - actions;
+    const parts = [];
+    if (findings) parts.push(`${findings} further finding${findings === 1 ? '' : 's'}`);
+    if (actions) parts.push(`${actions} action${actions === 1 ? '' : 's'} to take`);
+    return parts.join(' \u00b7 ');
+  }
+
   function impactHtml(item) {
     const head = (item.headline || '').trim();
     const sub = (item.subtitle || '').trim();
@@ -2198,7 +2456,7 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
       </div>
       ${impactHtml(lead)}
       <button type="button" class="ov-attn-more-link" data-open-lead>
-        <span>View the full finding</span>
+        <span>${lead.isAction ? 'Open this action' : 'View the full finding'}</span>
         <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
       </button>
     </div>
@@ -2224,12 +2482,12 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
          asking the reader to click to find out whether there is anything
          there. It still closes. -->
     <details class="ov-attn-rest" open>
-      <summary>${rest.length} further finding${rest.length === 1 ? '' : 's'}</summary>
+      <summary>${restSummary(rest)}</summary>
       <div class="ov-attn-rest-list">
         ${rest.map((it) => `
           <button type="button" class="ov-attn-rest-item"
                   data-kind="${it.kind}" data-id="${it.id}">
-            <span class="ov-attn-rest-cat cat-${(it.category || 'info').toLowerCase()}">${escapeInsightText(it.category || '')}</span>
+            <span class="ov-attn-rest-cat cat-${(it.category || 'info').toLowerCase()}${it.isAction ? ' is-action' : ''}">${escapeInsightText(it.label || it.category || '')}</span>
             <span class="ov-attn-rest-title">${escapeInsightText(it.title)}</span>
           </button>`).join('')}
       </div>
@@ -2385,9 +2643,26 @@ function renderTwinStats() {
 
 /** The solver's open/closed decision for a facility, or "not solved". */
 function openStatusTag(node) {
-  if (node.isOpen === true) return '<span class="tag tag-success">Open</span>';
-  if (node.isOpen === false) return '<span class="tag tag-muted">Closed by solver</span>';
-  return '<span class="tag tag-muted">Not solved</span>';
+  // A site the client PROPOSED is not a site the solver CLOSED.
+  //
+  // Both arrive here with `isOpen === false` and, until this branch existed,
+  // both printed "Closed by solver" — which reads, for a candidate, as though
+  // the optimiser had shut down a working warehouse the client never built.
+  // The wording for an existing facility is unchanged, byte for byte.
+  const isCandidate = String(node.status || '').toUpperCase() === 'CANDIDATE';
+  if (node.isOpen === true) {
+    return isCandidate
+      ? '<span class="tag tag-success">Open</span> <span class="tag tag-info">newly opened</span>'
+      : '<span class="tag tag-success">Open</span>';
+  }
+  if (node.isOpen === false) {
+    return isCandidate
+      ? '<span class="tag tag-muted">Proposed — not opened</span>'
+      : '<span class="tag tag-muted">Closed by solver</span>';
+  }
+  return isCandidate
+    ? '<span class="tag tag-info">Proposed site</span>'
+    : '<span class="tag tag-muted">Not solved</span>';
 }
 
 function renderTwinTables() {
@@ -2425,8 +2700,15 @@ function renderTwinTables() {
       // tag saying a facility performs well on a facility that is not
       // operating. Operating status and utilisation health are different
       // facts and get different answers.
-      const label = hasUtil ? getUtilLabel(d.utilPct, d.isOpen) : 'Not solved';
-      const tagClass = hasUtil ? getUtilTagClass(d.utilPct, d.isOpen) : 'tag-muted';
+      // A proposed site the optimiser declined is not "Not selected" in the
+      // sense an existing DC is — it does not exist yet. Same distinction the
+      // map and the facility panel now make.
+      const isCand = String(d.status || '').toUpperCase() === 'CANDIDATE';
+      const notTaken = d.isOpen === false || !hasUtil;
+      const label = (isCand && notTaken) ? 'Proposed — not opened'
+        : hasUtil ? getUtilLabel(d.utilPct, d.isOpen) : 'Not solved';
+      const tagClass = (isCand && notTaken) ? 'tag-info'
+        : hasUtil ? getUtilTagClass(d.utilPct, d.isOpen) : 'tag-muted';
       return `
         <tr class="clickable-row" data-id="${d.id}">
           <td>${d.name}</td>
@@ -2471,13 +2753,113 @@ window.openFacilityPanel = function (facilityId) {
   const utilColor = getUtilColor(utilPct);
   const utilLabel = getUtilLabel(utilPct);
 
-  // S2 P0 #5: every facility needs a risk/bottleneck status, not just
-  // Delhi — derived from the same utilLabel already computed above (no new
-  // calculation), so the band can never drift from what the map/DC table
-  // already show for this facility.
-  const riskStatus = utilLabel === 'Critical' ? 'HIGH — Capacity Breach'
-    : utilLabel === 'Stress' ? 'MEDIUM — Approaching Capacity'
-      : 'LOW — Healthy Headroom';
+  // What the CLIENT said this site is — not what the solver decided to do with
+  // it. `openStatusTag` answers only the second question, so a proposed site
+  // the optimiser declined and a real DC it shut both read "Closed by solver",
+  // which is right for one of them and badly wrong for the other.
+  const isCandidate = String(fac.status || '').toUpperCase() === 'CANDIDATE';
+
+  // Utilisation in the busiest single period of the solved horizon, set by
+  // hydration from the solver's own `peak_utilization_pct`. Not a second
+  // calculation of the same thing: the average shown beside it and this peak
+  // are two readings the MILP already published together.
+  const peakPct = (fac.peakUtilPct === null || fac.peakUtilPct === undefined)
+    ? null : fac.peakUtilPct;
+
+  // A single-period solve has no busiest month to report — peak and average
+  // are arithmetically the same number. Printing it twice would imply a
+  // seasonal profile the upload never stated, so the panel says what is
+  // actually known instead (see the peak row below).
+  const solvedAvg = (fac.utilPct === null || fac.utilPct === undefined)
+    ? null : fac.utilPct;
+  const hasSeasonalProfile = peakPct !== null && solvedAvg !== null
+    && Math.abs(peakPct - solvedAvg) > 0.05;
+
+  // S2 P0 #5: every facility needs a risk/bottleneck status, not just Delhi.
+  //
+  // The band now reads from the PEAK where the solve reported one, not from
+  // the horizon average. Capacity is sized for the busiest period, so a site
+  // reporting "Healthy Headroom" on a yearly mean while breaching in one month
+  // is exactly the failure this row exists to prevent. Where no peak was
+  // reported the average still drives it, so a single-period solve behaves
+  // precisely as it did before.
+  //
+  // Note this is deliberately allowed to differ from the map and DC-table
+  // colouring, which remain on the average: those surfaces answer "how loaded
+  // is this network typically", this row answers "will this site hold".
+  const riskBasisPct = hasSeasonalProfile ? peakPct : utilPct;
+  const riskLabel = getUtilLabel(riskBasisPct);
+
+  // Whether there is a load to assess at all.
+  //
+  // This ternary used to have no such branch: anything that was not 'Critical'
+  // or 'Stress' fell through to "LOW — Healthy Headroom", and `getUtilLabel`
+  // returns 'Not solved' for a null utilisation. So a site the solver never
+  // ran, and a proposed site it declined to open, both announced healthy spare
+  // capacity — the most reassuring message on the panel, on the one facility
+  // that had produced no evidence whatsoever.
+  //
+  // AND WHETHER THE SITE IS OPERATING AT ALL. This tested only for a null
+  // utilisation, and hydration writes 0 for a site the solve did not use — so
+  // a proposed DC the optimiser declined reported "0% Healthy", "Headroom
+  // 21,000 units/month" and "LOW — Healthy Headroom". Every band read zero as
+  // comfortable. `getUtilLabel` already takes `isOpen` and answers "Not
+  // selected"; the DC table passes it and this panel did not.
+  const notOperating = fac.isOpen === false;
+  const riskKnown = !notOperating && riskBasisPct !== null
+    && riskBasisPct !== undefined && !Number.isNaN(Number(riskBasisPct));
+  const riskStatus = !riskKnown
+    ? (notOperating
+        ? (isCandidate ? 'Not opened — no load to assess'
+                       : 'Closed in this solve — no load to assess')
+        : (isCandidate ? 'Not opened — no load to assess' : 'Not solved'))
+    : riskLabel === 'Critical' ? 'HIGH — Capacity Breach'
+      : riskLabel === 'Stress' ? 'MEDIUM — Approaching Capacity'
+        : 'LOW — Healthy Headroom';
+
+  // ---- Headroom, and the growth that would consume it ------------------
+  //
+  // Not "how full is this site" but "what happens to it when demand grows".
+  // Both figures below are arithmetic on numbers already on the panel —
+  // capacity, and the solved utilisation at the busiest period — so they need
+  // no scenario run, no forecast and no model of their own.
+  //
+  // The growth figure is stated against THIS SITE'S OWN volume, not against
+  // network demand, and the wording says so. They are not the same number: a
+  // 10% national uplift does not land as 10% here, and the solver may re-route
+  // around this site entirely. Claiming otherwise would be inventing an
+  // allocation the model never produced.
+  const CRITICAL_PCT = 95;
+  const headroomBasis = riskKnown ? Number(riskBasisPct) : null;
+  const capacityUnits = Number(fac.capacity);
+  const headroomUnits = (headroomBasis !== null && Number.isFinite(capacityUnits)
+    && capacityUnits > 0)
+    ? capacityUnits * (1 - headroomBasis / 100)
+    : null;
+  const growthToBreachPct = (headroomBasis !== null && headroomBasis > 0)
+    ? (CRITICAL_PCT / headroomBasis - 1) * 100
+    : null;
+
+  const headroomRow = headroomUnits === null ? '' : `
+    <div class="fp-stat"><span class="fp-stat-label">Headroom${hasSeasonalProfile ? ' at peak' : ''}</span><span class="fp-stat-value">${formatNumber(Math.max(0, Math.round(headroomUnits)))} ${perPeriodLabel()}</span></div>`;
+
+  const growthRow = growthToBreachPct === null ? '' : (growthToBreachPct <= 0
+    ? `
+    <div class="fp-stat"><span class="fp-stat-label">Growth before breach</span><span class="fp-stat-value" style="color:var(--red)">already at or past ${CRITICAL_PCT}% — no room for growth</span></div>`
+    : `
+    <div class="fp-stat"><span class="fp-stat-label">Growth before breach</span><span class="fp-stat-value">+${growthToBreachPct.toFixed(0)}% <span style="color:var(--text-3);font-weight:400">on this site's own volume${hasSeasonalProfile ? ', at peak' : ''}</span></span></div>`);
+
+  // The peak row: the solved busiest-period reading where one exists, and an
+  // explicit statement of its absence where it does not. Never a repeat of the
+  // average dressed up as a second finding.
+  // Nothing about the busiest period of a site that was not used in this
+  // solve. The row below reports on the DATA, and printing it here reads as a
+  // statement about a warehouse that has no solve to have a peak in.
+  const peakRow = notOperating ? '' : hasSeasonalProfile
+    ? `<div class="fp-stat"><span class="fp-stat-label">Utilisation (peak)</span><span class="fp-stat-value" style="color:${getUtilColor(peakPct)}">${peakPct}% <span class="tag ${getUtilTagClass(peakPct)}">${getUtilLabel(peakPct)}</span></span></div>`
+    : (peakPct !== null
+      ? `<div class="fp-stat"><span class="fp-stat-label">Utilisation (peak)</span><span class="fp-stat-value" style="color:var(--text-3);font-weight:400">single period modelled — no seasonal profile in this data</span></div>`
+      : '');
 
   // Was `facilityId === 'DC_DELHI'`, which pinned a hardcoded "Forecast Dec
   // 2026 — 10,800 units/day" panel to one prototype facility and showed it for
@@ -2502,11 +2884,23 @@ window.openFacilityPanel = function (facilityId) {
     <div class="fp-stat"><span class="fp-stat-label">Status</span><span class="fp-stat-value">${openStatusTag(fac)}</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Capacity</span><span class="fp-stat-value">${formatNumber(fac.capacity)} ${perPeriodLabel()}</span></div>
     <div class="fp-stat"><span class="fp-stat-label">Current Throughput</span><span class="fp-stat-value">${formatNumber(fac.throughput)} ${perPeriodLabel()}</span></div>
-    <div class="fp-stat"><span class="fp-stat-label">Utilisation</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${getUtilTagClass(utilPct)}">${utilLabel}</span></span></div>
+    ${(utilPct === null || utilPct === undefined || notOperating)
+      ? `<div class="fp-stat"><span class="fp-stat-label">Utilisation (avg)</span><span class="fp-stat-value" style="color:var(--text-3);font-weight:400">${
+          notOperating
+            ? (isCandidate ? 'not opened in this solve'
+                           : 'closed by the solver in this solve')
+            : (isCandidate ? 'not opened in this solve' : 'not solved')}</span></div>`
+      : `<div class="fp-stat"><span class="fp-stat-label">Utilisation (avg)</span><span class="fp-stat-value" style="color:${utilColor}">${utilPct}% <span class="tag ${getUtilTagClass(utilPct, fac.isOpen)}">${getUtilLabel(utilPct, fac.isOpen)}</span></span></div>`}
+    ${peakRow}
+    ${headroomRow}
+    ${growthRow}
+    ${isCandidate ? (fac.openingCost != null
+      ? `<div class="fp-stat"><span class="fp-stat-label">Cost to open</span><span class="fp-stat-value">${formatCurrency(fac.openingCost)} <span style="color:var(--text-3);font-weight:400">one-time</span></span></div>`
+      : `<div class="fp-stat"><span class="fp-stat-label">Cost to open</span><span class="fp-stat-value" style="color:var(--text-3);font-weight:400">not priced in the upload — the optimiser is treating this site as free to build</span></div>`) : ''}
     ${isDC && fac.fixedCostPerYear != null ? `<div class="fp-stat"><span class="fp-stat-label">Fixed Cost</span><span class="fp-stat-value">${formatCurrency(fac.fixedCostPerYear)}/year</span></div>` : ''}
     ${isDC && fac.handlingCost != null ? `<div class="fp-stat"><span class="fp-stat-label">Handling Cost</span><span class="fp-stat-value">${formatCurrencyExact(fac.handlingCost)}/unit</span></div>` : ''}
     ${forecastSection}
-    <div class="fp-stat"><span class="fp-stat-label">Risk / Bottleneck</span><span class="fp-stat-value"><span class="tag ${getUtilTagClass(utilPct)}">${riskStatus}</span></span></div>
+    <div class="fp-stat"><span class="fp-stat-label">Risk / Bottleneck${hasSeasonalProfile ? ' <span style="color:var(--text-3);font-weight:400">at peak</span>' : ''}</span><span class="fp-stat-value"><span class="tag ${riskKnown ? getUtilTagClass(riskBasisPct) : 'tag-muted'}">${riskStatus}</span></span></div>
     <div style="margin-top:var(--space-lg)">
       <div class="card-title mb-md">Connected Lanes</div>
       ${LANES.filter(l => l.from === facilityId || l.to === facilityId).map(l => `
@@ -2707,14 +3101,30 @@ function renderHomeSignals(rowId = 'fc-signals-row') {
     return;
   }
 
+  // WHAT THE ROUTER ACTUALLY DID with this signal.
+  //
+  // This used to regex-match `sig.intendedUse`, which `loadStructure` sets to
+  // the constant "Recorded from your upload — not yet routed into a forecast"
+  // for every signal — so "Not yet applied" was the only outcome the chip
+  // could ever show, whatever the forecast had done with it. Signals ARE
+  // routed (`_uploaded_signals_for` -> `signal_router.route_for_forecast`);
+  // the chip had no way to know.
+  //
+  // `applied_signal_ids` is the routing's own answer, derived from the
+  // per-series `signal_adjustments` the enricher recorded.
+  const signalState = FORECAST_BRIEFING.signals || null;
+  const appliedIds = new Set((signalState && signalState.applied_signal_ids) || []);
+  const forecastRan = Boolean(signalState);
+
   // Three on the row, matching the mockup; the rest are behind "View all
   // signals", which is why that link is there rather than decorative.
   row.innerHTML = EXTERNAL_SIGNALS.slice(0, 3).map((sig) => {
-    const applied = /used in forecast/i.test(sig.intendedUse || '');
-    const context = /context/i.test(sig.intendedUse || '');
-    const tone = applied ? 'ok' : context ? 'info' : 'pending';
+    const applied = appliedIds.has(sig.id);
+    // Not "context only" — that was a guess dressed as a category. Either the
+    // forecast has not run, or it ran and this signal did not move it.
+    const tone = applied ? 'ok' : forecastRan ? 'info' : 'pending';
     const label = applied ? 'Used in forecast'
-      : context ? 'Context only' : 'Not yet applied';
+      : forecastRan ? 'Did not change the forecast' : 'No forecast run yet';
     return `
       <div class="ov-signal">
         <span class="ov-signal-icon">${signalIconSvg(sig.type)}</span>
@@ -2722,7 +3132,13 @@ function renderHomeSignals(rowId = 'fc-signals-row') {
           <div class="ov-signal-title" title="${escapeInsightText(sig.title)}">${escapeInsightText(sig.title)}</div>
           <div class="ov-signal-meta">Source: ${escapeInsightText(sig.source)}
             &nbsp;&middot;&nbsp; ${escapeInsightText(sig.publishedDate)}</div>
-          <span class="ov-signal-chip tone-${tone}">${OV_SIGNAL_CHIP[tone]}${label}</span>
+          <span class="ov-signal-chip tone-${tone}" title="${escapeInsightText(
+            applied
+              ? 'The forecaster applied an adjustment from this signal. The rule that fired is recorded against it.'
+              : forecastRan
+                ? 'This signal reached the router and did not adjust any series — usually because it names no market or facility in this network, or its confidence is below the guardrail.'
+                : 'No forecast has been produced for this network yet, so nothing has been routed.')}"
+                >${OV_SIGNAL_CHIP[tone]}${label}</span>
         </div>
       </div>`;
   }).join('');

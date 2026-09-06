@@ -179,6 +179,34 @@ class ScenarioValidator:
                 f"demand_multiplier must be >= 0, got {spec.demand_multiplier}.",
             )
 
+        # A growth scope that matches no demand row is refused, not run.
+        #
+        # Scaling zero rows produces a scenario identical to the base case, and
+        # a comparison card reading "no change in cost" is the correct answer to
+        # a question nobody asked. Misspelling a region is not a finding.
+        if spec.action == ScenarioActionType.CHANGE_DEMAND:
+            if spec.demand_region:
+                want = spec.demand_region.strip().lower()
+                known = {(f.region or "").strip() for f in network.facilities if f.region}
+                if not any(r.lower() == want for r in known):
+                    raise InvalidScenarioError(
+                        f"No facility or market in this network is in region "
+                        f"'{spec.demand_region}'. Known regions: "
+                        f"{sorted(known) or 'none stated in the upload'}.",
+                        context={"region": spec.demand_region, "known": sorted(known)},
+                    )
+            if spec.demand_product_category:
+                want = spec.demand_product_category.strip().lower()
+                known = {(p.category or "").strip() for p in network.products if p.category}
+                if not any(c.lower() == want for c in known):
+                    raise InvalidScenarioError(
+                        f"No product in this network is in category "
+                        f"'{spec.demand_product_category}'. Known categories: "
+                        f"{sorted(known) or 'none stated in the upload'}.",
+                        context={"category": spec.demand_product_category,
+                                 "known": sorted(known)},
+                    )
+
         if spec.action == ScenarioActionType.CHANGE_TRANSPORT_COST:
             if spec.transport_cost_multiplier is None:
                 raise InvalidScenarioError(

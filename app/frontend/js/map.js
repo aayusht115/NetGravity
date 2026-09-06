@@ -318,10 +318,11 @@ export function initMap(containerId, options = {}) {
 
   const zoom = options.zoom || (options.isCompact ? 4.2 : 5);
   const center = options.center || [22.5, 79.5];
-  // A compact map starts with the wheel disabled and EARNS it on click — see
-  // `armCompactZoom`. It used to be disabled outright and never re-enabled,
-  // which is why the scenario planner's twin card was the one map in the
-  // product you could not zoom into.
+  // The Digital Twin page is the reference: its map has the wheel on from
+  // the start, and every other map in this product is meant to behave the
+  // same way. `isCompact` still decides the default for anything that does
+  // not say otherwise, but a caller that asks for the wheel gets it — see
+  // scenarios.js, which does.
   const scrollWheelZoom = options.scrollWheelZoom !== undefined
     ? options.scrollWheelZoom : !options.isCompact;
 
@@ -339,7 +340,9 @@ export function initMap(containerId, options = {}) {
   });
   L.control.zoom({ position: 'bottomleft' }).addTo(map);
   addFitControl(map, containerId);
-  if (options.isCompact) armCompactZoom(map, container);
+  // Only for a map whose wheel is genuinely off. Arming a map that already
+  // zooms would show "Click the map to zoom" over one that just zoomed.
+  if (options.isCompact && !scrollWheelZoom) armCompactZoom(map, container);
 
   maps[containerId] = map;
   // Read-only handle for diagnostics: "where is the map looking" is otherwise
@@ -886,7 +889,16 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
   if (isClosed) border = '3px dashed #94a3b8';
   if (isNew) border = '3px solid #6B2FA0';
 
-  const glyph = isClosed ? '⛔' : iconMap[type];
+  // A site the client PROPOSED and the solver did not take is drawn as an
+  // outline, not as a closure. Both arrive with `isOpen === false`; without
+  // this the map put a stop sign on a warehouse that was never built and the
+  // tooltip said it had been "closed in this scenario".
+  const isCandidate = String(node.status || '').toUpperCase() === 'CANDIDATE';
+  const isUnbuiltCandidate = isCandidate && !isNew
+    && !(overrideStats && overrideStats.isOpen === true);
+  if (isUnbuiltCandidate) border = '3px dashed #6B2FA0';
+
+  const glyph = (isClosed && !isCandidate) ? '⛔' : iconMap[type];
   const badge = isNew
     ? '<span style="position:absolute;top:-6px;right:-8px;background:#6B2FA0;color:#fff;'
       + 'font-size:8px;font-weight:800;padding:1px 4px;border-radius:6px;letter-spacing:.04em">NEW</span>'
@@ -915,7 +927,9 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
 
   let tooltipContent = `<div style="font-size:12px;line-height:1.4"><strong>${node.name}</strong>`;
   if (isNew) tooltipContent += ' <span style="color:#6B2FA0;font-weight:700">(new in this scenario)</span>';
-  if (isClosed) tooltipContent += ' <span style="color:#dc2626;font-weight:700">(closed in this scenario)</span>';
+  if (isUnbuiltCandidate) tooltipContent += ' <span style="color:#6B2FA0;font-weight:700">(proposed site — not opened)</span>';
+  else if (isCandidate) tooltipContent += ' <span style="color:#6B2FA0;font-weight:700">(proposed site — opened by the optimiser)</span>';
+  if (isClosed && !isCandidate) tooltipContent += ' <span style="color:#dc2626;font-weight:700">(closed in this scenario)</span>';
   tooltipContent += '<br>';
   if (type === 'plant') {
     tooltipContent += `Capacity: ${formatNumber(node.capacity)} ${perPeriodLabel()}<br>Throughput: ${formatNumber(throughput)} ${perPeriodLabel()}`;

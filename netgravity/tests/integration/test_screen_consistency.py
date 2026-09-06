@@ -420,11 +420,12 @@ class TestTheForecastScreenIsTheMockup:
                  ('class="fc-main"', 'class="fc-chart-card"', 'id="fc-signals-card"')]
         assert order == sorted(order), order
 
-    def test_the_left_column_is_the_overviews_own_two_cards(self):
+    def test_the_shared_cards_are_still_one_renderer_each(self):
         """
-        Not a copy — the same classes, drawn by the same two functions into
-        this page's containers. A second alert card is a second place for the
-        same finding to be worded differently.
+        The alert and the signals row ARE the Overview's own, drawn by the same
+        function into this page's containers. A second alert card would be a
+        second place for the same finding to be worded differently, and that
+        has not changed.
         """
         fc = self._section()
         assert 'class="ov-alert" id="fc-alert"' in fc
@@ -434,7 +435,6 @@ class TestTheForecastScreenIsTheMockup:
 
         js = _without_comments(_asset("js", "app.js"))
         assert "function renderOverviewAlert(elId = 'ov-alert')" in js
-        assert "function renderHomeAttentionFeed(listId = 'ov-attn-body')" in js
         # The default followed the caller when Home's signals card was
         # replaced by the KPI strip: this renderer's only caller is now the
         # Forecast tab, and a default naming an element that no longer exists
@@ -443,9 +443,60 @@ class TestTheForecastScreenIsTheMockup:
         page = js[js.index("function renderForecastPage()"):]
         page = page[:page.index("\n}\n")]
         for call in ("renderOverviewAlert('fc-alert')",
-                     "renderHomeAttentionFeed('fc-attn-body')",
                      "renderHomeSignals('fc-signals-row')"):
             assert call in page, call
+
+    def test_the_attention_card_is_about_the_forecast_not_the_network(self):
+        """
+        It used to be `renderHomeAttentionFeed('fc-attn-body')` — the same
+        NETWORK-scoped finding the Overview shows, in a second container. Every
+        word of it was correct and it was the answer to the Overview's
+        question, printed under the Forecast's.
+
+        Reported as: "what needs your attention card is repeated, which does
+        not make any sense."
+        """
+        js = _without_comments(_asset("js", "app.js"))
+        page = js[js.index("function renderForecastPage()"):]
+        page = page[:page.index("\n}\n")]
+        assert "renderForecastAttention('fc-attn-body')" in page
+        assert "renderHomeAttentionFeed" not in page, (
+            "the Forecast screen must not draw the Overview's attention feed")
+        # Home still has its own, unchanged.
+        assert "function renderHomeAttentionFeed(listId = 'ov-attn-body')" in js
+
+    def test_the_forecast_card_reads_the_forecasts_own_briefing(self):
+        js = _without_comments(_asset("js", "app.js"))
+        block = js[js.index("function renderForecastAttention("):]
+        block = block[:block.index("\n}\n")]
+        assert "FORECAST_BRIEFING.explanation" in block
+        assert "FORECAST_BRIEFING.outlook" in block
+        # And says so when there is nothing to read, rather than falling back
+        # to the network's briefing — which is what it did before.
+        assert "No forecast has been produced" in block
+
+    def test_it_offers_the_scenario_the_forecast_recommends(self):
+        """
+        A forecast briefing ending "monitor demand" has told a planner nothing
+        they can act on. This application can test the network against the
+        demand the forecast projects, at the rate it projects.
+        """
+        js = _without_comments(_asset("js", "app.js"))
+        block = js[js.index("function forecastActions(outlook)"):]
+        block = block[:block.index("\n}\n")]
+        assert "outlook.growth_pct" in block
+        assert "openScenarioFromForecast(" in block
+        # Gated on there being a real movement to test.
+        assert "Math.abs(growth) >= 1" in block
+
+    def test_nothing_is_submitted_on_the_readers_behalf(self):
+        js = _without_comments(_asset("js", "app.js"))
+        block = js[js.index("function openScenarioFromForecast("):]
+        block = block[:block.index("\n}\n")]
+        assert "openScenarioBuilderWith" in block
+        for forbidden in ("runScenarioCreation", "btn-run-toolbox-scenario",
+                          "simulate"):
+            assert forbidden not in block, forbidden
 
     def test_two_cards_on_two_pages_cannot_share_an_id(self):
         """

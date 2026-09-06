@@ -297,6 +297,13 @@ class ExecutionContext:
                 "code": result.error_code,
                 "message": result.error_message,
                 "failure_class": result.failure_class,
+                # What the failure knew about itself. `executor.py` puts the
+                # exception's own context here, and it was dropped at this hop
+                # — so an infeasible solve's diagnosis (how much demand could
+                # not be served, which markets, which site the optimiser would
+                # open) reached the response as a sentence in the message and
+                # as nothing a screen could render.
+                "context": dict(result.metadata.get("error_context") or {}),
             })
             status = (
                 EvidenceStatus.TIMEOUT if result.error_code == "ENGINE_TIMEOUT"

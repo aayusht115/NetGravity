@@ -748,6 +748,37 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   z-index: 90;
 }
 
+/* The band the bar could not cover.
+   `.main-content` is the scroll container and carries `padding: var(--space-lg)`.
+   A sticky child pins to the top of the SCROLLPORT, which is the padding box —
+   so this bar docks 24px below the container's visible top edge, and the
+   content scrolling underneath passes through those 24px in full view before
+   it reaches the bar. Measured on the KPI dashboard at scrollTop 150 and 600:
+   `#dash-facility-name`, `.facility-toolbar` and two chart canvases were all
+   painting in that band, above a bar whose whole job is to be in front of
+   them.
+
+   The band is real page, not a gap the bar could simply grow into: the tab
+   panels deliberately bleed out to the container's edges through the same
+   padding (see `#tab-facility-dashboard` and friends below), so removing the
+   container's padding would move every panel instead of fixing this.
+
+   So the bar covers it, with an opaque strip in its own background that is
+   part of the bar and therefore sticks with it. `left/right: 0` matches the
+   bar's own width, which is exactly the width content can occupy: each panel
+   pads its content back in by the same 24px it bled out by, so nothing can
+   ever appear beside the bar. */
+.app-global-topbar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: var(--space-lg);
+  background: var(--bg);
+  pointer-events: none;
+}
+
 .topbar-left-area {
   display: flex;
   align-items: center;
@@ -1959,6 +1990,316 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .scn-take-check-icon.good { background: #16a34a; }
 .scn-take-check-icon.warn { background: #d97706; }
 
+/* Where the words came from. Visibility of system status: a reader can tell
+   "the model wrote this" from "the deterministic template wrote this", and
+   "saved" from "written just now" — which is also how you tell a cached
+   explanation from a fresh model request. */
+.scn-take-source {
+  margin-left: auto;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--purple-100);
+  color: var(--primary);
+  cursor: help;
+}
+
+.scn-take-source.muted {
+  background: var(--bg-subtle, #f1f5f9);
+  color: var(--text-3);
+}
+
+/* The three supporting numbers. Supplied by the backend, formatted in the
+   project's own currency by `formatCurrency` — the model writes none of them.
+   Three, never four: a fourth is a table, and the table is already on the
+   left of this card. */
+.scn-take-figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.scn-take-figure {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--purple-100);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+.scn-take-figure-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 3px;
+}
+
+.scn-take-figure-value {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-1);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/* THE ANSWER, ABOVE EVERYTHING ELSE.
+
+   Four or five label/value pairs — what you changed, what it costs, how much
+   of that is the change itself, what it does to service, what it asks of
+   capacity. This sat across a verdict sentence, three paragraphs of narration,
+   a figure strip and a capacity section, all of it true and none of it in one
+   place, with the recommended actions below the lot.
+
+   A <dl> because these are definitions: a screen reader gets the pairing for
+   free, which a grid of divs does not give it.
+
+   Stacked, not two columns. On a card this narrow a label column would leave
+   the values about 180px and wrap every one — and these are read down, one
+   after another, not compared across. */
+.scn-glance {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--purple-100);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.scn-glance dt {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+
+.scn-glance dd {
+  margin: 0 0 9px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.scn-glance dd:last-child { margin-bottom: 0; }
+
+.scn-glance strong { font-weight: 800; }
+
+/* The distance from today, and its direction. Colour is not the only carrier —
+   every one of these is preceded by an arrow and followed by words. */
+.scn-glance-delta {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.scn-glance-delta.good { color: var(--green); }
+.scn-glance-delta.bad  { color: var(--red); }
+
+/* What the change asks of the network: which sites are full, which are working
+   harder, what was left closed. Rows rather than tiles — there can be five of
+   them, and a tile grid at that count stops being scannable.
+
+   Grid, not flex, so the utilisation column lines up down the list: the reader
+   is comparing those numbers to each other, which is exactly what a ragged
+   right edge prevents. */
+.scn-cap-group-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 10px 0 5px;
+}
+
+.scn-cap-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--r-sm, 6px);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--purple-100);
+  margin-bottom: 4px;
+}
+
+.scn-cap-site {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The region, where the upload states one. Second-order information about a
+   site whose name is the thing being read, so it is set as a quiet suffix
+   rather than as its own column. */
+.scn-cap-region {
+  /* Kept on one line. Site names here run to five words, and a chip allowed to
+     wrap left "DC ·" dangling at the end of one line and "NATIONAL" alone on
+     the next. */
+  white-space: nowrap;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-left: 6px;
+}
+
+.scn-cap-util {
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  justify-self: end;
+}
+
+.scn-cap-util.full { color: var(--red); }
+.scn-cap-util.hot  { color: var(--amber); }
+.scn-cap-util.idle {
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Where the number came from and what is new in it, under the site name so it
+   reads as a caption on that row rather than as a third column. */
+.scn-cap-delta {
+  grid-column: 1 / -1;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.scn-cap-more {
+  font-size: 10.5px;
+  color: var(--text-3);
+  padding: 2px 8px 4px;
+}
+
+/* The governance verdict: a statement about the recommended change, not a
+   control. It was a disabled button at the head of the action list, which is
+   a thing that looks pressable and is not. */
+.scn-take-governance {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px dashed var(--purple-200);
+  border-radius: var(--r-md);
+  padding: 8px 10px;
+  margin-bottom: 14px;
+}
+
+.scn-take-governance-tag {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--primary);
+  padding-top: 1px;
+}
+
+/* Recommended actions. Each one performs something this application actually
+   does; none of them approves a change. The label is the verb, the line under
+   it says what will happen — so nothing here is a leap of faith. */
+.scn-take-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.scn-take-action {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  background: #ffffff;
+  border: 1px solid var(--purple-100);
+  border-radius: var(--r-md);
+  padding: 9px 11px;
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.scn-take-action:hover:not(:disabled) {
+  border-color: var(--purple-300);
+  box-shadow: 0 2px 10px rgba(107, 47, 160, 0.12);
+  transform: translateY(-1px);
+}
+
+.scn-take-action:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.scn-take-action.primary {
+  background: linear-gradient(135deg, #7c3aed 0%, #6B2FA0 100%);
+  border-color: transparent;
+  box-shadow: 0 4px 14px rgba(107, 47, 160, 0.28);
+}
+
+.scn-take-action.primary .scn-take-action-label { color: #ffffff; }
+.scn-take-action.primary .scn-take-action-detail { color: rgba(255, 255, 255, 0.85); }
+
+.scn-take-action-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.3;
+}
+
+.scn-take-action-detail {
+  display: block;
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.45;
+  margin-top: 2px;
+}
+
+/* The technical account, collapsed. The conclusion above is said once; this
+   is where the caveats and the working live. */
+.scn-take-details {
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+
+.scn-take-details > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--primary);
+  list-style: none;
+}
+
+.scn-take-details > summary::-webkit-details-marker { display: none; }
+.scn-take-details > summary::before { content: '▸ '; }
+.scn-take-details[open] > summary::before { content: '▾ '; }
+
+.scn-take-details ul {
+  margin: 8px 0 0;
+  padding-left: 16px;
+  line-height: 1.55;
+}
+
+.scn-take-details li { margin-bottom: 5px; }
+
 .scn-take-tradeoff {
   display: flex;
   align-items: flex-start;
@@ -1973,6 +2314,11 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 .scn-take-tradeoff-icon { font-size: 13px; }
+
+/* Two findings can share the band — the ranking's trade-off and the
+   briefing's risk. They are separate sentences, so they are separate lines. */
+.scn-take-tradeoff-line { display: block; line-height: 1.5; }
+.scn-take-tradeoff-line + .scn-take-tradeoff-line { margin-top: 6px; }
 
 .scn-take-review-btn {
   width: 100%;
@@ -2046,6 +2392,20 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   border-radius: var(--r-lg);
   padding: 16px 20px;
   box-shadow: var(--shadow-sm);
+}
+
+/* The comparison table's empty state.
+   It used to carry an inline `padding: 18px` inside a card that already pads
+   16px/20px, so one sentence sat 34px in from the card's edge — out of line
+   with the "Comparison" heading directly above it — in a 972x134 box at 6%
+   ink coverage, the sparsest card in the product. Aligned to the heading,
+   and as tall as the sentence it holds. */
+.scn-empty-note {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+  padding: 2px 0 6px;
+  max-width: 78ch;
 }
 
 .scn-table-header-row {
@@ -3684,3 +4044,304 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 .scn-col-review:hover { background: var(--surface-2, #f8fafc); }
 .scn-col-review:focus-visible { outline: 2px solid var(--primary, #6B2FA0); outline-offset: 1px; }
+
+
+/* ═══════════════════════════════════════════════════════════════
+   BACKGROUND WORK TRAY — a run that was left, still running
+   ═══════════════════════════════════════════════════════════════
+
+   A scenario solve measured at 700+ seconds held the entire workspace behind
+   a blurred scrim with no exit. This is what the reader gets back when they
+   leave it: a small card that says the work is still happening, counts, and
+   tells them the moment it lands — on whichever screen they moved to.
+
+   BOTTOM LEFT, deliberately. The assistant's floating button owns the bottom
+   right, and the reason to leave a solve running is usually to go and use the
+   assistant or the Digital Twin. A tray that covered the way to either would
+   have removed the freedom it exists to give.
+
+   It does not steal focus, does not take a click anywhere else on the page,
+   and does not disappear on its own — a notice that clears itself is a notice
+   the reader who stepped away never sees. */
+.ng-bg-tray {
+  position: fixed;
+  /* Clear of the sidebar, not on top of it. At `left: 28px` the card covered
+     the network summary in the rail — a notice that hides the thing beside it
+     has traded one piece of information for another. */
+  left: calc(var(--sidebar-w, 220px) + 24px);
+  bottom: 28px;
+  z-index: 99991;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(380px, calc(100vw - var(--sidebar-w, 220px) - 48px));
+  pointer-events: none;
+}
+
+.ng-bg-tray.visible { display: flex; }
+
+.ng-bg-card {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border-radius: var(--r-lg);
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border-light);
+  box-shadow: 0 10px 30px rgba(24, 12, 38, 0.14), 0 2px 6px rgba(0, 0, 0, 0.06);
+  animation: ng-bg-in 0.28s ease-out both;
+}
+
+@keyframes ng-bg-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.ng-bg-card.running { border-left: 3px solid var(--primary); }
+.ng-bg-card.done    { border-left: 3px solid var(--green); }
+.ng-bg-card.failed  { border-left: 3px solid var(--red); }
+
+.ng-bg-text { flex: 1 1 auto; min-width: 0; }
+
+.ng-bg-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-1);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.ng-bg-sub {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+.ng-bg-elapsed {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+/* The only moving thing on the card, and it moves because a request really is
+   in flight. */
+.ng-bg-spinner {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 2px solid var(--purple-100);
+  border-top-color: var(--primary);
+  animation: ng-bg-spin 0.9s linear infinite;
+}
+
+@keyframes ng-bg-spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ng-bg-spinner { animation-duration: 2.4s; }
+  .ng-bg-card { animation: none; }
+}
+
+.ng-bg-mark {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  color: #ffffff;
+  background: var(--red);
+}
+
+.ng-bg-mark.ok { background: var(--green); }
+
+.ng-bg-open {
+  flex: 0 0 auto;
+  align-self: center;
+  border: none;
+  background: var(--primary);
+  color: var(--text-on-primary);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ng-bg-open:hover { filter: brightness(1.08); }
+
+.ng-bg-dismiss {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0 0 0 4px;
+  cursor: pointer;
+}
+
+.ng-bg-dismiss:hover { color: var(--text-1); }
+
+.ng-bg-open:focus-visible,
+.ng-bg-dismiss:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   FORECAST — what the projection says, and what to do about it
+   ═══════════════════════════════════════════════════════════════
+
+   This card replaced a second copy of Home's "Needs your attention". The
+   finding there was correct and was the answer to a different question; a
+   reader on this screen is asking what the demand projection means.
+
+   Set to match the recommendation card's own glance block and action list —
+   the two screens now say two different things and should still look like one
+   application. */
+.fc-attn-facts {
+  margin: 12px 0 4px;
+  padding: 0;
+}
+
+.fc-attn-facts dt {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin-bottom: 2px;
+}
+
+.fc-attn-facts dd {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.fc-attn-facts dd:last-child { margin-bottom: 0; }
+
+/* The direction of the change, and never by colour alone — every one of these
+   is preceded by an arrow and followed by words. */
+.fc-attn-delta {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fc-attn-delta.up   { color: var(--amber); }
+.fc-attn-delta.down { color: var(--text-2); }
+
+.fc-attn-warning {
+  margin-top: 10px;
+  padding: 9px 11px;
+  border-radius: var(--r-md);
+  background: var(--amber-bg);
+  border: 1px solid rgba(217, 119, 6, 0.28);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #92400e;
+}
+
+/* Each one opens the scenario builder filled in. None of them runs anything:
+   a forecast is a projection, and testing the network against it is a
+   decision a person makes. */
+.fc-attn-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.fc-attn-action {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 9px 11px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--purple-100);
+  background: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color .18s ease, background .18s ease;
+}
+
+.fc-attn-action:hover {
+  border-color: var(--purple-200);
+  background: #ffffff;
+}
+
+.fc-attn-action.primary {
+  border-color: var(--primary);
+  background: var(--purple-50);
+}
+
+.fc-attn-action:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.fc-attn-action-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.fc-attn-action-detail {
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+
+
+/* The figures behind a refused scenario.
+
+   A run the solver could not solve used to be one line of red text. These are
+   the numbers from the diagnostic solve that says why — the shortfall, the
+   markets it falls in, and any proposed site the optimiser would build. Set
+   inside the error banner, quieter than the sentence above them, because the
+   sentence is the finding and these are its evidence. */
+.scn-infeasible-detail {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(220, 38, 38, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.scn-infeasible-row {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.scn-infeasible-row > span:first-child {
+  flex: 0 0 108px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.scn-infeasible-row > span:last-child {
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}

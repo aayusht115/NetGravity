@@ -800,6 +800,61 @@ class AssignmentDecision(BaseModel):
 # Full Optimization Result
 # ---------------------------------------------------------------------------
 
+class InfeasibilityDiagnosis(BaseModel):
+    """
+    Why a solve proved infeasible, in units, from a diagnostic re-solve.
+
+    NOT A RESULT. The solve it describes is still INFEASIBLE and still has no
+    KPIs: `unserved_demand` here is what a DIFFERENT model — the same network
+    asked to serve what it can rather than everything — reports it could not
+    reach. It is the answer to "why", never to "what is the plan".
+
+    That separation is the whole design, and it is the same one
+    `resilience/rei.py::_service_diagnostic` makes for disrupted networks:
+    service fields only, no cost, so a figure produced under an artificial
+    shortage penalty can never be read as money anyone pays.
+
+    Every field is None when the diagnostic itself did not solve — which is
+    itself worth reporting, because "the network cannot serve this even when
+    allowed to give up on some of it" is a stronger finding than a shortfall.
+    """
+
+    #: Whether the diagnostic model solved at all.
+    diagnosed: bool = False
+
+    #: What the network could not deliver even when permitted to strand
+    #: demand. None when the diagnostic did not solve.
+    unserved_demand: Optional[float] = None
+    total_demand: Optional[float] = None
+    #: `unserved / total`, as a fraction in [0, 1].
+    unserved_rate: Optional[float] = None
+
+    #: The markets left short, largest first, as {market_id, unserved}. Named
+    #: because "you are 23% short" is a fact and "Delhi and Pune are short" is
+    #: something a planner can act on.
+    short_markets: List[Dict[str, Any]] = Field(default_factory=list)
+
+    #: Sites the diagnostic model chose to open. The strict solve evaluated
+    #: none, so this is the only statement available about what a working plan
+    #: would look like.
+    would_open: List[str] = Field(default_factory=list)
+
+    #: Of those, the ones that do not exist yet — facilities the client has
+    #: only PROPOSED. This is the sentence a planner is actually waiting for:
+    #: "the network is short, and the optimiser would build the site you are
+    #: considering" is a different finding from "it would use what you already
+    #: run".
+    would_open_candidates: List[str] = Field(default_factory=list)
+
+    #: One sentence, for a reader rather than a log.
+    summary: str = ""
+
+    #: Why no diagnosis is available, when none is.
+    reason: str = ""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class OptimizationResult(BaseModel):
     """
     Complete, structured output from one optimization run.
@@ -843,6 +898,13 @@ class OptimizationResult(BaseModel):
     # a scenario override) rather than the observed one. Only
     # ACTUAL_AS_IS_EVALUATION yields False.
     is_hypothetical:   bool = True
+
+    #: Why this solve proved infeasible, when it did.
+    #:
+    #: Present ONLY on an INFEASIBLE result, and never a substitute for one: a
+    #: screen still has no cost, no plan and no served volume here. It has a
+    #: reason, in units, which is what an empty dashboard could not give.
+    infeasibility: Optional[InfeasibilityDiagnosis] = None
 
     # KPIs and analytics
     kpis:            Optional[NetworkKPIs]      = None

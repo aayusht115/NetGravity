@@ -253,7 +253,11 @@ function packetMarkup() {
     const span = Math.hypot(px(b.lng) - px(a.lng), py(b.lat) - py(a.lat));
     // The arc is longer than the chord it bows from; ~8% is that difference
     // at the lifts these corridors use.
-    const dur = Math.min(13, Math.max(5.5, (span * (1 + lift * 0.5)) / 78));
+    //
+    // Slower than it was (78 px/s): at that speed the eye tracked individual
+    // packets across the map, which is a thing to watch rather than a thing
+    // happening behind a sign-in form.
+    const dur = Math.min(17, Math.max(7.5, (span * (1 + lift * 0.5)) / 58));
     return [0, dur / 2].map((begin, k) => `
       <g class="lw-packet">
         <circle class="lw-packet-glow" r="8.2" />
@@ -263,6 +267,19 @@ function packetMarkup() {
                        keyPoints="${k % 2 ? '1;0' : '0;1'}" keyTimes="0;1">
           <mpath href="#lw-c${i}" xlink:href="#lw-c${i}" />
         </animateMotion>
+        <!-- Fades in as it leaves and out as it arrives.
+             Linear motion is right for a loop — easing would decelerate into
+             the hub and then snap back to the other end, which is the pop
+             this removes — but a packet appearing and vanishing at full
+             brightness pops just as hard. This is the same clock: an
+             animateMotion and an animate with identical dur and begin stay
+             in step, which two CSS animations on the same element would not
+             be guaranteed to do. -->
+        <animate attributeName="opacity" values="0;1;1;0"
+                 keyTimes="0;0.14;0.86;1" calcMode="spline"
+                 keySplines="0.4 0 0.6 1;0 0 1 1;0.4 0 0.6 1"
+                 dur="${dur.toFixed(2)}s" begin="${begin.toFixed(2)}s"
+                 repeatCount="indefinite" />
       </g>`).join('');
   }).join('');
 }

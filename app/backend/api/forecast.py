@@ -115,24 +115,153 @@ def _uploaded_signals_for(orchestrator: Any, snapshot_id: str
     if not raw:
         return [], []
 
-    from netgravity.ingestion.schemas.signal import MarketIntelligenceSignal
-
     signals: List[Any] = []
     for index, row in enumerate(raw):
         if not isinstance(row, dict):
             notes.append(f"uploaded signal {index} is not an object and was skipped")
             continue
         try:
-            signals.append(MarketIntelligenceSignal(**row))
+            signals.append(_as_market_intelligence(row))
         except Exception as exc:  # noqa: BLE001
-            title = str(row.get("title") or f"signal {index}")[:60]
+            title = str(row.get("description") or row.get("title")
+                        or f"signal {index}")[:60]
             notes.append(
                 f"uploaded signal '{title}' could not be read as market "
                 f"intelligence and did not reach the forecast: "
                 f"{type(exc).__name__}")
+
+    # THE GUARDRAIL, actually run.
+    #
+    # `route_for_forecast` refuses anything that has not cleared it, and an
+    # uploaded row arrives with no verdict at all — so before this, a correctly
+    # mapped signal would still have been refused, and asserting a verdict here
+    # would be forging the one check that decides whether market intelligence
+    # may move a number. This is the same policy, thresholds and classifier the
+    # extraction path uses; a signal that does not clear it is refused and the
+    # refusal is reported by the router.
+    #
+    # Scored against every node in the network. A market is a FACILITY with
+    # role MARKET, so a signal naming M001 earns the entity-match bonus here
+    # exactly as one naming a DC would.
+    if signals:
+        try:
+            from netgravity.ingestion.guardrails import relevance
+
+            network = orchestrator.snapshots.get(snapshot_id).network
+            scope = {f.id for f in network.facilities}
+            signals = relevance.apply(signals, known_entity_ids=scope)
+        except Exception as exc:  # noqa: BLE001 — a forecast without them still stands
+            logger.warning("forecast.signals.guardrail_failed: %s", exc)
+            notes.append(
+                "the relevance guardrail could not be run over the uploaded "
+                "signals, so none of them informed this forecast")
+            signals = []
+
     logger.info("forecast.signals.attached snapshot=%s usable=%d unreadable=%d",
                 snapshot_id, len(signals), len(notes))
     return signals, notes
+
+
+def _as_market_intelligence(row: Dict[str, Any]) -> Any:
+    """
+    One uploaded signal row, as the type the guardrail and router read.
+
+    The ingestion structure's shape shares no field name with
+    `MarketIntelligenceSignal`, which is why `MarketIntelligenceSignal(**row)`
+    raised on every row of every upload.
+
+    WHAT IS MAPPED AND WHAT IS NOT. `id`, `date`, `description` and `marketId`
+    have exact counterparts. `relevance` is HIGH/MEDIUM/LOW on both sides.
+    `type` is the upload's own word for what kind of event this is and is left
+    for the guardrail's classifier to bucket — it reads the text, and its
+    keyword table is the declared policy for that decision.
+
+    DIRECTION is read only where the type states one. A signal typed
+    CUSTOMER_EXPANSION or MARKET_GROWTH is unambiguously upward; one typed
+    WEATHER_DISRUPTION states no direction about demand, and guessing would
+    hand the rules table a mechanism nobody declared. NEUTRAL is the honest
+    default, and `_RULES` acts on it only for WEATHER, where the declared
+    effect is to widen the band rather than move the estimate.
+
+    `probability` is deliberately dropped rather than carried: a field named
+    probability makes this a RISK signal, and `route_for_forecast` refuses
+    those outright — event likelihood belongs to the RF pathway, never to a
+    forecast. An uploaded row that carries one is market intelligence with a
+    number attached in the wrong column, not a hazard.
+    """
+    from netgravity.ingestion.schemas.signal import (
+        MarketIntelligenceSignal,
+        SignalConfidence,
+        SignalDirection,
+    )
+
+    kind = str(row.get("type") or "").upper()
+    up = any(w in kind for w in ("EXPANSION", "GROWTH", "INCREASE", "SURGE"))
+    down = any(w in kind for w in ("CONTRACTION", "DECLINE", "DECREASE",
+                                   "CLOSURE", "SHUTDOWN"))
+    direction = (SignalDirection.UP if up
+                 else SignalDirection.DOWN if down
+                 else SignalDirection.NEUTRAL)
+
+    confidence = str(row.get("relevance") or "").upper()
+    market = str(row.get("marketId") or "").strip()
+    text = str(row.get("description") or row.get("type") or row.get("id") or "")
+
+    return MarketIntelligenceSignal(
+        signal_id=str(row.get("id") or row.get("signal_id") or ""),
+        title=text[:200],
+        published_date=str(row.get("date") or ""),
+        effective_date=str(row.get("date") or "") or None,
+        direction=direction,
+        # The upload's own type, kept verbatim so the classifier reads the
+        # word the client used rather than a paraphrase of it.
+        magnitude=str(row.get("type") or ""),
+        affected_entities=[market] if market else [],
+        geography=market,
+        confidence=(SignalConfidence(confidence)
+                    if confidence in SignalConfidence.__members__
+                    else SignalConfidence.MEDIUM),
+        rationale=text,
+        structured_by="upload",
+    )
+
+
+def _forecast_explanation(ctx: Any) -> Dict[str, Any]:
+    """
+    The forecast's grounded briefing, in the shape the card reads.
+
+    Already computed and already grounded — the forecast workflow runs
+    `reasoning.synthesise` on every request and `numeric_grounding` has
+    re-checked every numeric claim by the time it gets here. Nothing is
+    generated and nothing is recomputed; this selects fields off
+    `ExecutiveBriefing`, exactly as `_scenario_explanation` does.
+
+    Returns {} when the run produced no briefing, so the screen says it has
+    nothing to explain rather than showing the network's briefing in its place
+    — which is what it did before, in a second copy of Home's card.
+    """
+    reasoning = getattr(ctx, "reasoning", None)
+    briefing = getattr(reasoning, "briefing", None) if reasoning else None
+    if briefing is None:
+        return {}
+
+    from netgravity.orchestrator.explanation_service import build_card
+
+    return {
+        "card": build_card(reasoning),
+        "scope": briefing.scope.value,
+        "opening": briefing.opening,
+        "insights": [
+            {"theme": i.theme, "headline": i.headline,
+             "narrative": i.narrative, "severity": i.severity.value}
+            for i in briefing.kpi_insights
+        ],
+        "recommendation": briefing.recommendation,
+        "limitation": briefing.limitation,
+        "evidence_completeness": briefing.evidence_completeness.value,
+        "source": getattr(reasoning, "source", "template"),
+        "grounding": {"warnings": list(getattr(reasoning, "validation_warnings", []))},
+    }
 
 
 def create_forecast_blueprint(orchestrator: Optional[Orchestrator] = None,
@@ -262,6 +391,26 @@ def create_forecast_blueprint(orchestrator: Optional[Orchestrator] = None,
         # that was refused.
         adjusted = sum(1 for row in series if row.get("signal_adjustments"))
 
+        # What the forecast IMPLIES — how much demand against how much was
+        # observed, where it is growing, what the signals moved. Computed by
+        # the forecasting capability itself (`_forecast_outlook`), so the
+        # briefing above and this block cannot disagree about a number.
+        outlook = (ctx.output_of("forecast.demand") or {}).get("outlook") or {}
+        # Built once. Called twice it could, in principle, answer differently,
+        # and the two answers would sit in the same response.
+        explanation = _forecast_explanation(ctx)
+
+        # WHICH uploaded signal actually moved this forecast, by id.
+        #
+        # The screen showed "Not yet applied" on every signal, from a hardcoded
+        # string written when nothing routed them. They are routed; the chip
+        # simply had no way to know. This is the routing's own answer.
+        applied_signal_ids = sorted({
+            a["signal_id"] for row in series
+            for a in (row.get("signal_adjustments") or [])
+            if a.get("signal_id")
+        })
+
         return jsonify({
             "project_id": project_id,
             "snapshot_id": snapshot_id,
@@ -269,16 +418,28 @@ def create_forecast_blueprint(orchestrator: Optional[Orchestrator] = None,
             "status": "OK",
             "horizon": horizon,
             "series": series,
+            # The forecast's own grounded briefing, FORECAST-scoped, from the
+            # reasoning step this workflow already runs. It was computed on
+            # every request and returned on none of them, so the screen had
+            # only the network's general briefing to show beside a projection.
+            "explanation": explanation,
+            "outlook": outlook,
             "signals": {
                 "attached": len(signals),
                 "series_adjusted": adjusted,
+                "applied_signal_ids": applied_signal_ids,
                 "unreadable": signal_notes,
             },
             "warnings": list(getattr(ctx, "warnings", []) or []) + signal_notes,
             "provenance": {
                 "authoritative_source": "netgravity.forecasting",
                 "routed_through": "orchestrator capability 'forecast.demand'",
+                # Every FIGURE is still the forecaster's, whichever voice the
+                # briefing is in. `disable_llm=True` on this request means the
+                # briefing is the deterministic template's — stated here rather
+                # than as a bare False, which said nothing about the words.
                 "llm_used": False,
+                "explanation_source": explanation.get("source") or "template",
             },
         }), 200
 

@@ -190,6 +190,42 @@
 
 .agl-skip[hidden] { display: none !important; }
 
+/* The way out of the WAIT, as distinct from the way out of the pacing beside
+   it. Filled rather than outlined because on a run long enough to be offered
+   it, this is the thing to press — and a reader who has been held for four
+   minutes should not have to find it. Its title says what happens to the run,
+   because a button on a modal over running work reads as a cancel until it is
+   told otherwise. */
+.agl-background {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  margin-left: 8px;
+  border: 1px solid transparent;
+  background: var(--primary, #6B2FA0);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: -0.01em;
+  padding: 5px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter .2s ease;
+}
+
+/* First control in the row when "Skip to latest" is not being offered. */
+.agl-skip[hidden] + .agl-background { margin-left: auto; }
+
+.agl-background:hover { filter: brightness(1.1); }
+
+.agl-background:focus-visible {
+  outline: 2px solid var(--primary, #6B2FA0);
+  outline-offset: 2px;
+}
+
+.agl-background[hidden] { display: none !important; }
+
 /* ─── progress ────────────────────────────────────────────────── */
 .agl-bar {
   height: 5px;

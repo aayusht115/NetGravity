@@ -171,6 +171,11 @@ export function mapScenarioRecord(raw) {
     // Authoritative measurements. `value` is null whenever `status` is not
     // VALID; the UI must render `status`, not coerce the null.
     ...readNetworkFigures(kpis),
+    // The band the BACKEND derived, where it derived one. It ranks and warns
+    // on this value, so a screen showing a different band than the ranking
+    // used would be describing a decision that was not made. Older stored
+    // scenarios carry none and keep the mapper's own reading above.
+    ...(raw.capacity_risk ? { capacityRisk: raw.capacity_risk } : {}),
 
     costChange: costDelta.percentage === null
       ? null : +costDelta.percentage.toFixed(2),
@@ -201,11 +206,25 @@ export function mapScenarioRecord(raw) {
     // carry their own coordinates, because the KPI layer's per-facility record
     // is a solver outcome and has none.
     newSites: raw.new_sites || [],
+
+    // What the change asks of the sites that have to absorb it: which are
+    // full, how much more each carries, what capacity was left closed, and
+    // which regions have no room left. Derived on the server from the
+    // authoritative per-facility values — see `_capacity_response`. Null for
+    // a scenario solved before it existed, and the card renders nothing
+    // rather than deriving a substitute here.
+    capacityResponse: raw.capacity_response || null,
     // What the builder actually did, in its own words.
     overrides: raw.overrides || [],
     triggeredThresholds: raw.triggered_thresholds || [],
     provenance: raw.provenance || {},
     request: raw.request || {},
+
+    // THIS scenario's own grounded briefing, SCENARIO-scoped, produced by the
+    // reasoning step its workflow already ran. Null for a scenario solved
+    // before explanations were returned — the recommendation panel says so
+    // rather than showing the network's briefing under this scenario's name.
+    explanation: raw.explanation || null,
 
     // Not produced by any engine — left empty rather than fabricated.
     implementationCost: null,
@@ -249,6 +268,8 @@ export function baselineFromScenarioRecord(raw) {
     executionId: raw.execution_id,
     feasible: true,
     ...readNetworkFigures(raw.baseline_kpis),
+    ...(raw.baseline_capacity_risk
+      ? { capacityRisk: raw.baseline_capacity_risk } : {}),
     // The baseline is the reference, so it has no change against itself.
     costChange: 0,
     costChangeAbsolute: 0,

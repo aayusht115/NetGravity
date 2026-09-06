@@ -77,10 +77,13 @@
 import {
   HOME_INSIGHTS, NETWORK_INSIGHTS, NETWORK_RECOMMENDATION, OBSERVED_UTILISATION,
   getFacilityById, PLANTS, DCS,
+  HOME_ACTION_ITEMS, NOTIFICATION_RECIPIENTS, EMAIL_DELIVERY,
 } from './data.js';
 
 /* ─── Icons ──────────────────────────────────────────────────── */
 const ICON = {
+  mail: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="15" height="11" rx="1.6"/><path d="M2.9 5.4 10 10.6l7.1-5.2"/></svg>',
+  upload: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13V3.4M6.4 6.8 10 3.2l3.6 3.6"/><path d="M3.4 12.6v2.8a1.4 1.4 0 0 0 1.4 1.4h10.4a1.4 1.4 0 0 0 1.4-1.4v-2.8"/></svg>',
   arrowLeft: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15l-5-5 5-5"/></svg>`,
   arrowRight: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10h10M11 6l4 4-4 4"/></svg>`,
   play: `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"/></svg>`,
@@ -734,21 +737,460 @@ function bindDeepDive() {
    Entry points / navigation
    ═══════════════════════════════════════════════════════════════ */
 
+/* ═══════════════════════════════════════════════════════════════
+   ACTION VIEW — a request to a person, not a finding about a network
+   ───────────────────────────────────────────────────────────────
+   The same page, a different thing on it. An action item comes from the
+   deterministic completeness gate: a column the upload does not carry, and
+   the sites it is missing from. Nothing was solved to produce it, so this
+   view has no chart, no evidence table and no recommendation — there is no
+   figure to plot and none to cite. What it has instead is the request, and
+   the means to send it.
+
+   The panel is on screen from the moment the page opens rather than behind
+   a "compose" button. It is the whole reason to be on this page; hiding it
+   behind a click would be one step of ceremony protecting nothing, and the
+   reader would have to remember what the page was for.
+   ═══════════════════════════════════════════════════════════════ */
+
+const insdAction = {
+  /** The action being looked at. */
+  item: null,
+  /** Addresses currently ticked, as a Set of lowercased emails. */
+  selected: new Set(),
+  /** Result of the last send on this page, shown until it is left. */
+  outcome: null,
+  sending: false,
+};
+
+function findAction(id) {
+  return HOME_ACTION_ITEMS.find((a) => a.id === id) || null;
+}
+
+function insdValidEmail(value) {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(value || '').trim());
+}
+
+/** The sites the field is missing from. Long lists collapse. */
+function affectedHtml(item) {
+  const names = item.entities || [];
+  if (!names.length) {
+    return `<p class="insd-action-note">This applies to the upload as a whole —
+      the gate found no column for it anywhere in the file.</p>`;
+  }
+  const LIMIT = 8;
+  const shown = names.slice(0, LIMIT);
+  const hidden = names.slice(LIMIT);
+  return `
+    <div class="insd-affected">
+      <div class="insd-affected-head">
+        ${insdEsc(item.entityType || 'Record')}${names.length === 1 ? '' : 's'} affected
+        <span class="insd-affected-count">${names.length}</span>
+      </div>
+      <ul class="insd-affected-list">
+        ${shown.map((n) => `<li>${insdEsc(n)}</li>`).join('')}
+      </ul>
+      ${hidden.length ? `
+      <details class="insd-affected-more">
+        <summary>${hidden.length} more</summary>
+        <ul class="insd-affected-list">
+          ${hidden.map((n) => `<li>${insdEsc(n)}</li>`).join('')}
+        </ul>
+      </details>` : ''}
+    </div>`;
+}
+
+/** What this field is, and what its absence costs. */
+function whatsMissingHtml(item) {
+  const required = item.severity === 'REQUIRED';
+  const consequence = required
+    ? `The analysis is running without it. Every figure that depends on this
+       field is computed from the sites that do state it, so the network's
+       totals are incomplete rather than wrong.`
+    : (item.whatItUnlocks
+        ? `Providing it ${insdEsc(item.whatItUnlocks.replace(/^would /, 'would '))}.`
+        : 'The analysis ran without it.');
+  return `
+    <div class="insd-card">
+      <div class="insd-chart-head">
+        <div class="insd-chart-title">What is missing</div>
+        <span class="insd-badge tone-${required ? 'risk' : 'info'}">
+          ${required ? 'REQUIRED' : 'OPTIONAL'}</span>
+      </div>
+      <div class="insd-missing-field">
+        ${insdEsc(item.displayLabel)}
+        ${item.unit ? `<span class="insd-missing-unit">${insdEsc(item.unit)}</span>` : ''}
+      </div>
+      <p class="insd-action-note">${consequence}</p>
+      ${affectedHtml(item)}
+    </div>`;
+}
+
+/** The standing recipient list as ticks, plus a field for anyone else. */
+function recipientsHtml() {
+  if (!NOTIFICATION_RECIPIENTS.length) {
+    return `
+      <p class="insd-action-note">No addresses are saved yet. Add the person who
+        owns this data below — they will be offered next time.</p>`;
+  }
+  return `
+    <div class="insd-recipients">
+      ${NOTIFICATION_RECIPIENTS.map((r) => {
+        const on = insdAction.selected.has(r.email.toLowerCase());
+        return `
+        <label class="insd-recipient${on ? ' is-on' : ''}">
+          <input type="checkbox" data-recipient="${insdEsc(r.email)}" ${on ? 'checked' : ''}>
+          <span class="insd-recipient-label">${insdEsc(r.label || r.email)}</span>
+          <span class="insd-recipient-email">${insdEsc(r.email)}</span>
+        </label>`;
+      }).join('')}
+    </div>`;
+}
+
 /**
- * Open the deep dive for one insight.
+ * What will happen when this button is pressed, in the reader's own terms.
  *
- * `kind` is accepted and ignored for the moment: the attention feed passes
- * 'insight' or 'action', and `HOME_ACTION_ITEMS` is currently empty because no
- * engine produces a discrete action record. When one does, this is where that
- * branch belongs; until then an unfound id opens nothing rather than opening a
- * page about the wrong thing.
+ * `stub` is the state this build ships in — no outbound credential is
+ * configured, so `EmailSender` logs the message and returns a labelled stub.
+ * Saying so is not a disclaimer; it is the difference between a feature and a
+ * lie about one.
+ *
+ * What it does NOT do is name an environment variable. This screen is read by
+ * whoever owns the network, not by whoever deploys it: they cannot set
+ * `NETGRAVITY_SMTP_HOST`, should not have to know it exists, and telling them
+ * to is an instruction addressed to somebody who is not in the room. The
+ * person who CAN set it reads `/api/status`, where `outbound_email` names the
+ * variable and the reason.
+ */
+function deliveryNoteHtml() {
+  if (EMAIL_DELIVERY.mode !== 'stub') return '';
+  return `
+    <p class="insd-delivery-note">
+      ${ICON.info}
+      <span><strong>Email is not switched on for this workspace yet.</strong>
+        Pressing send will save the request and record who it is for, so the
+        wording and the audit trail are ready — but the message will not leave
+        this system. Ask whoever administers your NetGravity deployment to
+        connect a mail server, and you can copy the message below in the
+        meantime.</span>
+    </p>`;
+}
+
+/** A moment a person can place, from a timestamp only a machine can. */
+function insdWhen(value) {
+  const at = new Date(value);
+  if (!value || Number.isNaN(at.getTime())) return '';
+  const sameDay = new Date().toDateString() === at.toDateString();
+  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return sameDay ? `today at ${time}`
+    : `on ${at.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${time}`;
+}
+
+/** "a@b.com and c@d.com", "a@b.com, c@d.com and e@f.com" — never "a, b, c". */
+function insdList(values) {
+  const items = (values || []).filter(Boolean);
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+}
+
+/**
+ * What happened just now, or what happened last time.
+ *
+ * Four outcomes, not three. `partial` is the one that was missing and the one
+ * that matters most: `SMTP.send_message` raises only when it rejects EVERY
+ * address, so a mistyped address in a list of four used to come back as a
+ * clean send and that person was never asked. It names them.
+ */
+function outcomeHtml() {
+  const item = insdAction.item;
+  const outcome = insdAction.outcome;
+  const previous = item && item.lastSent;
+
+  if (outcome) {
+    const delivered = insdList(outcome.delivered && outcome.delivered.length
+      ? outcome.delivered : outcome.recipients);
+    const refused = insdList(outcome.refused);
+    const tone = outcome.delivery === 'sent' ? 'good'
+      : outcome.delivery === 'stubbed' ? 'info' : 'bad';
+    let said;
+    if (outcome.delivery === 'sent') {
+      said = `Sent to ${delivered}.`;
+    } else if (outcome.delivery === 'partial') {
+      said = `Sent to ${delivered}, but the mail server would not accept `
+        + `${refused} — so they have not been asked. Check the address and `
+        + `send again to them alone.`;
+    } else if (outcome.delivery === 'stubbed') {
+      said = `Saved for ${delivered}. Nothing was delivered — email is not `
+        + 'switched on for this workspace yet.';
+    } else {
+      // The real reason, which the endpoint used to swallow: a configured
+      // mail server that rejected the message was reported as "no mail server
+      // is configured", and the SMTP error went nowhere.
+      said = `Not sent. ${outcome.notes || 'The mail server rejected the message.'}`;
+    }
+    return `<div class="insd-outcome tone-${tone}">${insdEsc(said)}</div>`;
+  }
+  if (previous) {
+    // TO, not from — the one word in this sentence that says which direction
+    // the request went, and it was the wrong one.
+    const when = insdWhen(previous.sent_at);
+    const who = insdList(previous.recipients || []);
+    // The VERB follows the outcome. "Already sent to X ... It was saved but
+    // not delivered" contradicts itself in its own second clause, and a
+    // reader who stops at the first full stop has been told something false.
+    const said = previous.result === 'stubbed'
+      ? `Already saved for ${who}${when ? ` ${when}` : ''} — not delivered, `
+        + 'because email is not switched on for this workspace yet.'
+      : previous.result === 'failed'
+        ? `Last attempt to reach ${who}${when ? ` ${when}` : ''} did not get through.`
+        : previous.result === 'partial'
+          ? `Already sent to some of ${who}${when ? ` ${when}` : ''} — the mail `
+            + 'server refused the rest.'
+          : `Already sent to ${who}${when ? ` ${when}` : ''}.`;
+    return `<div class="insd-outcome tone-info">${insdEsc(said)}</div>`;
+  }
+  return '';
+}
+
+function requestPanelHtml(item) {
+  const draft = item.draft || { subject: '', body: '' };
+  return `
+    <div class="insd-card insd-request">
+      <div class="insd-chart-head">
+        <div class="insd-chart-title">Request this data</div>
+      </div>
+
+      <label class="insd-field-label" for="insd-subject">Subject</label>
+      <input class="insd-input" id="insd-subject" type="text"
+             value="${insdEsc(draft.subject)}">
+
+      <label class="insd-field-label">Send to</label>
+      ${recipientsHtml()}
+      <div class="insd-add-row">
+        <input class="insd-input" id="insd-new-recipient" type="email"
+               placeholder="someone@company.com"
+               aria-label="Add another email address">
+        <button type="button" class="insd-btn-secondary insd-btn-compact"
+                id="insd-add-recipient">Add</button>
+      </div>
+      <p class="insd-field-error" id="insd-recipient-error" hidden></p>
+
+      <label class="insd-field-label" for="insd-message">Message</label>
+      <textarea class="insd-textarea" id="insd-message" rows="10"
+                spellcheck="false">${insdEsc(draft.body)}</textarea>
+      <p class="insd-action-note insd-note-tight">Written from the gap itself —
+        the field name and the sites it is missing from. Edit anything before
+        sending.</p>
+
+      ${deliveryNoteHtml()}
+      ${outcomeHtml()}
+
+      <button type="button" class="insd-btn-primary insd-send-btn" id="insd-send">
+        ${ICON.mail}<span>${EMAIL_DELIVERY.mode === 'stub'
+          ? 'Save request' : 'Send request'}</span>
+      </button>
+    </div>`;
+}
+
+function renderActionDetail() {
+  const page = document.getElementById('tab-insight-detail');
+  const item = insdAction.item;
+  if (!page || !item) return;
+
+  const required = item.severity === 'REQUIRED';
+  page.innerHTML = `
+    <div class="insd-page">
+      <button type="button" class="insd-back-link" id="insd-back-btn">${ICON.arrowLeft}<span>Back to Home</span></button>
+
+      <div class="insd-header-row">
+        <h1 class="insd-title">${insdEsc(item.title)}</h1>
+        <span class="insd-badge tone-${required ? 'risk' : 'info'}">
+          ${required ? 'DATA NEEDED' : 'OPTIONAL DATA'}</span>
+      </div>
+      <p class="insd-subtitle">Action \u00b7 found by the data completeness check on your upload</p>
+
+      <div class="insd-main-split">
+        <div>
+          ${whatsMissingHtml(item)}
+          <!-- Inside the left column, not under both. The request panel is
+               much the taller of the two, and a full-width bar under it left
+               about three hundred pixels of empty page beside the card it
+               belongs to. Here it also reads as what it is: the alternative
+               to the request on the right. -->
+          <div class="insd-action-bar insd-action-bar-inline">
+            <button type="button" class="insd-btn-secondary" id="insd-upload-instead">
+              ${ICON.upload}<span>Upload the data instead</span></button>
+            <button type="button" class="insd-action-link" id="insd-why-btn">
+              ${ICON.info}<span>Why is this needed?</span></button>
+            <div class="insd-why-reveal" id="insd-why-reveal">${insdEsc(
+              required
+                ? `This field is on the required list because the network model reads
+                   it directly. It is checked against the columns your workbook
+                   actually carried, before any default is applied — so this says the
+                   column was absent or blank for these sites, not that its value was
+                   zero.`
+                : `This field is on the optional list: the analysis completes without
+                   it. It is checked against the columns your workbook actually
+                   carried, so this says the column was absent or blank, not that its
+                   value was zero.`
+            )}</div>
+          </div>
+        </div>
+        ${requestPanelHtml(item)}
+      </div>
+
+      <p class="insd-footer-note">Source: the deterministic data-completeness
+        check over the columns your upload carried. No model was called to
+        produce this item, and no figure on this page was estimated.</p>
+    </div>`;
+
+  bindActionDetail();
+}
+
+function bindActionDetail() {
+  document.getElementById('insd-back-btn')?.addEventListener('click', backToHome);
+
+  document.getElementById('insd-why-btn')?.addEventListener('click', () => {
+    document.getElementById('insd-why-reveal')?.classList.toggle('open');
+  });
+
+  document.getElementById('insd-upload-instead')?.addEventListener('click', () => {
+    if (typeof window.showUploadData === 'function') {
+      const project = typeof window.getCurrentProject === 'function'
+        ? window.getCurrentProject() : null;
+      window.showUploadData(project);
+    }
+  });
+
+  document.querySelectorAll('[data-recipient]').forEach((box) => {
+    box.addEventListener('change', () => {
+      const email = box.getAttribute('data-recipient').toLowerCase();
+      if (box.checked) insdAction.selected.add(email);
+      else insdAction.selected.delete(email);
+      box.closest('.insd-recipient')?.classList.toggle('is-on', box.checked);
+      refreshSendState();
+    });
+  });
+
+  const addBtn = document.getElementById('insd-add-recipient');
+  const addInput = document.getElementById('insd-new-recipient');
+  const addError = document.getElementById('insd-recipient-error');
+
+  const addRecipient = async () => {
+    const email = (addInput?.value || '').trim();
+    if (!email) return;
+    if (!insdValidEmail(email)) {
+      // Caught here rather than at send: an address is easiest to fix while
+      // the person is still looking at the field they typed it into.
+      if (addError) {
+        addError.textContent = `"${email}" does not look like an email address.`;
+        addError.hidden = false;
+      }
+      return;
+    }
+    if (addError) addError.hidden = true;
+    if (!NOTIFICATION_RECIPIENTS.some(r => r.email.toLowerCase() === email.toLowerCase())) {
+      NOTIFICATION_RECIPIENTS.push({ label: email, email });
+    }
+    insdAction.selected.add(email.toLowerCase());
+    addInput.value = '';
+    // Saved server-side too, so it is offered on the next action and to the
+    // pipeline's own triggers — not just for the rest of this page view.
+    try {
+      const mod = await import('./integration/services/action-service.js');
+      await mod.actionService.addRecipient(email);
+    } catch (err) {
+      console.warn('[actions] recipient saved locally only:', err.message);
+    }
+    renderActionDetail();
+  };
+
+  addBtn?.addEventListener('click', addRecipient);
+  addInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addRecipient(); }
+  });
+
+  document.getElementById('insd-send')?.addEventListener('click', sendRequest);
+  refreshSendState();
+}
+
+/** Disabled with a reason, rather than failing after the click. */
+function refreshSendState() {
+  const btn = document.getElementById('insd-send');
+  if (!btn) return;
+  const none = insdAction.selected.size === 0;
+  btn.disabled = none || insdAction.sending;
+  btn.title = none ? 'Tick at least one recipient first' : '';
+}
+
+async function sendRequest() {
+  const item = insdAction.item;
+  if (!item || insdAction.sending) return;
+  const to = [...insdAction.selected];
+  if (!to.length) return;
+
+  const btn = document.getElementById('insd-send');
+  insdAction.sending = true;
+  refreshSendState();
+  if (btn) {
+    btn.querySelector('span').textContent =
+      EMAIL_DELIVERY.mode === 'stub' ? 'Saving\u2026' : 'Sending\u2026';
+  }
+
+  const subject = document.getElementById('insd-subject')?.value || '';
+  const body = document.getElementById('insd-message')?.value || '';
+
+  try {
+    const mod = await import('./integration/services/action-service.js');
+    const res = await mod.actionService.dispatch(item.id, { to, subject, body });
+    insdAction.outcome = {
+      delivery: res.delivery,
+      recipients: (res.dispatch && res.dispatch.recipients) || to,
+      // Who actually took the message and who the server turned away. A list
+      // of four with one address refused is one person still waiting to be
+      // asked, and only naming them makes that something anyone can act on.
+      delivered: res.delivered || [],
+      refused: res.refused || [],
+      notes: res.notes || '',
+    };
+    item.lastSent = res.dispatch || item.lastSent;
+  } catch (err) {
+    // A failed send says so. The one thing this must never do is go quiet
+    // and leave the reader believing a request went out.
+    insdAction.outcome = { delivery: 'failed', recipients: to,
+                           delivered: [], refused: [], notes: err.message };
+  } finally {
+    insdAction.sending = false;
+    renderActionDetail();
+  }
+}
+
+/**
+ * Open the deep dive for one insight, or the action view for one action.
+ *
+ * `kind` used to be accepted and ignored, with a note saying the branch
+ * belonged here once something produced action records. The data-completeness
+ * gate now does, so this is that branch. An id matching neither store opens
+ * nothing, rather than opening a page about the wrong thing.
  */
 export function showInsightDetail(kind, id) {
-  const hit = findRecord(id);
-  if (!hit) return;
+  const action = (kind === 'action') ? findAction(id) : null;
+  const hit = action ? null : findRecord(id);
+  if (!action && !hit) return;
 
-  insdFlow.record = hit.record;
-  insdFlow.facilityId = hit.facilityId;
+  if (action) {
+    insdAction.item = action;
+    insdAction.outcome = null;
+    insdAction.sending = false;
+    // Everyone on the standing list is ticked to begin with: that list is
+    // "who generally wants to see this kind of thing", so the default is the
+    // list, and un-ticking is the exception rather than the ritual.
+    insdAction.selected = new Set(
+      NOTIFICATION_RECIPIENTS.map((r) => r.email.toLowerCase()));
+  } else {
+    insdFlow.record = hit.record;
+    insdFlow.facilityId = hit.facilityId;
+  }
 
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   const page = document.getElementById('tab-insight-detail');
@@ -762,7 +1204,8 @@ export function showInsightDetail(kind, id) {
   const btnUpload = document.getElementById('btn-topbar-upload');
   if (btnUpload) btnUpload.style.display = 'none';
 
-  renderDeepDive();
+  if (action) renderActionDetail();
+  else renderDeepDive();
   // The page area is the scroll container, not the window.
   if (typeof window.scrollPageToTop === 'function') window.scrollPageToTop();
   else window.scrollTo({ top: 0, behavior: 'smooth' });

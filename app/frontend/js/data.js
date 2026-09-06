@@ -26,6 +26,17 @@ export const PLANTS = [];
 
 export const DCS = [];
 
+/**
+ * The regions and product categories THIS network states — not a fixed list.
+ *
+ * Demand growth is something a client gives you in their own words ("chilled is
+ * up 20% in the South"), so a form that asks for it can only offer the labels
+ * their own upload carries. Both stay empty when the upload states none, and a
+ * form reading them must then say so rather than offering an invented list.
+ */
+export const NETWORK_REGIONS = [];
+export const PRODUCT_CATEGORIES = [];
+
 export const MARKETS = [];
 
 // ─── S2: de-overlap co-located nodes ──────────────────────────
@@ -85,6 +96,36 @@ export const FORECAST = {
   breachFacility: null,
   breachProjectedUtil: null,
 };
+
+/**
+ * What the forecast MEANS, from the forecast run's own reasoning step.
+ *
+ * `FORECAST` above is the cone the chart draws. This is the briefing beside
+ * it: the growth the projection implies, where it is concentrated, what the
+ * uploaded signals did to it, and the scenario a planner would run next.
+ *
+ * The Forecast screen used to have none of this and drew Home's "Needs your
+ * attention" card into a second container — the same NETWORK-scoped finding,
+ * twice, on two screens. The reasoning step was always running on a forecast
+ * (`_build_forecast` ends with `_reason_and_govern`); it was reasoning over a
+ * payload that contained nothing about the forecast, and the endpoint returned
+ * none of what it produced.
+ *
+ * `signals.appliedIds` is the routing's OWN answer to which uploaded signal
+ * moved this forecast. The card used to derive that from a hardcoded string.
+ */
+export const FORECAST_BRIEFING = {
+  explanation: null,
+  outlook: null,
+  signals: null,
+};
+
+/** Replace it wholesale — a forecast is current or it is not. */
+export function setForecastBriefing(response) {
+  FORECAST_BRIEFING.explanation = (response && response.explanation) || null;
+  FORECAST_BRIEFING.outlook = (response && response.outlook) || null;
+  FORECAST_BRIEFING.signals = (response && response.signals) || null;
+}
 
 // ─── EXTERNAL SIGNALS ───────────────────────────────────────
 // Signals that arrived with the upload, mapped in by `loadStructure()`.
@@ -431,6 +472,69 @@ export const OBSERVED_UTILISATION = { periods: [], points: [], byFacility: {} };
 // ─── HOME ACTION ITEMS ───────────────────────────────────────
 export const HOME_ACTION_ITEMS = [];
 
+/**
+ * Who a request can be addressed to, and whether email actually goes out.
+ *
+ * Both are the server's answer, not this file's: the recipient list lives in
+ * the Action Agent's own store (so it survives a reload and is shared by the
+ * pipeline's own triggers), and `EMAIL_DELIVERY.mode` is read from whether an
+ * outbound credential is configured on the server. `'stub'` means a send is
+ * logged and nothing leaves the machine — the screen says so on the button,
+ * because a stub reported as a send is worse than no feature at all.
+ */
+export const NOTIFICATION_RECIPIENTS = [];
+
+export const EMAIL_DELIVERY = { mode: 'stub' };
+
+/**
+ * Write a `/api/actions` response into the stores the screens read.
+ *
+ * Replaces rather than merges: an action is outstanding or it is not, and a
+ * re-upload that supplies the missing column must not leave the request for
+ * it on screen. Same rule as `applyInsightResponse`.
+ */
+export function applyActionsResponse(response) {
+  HOME_ACTION_ITEMS.length = 0;
+  NOTIFICATION_RECIPIENTS.length = 0;
+  if (!response) return 0;
+
+  (response.actions || []).forEach((a) => {
+    HOME_ACTION_ITEMS.push({
+      id: a.id,
+      kind: a.kind || 'MISSING_DATA',
+      severity: a.severity || 'OPTIONAL',
+      title: a.title || '',
+      subtitle: a.subtitle || '',
+      displayLabel: a.display_label || '',
+      unit: a.unit || '',
+      whatItUnlocks: a.what_it_unlocks || '',
+      entityType: a.entity_type || '',
+      entityTypePlural: a.entity_type_plural || '',
+      // The sites the field is missing from. Named, because "fifteen DCs"
+      // is not something anyone can act on and a list of fifteen names is.
+      entities: a.entities || [],
+      // The message the server composed from the gap. Editable on screen;
+      // sent as-is if it is not edited.
+      draft: a.draft || { subject: '', body: '' },
+      lastSent: a.last_sent || null,
+    });
+  });
+
+  (response.recipients || []).forEach((r) => NOTIFICATION_RECIPIENTS.push({
+    label: r.label || r.email,
+    email: r.email,
+  }));
+
+  EMAIL_DELIVERY.mode = response.email_mode || 'stub';
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('actionsLoaded', {
+      detail: { count: HOME_ACTION_ITEMS.length },
+    }));
+  }
+  return HOME_ACTION_ITEMS.length;
+}
+
 
 /**
  * Drop demo narrative content that describes a DIFFERENT network.
@@ -465,6 +569,11 @@ export function clearNetworkModel() {
   LANES.length = 0;
   SCENARIOS.length = 0;
   EXTERNAL_SIGNALS.length = 0;
+  // Region and category labels belong to the network that stated them. Left
+  // behind, the previous client's regions would populate the next client's
+  // growth form.
+  NETWORK_REGIONS.length = 0;
+  PRODUCT_CATEGORIES.length = 0;
 
   Object.keys(FACILITY_KPIS).forEach((k) => delete FACILITY_KPIS[k]);
 
@@ -1097,6 +1206,25 @@ export function loadNetworkData(networkData) {
     ...PLANTS.map(p => ({ ...p, type: 'Plant' })),
     ...DCS.map(d => ({ ...d, type: 'DC' }))
   );
+
+  // Distinct region and category labels, in the upload's own spelling. Sorted
+  // for a stable dropdown; de-duplicated case-insensitively because "North" and
+  // "north" in two sheets are one region, not two.
+  const seenRegion = new Map();
+  [...PLANTS, ...DCS, ...MARKETS].forEach((n) => {
+    const r = (n && n.region ? String(n.region) : '').trim();
+    if (r && !seenRegion.has(r.toLowerCase())) seenRegion.set(r.toLowerCase(), r);
+  });
+  NETWORK_REGIONS.length = 0;
+  NETWORK_REGIONS.push(...[...seenRegion.values()].sort());
+
+  const seenCategory = new Map();
+  (networkData.products || []).forEach((p) => {
+    const c = (p && p.category ? String(p.category) : '').trim();
+    if (c && !seenCategory.has(c.toLowerCase())) seenCategory.set(c.toLowerCase(), c);
+  });
+  PRODUCT_CATEGORIES.length = 0;
+  PRODUCT_CATEGORIES.push(...[...seenCategory.values()].sort());
 
   if (networkData.lanes && networkData.lanes.length > 0) {
     LANES.length = 0;

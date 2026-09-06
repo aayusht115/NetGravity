@@ -230,6 +230,22 @@ class IngestionConfig:
         in {"1", "true", "yes", "y"}
     )
 
+    # Does a required-field gap stop a dataset being finalized?
+    #
+    # The completeness check (netgravity/ingestion/completeness.py) always
+    # RUNS and is always reported — it is what the Action Agent's
+    # missing-data email and the UI's action items are built from. Whether
+    # it also blocks is a policy question, and the answer changes what
+    # existing uploads do: a dataset that finalizes today would stop.
+    #
+    # Off by default for that reason. Turn it on when the required-field
+    # registry has been reviewed against the workbooks in use, not before —
+    # a gap the registry gets wrong would lock a real dataset out of the
+    # product, and the email path already tells someone about it.
+    completeness_blocks_finalize: bool = field(
+        default_factory=lambda: _flag("NETGRAVITY_COMPLETENESS_BLOCKS_FINALIZE", False)
+    )
+
     # Points the OpenAI SDK at a different server. Blank => real OpenAI.
     # This is what makes OpenAI-compatible free/alternate providers
     # (OpenRouter, Groq, Cerebras, GitHub Models) work with no other code

@@ -137,6 +137,13 @@ class DatasetStore:
                 "integrity": preview.get("integrity", []),
                 "currency": preview.get("currency"),
                 "geography": preview.get("geography", {}),
+                # Which required/optional fields the upload did not carry.
+                # Kept for the same reason `geography` is: it is a decision
+                # about the data, not the data — a few hundred bytes, and
+                # the only surviving record of it once `structure` is
+                # dropped below. The action items and the missing-data
+                # email are built from this.
+                "completeness": preview.get("completeness", {}),
                 "network_summary": network_summary,
                 "assumptions": list(assumptions),
                 "issues": list(issues),

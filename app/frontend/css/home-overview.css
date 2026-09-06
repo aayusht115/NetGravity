@@ -906,28 +906,37 @@
      is knowable from here. The fallback is the value it measures at 1680x1050
      so the page is right before the first measurement lands.
 
-     `--ov-strip-h` is the KPI strip's measured height, subtracted for the
-     same reason: it is the bottom row, and a row of headline figures that
-     begins below the fold is a row nobody reads. The card it replaced —
-     "Signals influencing your network" — did start below the fold, and that
-     was defensible for three rows of a spreadsheet the build does not use;
-     it is not defensible for the network's cost, utilisation and service.
+     The KPI strip's height USED to be subtracted here as well, so the
+     four figures landed above the fold. It is not any more — see the note
+     under this rule. This grid takes the whole first screen, and the strip
+     is the first thing below it.
 
      The effect a reader sees: "Needs your attention" and the digital twin
-     stop just above the strip, and the whole page is one screen. */
+     fill the window, and the strip is one short scroll away. */
   flex: 0 0 auto;
-  min-height: calc(100vh - var(--ov-main-top, 126px)
-                   - var(--ov-strip-h, 98px) - var(--space-lg, 24px));
+  min-height: calc(100vh - var(--ov-main-top, 126px) - var(--space-lg, 24px));
   /* And no more. A bounded row is what makes the attention card's own
      scroller work: unbounded, the card grew to its findings list and pushed
      the twin past the bottom of the window instead of ending at it. */
-  max-height: calc(100vh - var(--ov-main-top, 126px)
-                   - var(--ov-strip-h, 98px) - var(--space-lg, 24px));
+  max-height: calc(100vh - var(--ov-main-top, 126px) - var(--space-lg, 24px));
 }
 
-.ov-main > .ov-alert     { grid-column: 1; grid-row: 1; }
+/* SUPERSEDED: `- var(--ov-strip-h, 98px)` was subtracted from both, to keep
+   the KPI strip on the first screen. That cost the attention card 95px of
+   height it needed more: measured at 1680x1050, 204px of its content sat
+   below its own internal scroller, so the recommendation a reader is meant
+   to act on could be off the bottom of the card. The strip is four figures
+   that are also a whole page behind "View all KPIs"; the findings are the
+   only thing on this screen that is nowhere else. The strip now begins just
+   below the fold, which is where a summary of a page you can open belongs.
+
+   The alert spans BOTH columns rather than sitting above the attention card
+   alone. It is one line of status, and while it was stacked in column one
+   the twin was exactly its height taller than the card beside it — 786 to
+   706. Across the top, the two cards below it start and end together. */
+.ov-main > .ov-alert     { grid-column: 1 / -1; grid-row: 1; }
 .ov-main > .ov-attn-card { grid-column: 1; grid-row: 2; }
-.ov-main > .ov-twin-card { grid-column: 2; grid-row: 1 / span 2; }
+.ov-main > .ov-twin-card { grid-column: 2; grid-row: 2; }
 
 .ov-attn-card,
 .ov-twin-card,
@@ -1350,4 +1359,14 @@
 @media (max-width: 900px) {
   .ov-signals-row { grid-template-columns: minmax(0, 1fr); }
   .ov-head { gap: 8px; }
+}
+
+
+/* An action item's chip in the attention feed. Same tones as a finding's
+   severity chip — a required gap is a risk to the analysis and reads like
+   one — but the outline marks it as a different kind of thing: a request
+   to a person, not a conclusion about the network. */
+.ov-attn-rest-cat.is-action {
+  background: #ffffff;
+  border: 1px dashed currentColor;
 }

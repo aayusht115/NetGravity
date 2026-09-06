@@ -47,6 +47,29 @@ export const scenarioService = {
   },
 
   /**
+   * Rank a set of solved scenarios and get the backend's own verdict.
+   *
+   * The ranking, the recommended scenario, the caveats and the service
+   * warning are DECIDED THERE, from the authoritative KPI values and their
+   * statuses. This screen used to decide all four itself, in JavaScript,
+   * where the reasoning was invisible to the audit trail and free to
+   * disagree with the same numbers in the table beside it.
+   *
+   * No solve runs: every scenario in the set is already solved and stored.
+   * The default timeout is right — the only slow part is the one model
+   * request the explanation may spend, and only for a set never compared
+   * before.
+   */
+  async compareScenarios(scenarioIds, projectId = null) {
+    const id = projectId || getActiveProjectId();
+    return apiClient.post(
+      `/api/scenarios/compare?project_id=${encodeURIComponent(id)}`,
+      { project_id: id, scenario_ids: scenarioIds },
+      { timeout: CONFIG.LLM_TIMEOUT_MS || 90000 },
+    );
+  },
+
+  /**
    * The scenario this project stored for `name` since `sinceMs`, or null.
    *
    * Aborting a fetch does not stop a solve. When `simulateScenario` times out

@@ -404,34 +404,56 @@ class TestTheOverviewPageIsShapedLikeTheMockup:
         css = _asset("css", "home-overview.css")
         rows = css[css.index(".ov-main {"):]
         rows = rows[:rows.index(".ov-attn-card,")]
-        assert "grid-row: 1 / span 2" in rows, (
-            "the twin does not span both rows, so it cannot reach the alert"
-        )
+        # SUPERSEDED: the twin spanned rows 1 and 2, so it ran from the top
+        # of the alert down to the bottom of the attention card — and was
+        # therefore exactly the alert's height taller than the card beside
+        # it, 786px to 706px. The two cards were asked to be the same
+        # height, so the alert now spans both COLUMNS above them and the
+        # cards share row 2. The twin still reaches the full height of the
+        # row it is in, which is what this was protecting.
+        assert "grid-row: 1 / span 2" not in rows, rows
+        assert ".ov-main > .ov-alert     { grid-column: 1 / -1; grid-row: 1; }" in rows, rows
+        assert ".ov-main > .ov-attn-card { grid-column: 1; grid-row: 2; }" in rows, rows
+        assert ".ov-main > .ov-twin-card { grid-column: 2; grid-row: 2; }" in rows, rows
         assert "grid-template-rows: auto minmax(0, 1fr)" in rows
 
-    def test_the_kpi_strip_is_on_the_first_screen(self):
+    def test_the_grid_takes_the_whole_first_screen(self):
         """
-        Home fits itself to the window and does not scroll to a second screen,
-        so a row below the fold is a row nobody reads. Measured before this
-        was reserved: the strip began at y=1054 in a 1050px viewport.
+        SUPERSEDED: this was `test_the_kpi_strip_is_on_the_first_screen`, and
+        it required `.ov-main` to subtract the strip's measured height so the
+        four figures landed above the fold.
 
-        The card it replaced DID start below the fold, and the stylesheet said
-        so deliberately — defensible for three rows of a spreadsheet this
-        build does not use, not for the network's cost, utilisation and
-        service.
+        That was the wrong trade for this page. The 95px it bought the strip
+        came out of the attention card, and measured at 1680x1050 that card
+        was hiding 204px of its own content behind an internal scroller — so
+        the recommendation a reader is meant to act on could be below the
+        bottom of the card. The strip is four figures that are also a whole
+        page behind "View all KPIs"; the findings are the only thing on this
+        screen that is nowhere else. The strip now starts just below the fold.
+
+        What this still protects: the grid is sized from a MEASURED top
+        offset rather than a guessed one, and it is bounded, which is what
+        makes the attention card's own scroller work at all.
         """
         css = _asset("css", "home-overview.css")
         rows = css[css.index(".ov-main {"):]
-        rows = rows[:rows.index(".ov-attn-card,")]
-        assert "--ov-strip-h" in rows, (
-            "`.ov-main` does not leave room for the strip below it"
+        rows = rows[:rows.index("/* SUPERSEDED:")]
+        assert "--ov-strip-h" not in rows, (
+            "`.ov-main` is still buying the strip a place on the first screen"
         )
-        # Measured, not assumed: the height follows the type scale.
+        assert "min-height: calc(100vh - var(--ov-main-top" in rows, rows
+        assert "max-height: calc(100vh - var(--ov-main-top" in rows, rows
+
+        # And nothing writes the variable any more — a stale value left on
+        # the shell would keep the old subtraction alive.
         js = _asset("js", "app.js")
         fn = js[js.index("function sizeOverviewToWindow()"):]
         fn = fn[:fn.index("\n}\n")]
+        assert "removeProperty('--ov-strip-h')" in fn, fn
+        assert "setProperty('--ov-strip-h'" not in fn, fn
+        # The chat button's gutter is still measured from the strip's rect.
         assert "home2-kpi-strip" in fn, fn
-        assert "--ov-strip-h" in fn, fn
+        assert "--ov-fab-reserve" in fn, fn
         assert "getBoundingClientRect()" in fn, fn
 
     def test_the_strip_reports_the_solve_and_computes_nothing(self):

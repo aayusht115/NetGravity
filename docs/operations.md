@@ -255,6 +255,45 @@ any key is looked up, which is what closes the algorithm-confusion attack. See
 
 `/api/status` reports the channel and whether it is actually configured.
 
+### Outbound data requests
+
+A second, separate path. When the data-completeness gate finds a field missing
+from named sites, a user can email whoever owns that data from the action
+screen. It reads its OWN variables — note the names differ from the reset
+path's above, which is a trap worth knowing about:
+
+```bash
+NETGRAVITY_SMTP_HOST=smtp.example.com
+NETGRAVITY_SMTP_PORT=587                    # STARTTLS
+NETGRAVITY_SMTP_USERNAME=apikey             # NOT _USER
+NETGRAVITY_SMTP_PASSWORD=...                # an App Password on Gmail; SMTP
+                                            # auth needs a 2FA-compatible one
+NETGRAVITY_SMTP_FROM_ADDRESS=netgravity@example.com   # NOT _FROM
+NETGRAVITY_SMTP_TIMEOUT_SECONDS=20
+NETGRAVITY_EMAIL_STRICT=false               # true => a failed send raises
+                                            # rather than degrading to a stub
+```
+
+With none of these set the feature still works and is honest about it: the
+request is composed, recorded and logged, the audit trail is written, and the
+screen says the message has not left the system. `/api/status` reports the
+same under `outbound_email`, with the reason, and marks it `severity: error`
+when `NETGRAVITY_ENV=production` — a production deployment that cannot ask
+anyone for missing data is a misconfiguration, not a default.
+
+Four outcomes are reported, and they are not interchangeable:
+
+| outcome | what happened |
+|---|---|
+| `sent` | every address accepted the message |
+| `partial` | some accepted it, some were refused — the refused ones are named, and they have **not** been asked |
+| `failed` | the server rejected the message or could not be reached; the reason is shown |
+| `stubbed` | no outbound credential configured; recorded and logged, not delivered |
+
+`partial` exists because `SMTP.send_message` raises only when it rejects EVERY
+address. One mistyped address in a list of four returns quietly, and treating
+that as a clean send loses the person who was never asked.
+
 ---
 
 ## 4. Rate limits
