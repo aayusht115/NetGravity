@@ -624,7 +624,178 @@
 
         <!-- ─────────────────── TAB: FACILITY DASHBOARD / ANALYTICS ─────────────────── -->
         <section class="tab-panel" id="tab-facility-dashboard">
-          <!-- Facility Dashboard Controls Toolbar (Export Action & Facility Context) -->
+
+          <!--
+            ONE SCREEN, ONE FLOW.
+
+            Not two. This panel used to carry a network band above a per-site
+            band, each with its own heading and its own export button, and the
+            rule between them read as a division between two kinds of building
+            — which is exactly what a DC and a warehouse are not. There is one
+            facility population here and one report of it, read top to bottom
+            in the order a planner has to act:
+
+              1. how many sites, and how many are in trouble;
+              2. WHICH ones, named, with the reason;
+              3. the peak against the average — the one picture that shows what
+                 an average hides;
+              4. the same network cut three more ways — the mix of states, the
+                 headroom in UNITS rather than per cent, and the stock held;
+              5. every site, in a table, for the reader who wants the numbers;
+              6. then down into the one site the top bar has selected, with its
+                 own throughput, cost, findings and corridors — unchanged.
+
+            ONE VOCABULARY. A DC and a warehouse are the same site, so this
+            screen names them the way the rest of the product already does:
+            "Distribution Centre" for the role, "facility" for the collective.
+
+            ONE EXPORT. The button below writes the whole screen to one file —
+            every site in the network table AND the selected site's telemetry,
+            KPIs, findings and corridors. Two buttons made the reader work out
+            which half each one covered before they could trust either file.
+          -->
+          <div class="facility-toolbar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px">
+            <!-- What these figures are OF. A peak reading means nothing
+                 without the horizon it is the peak of. -->
+            <div class="text-xs" id="wh-basis" style="color:var(--text-2);min-width:0">&mdash;</div>
+            <button class="btn btn-secondary btn-export-kpi" id="btn-export-kpi" data-action="exportFacilityReport"
+                    title="Export every metric on this screen — the whole network and the selected facility — to CSV"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;font-size:12.5px;font-weight:600;border-radius:8px;background:#ffffff;border:1px solid #e5e7eb;color:#374151;cursor:pointer;flex-shrink:0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+              </svg>
+              <span>Export KPI Report (CSV)</span>
+            </button>
+          </div>
+
+          <!-- 1. The roll-up -->
+          <div class="grid-4 mb-lg" id="wh-summary-grid"></div>
+
+          <!-- 2. Named, with the reason -->
+          <div id="wh-attention" class="mb-lg"></div>
+
+          <!-- 3. The picture -->
+          <div class="grid-2 mb-lg">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Peak vs Average Utilisation</div>
+                  <div class="card-subtitle">Every open site, against the 90% threshold</div>
+                </div>
+                <span class="tag tag-muted" id="wh-util-tag">&mdash;</span>
+              </div>
+              <div class="chart-wrap" style="height:300px">
+                <canvas id="chart-wh-utilisation"></canvas>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Where the Facility Spend Sits</div>
+                  <div class="card-subtitle">Fixed, opening, handling and holding — transport excluded</div>
+                </div>
+                <span class="tag tag-primary" id="wh-spend-tag">&mdash;</span>
+              </div>
+              <div class="chart-wrap" style="height:300px">
+                <canvas id="chart-wh-spend"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3b. The same network, three more ways.
+
+               Every figure here is already in the table below. They are drawn
+               because a table answers "what is THIS site" and a chart answers
+               "what is this NETWORK", and no row can do the second:
+
+                 * the mix says how many sites are in trouble against how many
+                   are fine, before any name is read;
+                 * headroom in units says where the next volume can actually
+                   go — 95% of 200 units is 10 spare, 80% of 40,000 is 8,000,
+                   and the per-cent chart above ranks those the wrong way
+                   round for that question;
+                 * stock says whether a site holds for a season or holds a
+                   constant buffer, which is the gap between its two bars.
+          -->
+          <div class="grid-3 mb-lg">
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Network Status Mix</div>
+                  <div class="card-subtitle">How many sites sit in each state</div>
+                </div>
+                <span class="tag tag-muted" id="wh-mix-tag">&mdash;</span>
+              </div>
+              <div class="chart-wrap" style="height:260px">
+                <canvas id="chart-wh-mix"></canvas>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Capacity and What It Carries</div>
+                  <div class="card-subtitle">How much of each site's rated capacity is used, in units</div>
+                </div>
+                <span class="tag tag-muted" id="wh-headroom-tag">&mdash;</span>
+              </div>
+              <div class="chart-wrap" style="height:260px">
+                <canvas id="chart-wh-headroom"></canvas>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Stock Held</div>
+                  <div class="card-subtitle">Average against peak, per site</div>
+                </div>
+                <span class="tag tag-muted" id="wh-stock-tag">&mdash;</span>
+              </div>
+              <!-- A model that carries no inventory decisions has no stock to
+                   draw. The note REPLACES the canvas and states the reason —
+                   an empty chart frame reads as "zero stock", which is the one
+                   thing an absent reading does not mean. -->
+              <div class="chart-wrap" style="height:260px" id="wh-stock-wrap">
+                <canvas id="chart-wh-stock"></canvas>
+              </div>
+              <div id="wh-stock-absent" style="display:none"></div>
+            </div>
+          </div>
+
+          <!-- 5. Every site -->
+          <div class="card mb-lg">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Facility Health</div>
+                <div class="card-subtitle">Sorted by what needs attention first</div>
+              </div>
+              <span class="tag tag-muted" id="wh-health-count">&mdash;</span>
+            </div>
+            <div class="table-wrap">
+              <table class="ng-table" id="table-wh-health">
+                <thead>
+                  <tr>
+                    <th>Facility</th>
+                    <th>Status</th>
+                    <th class="num">Capacity / period</th>
+                    <th class="num">Avg throughput</th>
+                    <th class="num">Peak throughput</th>
+                    <th class="num">Avg util</th>
+                    <th class="num">Peak util</th>
+                    <th class="num">Tight periods</th>
+                    <th class="num">Avg stock</th>
+                    <th class="num">Peak stock</th>
+                    <th class="num">Facility cost</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Which facility the cards below are about. -->
           <!--
             The screen states WHICH facility it is showing.
 
@@ -644,12 +815,6 @@
               <span id="dash-facility-name" style="font-size:16px;font-weight:700;color:var(--text-1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">&mdash;</span>
               <span id="dash-facility-type" class="text-xs" style="color:var(--text-2);white-space:nowrap"></span>
             </div>
-            <button class="btn btn-secondary btn-export-kpi" id="btn-export-kpi" data-action="exportFacilityReport" title="Export Facility KPIs & Insights to CSV" style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;font-size:12.5px;font-weight:600;border-radius:8px;background:#ffffff;border:1px solid #e5e7eb;color:#374151;cursor:pointer;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-              </svg>
-              <span>Export KPI Report (CSV)</span>
-            </button>
           </div>
 
           <!-- 6 Executive Data Cards -->

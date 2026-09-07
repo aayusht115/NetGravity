@@ -762,3 +762,386 @@ export function renderFacilityLaneFlowsChart(canvasId, connectedLanes, facilityI
   });
 }
 
+/**
+ * A dashed horizontal rule at the over-utilisation threshold, with its value.
+ *
+ * The bars mean "tight" or "fine" only against the line, and a legend entry
+ * for a threshold is easy to miss; drawn on the plot it is unmissable and
+ * costs no library.
+ */
+const utilisationThreshold = {
+  id: 'ngUtilisationThreshold',
+  afterDatasetsDraw(chart, _args, opts) {
+    const { ctx, chartArea, scales } = chart;
+    const pct = opts && opts.pct;
+    if (!chartArea || !scales || !scales.y || typeof pct !== 'number') return;
+    const y = scales.y.getPixelForValue(pct);
+    if (!Number.isFinite(y) || y < chartArea.top || y > chartArea.bottom) return;
+
+    ctx.save();
+    ctx.setLineDash([5, 4]);
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.moveTo(chartArea.left, y);
+    ctx.lineTo(chartArea.right, y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const label = `${pct}% threshold`;
+    ctx.font = '600 10.5px Inter, system-ui, sans-serif';
+    const w = ctx.measureText(label).width + 12;
+    const bx = chartArea.right - w;
+    const by = Math.max(chartArea.top, y - 18);
+    ctx.fillStyle = '#fef2f2';
+    ctx.strokeStyle = '#fecaca';
+    ctx.lineWidth = 1;
+    if (ctx.roundRect) {
+      ctx.beginPath();
+      ctx.roundRect(bx, by, w, 16, 5);
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.fillRect(bx, by, w, 16);
+      ctx.strokeRect(bx, by, w, 16);
+    }
+    ctx.fillStyle = '#dc2626';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, bx + w / 2, by + 8);
+    ctx.restore();
+  },
+};
+
+/**
+ * Peak against average utilisation, per site.
+ *
+ * The chart this screen exists for. `utilization_pct` over a horizon is a
+ * MEAN, and a site at 50% for the year and 95% in one month is drawn by that
+ * mean as comfortable. Both bars, side by side, against the threshold.
+ *
+ * On a single-period solve the two bars are identical by definition, so only
+ * one is drawn and the caption says why — two identical bars would imply a
+ * seasonal reading the data does not carry.
+ */
+export function renderWarehouseUtilisationChart(canvasId, rows, thresholdPct, multiPeriod) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !rows || rows.length === 0) return;
+
+  const labels = rows.map((r) => r.facility_name || r.facility_id);
+  const peak = rows.map((r) => Number(r.peak_utilization_pct) || 0);
+  const avg = rows.map((r) => Number(r.avg_utilization_pct) || 0);
+
+  // Colour by where the bar lands, not by series: the reader is looking for
+  // "which of these is a problem", and a uniform palette makes them read the
+  // axis to find out.
+  const peakColour = peak.map((v) => (v >= 100 ? '#dc2626'
+    : v >= thresholdPct ? '#d97706' : '#6B2FA0'));
+
+  const datasets = [{
+    label: multiPeriod ? 'Peak period' : 'Utilisation',
+    data: peak,
+    backgroundColor: peakColour,
+    borderRadius: 4,
+    barPercentage: 0.72,
+    categoryPercentage: 0.72,
+  }];
+  if (multiPeriod) {
+    datasets.push({
+      label: 'Horizon average',
+      data: avg,
+      backgroundColor: '#d4bfe8',
+      borderRadius: 4,
+      barPercentage: 0.72,
+      categoryPercentage: 0.72,
+    });
+  }
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family: 'Inter', size: 10.5 } } },
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: '% of stated capacity',
+                   font: { family: 'Inter', size: 11 } },
+          ticks: { font: { family: 'Inter', size: 10.5 }, callback: (v) => `${v}%` },
+        },
+      },
+      plugins: {
+        legend: {
+          display: multiPeriod, position: 'bottom',
+          labels: { usePointStyle: true, boxWidth: 8,
+                    font: { family: 'Inter', size: 11 }, padding: 12 },
+        },
+        tooltip: {
+          callbacks: {
+            label: (c) => ` ${c.dataset.label}: ${Number(c.raw).toFixed(1)}%`,
+            afterBody: (items) => {
+              const row = rows[items[0].dataIndex];
+              if (!row) return '';
+              const lines = [];
+              if (row.peak_period) lines.push(`Busiest period: ${row.peak_period}`);
+              if (multiPeriod) {
+                lines.push(`At or above ${thresholdPct}% in `
+                  + `${row.bottleneck_periods_count} of ${row.periods_observed} periods`);
+              }
+              return lines;
+            },
+          },
+        },
+        ngUtilisationThreshold: { pct: thresholdPct },
+      },
+    },
+    plugins: [utilisationThreshold],
+  });
+}
+
+/**
+ * Which sites the facility spend sits in.
+ *
+ * A doughnut because the question is "what share", and the share is the whole
+ * finding — a total says how much, this says where to look. Transport is
+ * excluded and the caption says so: it is not attributed to a site by the
+ * model, and a pie that silently omitted the largest cost line would be read
+ * as the network's cost.
+ */
+export function renderWarehouseSpendChart(canvasId, drivers) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !drivers || drivers.length === 0) return;
+
+  const palette = ['#6B2FA0', '#2563eb', '#16a34a', '#d97706', '#dc2626',
+                   '#9a64c1', '#0891b2', '#65a30d', '#c2410c', '#7c3aad'];
+  const total = drivers.reduce((sum, d) => sum + (Number(d.total_facility_cost) || 0), 0);
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: drivers.map((d) => d.facility_name || d.facility_id),
+      datasets: [{
+        data: drivers.map((d) => Number(d.total_facility_cost) || 0),
+        backgroundColor: drivers.map((_, i) => palette[i % palette.length]),
+        borderWidth: 2,
+        borderColor: '#ffffff',
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { usePointStyle: true, boxWidth: 10,
+                    font: { family: 'Inter', size: 11 }, padding: 10 },
+        },
+        tooltip: {
+          callbacks: {
+            label: (c) => ` ${c.label}: ${formatCurrency(c.raw)}`
+              + (total > 0 ? ` (${((c.raw / total) * 100).toFixed(1)}%)` : ''),
+          },
+        },
+      },
+      cutout: '62%',
+    },
+  });
+}
+
+/**
+ * How many sites sit in each state.
+ *
+ * A doughnut because the question is COMPOSITION — the reader wants the shape
+ * of the network before reading any site's name, and "three of eleven are
+ * tight" is a different sentence from a list of three names.
+ *
+ * The slice colours are the band colours the tags, the attention rows and the
+ * table already use, so one state is one colour everywhere on this screen. A
+ * band with nothing in it is left out rather than drawn as a zero slice: a
+ * legend entry with nothing behind it is a label the reader has to dismiss.
+ */
+export function renderWarehouseStatusMixChart(canvasId, slices) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+  const ctx = document.getElementById(canvasId);
+  const rows = (slices || []).filter((s) => Number(s.value) > 0);
+  if (!ctx || rows.length === 0) return;
+
+  const total = rows.reduce((sum, s) => sum + Number(s.value), 0);
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: rows.map((s) => s.label),
+      datasets: [{
+        data: rows.map((s) => Number(s.value)),
+        backgroundColor: rows.map((s) => s.color),
+        borderWidth: 2,
+        borderColor: '#ffffff',
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { usePointStyle: true, boxWidth: 9,
+                    font: { family: 'Inter', size: 11 }, padding: 9 },
+        },
+        tooltip: {
+          callbacks: {
+            label: (c) => ` ${c.label}: ${c.raw} site${c.raw === 1 ? '' : 's'}`
+              + (total > 0 ? ` of ${total}` : ''),
+          },
+        },
+      },
+      cutout: '58%',
+    },
+  });
+}
+
+/**
+ * Rated capacity, and how much of it the busiest period uses — in UNITS.
+ *
+ * The utilisation chart answers "how full"; this one answers "how much room",
+ * and they rank a network differently. A site at 95% of 200 units has ten
+ * spare and a site at 80% of 40,000 has eight thousand: a planner deciding
+ * where the next volume can go needs the second reading, and the per-cent
+ * chart puts the wrong site at the top for that question.
+ *
+ * Stacked to the rated capacity so the BAR LENGTH is the capacity — the solid
+ * part is what the peak period carries, the pale part is what is left. Nothing
+ * new is measured here: both numbers are read from the report, and the
+ * difference between them is drawn rather than computed as a KPI. The tooltip
+ * names both source figures so the split can be checked against them.
+ *
+ * A peak ABOVE stated capacity gets its own red segment. The model can exceed
+ * a stated capacity, and a chart that clipped the bar at 100% would hide the
+ * single worst thing it could have to show.
+ */
+export function renderWarehouseHeadroomChart(canvasId, rows, multiPeriod) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+  const ctx = document.getElementById(canvasId);
+  const sites = (rows || []).filter(
+    (r) => Number.isFinite(Number(r.rated_capacity_per_period))
+        && Number(r.rated_capacity_per_period) > 0);
+  if (!ctx || sites.length === 0) return;
+
+  const cap = sites.map((r) => Number(r.rated_capacity_per_period));
+  const peak = sites.map((r) => Number(r.peak_throughput_units) || 0);
+  const over = peak.map((v, i) => Math.max(0, v - cap[i]));
+
+  const datasets = [
+    { label: multiPeriod ? 'Used in the busiest period' : 'Used',
+      data: peak.map((v, i) => Math.min(v, cap[i])),
+      backgroundColor: '#6B2FA0', borderRadius: 3, barPercentage: 0.68 },
+    { label: 'Headroom',
+      data: cap.map((c, i) => Math.max(0, c - peak[i])),
+      backgroundColor: '#e5dcf0', borderRadius: 3, barPercentage: 0.68 },
+  ];
+  // Only when something actually exceeds. An always-present legend entry for
+  // a condition no site is in reads as a warning the reader has to rule out.
+  if (over.some((v) => v > 0)) {
+    datasets.push({ label: 'Over stated capacity', data: over,
+                    backgroundColor: '#dc2626', borderRadius: 3, barPercentage: 0.68 });
+  }
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: sites.map((r) => r.facility_name || r.facility_id), datasets },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          stacked: true, beginAtZero: true,
+          title: { display: true, text: perPeriodLabel(),
+                   font: { family: 'Inter', size: 11 } },
+          ticks: { font: { family: 'Inter', size: 10.5 },
+                   callback: (v) => formatNumber(v) },
+        },
+        y: { stacked: true, grid: { display: false },
+             ticks: { font: { family: 'Inter', size: 10.5 } } },
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { usePointStyle: true, boxWidth: 8,
+                    font: { family: 'Inter', size: 10.5 }, padding: 9 },
+        },
+        tooltip: {
+          callbacks: {
+            label: (c) => ` ${c.dataset.label}: ${formatNumber(c.raw)}`,
+            afterBody: (items) => {
+              const i = items[0].dataIndex;
+              return [`Rated capacity: ${formatNumber(cap[i])}`,
+                      `${multiPeriod ? 'Busiest period carries' : 'Carries'}: `
+                        + `${formatNumber(peak[i])}`];
+            },
+          },
+        },
+      },
+    },
+  });
+}
+
+/**
+ * Average stock against peak stock, per site.
+ *
+ * Two bars because the GAP between them is the finding. A site whose peak is
+ * twice its average is holding for a season; a site whose peak sits on its
+ * average is holding a constant buffer, and the two need different answers.
+ *
+ * Only sites the model reports a stock level for are passed in. A site with no
+ * inventory decision is not a site holding nothing, and a zero bar would state
+ * a measurement nobody took — the card shows the reason instead.
+ */
+export function renderWarehouseStockChart(canvasId, rows) {
+  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+  const ctx = document.getElementById(canvasId);
+  if (!ctx || !rows || rows.length === 0) return;
+
+  chartInstances[canvasId] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map((r) => r.facility_name || r.facility_id),
+      datasets: [
+        { label: 'Peak', data: rows.map((r) => Number(r.peak_inventory_units) || 0),
+          backgroundColor: '#6B2FA0', borderRadius: 4,
+          barPercentage: 0.72, categoryPercentage: 0.72 },
+        { label: 'Average', data: rows.map((r) => Number(r.avg_inventory_units) || 0),
+          backgroundColor: '#d4bfe8', borderRadius: 4,
+          barPercentage: 0.72, categoryPercentage: 0.72 },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family: 'Inter', size: 10.5 } } },
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Units held',
+                   font: { family: 'Inter', size: 11 } },
+          ticks: { font: { family: 'Inter', size: 10.5 },
+                   callback: (v) => formatNumber(v) },
+        },
+      },
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { usePointStyle: true, boxWidth: 8,
+                    font: { family: 'Inter', size: 11 }, padding: 10 },
+        },
+        tooltip: {
+          callbacks: { label: (c) => ` ${c.dataset.label}: ${formatNumber(c.raw)} units` },
+        },
+      },
+    },
+  });
+}

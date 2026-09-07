@@ -139,6 +139,48 @@ class FacilitySummary(BaseModel):
     #: dividing by a period count it had to go and find.
     throughput_units_per_period: float = 0.0
 
+    #: What this site cost the plan, split the way the engine charged it.
+    #:
+    #: Read verbatim from `FacilityDecision` — the MILP's own attribution, not
+    #: a re-split of the network total. `total_facility_cost` is the engine's
+    #: sum (fixed + opening + closure + handling + holding) and is authoritative
+    #: over adding the parts back up here.
+    #:
+    #: `inventory_cost` is deliberately ABSENT. `FacilityDecision` declares the
+    #: field and nothing ever writes it — inventory cost is attributed to
+    #: facility→market PAIRS (`AssignmentDecision.inventory_cost`), not to a
+    #: site. Carrying it would put a hard 0.00 on every warehouse's cost card,
+    #: which reads as "this site carries no inventory cost" rather than "the
+    #: model does not attribute it per site".
+    fixed_cost:           float = 0.0
+    handling_cost:        float = 0.0
+    holding_cost:         float = 0.0
+    opening_cost:         float = 0.0
+    total_facility_cost:  float = 0.0
+
+    #: Stock held at this site, averaged over the MODELLED HORIZON and at its
+    #: highest in a single period — summed over products, from
+    #: `OptimizationResult.inventory_decisions` (the I_{i,k,t} variable).
+    #:
+    #: None, not 0.0, when the solve produced no inventory decisions at all: a
+    #: single-period model has nowhere to carry stock TO and a run with
+    #: inventory disabled never asks, so reporting an average of zero would
+    #: state that this warehouse runs empty. Where the solve DID model stock, a
+    #: site that held none is reported as holding none — that is a decision the
+    #: model made, not a gap in the evidence.
+    #:
+    #: `inventory_periods` says how many periods the average is over, so a
+    #: reader can tell one period's stock from a horizon's.
+    avg_inventory_units:  Optional[float] = None
+    peak_inventory_units: Optional[float] = None
+    inventory_periods:    int = 0
+
+    #: Where the site is, as the upload stated it. Carried so a regional
+    #: reading of the footprint does not have to re-join against the network,
+    #: and None when the upload named neither.
+    region:  Optional[str] = None
+    country: Optional[str] = None
+
     # Observed-baseline provenance, so open→closed transitions are visible.
     baseline_status:  Optional[str] = None
     # Contractual state that constrained (or did not constrain) this facility.
@@ -236,6 +278,20 @@ class NetworkStateResult(BaseModel):
     closed_facilities: List[str] = Field(default_factory=list)
     facilities:        List[FacilitySummary] = Field(default_factory=list)
     flows:             List[FlowSummary] = Field(default_factory=list)
+
+    #: Which region each demand market sits in — `{market_id: region}`.
+    #:
+    #: Markets are absent from `facilities` above, and rightly: the MILP emits
+    #: a decision only for facilities it decides something ABOUT, and a market
+    #: has no capacity to utilise and no cost to attribute. The consequence is
+    #: that a market's region reaches nothing downstream, so a rate stated by
+    #: region — which is how demand growth is stated — cannot be matched to the
+    #: sites that serve it. `flows` names the market each site ships to; this
+    #: names the region that market is in.
+    #:
+    #: Only markets whose upload stated a region appear. An empty map means the
+    #: upload named no regions, not that the markets have none.
+    market_regions:    Dict[str, str] = Field(default_factory=dict)
 
     # --- Planning horizon ---
     #: How many planning periods this result covers, and what the source calls

@@ -122,6 +122,50 @@ def _utilisation_by_period(fd: Any) -> Dict[str, float]:
     }
 
 
+def _inventory_by_facility(
+    result: OptimizationResult,
+    periods: int,
+) -> Dict[str, Dict[str, float]]:
+    """
+    Average and peak stock held at each site, over the modelled horizon.
+
+    `InventoryDecision` is I_{i,k,t} — one row per facility, product and
+    period, and only for the (facility, period) pairs that held something. A
+    site's stock in a period is the sum over its products; its average is over
+    EVERY modelled period and its peak is the worst single one. A sum and a max
+    over rows the MILP already produced — no inventory is computed here.
+
+    Returns {} when the solve produced no inventory decisions AT ALL, which is
+    what a single-period model or a run with inventory disabled produces. The
+    caller reports that as absent rather than as zero: it is the difference
+    between "this warehouse holds no stock" and "this model does not carry
+    stock".
+
+    Where the solve DID model stock, a facility that held none is reported as
+    holding none. That is a decision the model made, not a gap in the evidence.
+    """
+    if not result.inventory_decisions:
+        return {}
+
+    span = max(1, periods)
+    by_facility_period: Dict[str, Dict[int, float]] = defaultdict(lambda: defaultdict(float))
+    for inv in result.inventory_decisions:
+        by_facility_period[inv.facility_id][inv.period] += float(inv.units)
+
+    out: Dict[str, Dict[str, float]] = {}
+    for fd in result.facility_decisions:
+        periods_held = by_facility_period.get(fd.facility_id) or {}
+        levels = list(periods_held.values())
+        out[fd.facility_id] = {
+            # Divided by the horizon, not by the number of periods that held
+            # something: the periods that held nothing held nothing.
+            "avg": round(sum(levels) / span, 4),
+            "peak": round(max(levels), 4) if levels else 0.0,
+            "periods": span,
+        }
+    return out
+
+
 def build_network_state_result(
     result:     OptimizationResult,
     network:    CanonicalNetwork,
@@ -163,6 +207,7 @@ def build_network_state_result(
         periods_modelled = len({fl.period for fl in result.flow_decisions}) or 1
 
     # --- Facilities ---
+    inventory = _inventory_by_facility(result, periods_modelled)
     facilities: List[FacilitySummary] = []
     open_ids: List[str] = []
     closed_ids: List[str] = []
@@ -174,6 +219,7 @@ def build_network_state_result(
             if closure_active and fac.closure_cost_applies(is_open=False):
                 charged = fac.closure_cost
 
+        inv_row = inventory.get(fd.facility_id)
         facilities.append(FacilitySummary(
             facility_id          = fd.facility_id,
             facility_name        = fd.facility_name,
@@ -196,11 +242,32 @@ def build_network_state_result(
             utilization_by_period = _utilisation_by_period(fd),
             throughput_units_per_period = round(
                 fd.throughput_units / periods_modelled, 4),
+            # The engine's own cost attribution for this site, unchanged. The
+            # total is the engine's sum rather than one made here, so a screen
+            # adding the parts up and a screen reading the total cannot
+            # disagree.
+            fixed_cost           = round(fd.fixed_cost, 4),
+            handling_cost        = round(fd.handling_cost, 4),
+            holding_cost         = round(fd.holding_cost, 4),
+            opening_cost         = round(fd.opening_cost, 4),
+            total_facility_cost  = round(fd.total_facility_cost, 4),
+            avg_inventory_units  = inv_row.get("avg") if inv_row else None,
+            peak_inventory_units = inv_row.get("peak") if inv_row else None,
+            inventory_periods    = int(inv_row.get("periods", 0)) if inv_row else 0,
+            region               = getattr(fac, "region", None) if fac else None,
+            country              = getattr(fac, "country", None) if fac else None,
             baseline_status      = fac.effective_baseline_status.value if fac else None,
             contract_status      = fac.contract_status.value if fac else "NONE",
             closure_cost_charged = round(charged, 4),
         ))
         (open_ids if fd.is_open else closed_ids).append(fd.facility_id)
+
+    # Markets get no facility decision, so their geography is read from the
+    # network rather than from the result.
+    market_regions = {
+        f.id: f.region for f in network.facilities
+        if f.role in MARKET_ROLES and getattr(f, "region", None)
+    }
 
     # --- Flows, aggregated across mode and product ---
     agg: Dict[tuple, Dict[str, float]] = defaultdict(
@@ -273,6 +340,7 @@ def build_network_state_result(
         closed_facilities = sorted(closed_ids),
         facilities        = facilities,
         flows             = flows,
+        market_regions    = market_regions,
         periods_modelled  = periods_modelled,
         period_labels     = labels,
         # Carried from the network, not assumed. Every money figure above is

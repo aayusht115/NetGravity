@@ -106,6 +106,12 @@ def _period_span(state: dict) -> str:
     return f" across the {periods} periods modelled"
 
 
+#: The share of total facility spend at which one site is a finding rather than
+#: a row in a table. Two fifths: with four sites an even split is 25%, so this
+#: is comfortably above "the largest of several" and below "almost all of it".
+_SPEND_CONCENTRATION_SHARE = 0.40
+
+
 class ReasoningAgent:
     """Produces narrative synthesis over deterministic evidence."""
 
@@ -983,6 +989,132 @@ class ReasoningAgent:
         return out
 
     @staticmethod
+    def _warehouse_insights(warehouse: Dict[str, Any], refs_for) -> List[KPIInsight]:
+        """
+        What the horizon average was hiding, and where the spend sits.
+
+        Three findings, each emitted only when the evidence carries it:
+
+          * A site whose PEAK period is at or above the threshold while its
+            AVERAGE is not. This is the finding a multi-period model exists to
+            produce and the one an average cannot state — and it is why this
+            method exists beside `_utilization_insights` rather than inside it:
+            that one reads the average and is right about the average.
+          * How OFTEN the tightest site is tight. "Once in twelve months" and
+            "nine months in twelve" are the same peak and different problems.
+          * Where the facility spend is concentrated. A total says how much;
+            the share says which site to look at.
+
+        Silent when the peak and the average agree everywhere, which is every
+        single-period solve — there the existing capacity insight already says
+        it, and two cards making one point in different words is worse than
+        one.
+        """
+        from netgravity.config.defaults import UTILIZATION_THRESHOLDS
+
+        if not warehouse:
+            return []
+        over_pct = UTILIZATION_THRESHOLDS["over_threshold"] * 100.0
+        periods = warehouse.get("periods_modelled") or 1
+        rows = [r for r in (warehouse.get("tightest") or []) if isinstance(r, dict)]
+        out: List[KPIInsight] = []
+
+        def num(row: Dict[str, Any], key: str):
+            value = row.get(key)
+            return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+        # ---- the peak the average hid ---------------------------------
+        hidden = []
+        for row in rows:
+            peak, avg = num(row, "peak_utilization_pct"), num(row, "avg_utilization_pct")
+            if peak is None or avg is None:
+                continue
+            if peak >= over_pct > avg:
+                hidden.append((row, peak, avg))
+
+        if hidden and periods > 1:
+            row, peak, avg = hidden[0]
+            name = str(row.get("name") or row.get("facility_id") or "a site")
+            when = row.get("peak_period")
+            where = f" in period {when}" if when else ""
+            others = (f" {len(hidden) - 1} other site(s) in this footprint read the "
+                      f"same way." if len(hidden) > 1 else "")
+            out.append(KPIInsight(
+                theme="Capacity",
+                headline=f"{name} is at {peak:.1f}% in its busiest period, not {avg:.1f}%",
+                severity=InsightSeverity.RISK,
+                narrative=(
+                    f"I see {name} averaging {avg:.2f}% of stated capacity across "
+                    f"the {periods} modelled periods and reaching {peak:.2f}%"
+                    f"{where}. The average is below the {over_pct:.0f}% threshold "
+                    f"and the peak is not, so a reading of the average alone would "
+                    f"report headroom this site does not have when it matters."
+                    f"{others}"
+                ),
+                metric_refs=refs_for("peak_utilization_pct"),
+                comparison_refs=refs_for("avg_utilization_pct"),
+            ))
+
+        # ---- how often ------------------------------------------------
+        tight = next((r for r in rows
+                      if (num(r, "bottleneck_periods_count") or 0) > 0), None)
+        if tight is not None and periods > 1:
+            count = int(num(tight, "bottleneck_periods_count") or 0)
+            observed = int(num(tight, "periods_observed") or periods)
+            name = str(tight.get("name") or tight.get("facility_id") or "a site")
+            n_bottlenecks = warehouse.get("n_bottlenecks")
+            across = (f" Across the footprint {n_bottlenecks} open site(s) reach "
+                      f"the threshold at some point in the horizon."
+                      if isinstance(n_bottlenecks, int) and n_bottlenecks > 1 else "")
+            out.append(KPIInsight(
+                theme="Capacity",
+                headline=(f"{name} is at or above {over_pct:.0f}% in "
+                          f"{count} of {observed} periods"),
+                severity=(InsightSeverity.RISK if count > 1
+                          else InsightSeverity.INFORMATION),
+                narrative=(
+                    f"I see {name} at or above {over_pct:.0f}% of stated capacity "
+                    f"in {count} of the {observed} modelled periods. That is how "
+                    f"often it has no room left, which is a different question "
+                    f"from how high it goes.{across}"
+                ),
+                metric_refs=refs_for("bottleneck_periods_count"),
+            ))
+
+        # ---- where the facility spend sits ----------------------------
+        #
+        # Only when it is CONCENTRATED. A briefing holds six insights; three
+        # warehouse cards pushed the footprint and carbon findings off the end
+        # of every one, including on networks where the largest site holds a
+        # perfectly ordinary share. One site carrying two fifths of what every
+        # site costs is worth a reader's attention; one carrying a quarter of
+        # four is division.
+        drivers = [d for d in (warehouse.get("cost_drivers") or [])
+                   if isinstance(d, dict)]
+        if drivers:
+            top = drivers[0]
+            cost = top.get("total_facility_cost")
+            share = top.get("share_of_facility_spend")
+            if (isinstance(cost, (int, float)) and isinstance(share, (int, float))
+                    and share >= _SPEND_CONCENTRATION_SHARE):
+                name = str(top.get("name") or top.get("facility_id") or "a site")
+                out.append(KPIInsight(
+                    theme="Cost",
+                    headline=(f"{name} carries {share * 100:.1f}% of what the "
+                              f"facilities cost"),
+                    narrative=(
+                        f"I see {name} accounting for {cost:,.2f} of facility "
+                        f"cost, which is {share * 100:.2f}% of what every site in "
+                        f"this plan costs together. That is fixed, opening, "
+                        f"handling and holding cost at the site — it does not "
+                        f"include transport, so it is where to look first for "
+                        f"facility spend and not a ranking of total network cost."
+                    ),
+                    metric_refs=refs_for("total_facility_cost"),
+                ))
+        return out
+
+    @staticmethod
     def _cost_structure_insights(state: Dict[str, Any], refs_for) -> List[KPIInsight]:
         """
         Which cost line the total is actually made of.
@@ -1333,6 +1465,35 @@ class ReasoningAgent:
                     f"fails first if demand moves. I have not run that scenario, so "
                     f"I am not stating what it would cost or save.")
 
+        # The peak the average hid. Only sites whose AVERAGE is below the
+        # threshold reach here — anything over it on average was returned above
+        # — so this branch says something the one above could not.
+        warehouse = payload.get("warehouse") or {}
+        periods = warehouse.get("periods_modelled") or 1
+        peaked = [
+            row for row in (warehouse.get("tightest") or [])
+            if isinstance(row, dict)
+            and isinstance(row.get("peak_utilization_pct"), (int, float))
+            and row["peak_utilization_pct"] >= over_pct
+        ]
+        if peaked and periods > 1:
+            row = peaked[0]
+            # Capped: this sentence goes into a 350-character field, and
+            # exceeding it loses the whole recommendation rather than the tail
+            # of it.
+            name = str(row.get("name") or row.get("facility_id") or "one site")
+            name = name if len(name) <= 32 else name[:31] + "…"
+            count = row.get("bottleneck_periods_count")
+            observed = row.get("periods_observed") or periods
+            when = (f" in {count} of {observed} periods"
+                    if isinstance(count, (int, float)) and count else "")
+            return (f"I recommend sizing this plan against its peak, not its "
+                    f"average: {name} reaches the {over_pct:.0f}% threshold"
+                    f"{when} while averaging below it, so it has no room in "
+                    f"the period that decides whether the footprint works. "
+                    f"Test added capacity or reassigned volume there. I have "
+                    f"not run it, so I state no saving.")
+
         if negatives:
             return ("I recommend a footprint review: at least one open site costs "
                     "more than the routing benefit it provides, so closing it would "
@@ -1351,11 +1512,18 @@ class ReasoningAgent:
                     "on this: I have no deterministic finding to base a "
                     "recommendation on.")
 
-        return ("I recommend no structural change on this evidence: demand is "
-                "served, no site is at its capacity threshold, and nothing in the "
-                "plan is stranded. The next useful step is a scenario that tests a "
-                "specific change you are considering, rather than a change this "
-                "network is asking for.")
+        # Reached only once every reading is clear: demand served, no site over
+        # the threshold on average, and — where a horizon was modelled — none
+        # over it in any single period either. The sentence names which,
+        # because "no site is at its capacity threshold" was previously said on
+        # the strength of the average alone.
+        basis = ("on average or in any single modelled period" if periods > 1
+                 else "in the period modelled")
+        return (f"I recommend no structural change on this evidence: demand is "
+                f"served, no site reaches its capacity threshold {basis}, and "
+                f"nothing is stranded. The next useful step is a scenario "
+                f"testing a specific change you are considering, rather than "
+                f"one this network is asking for.")
 
     def _template(
         self,
@@ -1413,6 +1581,10 @@ class ReasoningAgent:
         # forecast, in which case every branch below finds nothing and says
         # nothing — the same contract as the comparison block above.
         forecast_block = payload.get("forecast") or {}
+        # The footprint read peak-against-average. Absent on a run that solved
+        # nothing, in which case the branch below finds nothing and says
+        # nothing — the same contract as the two blocks above.
+        warehouse_block = payload.get("warehouse") or {}
 
         infeasible = self._is_infeasible(payload)
 
@@ -1528,6 +1700,11 @@ class ReasoningAgent:
             insights.extend(self._forecast_insights(forecast_block, refs_for))
             insights.extend(self._service_insights(state, refs_for))
             insights.extend(self._utilization_insights(state, payload, refs_for))
+            # AFTER the average, deliberately. The two answer the same question
+            # on different bases, and the peak reading is the correction to the
+            # average rather than a replacement for it — so a reader meets the
+            # average first and then what it hid.
+            insights.extend(self._warehouse_insights(warehouse_block, refs_for))
             insights.extend(self._cost_structure_insights(state, refs_for))
             insights.extend(self._footprint_insights(state, refs_for))
             insights.extend(self._carbon_insights(state, refs_for))
