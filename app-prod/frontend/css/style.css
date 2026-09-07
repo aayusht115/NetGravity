@@ -1917,6 +1917,23 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   box-shadow: 0 4px 18px rgba(107, 47, 160, 0.08);
   position: sticky;
   top: 16px;
+
+  /* THE CARD SCROLLS, not the page past it.
+     It is `position: sticky`, so once its content is taller than the viewport
+     its top pins and its foot sits below the fold with nothing that can bring
+     it into view: scrolling the page moves the comparison table on the left
+     and leaves this card exactly where it is. On a three-scenario comparison
+     that put the reasoning, the figures and the "also compared" list — the
+     whole reason the card exists — permanently out of reach.
+     Bounded to the viewport and given its own scrollbar instead. The last
+     16px matches `top`, so the card never touches the bottom edge. */
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  /* A wheel that reaches the end of this card stops there rather than
+     carrying on and scrolling the page underneath it. */
+  overscroll-behavior: contain;
+  /* Room for the scrollbar so the text does not shift when one appears. */
+  scrollbar-gutter: stable;
 }
 
 .scn-take-head {
@@ -3237,6 +3254,33 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   z-index: 10;
   pointer-events: none;
 }
+
+/* What the algorithm recommends changing about this network, in words, above
+   the twin that draws it. A slate node with a ring is a signal a reader has to
+   learn; the site's NAME is the thing they act on, and it must not be
+   reachable only by clicking the right dot.
+
+   Deliberately NOT an alert. A recommendation is not a warning, and a red
+   strip across the top of the screen every time the engine has a suggestion
+   teaches the reader to ignore the colour. This is the card surface the rest
+   of the product uses, with the primary hue on its edge — the same weight as
+   any other statement the engine makes.
+
+   Always present on this screen: "no change is recommended" is a finding, and
+   a reader who cannot see it has to guess whether the engine had nothing to
+   say or was never asked. */
+.twin-change-note {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 14px; margin-bottom: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border); border-left: 3px solid var(--purple-600);
+  border-radius: var(--r-md);
+  font-size: 12.5px; color: var(--text-2); line-height: 1.55;
+}
+.twin-change-note strong { color: var(--text-1); }
+.twin-change-note .twin-change-what { color: var(--purple-700); font-weight: 700; }
+/* Nothing to act on reads quieter than something to act on. */
+.twin-change-note.is-quiet { border-left-color: var(--border); }
 
 .twin3d-hint span {
   background: rgba(255, 255, 255, 0.97);

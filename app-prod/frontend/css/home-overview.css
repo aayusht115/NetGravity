@@ -930,13 +930,17 @@
    only thing on this screen that is nowhere else. The strip now begins just
    below the fold, which is where a summary of a page you can open belongs.
 
-   The alert spans BOTH columns rather than sitting above the attention card
-   alone. It is one line of status, and while it was stacked in column one
-   the twin was exactly its height taller than the card beside it — 786 to
-   706. Across the top, the two cards below it start and end together. */
-.ov-main > .ov-alert     { grid-column: 1 / -1; grid-row: 1; }
+   THE ALERT IS COLUMN ONE'S. It belongs to the attention card underneath
+   it — the same subject, the same width, one narrow stack a reader goes
+   down — and it was stretched across both columns only so that the two
+   cards below would start level with each other. That is the twin's
+   problem to solve, not the alert's: the twin spans BOTH rows instead, so
+   it starts at the top of the alert and ends at the bottom of the
+   attention card. The reader gets the status and the findings in one
+   column, and the network drawn full-height beside them. */
+.ov-main > .ov-alert     { grid-column: 1; grid-row: 1; }
 .ov-main > .ov-attn-card { grid-column: 1; grid-row: 2; }
-.ov-main > .ov-twin-card { grid-column: 2; grid-row: 2; }
+.ov-main > .ov-twin-card { grid-column: 2; grid-row: 1 / -1; }
 
 .ov-attn-card,
 .ov-twin-card,

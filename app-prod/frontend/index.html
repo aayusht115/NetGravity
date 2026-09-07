@@ -904,12 +904,21 @@
               <button class="toggle-btn" data-view="2d">2D Map</button>
               <button class="toggle-btn active" data-view="3d">3D Twin</button>
             </div>
-            <!-- Network State Toggle -->
-            <div class="toggle-group" id="map-toggle-twin">
-              <button class="toggle-btn active" data-state="actual">Actual</button>
-              <button class="toggle-btn" data-state="recommended">Recommended</button>
-            </div>
+            <!-- No network-state toggle. This screen is the twin of the
+                 network the client RUNS, and nothing else. A "Recommended"
+                 state offering a second network here asked the reader to hold
+                 two footprints in mind on a screen whose job is to show them
+                 one; what the engine recommends changing is said in words
+                 above, and tested as a scenario in the Scenario Planner. -->
           </div>
+
+          <!-- What the algorithm recommends changing about this network.
+               One note, above both views, because it is a statement about the
+               PLAN rather than about the way the plan is being drawn — and it
+               stays on screen when the answer is "nothing", which is a finding
+               a reader would otherwise have to guess at. Filled by
+               renderRecommendedChangeNote(). -->
+          <div class="twin-change-note" id="twin-change-note" hidden></div>
 
           <!-- 2D Leaflet Map (hidden by default) -->
           <div class="card twin-view-panel" id="twin-2d-panel" style="padding:0;overflow:hidden;display:none;position:relative;z-index:0">

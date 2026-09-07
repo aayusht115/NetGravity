@@ -18,6 +18,7 @@ that a model-proposed scenario is validated rather than trusted.
 
 from __future__ import annotations
 
+import inspect
 import json
 
 import pytest
@@ -435,3 +436,171 @@ class TestNaturalLanguageToScenario:
         [spec] = resolution.scenarios
         assert spec.capacity_multiplier is None
         assert spec.capacity_delta_units is None
+
+# ---------------------------------------------------------------------------
+# The footprint a scenario is allowed to change
+# ---------------------------------------------------------------------------
+
+
+def _network_where_closing_is_cheaper():
+    """
+    The shared Delhi fixture with one change: DC_KOLKATA carries a fixed cost
+    large enough that shutting it and serving MKT_EAST down Delhi's backup lane
+    is the cheaper plan. Every other cost is the fixture's, so the ONLY reason
+    the solver has to touch the footprint is the one this test is about.
+    """
+    net = build_delhi_network()
+    return net.model_copy(update={"facilities": [
+        f.model_copy(update={"fixed_cost_per_year": 50_000.0})
+        if f.id == "DC_KOLKATA" else f
+        for f in net.facilities
+    ]})
+
+
+def _solved_open(net):
+    """Which DCs the MILP opens, solved the way a scenario is solved."""
+    from netgravity.optimization.milp import solve as milp_solve
+    from netgravity.schemas.network import OptimizationMode
+
+    cfg = net.config.model_copy(update={
+        "optimization_mode": OptimizationMode.BROWNFIELD_SCENARIO_OPTIMIZATION})
+    result = milp_solve(net, cfg, "footprint-probe")
+    return {d.facility_id: d.is_open for d in result.facility_decisions
+            if d.facility_id.startswith("DC")}
+
+
+class TestOnlyTheUserClosesASite:
+    """
+    A scenario answers the question the planner asked. It does not redesign the
+    footprint on the way past.
+
+    A scenario solves as `BROWNFIELD_SCENARIO_OPTIMIZATION`, which honours
+    facility flags as supplied — and an uploaded network supplies
+    `is_closable = True`. So the MILP was free to shut any site it found
+    cheaper to shut. Ask "what if demand grows 20%?" on the network below and
+    the answer came back with a DC closed that the question never mentioned,
+    and a cost delta that was mostly the closure.
+
+    Closing a site is a decision. It happens when someone decides it.
+    """
+
+    def test_without_the_hold_the_solver_would_close_a_site(self):
+        """The premise. If this ever stops being true the tests below prove
+        nothing, because there would be no closure left to prevent."""
+        assert _solved_open(_network_where_closing_is_cheaper()) == {
+            "DC_DELHI": True, "DC_MUMBAI": True, "DC_KOLKATA": False}
+
+    def test_a_demand_scenario_closes_nothing(self):
+        built, _ = ScenarioBuilder().build(
+            _network_where_closing_is_cheaper(),
+            ScenarioIntentSpec(action=ScenarioActionType.CHANGE_DEMAND,
+                               demand_multiplier=1.2, label="Demand +20%"))
+        assert _solved_open(built) == {
+            "DC_DELHI": True, "DC_MUMBAI": True, "DC_KOLKATA": True}
+
+    def test_a_capacity_scenario_closes_nothing_either(self):
+        built, _ = ScenarioBuilder().build(
+            _network_where_closing_is_cheaper(),
+            ScenarioIntentSpec(action=ScenarioActionType.CHANGE_CAPACITY,
+                               facility_ids=["DC_DELHI"],
+                               capacity_multiplier=1.5,
+                               label="Delhi +50%"))
+        assert _solved_open(built)["DC_KOLKATA"] is True
+
+    def test_the_users_own_closure_still_closes(self):
+        """The exception the whole rule exists for. `is_forced_closed` is never
+        touched, so a site the scenario closed stays closed."""
+        built, overrides = ScenarioBuilder().build(
+            _network_where_closing_is_cheaper(),
+            ScenarioIntentSpec(action=ScenarioActionType.CLOSE_FACILITY,
+                               facility_ids=["DC_KOLKATA"],
+                               label="Close Kolkata"))
+        assert overrides == ["CLOSE_FACILITY DC_KOLKATA"]
+        assert _solved_open(built)["DC_KOLKATA"] is False
+
+    def test_the_closure_still_pays_its_closure_cost(self):
+        """
+        `baseline_status` is what closure economics key on, and the hold must
+        not disturb it — a closure that stopped being priced would be a worse
+        bug than the one being fixed.
+        """
+        from netgravity.schemas.network import FacilityStatus
+
+        built, _ = ScenarioBuilder().build(
+            _network_where_closing_is_cheaper(),
+            ScenarioIntentSpec(action=ScenarioActionType.CLOSE_FACILITY,
+                               facility_ids=["DC_KOLKATA"],
+                               label="Close Kolkata"))
+        shut = next(f for f in built.facilities if f.id == "DC_KOLKATA")
+        assert shut.effective_baseline_status == FacilityStatus.EXISTING
+        assert shut.is_forced_closed is True
+        assert shut.is_mandatory is False
+
+    def test_markets_are_never_pinned(self):
+        """Demand is not footprint. A market has no open/close decision to
+        hold, and writing flags onto one would be a change with no meaning."""
+        base = _network_where_closing_is_cheaper()
+        before = {f.id: (f.is_mandatory, f.is_closable)
+                  for f in base.facilities if f.id.startswith("MKT")}
+        built, _ = ScenarioBuilder().build(
+            base, ScenarioIntentSpec(action=ScenarioActionType.CHANGE_DEMAND,
+                                     demand_multiplier=1.1, label="+10%"))
+        after = {f.id: (f.is_mandatory, f.is_closable)
+                 for f in built.facilities if f.id.startswith("MKT")}
+        assert after == before
+
+    def test_a_candidate_is_offered_not_forced_open(self):
+        """
+        Holding the EXISTING footprint is not the same as opening everything.
+        A proposed site stays the solver's choice: forcing one open would
+        answer a question nobody asked, in the opposite direction.
+        """
+        from netgravity.schemas.network import FacilityRecord, FacilityStatus, NodeRole
+
+        base = _network_where_closing_is_cheaper()
+        candidate = FacilityRecord(
+            id="DC_PROPOSED", name="Proposed DC", role=NodeRole.DC,
+            status=FacilityStatus.CANDIDATE,
+            capacity_units_per_period=5_000.0, fixed_cost_per_year=0.0)
+        base = base.model_copy(update={
+            "facilities": [*base.facilities, candidate]})
+
+        built, _ = ScenarioBuilder().build(
+            base, ScenarioIntentSpec(action=ScenarioActionType.CHANGE_DEMAND,
+                                     demand_multiplier=1.1, label="+10%"))
+        proposed = next(f for f in built.facilities if f.id == "DC_PROPOSED")
+        assert proposed.is_mandatory is False
+        assert proposed.is_closable is True
+
+    def test_a_disruption_target_is_not_pinned_open(self):
+        """An outage is the point of the run that carries one. Pinning the
+        target open would delete the disruption being modelled."""
+        base = _network_where_closing_is_cheaper()
+        base = base.model_copy(update={"facilities": [
+            f.model_copy(update={"is_disruption_target": True})
+            if f.id == "DC_DELHI" else f
+            for f in base.facilities]})
+        built, _ = ScenarioBuilder().build(
+            base, ScenarioIntentSpec(action=ScenarioActionType.CHANGE_DEMAND,
+                                     demand_multiplier=1.1, label="+10%"))
+        target = next(f for f in built.facilities if f.id == "DC_DELHI")
+        assert target.is_mandatory is False
+        assert target.is_closable is True
+
+    def test_greenfield_still_designs_a_footprint(self):
+        """
+        The hold is a SCENARIO rule and lives in the scenario builder. A
+        greenfield design releases the footprint through its own mode policy
+        and never passes through here — that is still where a planner goes to
+        ask which sites should exist.
+        """
+        from netgravity.optimization.modes import get_mode_policy
+        from netgravity.schemas.network import OptimizationMode
+
+        policy = get_mode_policy(OptimizationMode.GREENFIELD_OPTIMIZATION)
+        assert policy.release_existing_footprint is True
+        assert policy.pin_existing_open is False
+
+        builder_source = inspect.getsource(ScenarioBuilder)
+        assert "_hold_the_existing_footprint" in builder_source
+

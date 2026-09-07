@@ -129,9 +129,8 @@ const THEME_COLORS = {
   dcCandidate: 0x6b2fa0, // Kearney Purple — the same hue the map uses
   market:      0x075985, // Sky Blue (deep)
   marketGlow:  0x0ea5e9,
+
   flowActual:  0x334155, // Slate 700
-  flowOptim:   0x5b21b6, // Purple (deep)
-  flowRecom:   0x065f46, // Emerald (deep)
 };
 
 // ─── Module State ───────────────────────────────────────────
@@ -141,7 +140,7 @@ let pointerDirty = true;
 let containerEl = null;
 let animationId = null;
 let isInitialised = false;
-let twin3dState = 'actual';
+
 
 let terrainGroup, nodeGroup, flowGroup, pulseGroup;
 let nodeMeshes = [];      // { id, type, coreMesh, hitMesh, baseRing, data, pos3D }
@@ -212,19 +211,13 @@ export function initTwin3D(containerId) {
   updateProjection();
   setupMapBase();
   setupNetworkNodes();
-  setupFlowArcs('actual');
+  setupFlowArcs();
   setupControls();
   setupInteraction();
 
   isInitialised = true;
   watchVisibility();
   animate();
-}
-
-export function setTwin3DState(state) {
-  if (state === twin3dState) return;
-  twin3dState = state;
-  setupFlowArcs(state);
 }
 
 /**
@@ -281,7 +274,7 @@ export function rebuildTwin3D() {
   hoveredNode = null;
 
   setupNetworkNodes();
-  setupFlowArcs(twin3dState);
+  setupFlowArcs();
   resizeTwin3D();
 }
 
@@ -1005,17 +998,19 @@ function createMarket3D(data, pos) {
 }
 
 // ─── Flow Arcs & Photon Streams ─────────────────────────────
-function setupFlowArcs(state) {
+function setupFlowArcs() {
   while (flowGroup.children.length > 0) flowGroup.remove(flowGroup.children[0]);
   while (pulseGroup.children.length > 0) pulseGroup.remove(pulseGroup.children[0]);
   flowArcs = [];
   photonStreams = [];
 
-  const flowData = getTwin3DFlowsForState(state);
-
-  let colorHex = THEME_COLORS.flowActual;
-  if (state === 'optimised') colorHex = THEME_COLORS.flowOptim;
-  else if (state === 'recommended') colorHex = THEME_COLORS.flowRecom;
+  // The lanes the solve reports, and nothing else. A per-state flow function
+  // used to manufacture an "optimised" and a "recommended" set by scaling
+  // three named prototype lanes (PLT_BADDI to DC_DELHI at 0.88, then 0.82)
+  // — multipliers that came from nobody's optimiser and matched no id in an
+  // uploaded network. The 2D map lost the same function for the same reason.
+  const flowData = LANES;
+  const colorHex = THEME_COLORS.flowActual;
 
   flowData.forEach(lane => {
     const fromNode = findNode(lane.from);
@@ -1041,7 +1036,7 @@ function setupFlowArcs(state) {
       emissive: colorHex,
       emissiveIntensity: 0.3,
       transparent: true,
-      opacity: state === 'actual' ? 0.4 : 0.6,
+      opacity: 0.4,
       roughness: 0.3,
     });
     const tube = new THREE.Mesh(tubeGeo, tubeMat);
@@ -1079,30 +1074,6 @@ function setupFlowArcs(state) {
 
     photonStreams.push({ particles, curve, offsets, speeds, count: photonCount });
   });
-}
-
-function getTwin3DFlowsForState(state) {
-  if (state === 'actual') return LANES;
-  if (state === 'optimised') {
-    return LANES.map(l => {
-      const m = { ...l };
-      if (l.from === 'PLT_BADDI' && l.to === 'DC_DELHI') m.flow = Math.round(l.flow * 0.88);
-      if (l.from === 'PLT_BADDI' && l.to === 'DC_KOLKATA') m.flow = Math.round(l.flow * 1.25);
-      if (l.from === 'PLT_KOLKATA' && l.to === 'DC_KOLKATA') m.flow = Math.round(l.flow * 1.15);
-      return m;
-    });
-  }
-  if (state === 'recommended') {
-    return LANES.map(l => {
-      const m = { ...l };
-      if (l.from === 'PLT_BADDI' && l.to === 'DC_DELHI') m.flow = Math.round(l.flow * 0.82);
-      if (l.from === 'PLT_BADDI' && l.to === 'DC_KOLKATA') m.flow = Math.round(l.flow * 1.45);
-      if (l.from === 'PLT_KOLKATA' && l.to === 'DC_KOLKATA') m.flow = Math.round(l.flow * 1.30);
-      if (l.from === 'DC_KOLKATA' && l.to === 'MKT_KOLKATA') m.flow = Math.round(l.flow * 1.20);
-      return m;
-    });
-  }
-  return LANES;
 }
 
 function findNode(id) {
@@ -1384,7 +1355,7 @@ function resetNodeHighlight(node) {
   if (node.baseRing) node.baseRing.scale.setScalar(1.0);
 
   flowArcs.forEach(fa => {
-    fa.tube.material.opacity = twin3dState === 'actual' ? 0.4 : 0.6;
+    fa.tube.material.opacity = 0.4;
     fa.tube.material.emissiveIntensity = 0.3;
   });
 }
@@ -1414,6 +1385,12 @@ function renderHUDTooltip(data, type, x, y) {
       <div class="hud-row"><span>Capacity / Flow:</span><strong>${formatNumber(data.throughput)} / ${formatNumber(data.capacity)} ${perPeriodLabel()}</strong></div>
     `;
   } else {
+    // A market has no facility diagnostics to open. The footer hint below is
+    // suppressed for one, because `openFacilityPanel` looks the id up in
+    // PLANTS and DCS and returns without doing anything when it is neither —
+    // so on a market the line promised a panel that could never appear, which
+    // is the same "clicking does nothing" the reader reported on the sites
+    // that do have one.
     typeBadge = '<span class="hud-badge market">Demand Market</span>';
     metricLine = `
       <div class="hud-row"><span>Demand:</span><strong>${formatNumber(data.demand)} ${perPeriodLabel()}</strong></div>
@@ -1429,7 +1406,8 @@ function renderHUDTooltip(data, type, x, y) {
     <div class="hud-body">
       ${metricLine}
     </div>
-    <div class="hud-footer">Click node to inspect full diagnostics →</div>
+    ${type === 'market' ? '' :
+      '<div class="hud-footer">Click node to inspect full diagnostics →</div>'}
   `;
 
   hudTooltipEl.style.left = `${Math.min(containerEl.clientWidth - 230, Math.max(10, x - 100))}px`;

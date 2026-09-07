@@ -201,6 +201,149 @@ export const SCHEMA_MAPPING = {
 // carried full cost/SLA/utilisation figures no solver produced.
 export const SCENARIOS = [];
 
+/**
+ * Every change a solved plan would make to the network.
+ *
+ * Closures, openings and rerouted corridors, read from the plans the engine
+ * actually solved — `baselineFacilities` / `scenarioFacilities` and
+ * `baselineFlows` / `scenarioFlows`, as `scenario-mapper.js` writes them.
+ *
+ * THREE ANSWERS, NOT TWO. "Nothing has been solved" and "what was solved
+ * changes nothing" are different statements and the screen must not collapse
+ * them: reporting "no change is recommended" for a network nobody has analysed
+ * is a conclusion from absence, which is the one thing absence cannot support.
+ *
+ *   NO_PLAN     no scenario has been solved, so nothing has been recommended
+ *   NO_CHANGE   a plan was solved and it moves nothing
+ *   CHANGES     a plan was solved and here is what it moves
+ *
+ * An OPENING counts only for a site that was shut in that plan's own baseline,
+ * and a CLOSURE only for one that was open in it — the same site can be
+ * neither, and a proposed DC the solver declined to build is not a closure.
+ */
+export function recommendedNetworkChanges() {
+  const named = new Map(
+    [...PLANTS, ...DCS, ...MARKETS].map((f) => [f.id, f.name]));
+  const nameOf = (id) => named.get(id) || id;
+
+  const closures = new Map();
+  const openings = new Map();
+  const reroutes = new Map();
+  const plans = [];
+
+  SCENARIOS.forEach((scn) => {
+    // The baseline is not a plan. `baselineFromScenarioRecord()` puts the
+    // observed network into this list as "Current Baseline" with
+    // `scenarioFacilities` set to `baseline_facilities` — the same object on
+    // both sides — so it can never differ from itself. Counting it would let
+    // a network nobody has run a scenario against report "no change is
+    // recommended", which is a conclusion drawn from a comparison of the
+    // network with itself rather than from anything an optimiser decided.
+    if (scn.type === 'BASELINE' || scn.id === 'SCN_ACTUAL') return;
+
+    const label = scn.name || scn.id;
+    const before = scn.baselineFacilities || {};
+    const after = scn.scenarioFacilities || {};
+    if (!Object.keys(after).length) return;
+    if (!plans.includes(label)) plans.push(label);
+
+    Object.entries(after).forEach(([id, solved]) => {
+      if (!solved || !before[id]) return;
+      const was = before[id].isOpen;
+      const now = solved.isOpen;
+      const bucket = (was === true && now === false) ? closures
+                   : (was === false && now === true) ? openings
+                   : null;
+      if (!bucket) return;
+      const row = bucket.get(id) || { facilityId: id, name: nameOf(id), plans: [] };
+      if (!row.plans.includes(label)) row.plans.push(label);
+      bucket.set(id, row);
+    });
+
+    // A corridor whose volume moved. Sub-unit drift is solver noise, not a
+    // recommendation to reroute anything.
+    const key = (f) => `${f.origin_id}->${f.destination_id}`;
+    const baseUnits = new Map(
+      (scn.baselineFlows || []).map((f) => [key(f), f.flow_units || 0]));
+    (scn.scenarioFlows || []).forEach((f) => {
+      const k = key(f);
+      const shift = (f.flow_units || 0) - (baseUnits.get(k) || 0);
+      if (Math.abs(shift) < 1) return;
+      const row = reroutes.get(k) || {
+        from: f.origin_id, to: f.destination_id,
+        fromName: nameOf(f.origin_id), toName: nameOf(f.destination_id),
+        shift, plans: [],
+      };
+      if (!row.plans.includes(label)) row.plans.push(label);
+      reroutes.set(k, row);
+    });
+  });
+
+  const out = {
+    closures: [...closures.values()],
+    openings: [...openings.values()],
+    reroutes: [...reroutes.values()],
+    plans,
+    status: 'NO_PLAN',
+    reason: '',
+    summary: '',
+  };
+
+  if (!plans.length) {
+    out.reason = 'No plan has been solved against this network, so the engine '
+      + 'has not recommended a change to it. Run a scenario to produce one.';
+    return out;
+  }
+
+  const parts = [];
+  if (out.closures.length) {
+    parts.push(`close ${out.closures.map((r) => r.name).join(', ')}`);
+  }
+  if (out.openings.length) {
+    parts.push(`open ${out.openings.map((r) => r.name).join(', ')}`);
+  }
+  if (out.reroutes.length) {
+    parts.push(`move volume on ${out.reroutes.length} corridor`
+      + `${out.reroutes.length === 1 ? '' : 's'}`);
+  }
+
+  if (!parts.length) {
+    out.status = 'NO_CHANGE';
+    out.reason = `No change is recommended. ${plans.join(', ')} re-solved this `
+      + 'network and kept every site open and every corridor carrying what it '
+      + 'carries today.';
+    return out;
+  }
+
+  out.status = 'CHANGES';
+  out.summary = parts.join('; ');
+  return out;
+}
+
+/**
+ * What the solve could not serve, and the engine's reason for it.
+ *
+ * Written by `hydrateFromBackend()` from the relaxation note the engine
+ * attaches when the strict model proves infeasible and it returns the best
+ * plan that serves as much as the network physically can.
+ *
+ * `shortMarkets` is read off THAT plan's own flows — demand at a market minus
+ * what reached it — so it is the shortfall the reported figures were computed
+ * with, not a second opinion about it. It stays empty when the run carried no
+ * relaxation note; a screen showing this must say the breakdown is absent
+ * rather than imply the shortfall is spread evenly or falls nowhere.
+ */
+export const DEMAND_SHORTFALL = {
+  unservedDemand: null,
+  totalDemand: null,
+  reason: '',
+  //: [{ marketId, demand, unserved }], largest shortfall first.
+  shortMarkets: [],
+  //: Proposed sites the relaxed plan opened to get as far as it did.
+  wouldOpenCandidates: [],
+  shortagePenaltyPerUnit: null,
+};
+
 // ─── SCENARIO COMPARISON INSIGHTS (Deterministic AI Assessments) ─
 export const SCENARIO_COMPARISON_INSIGHTS = [];
 
@@ -602,6 +745,10 @@ export function clearDemoNarrative(keepFacilityIds = []) {
   });
   SCENARIO_COMPARISON_INSIGHTS.length = 0;
   SCENARIO_COMPARISON_ACTIONS.length = 0;
+  Object.assign(DEMAND_SHORTFALL, {
+    unservedDemand: null, totalDemand: null, reason: '',
+    shortMarkets: [], wouldOpenCandidates: [], shortagePenaltyPerUnit: null,
+  });
 
   AGENT_STATE.activityTrace = [];
   AGENT_STATE.currentObjective = 'No objective set for this network yet.';

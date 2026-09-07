@@ -41,6 +41,7 @@ import {
   applyActionsResponse,
   applyHorizon, SOLVE_HORIZON, setActiveCurrency, setNetworkGeography,
   applySystemStatus, MARKETS, setForecastCatalogue, setForecastBriefing,
+  DEMAND_SHORTFALL,
 } from '../data.js';
 
 /** Read a KPIResult; a non-VALID status yields null, never 0. */
@@ -344,6 +345,22 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
     unservedDemand: relaxedMeta.unserved_demand ?? null,
     totalDemand: relaxedMeta.total_demand ?? null,
   } : null;
+
+  // WHERE the shortfall falls, kept rather than dropped.
+  //
+  // The note already carries `short_markets` — market by market, read off the
+  // plan's own flows — and `would_open_candidates`, and both were discarded
+  // here. Home could therefore say "452,610 units are unserved" and offer a
+  // "View affected demand" link with no affected demand behind it to view.
+  Object.assign(DEMAND_SHORTFALL, {
+    unservedDemand: relaxedMeta ? (relaxedMeta.unserved_demand ?? null) : null,
+    totalDemand: relaxedMeta ? (relaxedMeta.total_demand ?? null) : null,
+    reason: relaxedMeta ? (relaxedMeta.relaxation_reason || '') : '',
+    shortMarkets: (relaxedMeta && relaxedMeta.short_markets) || [],
+    wouldOpenCandidates: (relaxedMeta && relaxedMeta.would_open_candidates) || [],
+    shortagePenaltyPerUnit: relaxedMeta
+      ? (relaxedMeta.shortage_penalty_per_unit ?? null) : null,
+  });
 
   // ---- Planning horizon ------------------------------------------------
   // What span of time every figure below covers. Applied BEFORE the baseline

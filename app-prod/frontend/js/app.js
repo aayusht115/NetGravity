@@ -17,11 +17,11 @@ import {
   perPeriodLabel, SOLVE_HORIZON, horizonLabel,
   formatCurrencyExact, currencySymbol, currencyLabel, NETWORK_GEOGRAPHY,
   getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries, withCurrency,
-  FORECAST_BRIEFING
+  FORECAST_BRIEFING, recommendedNetworkChanges, DEMAND_SHORTFALL
 } from './data.js';
-import { initMap, setNetworkState, invalidateMapSize, refreshAllMaps,
+import { initMap, invalidateMapSize, refreshAllMaps,
          revealMap, renderMapLegendCounts } from './map.js';
-import { initTwin3D, setTwin3DState, resizeTwin3D } from './twin3d.js';
+import { initTwin3D, resizeTwin3D } from './twin3d.js';
 import { networkCountryLabel } from './world-basemap.js';
 import {
   renderForecastChart,
@@ -54,7 +54,6 @@ import { mapTwinStateToFrontend } from './integration/mappers/twin-mapper.js';
 // ─── State ──────────────────────────────────────────────────
 const state = {
   activeTab: 'home',
-  networkState: 'actual',
   mapsInitialised: {},
   chartsInitialised: {},
   // Home cockpit state
@@ -956,6 +955,9 @@ export function navigateToTab(tab) {
         // opening this tab after any later change showed the counts as of
         // the last load rather than as of now.
         renderTwinTables();
+        // A scenario solved since the last render changes what is recommended,
+        // and this is the screen that states it.
+        renderRecommendedChangeNote();
       } catch (err) {
         console.error('Twin initialization warning:', err);
       }
@@ -1319,30 +1321,9 @@ function initTabs() {
     });
   }
 
-  // Network state toggles (Digital Twin Tab)
-  const mapToggle = document.getElementById('map-toggle-twin');
-  if (mapToggle) {
-    mapToggle.querySelectorAll('.toggle-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        mapToggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const newState = btn.dataset.state;
-        state.networkState = newState;
-
-        // Update 2D map
-        setNetworkState(newState);
-
-        // Update 3D twin
-        setTwin3DState(newState);
-
-        renderTwinStats();
-      });
-    });
-
-    // Populate the overlays for the default ('actual') state on load, rather
-    // than leaving the placeholders that are baked into the markup.
-    renderTwinStats();
-  }
+  // The twin's overlays and the recommended-change note, for the one state
+  // this screen has. There is no toggle to hang them off any more.
+  renderTwinStats();
 
   // Window resize handler for 3D canvas and maps
   window.addEventListener('resize', () => {
@@ -1825,11 +1806,8 @@ function renderOverviewAlert(elId = 'ov-alert') {
           <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
         </button>
       </div>`;
-    el.querySelector('.ov-alert-link')?.addEventListener('click', () => {
-      // The markets the shortfall is in, which is the detail the old banner
-      // spelled out in prose.
-      if (typeof window.navigateToTab === 'function') window.navigateToTab('twin');
-    });
+    el.querySelector('.ov-alert-link')?.addEventListener('click',
+      openDemandShortfallDetail);
     return;
   }
 
@@ -1847,6 +1825,119 @@ function renderOverviewAlert(elId = 'ov-alert') {
         ? 'Every unit of demand in your upload is met within its service level.'
         : 'Upload a network dataset to populate this page.'}</div>
     </div>`;
+}
+
+/**
+ * The demand this plan cannot serve, market by market, and why.
+ *
+ * "View affected demand" used to change the page — it opened the Digital Twin,
+ * which draws the network and says nothing about a shortfall. The reader
+ * pressed a link naming a thing and got a different screen that did not
+ * contain it.
+ *
+ * Everything below is read from the relaxation note the engine attaches to the
+ * run these figures come from: the same plan, its own flows, its own reason.
+ * Nothing is recomputed here and nothing is apportioned — where the engine
+ * gave no market breakdown, this says so instead of spreading the total.
+ */
+function openDemandShortfallDetail() {
+  const overlay = document.getElementById('action-drawer-overlay');
+  const body = document.getElementById('action-drawer-content');
+  if (!overlay || !body) return;
+
+  const base = getOptimizedBaseCase()?.baseline || {};
+  const unserved = DEMAND_SHORTFALL.unservedDemand ?? base.unservedDemand ?? null;
+  const total = DEMAND_SHORTFALL.totalDemand ?? base.totalDemand ?? null;
+  const rows = DEMAND_SHORTFALL.shortMarkets || [];
+  const opened = DEMAND_SHORTFALL.wouldOpenCandidates || [];
+
+  const marketName = (id) => {
+    const m = MARKETS.find((x) => x.id === id);
+    return m ? m.name : id;
+  };
+  const facilityName = (id) => {
+    const f = getFacilityById(id);
+    return f ? f.name : id;
+  };
+  const share = (v) => (total ? `${((v / total) * 100).toFixed(1)}%` : '—');
+
+  const marketRows = rows.map((r) => `
+    <tr>
+      <td>
+        <div style="font-weight:600">${escapeInsightText(marketName(r.market_id))}</div>
+        <div class="text-xs" style="color:var(--text-3)">${escapeInsightText(r.market_id)}</div>
+      </td>
+      <td class="num">${formatNumber(r.demand)}</td>
+      <td class="num" style="font-weight:700;color:var(--red)">${formatNumber(r.unserved)}</td>
+      <td class="num">${r.demand ? `${((r.unserved / r.demand) * 100).toFixed(1)}%` : '—'}</td>
+    </tr>`).join('');
+
+  body.innerHTML = `
+    <div class="card-title" style="font-size:17px;margin-bottom:2px">Demand this plan cannot serve</div>
+    <div class="card-subtitle" style="margin-bottom:16px">Read from the solved
+      plan these figures come from &mdash; its own flows, market by market.</div>
+
+    <div class="grid-2" style="margin-bottom:16px">
+      <div class="dash-metric-card">
+        <div class="dash-metric-title">Unserved</div>
+        <div class="dash-metric-val" style="color:var(--red)">${
+          unserved === null ? '—' : formatNumber(unserved)}</div>
+        <div class="dash-metric-sub"><span>${
+          unserved === null ? 'not reported' : `${share(unserved)} of stated demand`}</span></div>
+      </div>
+      <div class="dash-metric-card">
+        <div class="dash-metric-title">Stated demand</div>
+        <div class="dash-metric-val">${total === null ? '—' : formatNumber(total)}</div>
+        <div class="dash-metric-sub"><span>across every market in this upload</span></div>
+      </div>
+    </div>
+
+    <div class="card-title mb-md" style="font-size:13px">Why</div>
+    <div class="wh-status-note" style="margin-bottom:18px">${
+      DEMAND_SHORTFALL.reason
+        ? escapeInsightText(DEMAND_SHORTFALL.reason)
+        : 'This run carried no relaxation note, so the engine has not stated a '
+          + 'reason for the shortfall here. The figure above is the one it '
+          + 'reported with the plan.'}</div>
+
+    <div class="card-title mb-md" style="font-size:13px">Where it falls</div>
+    ${rows.length ? `
+    <div class="table-wrap" style="margin-bottom:18px">
+      <table class="ng-table">
+        <thead><tr>
+          <th>Market</th>
+          <th class="num">Demand</th>
+          <th class="num">Unserved</th>
+          <th class="num">Short by</th>
+        </tr></thead>
+        <tbody>${marketRows}</tbody>
+      </table>
+    </div>` : `
+    <div class="wh-status-note" style="margin-bottom:18px">
+      <strong>No market breakdown travelled with this run.</strong>
+      The engine reports the shortfall per market only when it has relaxed an
+      infeasible model; this total came from a plan it did not. Nothing here
+      will apportion it across markets &mdash; a split nobody computed would
+      read exactly like one that was.
+    </div>`}
+
+    ${opened.length ? `
+    <div class="card-title mb-md" style="font-size:13px">What the plan already opened to get this far</div>
+    <div class="wh-status-note" style="margin-bottom:18px">
+      ${opened.map((id) => escapeInsightText(facilityName(id))).join(', ')}
+      &mdash; proposed sites this plan took up. The shortfall above is what
+      remains after them.
+    </div>` : ''}
+
+    <div class="text-xs" style="color:var(--text-2);line-height:1.6">
+      Serving this demand is a capacity question, and testing an answer to it
+      is what the Scenario Planner is for: add capacity at a short market's
+      serving site, or open a proposed one, and re-solve.
+    </div>`;
+
+  overlay.classList.add('active');
+  overlay.classList.add('visible');
+  overlay.style.display = 'flex';
 }
 
 const OV_ICONS = {
@@ -2429,6 +2520,22 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
   const rest = [...actionItems, ...insightItems].filter((it) => it !== lead);
   const rec = getNetworkRecommendation();
 
+  // What the algorithm recommends CHANGING, as distinct from what it
+  // recommends doing next. `rec` is the engine's prose; this is the concrete
+  // move — close this, open that, reroute those — read from the plans that
+  // were actually solved. Quiet here: a reader on Home who has run no plan is
+  // not owed a line saying so, and the Digital Twin states it for the reader
+  // who goes looking.
+  const change = recommendedChangeSummary({ quietWhenNothing: true });
+  const changeHtml = change ? `
+    <div class="ov-attn-next">
+      <span class="ov-attn-next-icon">${OV_ICONS.chart}</span>
+      <div class="ov-attn-next-text">
+        <div class="ov-attn-section-label tone-next">Recommended change</div>
+        <div class="ov-attn-next-sub">${change.html}</div>
+      </div>
+    </div>` : '';
+
   /* The finding's figure and its sentence, without saying the figure twice.
      An insight's `subtitle` usually restates its own headline evidence — "I
      see 452,610 units of 1,435,985 units of demand left unserved" already
@@ -2476,6 +2583,8 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
         <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
       </button>
     </div>
+
+    ${changeHtml}
 
     ${rec ? `
     <div class="ov-attn-next">
@@ -2585,6 +2694,69 @@ export function closeActionDrawer() {
  * here would make this screen a second KPI engine. So it stays an em dash
  * until the backend owns that metric, rather than showing an invented band.
  */
+/**
+ * Facility and scenario names come from an uploaded file, so they are escaped
+ * before they reach innerHTML.
+ */
+function escAttr(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+/**
+ * What the algorithm recommends changing about this network, in one sentence.
+ *
+ * The single reader behind both places this has to appear: the Digital Twin,
+ * and Home's "Needs your attention" card. One function, so the two screens
+ * cannot come to disagree about what was recommended.
+ *
+ * Three answers, because there are three situations and collapsing them lies:
+ * a network nobody has run a plan against has not been told there is nothing
+ * to change, and saying so would be a conclusion drawn from absence.
+ *
+ * Returns null when there is nothing worth putting in front of the reader on
+ * a screen that did not ask — Home takes this branch, the twin does not.
+ */
+function recommendedChangeSummary({ quietWhenNothing = false } = {}) {
+  const change = recommendedNetworkChanges();
+
+  if (change.status === 'CHANGES') {
+    const plans = change.plans.map(escAttr).join(', ');
+    return {
+      quiet: false,
+      html: `<div><strong>The recommended plan would</strong>
+        <span class="twin-change-what">${escAttr(change.summary)}</span>.
+        From ${plans}. The twin below is the network as it runs today \u2014 test
+        the change as a scenario to see it drawn.</div>`,
+    };
+  }
+  if (quietWhenNothing) return null;
+
+  return {
+    quiet: true,
+    html: `<div><strong>${change.status === 'NO_CHANGE'
+      ? 'No change is recommended.'
+      : 'No change has been recommended yet.'}</strong>
+      ${escAttr(change.reason).replace(/^No change is recommended\.\s*/, '')}</div>`,
+  };
+}
+
+/**
+ * The recommended change, above the twin that draws it.
+ *
+ * Always on screen here, in both states. "No change is recommended" is a
+ * finding: a reader who cannot see it has to guess whether the engine had
+ * nothing to say or was never asked, and those are different things.
+ */
+function renderRecommendedChangeNote() {
+  const node = document.getElementById('twin-change-note');
+  if (!node) return;
+  const summary = recommendedChangeSummary();
+  node.hidden = false;
+  node.classList.toggle('is-quiet', summary.quiet);
+  node.innerHTML = summary.html;
+}
+
 function renderTwinStats() {
   const nodeCount = PLANTS.length + DCS.length + MARKETS.length;
   const laneCount = LANES.length;
@@ -2612,6 +2784,8 @@ function renderTwinStats() {
         + 'in frame, and its land is drawn lighter than its neighbours.'
       : '';
   });
+
+  renderRecommendedChangeNote();
 
   // "How many plants / DCs / markets" is answered on the legend itself, at
   // the bottom-right corner of the map, rather than only by the three tables
@@ -2929,10 +3103,40 @@ window.openFacilityPanel = function (facilityId) {
   `;
 
   document.getElementById('facility-panel').classList.add('open');
+
+  // ...and SHOW it. Adding `.open` to the panel stopped being enough when the
+  // unified slide-in drawers landed: `#facility-panel` is a child of
+  // `#facility-panel-overlay`, which carries `display: none` until it is given
+  // `.active` / `.visible`, and the later `.facility-panel` block in style.css
+  // makes the panel `position: relative` with `transform: translateX(100%)`,
+  // so the older `.facility-panel.open { right: 0 }` rule has nothing left to
+  // move. Clicking a node on the Digital Twin therefore built the whole panel
+  // — 1,536 characters of that site's real figures — inside a container the
+  // reader could not see, which is why "Click node to inspect full
+  // diagnostics" appeared to do nothing.
+  //
+  // `actions.js`'s `closeFacilityPanel` already reached for the overlay; only
+  // the opening half was left behind.
+  const overlay = document.getElementById('facility-panel-overlay');
+  if (overlay) {
+    overlay.classList.add('active');
+    overlay.classList.add('visible');
+    // The element carries `style="display:none"` inline, which beats the
+    // stylesheet's `display: flex !important` on `.active`.
+    overlay.style.display = 'flex';
+  }
 };
 
 function closeFacilityPanel() {
-  document.getElementById('facility-panel').classList.remove('open');
+  document.getElementById('facility-panel')?.classList.remove('open');
+  // The half that actually hides it — the same three lines
+  // `closeActionDrawer` uses, so the two drawers behave identically.
+  const overlay = document.getElementById('facility-panel-overlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    overlay.classList.remove('visible');
+    overlay.style.display = 'none';
+  }
 }
 
 // --- Recommendation -----------------------------------------

@@ -404,18 +404,21 @@ class TestTheOverviewPageIsShapedLikeTheMockup:
         css = _asset("css", "home-overview.css")
         rows = css[css.index(".ov-main {"):]
         rows = rows[:rows.index(".ov-attn-card,")]
-        # SUPERSEDED: the twin spanned rows 1 and 2, so it ran from the top
-        # of the alert down to the bottom of the attention card — and was
-        # therefore exactly the alert's height taller than the card beside
-        # it, 786px to 706px. The two cards were asked to be the same
-        # height, so the alert now spans both COLUMNS above them and the
-        # cards share row 2. The twin still reaches the full height of the
-        # row it is in, which is what this was protecting.
-        assert "grid-row: 1 / span 2" not in rows, rows
-        assert ".ov-main > .ov-alert     { grid-column: 1 / -1; grid-row: 1; }" in rows, rows
+        # The alert belongs to the attention card underneath it: the same
+        # subject, the same width, one narrow stack the reader goes down.
+        # It spanned both columns for a while, only so the two cards below
+        # would start level with each other — which is the twin's problem
+        # to solve, not the alert's. The twin spans both ROWS instead, so
+        # it starts at the top of the alert and ends at the bottom of the
+        # attention card.
+        assert ".ov-main > .ov-alert     { grid-column: 1; grid-row: 1; }" in rows, rows
         assert ".ov-main > .ov-attn-card { grid-column: 1; grid-row: 2; }" in rows, rows
-        assert ".ov-main > .ov-twin-card { grid-column: 2; grid-row: 2; }" in rows, rows
+        assert ".ov-main > .ov-twin-card { grid-column: 2; grid-row: 1 / -1; }" in rows, rows
         assert "grid-template-rows: auto minmax(0, 1fr)" in rows
+        # Stacked, nothing spans anything — restored explicitly, because
+        # the span is set on the element rather than on the container.
+        stacked = css[css.index("@media (max-width: 1100px)"):]
+        assert ".ov-main > .ov-twin-card { grid-column: 1; grid-row: auto; }" in stacked
 
     def test_the_grid_takes_the_whole_first_screen(self):
         """
@@ -660,3 +663,88 @@ class TestNothingOnTheOverviewClaimsMoreThanTheBuildDoes:
         assert "${why}" not in caller, (
             "the issues are still being concatenated into the headline"
         )
+
+class TestTheAffectedDemandIsShown:
+    """
+    "View affected demand" named a thing and opened a different screen.
+
+    It called `navigateToTab('twin')` — the Digital Twin, which draws the
+    network and says nothing about a shortfall. A reader pressing a link that
+    names the demand it cannot serve was shown a map instead, and the detail
+    the link promised existed nowhere in the product.
+
+    The engine had it the whole time: when the strict model proves infeasible
+    it returns the best plan that serves as much as the network physically
+    can, and attaches a note carrying `short_markets` — demand at a market
+    minus what reached it, read off that plan's own flows — plus its reason
+    and the proposed sites it opened to get that far. Hydration dropped all of
+    it.
+    """
+
+    def test_the_link_opens_the_detail_rather_than_another_screen(self):
+        js = _asset("js", "app.js")
+        block = js[js.index("function renderOverviewAlert("):]
+        block = block[:block.index("\nfunction ")]
+        assert "openDemandShortfallDetail" in block
+        # The screen it used to change to.
+        assert "navigateToTab('twin')" not in block
+
+    def test_the_breakdown_survives_hydration(self):
+        """`short_markets` and `would_open_candidates` were read off the plan
+        and then discarded, so Home could report a shortfall and offer no
+        affected demand to view."""
+        hy = _asset("js", "integration", "hydrate.js")
+        assert "DEMAND_SHORTFALL" in hy
+        block = hy[hy.index("Object.assign(DEMAND_SHORTFALL,"):]
+        block = block[:block.index("});")]
+        assert "relaxedMeta.short_markets" in block
+        assert "relaxedMeta.would_open_candidates" in block
+        assert "relaxedMeta.relaxation_reason" in block
+
+    def test_a_new_network_clears_the_old_ones_shortfall(self):
+        js = _asset("js", "data.js")
+        assert "export const DEMAND_SHORTFALL" in js
+        # Reset with every other narrative field, or the previous project's
+        # markets are listed under this one's figures.
+        block = js[js.index("SCENARIO_COMPARISON_ACTIONS.length = 0;"):]
+        block = block[:block.index("AGENT_STATE")]
+        assert "Object.assign(DEMAND_SHORTFALL," in block
+        assert "shortMarkets: []" in block
+
+    def test_the_detail_names_markets_and_never_apportions(self):
+        """
+        A total split across markets by the screen would read exactly like one
+        the engine computed. Where no breakdown travelled with the run, the
+        drawer says so.
+        """
+        js = _asset("js", "app.js")
+        block = js[js.index("function openDemandShortfallDetail()"):]
+        block = block[:block.index("\nconst OV_ICONS")]
+        assert "DEMAND_SHORTFALL.shortMarkets" in block
+        assert "r.market_id" in block and "r.unserved" in block
+        assert "No market breakdown travelled with this run" in block
+        # Nothing divides the total by a market count anywhere in it.
+        assert "/ rows.length" not in block
+        assert "/ MARKETS.length" not in block
+
+    def test_the_reason_is_the_engines_own(self):
+        js = _asset("js", "app.js")
+        block = js[js.index("function openDemandShortfallDetail()"):]
+        block = block[:block.index("\nconst OV_ICONS")]
+        assert "DEMAND_SHORTFALL.reason" in block
+        # ...and its absence is stated rather than filled in.
+        assert "has not stated a" in block
+
+    def test_it_opens_the_drawer_that_already_exists(self):
+        """No second overlay for one more panel: the drawer, its close button
+        and its overlay-click dismissal are already on the page."""
+        html = _asset("index.html")
+        assert 'id="action-drawer-overlay"' in html
+        assert 'id="action-drawer-content"' in html
+        js = _asset("js", "app.js")
+        block = js[js.index("function openDemandShortfallDetail()"):]
+        block = block[:block.index("\nconst OV_ICONS")]
+        assert "action-drawer-content" in block
+        assert "action-drawer-overlay" in block
+        assert "export function closeActionDrawer()" in js
+
