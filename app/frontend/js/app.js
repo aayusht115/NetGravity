@@ -28,6 +28,8 @@ import {
   renderFacilityThroughputChart, renderFacilityCostBreakdownChart, renderFacilityLaneFlowsChart
 } from './charts.js';
 import { initScenarios } from './scenarios.js';
+import { renderWarehouseDashboard, clearWarehouseState,
+         warehouseHealthCsvLines } from './warehouse.js';
 import { mountAgentLoading } from './agent-loading.js';
 import {
   beginAnalysisLoading, endAnalysisLoading, reportAnalysisStage,
@@ -746,6 +748,13 @@ window.addEventListener('networkDataLoaded', (e) => {
   if (net && net.dcs && net.dcs.length > 0) {
     state.selectedFacility = net.dcs[0].id;
   }
+  // The warehouse report describes the network that produced it. Re-uploading
+  // into the SAME project keeps the project id and changes the data, so a
+  // report cached against the id alone would survive its own network.
+  try {
+    clearWarehouseState();
+    if (state.activeTab === 'facility-dashboard') renderWarehouseDashboard();
+  } catch (err) { }
   try { initHomeSelectors(); } catch (err) { }
   try { renderHome(); } catch (err) { }
   try { renderTwinTables(); } catch (err) { }
@@ -904,11 +913,18 @@ export function navigateToTab(tab) {
     return;
   }
 
-  // 2. Facility KPI Dashboard
+  // 2. KPI Dashboard — the warehouse network, then the selected facility.
   if (tab === 'facility-dashboard') {
     document.getElementById('tab-facility-dashboard')?.classList.add('active');
     state.activeTab = 'facility-dashboard';
     renderFacilityDashboard();
+    // Not awaited, and deliberately so: the facility band is already hydrated
+    // and renders immediately, while the warehouse band fetches a report the
+    // backend has already computed and cached per network version. Blocking
+    // the whole screen on that request would make an instant render wait for a
+    // round trip it does not need. The band shows its own "reading the solved
+    // footprint" line in the meantime.
+    renderWarehouseDashboard();
     scrollPageToTop();
     return;
   }
@@ -3406,24 +3422,33 @@ export function exportFacilityReport() {
       + ',' + csvCell('No insight has been generated for this network yet.'));
   }
 
+  // The other half of the same screen. One button on the panel, so one file:
+  // the reader who exports the KPI dashboard gets every metric that was on it,
+  // not the half that happened to sit under the button they pressed.
+  lines.push('');
+  lines.push(...warehouseHealthCsvLines());
+
   // A Blob with an explicit filename, not a `data:` URL. Chrome ignores the
   // `download` attribute's name on long data: URLs and saves the report under a
   // generated temporary name, which is how an export meant to be circulated
   // arrived as an unidentifiable file.
   const stamp = new Date().toISOString().slice(0, 10);
-  const safeName = String(fac.name || fac.id).replace(/[^A-Za-z0-9_-]+/g, '_');
   const blob = new Blob(['﻿' + lines.join('\r\n')],
                         { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `NetGravity_KPI_${safeName}_${stamp}.csv`;
+  // Named for the screen, not for one facility. The file now carries every
+  // site in the network as well as the selected one, and a filename naming a
+  // single site would have a reader circulate it as that site's report.
+  link.download = `NetGravity_KPI_Dashboard_${stamp}.csv`;
   document.body.appendChild(link);
   link.click();
   link.remove();
   URL.revokeObjectURL(url);
 
-  showNotification('Exported KPI report for ' + fac.name);
+  showNotification('Exported the KPI dashboard \u2014 the facility network '
+                   + 'and ' + fac.name + '.');
 }
 
 // Expose export on window

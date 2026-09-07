@@ -298,6 +298,22 @@ _FACT_SPEC: Dict[str, Tuple[ClaimKind, str]] = {
     "carbon_kg":                 (ClaimKind.UNITS, "optimization_result"),
     "share_of_total_units":      (ClaimKind.RATIO, "optimization_result"),
     "closure_cost_charged":      (ClaimKind.CURRENCY, "optimization_result"),
+    # Warehouse deep dive — the same solve, read per period.
+    #
+    # `peak_utilization_pct` is the MILP's own worst-period figure and is the
+    # correction to `utilization_pct` above, which over a horizon is an
+    # average. A briefing that cannot cite the peak can only report the
+    # average, which is how "capacity is not what limits this plan" came to be
+    # said about a network with a site at 95% in March.
+    "peak_utilization_pct":      (ClaimKind.PERCENTAGE, "kpi_engine"),
+    "avg_peak_utilization_pct":  (ClaimKind.PERCENTAGE, "kpi_engine"),
+    "bottleneck_periods_count":  (ClaimKind.COUNT, "kpi_engine"),
+    "periods_observed":          (ClaimKind.COUNT, "kpi_engine"),
+    "n_bottlenecks":             (ClaimKind.COUNT, "kpi_engine"),
+    "n_underused":               (ClaimKind.COUNT, "kpi_engine"),
+    "n_warehouses":              (ClaimKind.COUNT, "kpi_engine"),
+    "total_facility_cost":       (ClaimKind.CURRENCY, "optimization_result"),
+    "share_of_facility_spend":   (ClaimKind.RATIO, "optimization_result"),
 }
 
 

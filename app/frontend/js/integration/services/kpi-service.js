@@ -59,6 +59,33 @@ export const kpiService = {
     return apiClient.get('/api/kpis/evidence', scope(projectId), solveOptions);
   },
 
+  /**
+   * The warehouse deep dive: health, rankings, and — on request — sizing and
+   * a before-and-after.
+   *
+   * `growthPct` / `regionGrowth` state a demand growth rate. Without one the
+   * response's sizing section reports why it is empty rather than sizing the
+   * footprint against a rate nobody stated.
+   *
+   * `includeOptimized` runs a SECOND optimisation of the whole network to
+   * produce the per-site before-and-after, so it takes the solve timeout and
+   * is never sent by default.
+   */
+  async getWarehouseDeepDive(projectId = null, options = {}) {
+    const params = scope(projectId);
+    if (options.growthPct !== null && options.growthPct !== undefined
+        && options.growthPct !== '') {
+      params.growth_pct = String(options.growthPct);
+    }
+    if (options.regionGrowth) params.region_growth = options.regionGrowth;
+    if (options.targetUtilizationPct) {
+      params.target_utilization_pct = String(options.targetUtilizationPct);
+    }
+    if (options.growthSource) params.growth_source = options.growthSource;
+    if (options.includeOptimized) params.include = 'optimized';
+    return apiClient.get('/api/kpis/warehouse', params, solveOptions);
+  },
+
   async getThresholds() {
     return apiClient.get('/api/kpis/thresholds');
   },

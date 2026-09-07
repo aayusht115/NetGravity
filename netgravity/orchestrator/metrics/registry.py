@@ -467,6 +467,38 @@ class KPIRegistry:
             }
         return out
 
+    def warehouse_deep_dive(
+        self,
+        context: "ExecutionContext",
+        *,
+        key: Optional[str] = None,
+        baseline_health: Optional[Any] = None,
+        baseline_business_cost: Optional[float] = None,
+        growth: Optional[Any] = None,
+    ) -> Any:
+        """
+        Warehouse health, rankings and growth sizing for this execution.
+
+        A DERIVATION over the same `FacilitySummary` rows `facility_kpis`
+        wraps: peak against average, counts against the configured utilisation
+        thresholds, orderings, and — when the caller states a growth rate — the
+        capacity that rate would need. It computes no utilisation, no cost and
+        no inventory of its own; see
+        `netgravity/orchestrator/metrics/warehouse_deep_dive.py`.
+
+        Returns a report whose `status` says INSUFFICIENT_EVIDENCE when this
+        execution solved no network state, rather than an empty footprint.
+        """
+        from netgravity.orchestrator.metrics import warehouse_deep_dive as wdd
+
+        state = context.network_states.get(key) if key else _single_network_state(context)
+        return wdd.build_warehouse_deep_dive(
+            state,
+            baseline_health=baseline_health,
+            baseline_business_cost=baseline_business_cost,
+            growth=growth,
+        )
+
     def flow_kpis(
         self, context: "ExecutionContext", *, key: Optional[str] = None,
     ) -> List[Dict[str, Any]]:

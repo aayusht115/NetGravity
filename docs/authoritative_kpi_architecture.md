@@ -157,6 +157,7 @@ et al.).
 KPIRegistry
     ├── network_kpis(ctx)              -> Dict[str, KPIResult]
     ├── facility_kpis(ctx)              -> Dict[facility_id, Dict[str, KPIResult]]
+    ├── warehouse_deep_dive(ctx, ...)   -> WarehouseDeepDiveReport      (peak vs average, ranked, sized)
     ├── resilience_kpis(ctx)            -> Dict[str, KPIResult]         (network-level REI)
     ├── facility_resilience_kpis(ctx)   -> Dict[facility_id, Dict[str, KPIResult]]
     ├── risk_kpis(ctx)                  -> Dict[str, KPIResult]         (network-level RF)
@@ -184,6 +185,9 @@ unchanged context returns an equal answer (`test_the_package_is_a_view_and_calli
 |---|---|
 | `network_kpis` | No — reads `NetworkStateResult` fields verbatim |
 | `facility_kpis` | No — reads `FacilitySummary` fields verbatim |
+| `warehouse_deep_dive` | **Yes, and each one is named.** Every VALUE is read verbatim from the same `FacilitySummary` rows `facility_kpis` wraps — average utilisation, peak utilisation, per-period throughput, the engine's own `total_facility_cost`, and the summed `InventoryDecision` levels. What it derives over them is: `max`/`mean` across the periods; a COUNT of periods at or above the configured `UTILIZATION_THRESHOLDS["over_threshold"]`; ORDERINGS (the top-N tables); a SUBTRACTION between two solved plans, which is the same `(right - left)` diff `scenario_comparison` already uses; and — only when the caller states a growth rate — one multiplication and one division (`projected_peak = peak x (1+g)`, `required = projected_peak / target_utilisation`). It recomputes no utilisation, no cost and no inventory. See `netgravity/orchestrator/metrics/warehouse_deep_dive.py`. |
+| `warehouse_deep_dive` — growth sizing | **Refused rather than assumed when unstated.** There is no default growth rate. Without one the section returns `INSUFFICIENT_EVIDENCE` and the reason, because a capacity gap stated in units resting on an invented rate is indistinguishable on screen from a measured one. |
+| `warehouse_deep_dive` — before/after | **Refused rather than assumed with one plan.** A per-site comparison needs two solved plans. The baseline analysis is an `ACTUAL_AS_IS_EVALUATION`; the optimised half is a separately cached execution requested with `?include=optimized`, and its absence is reported as NOT_REQUESTED rather than as "nothing would change". |
 | `resilience_kpis` / `facility_resilience_kpis` | No — reads `FacilityResilienceRegistry` rows verbatim |
 | `risk_kpis` / `facility_risk_kpis` | No — reads `RiskAssessment` rows verbatim |
 | `forecast_metrics` | No — reads `AccuracyMetrics` verbatim |

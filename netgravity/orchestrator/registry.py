@@ -99,6 +99,64 @@ logger = logging.getLogger(__name__)
 _FACILITY_EVIDENCE_LIMIT = 25
 
 
+#: How many warehouse rows the reasoning payload names per ranking.
+_WAREHOUSE_EVIDENCE_ROWS = 3
+
+
+def _warehouse_evidence(context: ExecutionContext) -> Dict[str, Any]:
+    """
+    The peak-versus-average reading of the footprint, for the narrator.
+
+    Read through `KPIRegistry.warehouse_deep_dive`, which is the one access
+    layer over these figures — not by reaching into the state directly, so the
+    briefing and the warehouse screen cannot arrive at different numbers for
+    the same site.
+
+    Returns {} when this execution solved nothing, or when the report has no
+    open site to describe.
+    """
+    from netgravity.orchestrator.metrics.registry import KPIRegistry
+
+    report = KPIRegistry().warehouse_deep_dive(context)
+    if not report.health_kpis or not report.n_open:
+        return {}
+
+    def row(kpi: Any) -> Dict[str, Any]:
+        return {
+            "facility_id": kpi.facility_id,
+            "name": kpi.facility_name,
+            "avg_utilization_pct": kpi.avg_utilization_pct,
+            "peak_utilization_pct": kpi.peak_utilization_pct,
+            "peak_period": kpi.peak_period,
+            "bottleneck_periods_count": kpi.bottleneck_periods_count,
+            "periods_observed": kpi.periods_observed,
+            "health_band": kpi.health_band,
+        }
+
+    return {
+        "note": (
+            "Warehouse figures from the same solve as the totals above. "
+            "avg_utilization_pct is throughput over capacity across the whole "
+            "horizon; peak_utilization_pct is the single busiest period. On a "
+            "one-period solve they are the same number."
+        ),
+        "periods_modelled": report.periods_modelled,
+        "n_warehouses": report.n_warehouses,
+        "n_open": report.n_open,
+        "n_bottlenecks": report.n_bottlenecks,
+        "n_underused": report.n_underused,
+        "avg_peak_utilization_pct": report.avg_peak_utilization_pct,
+        "tightest": [row(k) for k in
+                     report.top_capacity_constraints[:_WAREHOUSE_EVIDENCE_ROWS]],
+        "cost_drivers": [
+            {"facility_id": d.facility_id, "name": d.facility_name,
+             "total_facility_cost": d.total_facility_cost,
+             "share_of_facility_spend": d.share_of_facility_spend}
+            for d in report.top_facilities_driving_cost[:_WAREHOUSE_EVIDENCE_ROWS]
+        ],
+    }
+
+
 def _facility_evidence(context: ExecutionContext) -> Dict[str, Any]:
     """
     Per-facility figures from the state this execution solved.
@@ -392,11 +450,25 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
         # consumer can recover them from it.
         ctx.network_states[req.capability] = state
         output = flatten_network_state(state)
-        # The observed counterpart to the scenario stamp above: this result IS
-        # current network state, and says so.
+        # The counterpart to the scenario stamp above.
+        #
+        # This capability serves two workflows. NETWORK_STATE_QUERY evaluates
+        # the network AS IT STANDS, and that result IS current network state —
+        # which is what the literals here used to say, unconditionally.
+        # OPTIMIZATION_REQUEST comes through the same handler and is the only
+        # caller that passes a `mode`, asking the model to CHOOSE a footprint;
+        # a plan that closes two DCs and re-routes the volume is not an
+        # observation of anything, and stamping it as one is how a hypothetical
+        # comes to be read as current state downstream.
+        #
+        # Keyed on the request's own param rather than on `state.is_hypothetical`,
+        # which follows the config's mode policy: a network configured for
+        # BROWNFIELD_SCENARIO_OPTIMIZATION reports True even when this workflow
+        # only evaluated it, and reading that here mislabels the observed run.
+        optimising = mode is not None and mode != OptimizationMode.ACTUAL_AS_IS_EVALUATION
         output.update({
-            "result_kind": "OBSERVED_RESULT",
-            "is_hypothetical": False,
+            "result_kind": "OPTIMIZED_RESULT" if optimising else "OBSERVED_RESULT",
+            "is_hypothetical": optimising,
             "baseline_snapshot_id": snapshot.snapshot_id,
             "model_version": snapshot.network.config.model_version,
             "execution_id": ctx.execution_id,
@@ -1026,6 +1098,16 @@ def _register_defaults(orch: Orchestrator, registry: CapabilityRegistry) -> None
         facilities = _facility_evidence(ctx)
         if facilities:
             payload["facilities"] = facilities
+
+        # The same solve read as a FOOTPRINT rather than as a list of sites:
+        # where the peak parts company with the average, how often, and which
+        # site the facility spend is concentrated in. `facilities` above
+        # carries the horizon average per site and nothing else, so the one
+        # question a multi-period model exists to answer — which month runs
+        # out of room — reached the narrator as no number at all.
+        warehouse = _warehouse_evidence(ctx)
+        if warehouse:
+            payload["warehouse"] = warehouse
 
         unavailable = {
             cap: {"status": ev.status.value, "reason": ev.reason}

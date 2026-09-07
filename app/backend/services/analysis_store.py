@@ -63,7 +63,16 @@ logger = logging.getLogger(__name__)
 #: 3 — the document gained `currency`, and every money metric's `unit` changed
 #: from the literal "INR" to the network's own currency. A cached v2 document
 #: would be served back with rupee units over dollar figures.
-_ANALYSIS_VERSION = 3
+#: 4 — the document gained `warehouse`: peak-versus-average health, the
+#: rankings and the cost attribution per site. A v3 document has none of it,
+#: and the warehouse screen reading one would show an empty footprint for a
+#: network that was solved correctly.
+#: 5 — `warehouse.optimized_business_cost` became `warehouse.business_cost`.
+#: A RENAME inside the document is a shape change like any other: the model is
+#: `extra="forbid"`, so a v4 document rehydrated by the new code raises rather
+#: than degrading, and every previously analysed project served a 500 until
+#: this was bumped. Adding a field is not the only thing that needs this.
+_ANALYSIS_VERSION = 5
 
 
 class AnalysisService:
@@ -301,5 +310,19 @@ def serialise_analysis(registry: Any, ctx: Any) -> Dict[str, Any]:
         "facility_resilience": {fid: dump(metrics) for fid, metrics in resilience.items()},
         "facility_risk": {fid: dump(metrics) for fid, metrics in risk.items()},
         "flows": registry.flow_kpis(ctx),
+        # The warehouse read of the same solve: peak against average, the
+        # rankings, and what each site cost.
+        #
+        # Computed HERE rather than in the endpoint that serves it, for the
+        # reason the rest of this document exists — it is a pure read of an
+        # execution that has already happened, so computing it beside the other
+        # five costs nothing, and computing it per request would either re-solve
+        # the network or need the context kept alive.
+        #
+        # No growth sizing and no before-and-after. Both take an input stated
+        # per REQUEST (a growth rate; a second solved plan), and a document
+        # cached per network version cannot hold a per-request answer. The
+        # endpoint applies them on top of these rows.
+        "warehouse": registry.warehouse_deep_dive(ctx).model_dump(mode="json"),
         "evidence": registry.evidence_package(ctx).model_dump(mode="json"),
     }
