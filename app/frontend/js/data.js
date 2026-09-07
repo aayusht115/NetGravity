@@ -320,6 +320,30 @@ export function recommendedNetworkChanges() {
   return out;
 }
 
+/**
+ * What the solve could not serve, and the engine's reason for it.
+ *
+ * Written by `hydrateFromBackend()` from the relaxation note the engine
+ * attaches when the strict model proves infeasible and it returns the best
+ * plan that serves as much as the network physically can.
+ *
+ * `shortMarkets` is read off THAT plan's own flows — demand at a market minus
+ * what reached it — so it is the shortfall the reported figures were computed
+ * with, not a second opinion about it. It stays empty when the run carried no
+ * relaxation note; a screen showing this must say the breakdown is absent
+ * rather than imply the shortfall is spread evenly or falls nowhere.
+ */
+export const DEMAND_SHORTFALL = {
+  unservedDemand: null,
+  totalDemand: null,
+  reason: '',
+  //: [{ marketId, demand, unserved }], largest shortfall first.
+  shortMarkets: [],
+  //: Proposed sites the relaxed plan opened to get as far as it did.
+  wouldOpenCandidates: [],
+  shortagePenaltyPerUnit: null,
+};
+
 // ─── SCENARIO COMPARISON INSIGHTS (Deterministic AI Assessments) ─
 export const SCENARIO_COMPARISON_INSIGHTS = [];
 
@@ -721,6 +745,10 @@ export function clearDemoNarrative(keepFacilityIds = []) {
   });
   SCENARIO_COMPARISON_INSIGHTS.length = 0;
   SCENARIO_COMPARISON_ACTIONS.length = 0;
+  Object.assign(DEMAND_SHORTFALL, {
+    unservedDemand: null, totalDemand: null, reason: '',
+    shortMarkets: [], wouldOpenCandidates: [], shortagePenaltyPerUnit: null,
+  });
 
   AGENT_STATE.activityTrace = [];
   AGENT_STATE.currentObjective = 'No objective set for this network yet.';

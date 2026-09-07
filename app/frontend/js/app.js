@@ -17,7 +17,7 @@ import {
   perPeriodLabel, SOLVE_HORIZON, horizonLabel,
   formatCurrencyExact, currencySymbol, currencyLabel, NETWORK_GEOGRAPHY,
   getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries, withCurrency,
-  FORECAST_BRIEFING, recommendedNetworkChanges
+  FORECAST_BRIEFING, recommendedNetworkChanges, DEMAND_SHORTFALL
 } from './data.js';
 import { initMap, invalidateMapSize, refreshAllMaps,
          revealMap, renderMapLegendCounts } from './map.js';
@@ -1806,11 +1806,8 @@ function renderOverviewAlert(elId = 'ov-alert') {
           <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
         </button>
       </div>`;
-    el.querySelector('.ov-alert-link')?.addEventListener('click', () => {
-      // The markets the shortfall is in, which is the detail the old banner
-      // spelled out in prose.
-      if (typeof window.navigateToTab === 'function') window.navigateToTab('twin');
-    });
+    el.querySelector('.ov-alert-link')?.addEventListener('click',
+      openDemandShortfallDetail);
     return;
   }
 
@@ -1828,6 +1825,119 @@ function renderOverviewAlert(elId = 'ov-alert') {
         ? 'Every unit of demand in your upload is met within its service level.'
         : 'Upload a network dataset to populate this page.'}</div>
     </div>`;
+}
+
+/**
+ * The demand this plan cannot serve, market by market, and why.
+ *
+ * "View affected demand" used to change the page — it opened the Digital Twin,
+ * which draws the network and says nothing about a shortfall. The reader
+ * pressed a link naming a thing and got a different screen that did not
+ * contain it.
+ *
+ * Everything below is read from the relaxation note the engine attaches to the
+ * run these figures come from: the same plan, its own flows, its own reason.
+ * Nothing is recomputed here and nothing is apportioned — where the engine
+ * gave no market breakdown, this says so instead of spreading the total.
+ */
+function openDemandShortfallDetail() {
+  const overlay = document.getElementById('action-drawer-overlay');
+  const body = document.getElementById('action-drawer-content');
+  if (!overlay || !body) return;
+
+  const base = getOptimizedBaseCase()?.baseline || {};
+  const unserved = DEMAND_SHORTFALL.unservedDemand ?? base.unservedDemand ?? null;
+  const total = DEMAND_SHORTFALL.totalDemand ?? base.totalDemand ?? null;
+  const rows = DEMAND_SHORTFALL.shortMarkets || [];
+  const opened = DEMAND_SHORTFALL.wouldOpenCandidates || [];
+
+  const marketName = (id) => {
+    const m = MARKETS.find((x) => x.id === id);
+    return m ? m.name : id;
+  };
+  const facilityName = (id) => {
+    const f = getFacilityById(id);
+    return f ? f.name : id;
+  };
+  const share = (v) => (total ? `${((v / total) * 100).toFixed(1)}%` : '—');
+
+  const marketRows = rows.map((r) => `
+    <tr>
+      <td>
+        <div style="font-weight:600">${escapeInsightText(marketName(r.market_id))}</div>
+        <div class="text-xs" style="color:var(--text-3)">${escapeInsightText(r.market_id)}</div>
+      </td>
+      <td class="num">${formatNumber(r.demand)}</td>
+      <td class="num" style="font-weight:700;color:var(--red)">${formatNumber(r.unserved)}</td>
+      <td class="num">${r.demand ? `${((r.unserved / r.demand) * 100).toFixed(1)}%` : '—'}</td>
+    </tr>`).join('');
+
+  body.innerHTML = `
+    <div class="card-title" style="font-size:17px;margin-bottom:2px">Demand this plan cannot serve</div>
+    <div class="card-subtitle" style="margin-bottom:16px">Read from the solved
+      plan these figures come from &mdash; its own flows, market by market.</div>
+
+    <div class="grid-2" style="margin-bottom:16px">
+      <div class="dash-metric-card">
+        <div class="dash-metric-title">Unserved</div>
+        <div class="dash-metric-val" style="color:var(--red)">${
+          unserved === null ? '—' : formatNumber(unserved)}</div>
+        <div class="dash-metric-sub"><span>${
+          unserved === null ? 'not reported' : `${share(unserved)} of stated demand`}</span></div>
+      </div>
+      <div class="dash-metric-card">
+        <div class="dash-metric-title">Stated demand</div>
+        <div class="dash-metric-val">${total === null ? '—' : formatNumber(total)}</div>
+        <div class="dash-metric-sub"><span>across every market in this upload</span></div>
+      </div>
+    </div>
+
+    <div class="card-title mb-md" style="font-size:13px">Why</div>
+    <div class="wh-status-note" style="margin-bottom:18px">${
+      DEMAND_SHORTFALL.reason
+        ? escapeInsightText(DEMAND_SHORTFALL.reason)
+        : 'This run carried no relaxation note, so the engine has not stated a '
+          + 'reason for the shortfall here. The figure above is the one it '
+          + 'reported with the plan.'}</div>
+
+    <div class="card-title mb-md" style="font-size:13px">Where it falls</div>
+    ${rows.length ? `
+    <div class="table-wrap" style="margin-bottom:18px">
+      <table class="ng-table">
+        <thead><tr>
+          <th>Market</th>
+          <th class="num">Demand</th>
+          <th class="num">Unserved</th>
+          <th class="num">Short by</th>
+        </tr></thead>
+        <tbody>${marketRows}</tbody>
+      </table>
+    </div>` : `
+    <div class="wh-status-note" style="margin-bottom:18px">
+      <strong>No market breakdown travelled with this run.</strong>
+      The engine reports the shortfall per market only when it has relaxed an
+      infeasible model; this total came from a plan it did not. Nothing here
+      will apportion it across markets &mdash; a split nobody computed would
+      read exactly like one that was.
+    </div>`}
+
+    ${opened.length ? `
+    <div class="card-title mb-md" style="font-size:13px">What the plan already opened to get this far</div>
+    <div class="wh-status-note" style="margin-bottom:18px">
+      ${opened.map((id) => escapeInsightText(facilityName(id))).join(', ')}
+      &mdash; proposed sites this plan took up. The shortfall above is what
+      remains after them.
+    </div>` : ''}
+
+    <div class="text-xs" style="color:var(--text-2);line-height:1.6">
+      Serving this demand is a capacity question, and testing an answer to it
+      is what the Scenario Planner is for: add capacity at a short market's
+      serving site, or open a proposed one, and re-solve.
+    </div>`;
+
+  overlay.classList.add('active');
+  overlay.classList.add('visible');
+  overlay.style.display = 'flex';
 }
 
 const OV_ICONS = {
