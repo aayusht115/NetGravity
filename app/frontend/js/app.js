@@ -3103,10 +3103,40 @@ window.openFacilityPanel = function (facilityId) {
   `;
 
   document.getElementById('facility-panel').classList.add('open');
+
+  // ...and SHOW it. Adding `.open` to the panel stopped being enough when the
+  // unified slide-in drawers landed: `#facility-panel` is a child of
+  // `#facility-panel-overlay`, which carries `display: none` until it is given
+  // `.active` / `.visible`, and the later `.facility-panel` block in style.css
+  // makes the panel `position: relative` with `transform: translateX(100%)`,
+  // so the older `.facility-panel.open { right: 0 }` rule has nothing left to
+  // move. Clicking a node on the Digital Twin therefore built the whole panel
+  // — 1,536 characters of that site's real figures — inside a container the
+  // reader could not see, which is why "Click node to inspect full
+  // diagnostics" appeared to do nothing.
+  //
+  // `actions.js`'s `closeFacilityPanel` already reached for the overlay; only
+  // the opening half was left behind.
+  const overlay = document.getElementById('facility-panel-overlay');
+  if (overlay) {
+    overlay.classList.add('active');
+    overlay.classList.add('visible');
+    // The element carries `style="display:none"` inline, which beats the
+    // stylesheet's `display: flex !important` on `.active`.
+    overlay.style.display = 'flex';
+  }
 };
 
 function closeFacilityPanel() {
-  document.getElementById('facility-panel').classList.remove('open');
+  document.getElementById('facility-panel')?.classList.remove('open');
+  // The half that actually hides it — the same three lines
+  // `closeActionDrawer` uses, so the two drawers behave identically.
+  const overlay = document.getElementById('facility-panel-overlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    overlay.classList.remove('visible');
+    overlay.style.display = 'none';
+  }
 }
 
 // --- Recommendation -----------------------------------------

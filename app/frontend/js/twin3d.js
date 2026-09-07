@@ -1385,6 +1385,12 @@ function renderHUDTooltip(data, type, x, y) {
       <div class="hud-row"><span>Capacity / Flow:</span><strong>${formatNumber(data.throughput)} / ${formatNumber(data.capacity)} ${perPeriodLabel()}</strong></div>
     `;
   } else {
+    // A market has no facility diagnostics to open. The footer hint below is
+    // suppressed for one, because `openFacilityPanel` looks the id up in
+    // PLANTS and DCS and returns without doing anything when it is neither —
+    // so on a market the line promised a panel that could never appear, which
+    // is the same "clicking does nothing" the reader reported on the sites
+    // that do have one.
     typeBadge = '<span class="hud-badge market">Demand Market</span>';
     metricLine = `
       <div class="hud-row"><span>Demand:</span><strong>${formatNumber(data.demand)} ${perPeriodLabel()}</strong></div>
@@ -1400,7 +1406,8 @@ function renderHUDTooltip(data, type, x, y) {
     <div class="hud-body">
       ${metricLine}
     </div>
-    <div class="hud-footer">Click node to inspect full diagnostics →</div>
+    ${type === 'market' ? '' :
+      '<div class="hud-footer">Click node to inspect full diagnostics →</div>'}
   `;
 
   hudTooltipEl.style.left = `${Math.min(containerEl.clientWidth - 230, Math.max(10, x - 100))}px`;

@@ -1676,3 +1676,84 @@ class TestTheRecommendationCardScrolls:
         right = html[html.index('class="scn-single-right"'):]
         right = right[:right.index("</div>\n          </div>")]
         assert 'class="scn-take-card" id="scn-multi-take-card"' in right
+
+class TestClickingANodeOpensItsDiagnostics:
+    """
+    "Click node to inspect full diagnostics" did nothing.
+
+    Not because the panel failed to build — it built completely, 1,536
+    characters of that site's real figures — but because it was built inside a
+    container the reader cannot see. `#facility-panel` is a child of
+    `#facility-panel-overlay`, which carries `display: none` until it is given
+    `.active` / `.visible`, and the unified slide-in drawer block later in
+    style.css makes the panel `position: relative` with
+    `transform: translateX(100%)`. So the older `.facility-panel.open
+    { right: 0 }` rule has nothing left to move, and adding `.open` — which is
+    all `openFacilityPanel` did — showed nothing.
+
+    `actions.js`'s `closeFacilityPanel` already reached for the overlay. Only
+    the opening half was left behind when the drawers were unified.
+    """
+
+    def test_the_panel_lives_inside_an_overlay_that_starts_hidden(self):
+        """The premise. If the markup ever stops nesting them, the fix below
+        is addressing a problem that no longer exists."""
+        html = (_FRONTEND / "index.html").read_text(encoding="utf-8")
+        block = html[html.index('id="facility-panel-overlay"'):]
+        block = block[:block.index("</div>", block.index('id="facility-panel"'))]
+        assert 'id="facility-panel"' in block
+        assert "display:none" in block.split(">")[0]
+
+    def test_the_open_class_alone_cannot_show_it(self):
+        """`.facility-panel.open { right: 0 }` is dead: the later unified
+        drawer block takes the panel off `position: fixed`."""
+        css = (_FRONTEND / "css" / "style.css").read_text(encoding="utf-8")
+        unified = css[css.index(".facility-panel {", css.index(".scenario-drawer,")):]
+        unified = unified[:unified.index("}")]
+        assert "position: relative" in unified
+        assert "transform: translateX(100%)" in unified
+        # And what DOES move it: a class on the overlay, not on the panel.
+        assert ".facility-panel-overlay.active .facility-panel" in css
+        assert ".facility-panel-overlay.visible .facility-panel" in css
+
+    def test_opening_shows_the_overlay(self):
+        js = _js("app.js")
+        block = js[js.index("window.openFacilityPanel = function"):]
+        block = block[:block.index("\nfunction closeFacilityPanel")]
+        assert "facility-panel-overlay" in block
+        assert "overlay.classList.add('active')" in block
+        assert "overlay.classList.add('visible')" in block
+        # The inline `display:none` beats the stylesheet's `!important`, so it
+        # has to be cleared too.
+        assert "overlay.style.display = 'flex'" in block
+
+    def test_closing_hides_it_again(self):
+        """Both halves, or the panel opens once and never goes away."""
+        js = _js("app.js")
+        block = js[js.index("function closeFacilityPanel()"):]
+        block = block[:block.index("\n}")]
+        assert "overlay.classList.remove('active')" in block
+        assert "overlay.classList.remove('visible')" in block
+        assert "overlay.style.display = 'none'" in block
+
+    def test_the_twin_and_the_map_go_through_the_same_door(self):
+        """One panel, opened the same way from the 3D scene, the 2D map and
+        the facility tables — so a fix to one is a fix to all three."""
+        assert "window.openFacilityPanel(data.id)" in _js("twin3d.js")
+        assert "window.openFacilityPanel(node.id)" in _js("map.js")
+        assert "openFacilityPanel(row.dataset.id)" in _js("app.js")
+
+    def test_the_hint_is_only_shown_where_the_click_leads_somewhere(self):
+        """
+        `openFacilityPanel` looks the id up in PLANTS and DCS and returns
+        without doing anything when it is neither. On a demand market the
+        footer promised a panel that could never appear — the same "clicking
+        does nothing" this class exists about, on the nodes that genuinely
+        have nothing to open.
+        """
+        twin = _js("twin3d.js")
+        assert "Click node to inspect full diagnostics" in twin
+        block = twin[twin.index("hudTooltipEl.innerHTML = `"):]
+        block = block[:block.index("`;")]
+        assert "type === 'market' ? ''" in block
+
