@@ -508,7 +508,7 @@ class TestTheTwinTooltipFollowsItsCanvas:
         assert "hudTooltipEl.parentElement !== containerEl" in fn
         # Called on the re-parent path, not only on first init.
         init = js[js.index("export function initTwin3D(containerId)"):]
-        init = init[:init.index("export function setTwin3DState")]
+        init = init[:init.index("export function rebuildTwin3D")]
         assert init.count("attachHudTooltip();") >= 1
         assert "attachHudTooltip();" in _fn(js, "function setupInteraction()")
 

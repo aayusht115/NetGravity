@@ -31,7 +31,7 @@ const maps = {}; // containerId → L.Map
 //: basemap can be re-chosen when a network loads after the map was built.
 const baseLayers = {};
 const layerGroups = {}; // containerId → { nodes, flows }
-let currentState = 'actual';
+
 
 // ─── Basemap ────────────────────────────────────────────────
 /**
@@ -209,12 +209,13 @@ const COLORS = {
   plant: '#6B2FA0',
   dc: '#2563eb',
   market: '#0891b2',
+  // One corridor colour, because there is one network on this map. The
+  // `optimised`, `recommended`, `scenario` and `changed` entries were keyed by
+  // a network state this map no longer has; the scenario map draws a changed
+  // lane from its own literals a few hundred lines below, and left here they
+  // read as a palette something still chooses from.
   flow: {
     actual: '#94a3b8',
-    optimised: '#6B2FA0',
-    recommended: '#16a34a',
-    scenario: '#6B2FA0',
-    changed: '#16a34a',
   },
 };
 
@@ -364,13 +365,13 @@ export function initMap(containerId, options = {}) {
   // Draw the network immediately.
   // `initMap` used to create the map, add a legend and stop: nothing was
   // plotted until the user clicked one of the network-state toggle buttons,
-  // which is the only thing wired to `setNetworkState`. Opening Digital Twin →
-  // 2D therefore showed an empty basemap with a legend for a network that was
-  // fully loaded.
+  // which was the only thing that drew it. Opening Digital Twin → 2D therefore
+  // showed an empty basemap with a legend for a network that was fully loaded.
+  // Those toggles are gone now; this is the only thing that draws it.
   if (options.initialScenario) {
     renderScenarioDigitalTwin(containerId, options.initialScenario, options.mode || 'scenario');
   } else {
-    renderNetwork(containerId, currentState);
+    renderNetwork(containerId);
   }
   // Framed AFTER drawing, on BOTH paths. It used to be inside the `else`, so
   // the only map built through the scenario path — Scenario Planning's
@@ -408,7 +409,7 @@ export function refreshAllMaps() {
     // this function's business — skipping the map entirely, as this used to,
     // is why it kept an India basemap and an India viewport for every network.
     if (id !== 'scenario-leaflet-map') {
-      renderNetwork(id, currentState);
+      renderNetwork(id);
     }
     fitToNetwork(id);
     try { maps[id].invalidateSize(); } catch (e) { /* not yet visible */ }
@@ -535,15 +536,6 @@ export function invalidateMapSize(containerId) {
 }
 
 // ─── Public API: Set Network State (Digital Twin Tab) ───────
-export function setNetworkState(state) {
-  currentState = state;
-  Object.keys(maps).forEach((id) => {
-    if (id !== 'scenario-leaflet-map') {
-      renderNetwork(id, state);
-    }
-  });
-}
-
 // ─── Public API: Render Scenario Digital Twin ───────────────
 export function renderScenarioDigitalTwin(containerId, scenarioId, mode = 'scenario') {
   if (!maps[containerId]) {
@@ -764,14 +756,17 @@ function getScenarioNetworkData(scenarioId) {
 }
 
 // ─── Render Network Standard (Digital Twin Tab) ─────────────
-function renderNetwork(containerId, state) {
+function renderNetwork(containerId) {
   const lg = layerGroups[containerId];
   if (!lg) return;
 
   lg.nodes.clearLayers();
   lg.flows.clearLayers();
 
-  const flowData = getFlowsForState(state);
+  // The lanes the solve reports. There is one network on this map and these
+  // are its corridors; a second, "optimised" set used to be manufactured here
+  // by scaling three named prototype lanes.
+  const flowData = LANES;
 
   // Draw flows
   flowData.forEach((flow) => {
@@ -780,14 +775,15 @@ function renderNetwork(containerId, state) {
     if (!from || !to) return;
 
     const thickness = Math.max(1, Math.min(8, flow.flow / 1500));
-    const color = COLORS.flow[state] || COLORS.flow.actual;
-    const opacity = state === 'actual' ? 0.35 : 0.6;
 
     const line = L.polyline([from, to], {
-      color: color,
+      // One network, one corridor style. The colour, the opacity and the dash
+      // all keyed off a network-state parameter that no longer exists — a
+      // solid line is what the actual network's corridors have always been
+      // drawn as, and there is no second state to distinguish from.
+      color: COLORS.flow.actual,
       weight: thickness,
-      opacity: opacity,
-      dashArray: state === 'recommended' ? '8 4' : null,
+      opacity: 0.35,
     });
 
     line.bindTooltip(
@@ -812,10 +808,11 @@ function renderNetwork(containerId, state) {
 
   DCS.forEach((d) => {
     // No per-id overrides. This branch reassigned utilisation and throughput
-    // for two of the prototype's own DCs whenever the "recommended" state was
+    // for two of the prototype's own DCs whenever a "recommended" state was
     // selected — figures no engine produced, shown on top of whatever network
-    // was loaded. A recommended state now draws the same solved values as the
-    // rest of the map until a scenario supplies its own.
+    // was loaded. This map draws the solved network and nothing else; the
+    // scenario map (`renderScenarioDigitalTwin`) is where a hypothetical one
+    // is drawn, from its own solve.
     const marker = createNodeMarker(d, 'dc', containerId, null);
     lg.nodes.addLayer(marker);
   });
@@ -826,29 +823,6 @@ function renderNetwork(containerId, state) {
   });
 
   renderMapLegendCounts();
-}
-
-// ─── Flow Data per State (Digital Twin Tab) ─────────────────
-function getFlowsForState(state) {
-  // Every state draws the solved flows on `LANES`.
-  //
-  // "optimised" and "recommended" used to be manufactured here by scaling
-  // three named prototype lanes — `PLT_BADDI → DC_DELHI` at 0.88, then 0.82,
-  // `PLT_BADDI → DC_KOLKATA` at 1.25, then 1.45 — multipliers that came from
-  // nobody's optimiser. On an uploaded network none of those ids match, so all
-  // three toggles already showed identical corridors while claiming to show
-  // three different plans.
-  //
-  // A genuine optimised or recommended plan for the CURRENT network is a
-  // scenario: solve one and the scenario map draws its own flows, from
-  // `getScenarioNetworkData()`. Until then these states have nothing of their
-  // own to show, and `renderNetwork()`'s caller says so.
-  return LANES;
-}
-
-/** True when `state` has a distinct solved plan behind it; only 'actual' does. */
-export function stateHasOwnPlan(state) {
-  return state === 'actual';
 }
 
 // ─── Create Node Marker ─────────────────────────────────────

@@ -93,11 +93,86 @@ class ScenarioBuilder:
                 context={"action": spec.action.value},
             )
 
+        # Everything the user did NOT ask to close stays open. See
+        # `_hold_the_existing_footprint`.
+        working = self._hold_the_existing_footprint(working)
+
         logger.info(
             "orchestrator.scenario.materialised action=%s overrides=%s",
             spec.action.value, overrides,
         )
         return working, overrides
+
+    # ------------------------------------------------------------------
+    # The footprint a scenario is allowed to change
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _hold_the_existing_footprint(
+        network: CanonicalNetwork,
+    ) -> CanonicalNetwork:
+        """
+        Pin every still-open existing site open, so only the USER closes sites.
+
+        WHY
+        ---
+        A scenario is solved as `BROWNFIELD_SCENARIO_OPTIMIZATION`, which
+        honours facility flags exactly as supplied — and an uploaded network
+        supplies `is_closable = True` by default. So the MILP was free to shut
+        any site it found cheaper to shut, and it did: a planner who asked
+        "what if demand in the west grows 20%?" got back a plan that had also
+        closed two DCs they never mentioned. The cost delta they were reading
+        was mostly the closures, not the question they asked.
+
+        That is a footprint DECISION, and a footprint decision is something a
+        planner makes deliberately — by closing a site in a scenario, or by
+        running a greenfield design — not something a what-if quietly performs
+        on the way to answering a different question.
+
+        WHAT IT DOES NOT DO
+        -------------------
+        It only ever sets `is_mandatory` / `is_closable`. In particular:
+
+          * a site the scenario itself closed keeps `is_forced_closed = True`
+            and is skipped, so the user's own closure still stands — and still
+            pays closure cost, because `baseline_status` is untouched;
+          * a CANDIDATE is not pinned. Offering the solver a site is not the
+            same as opening one, and forcing a proposed DC open would answer a
+            question nobody asked;
+          * a site already forced closed in the uploaded data stays closed;
+          * a disruption target is never pinned open — an outage is the whole
+            point of the run that carries one;
+          * markets and customers are never touched: they are demand, not
+            footprint.
+
+        Nothing else in the system changes. `GREENFIELD_OPTIMIZATION` still
+        releases the footprint through its own mode policy, and this method is
+        not on that path — it applies to scenarios, which is where the
+        unrequested closures were appearing.
+        """
+        held: List[str] = []
+        facilities: List[FacilityRecord] = []
+        for fac in network.facilities:
+            if (fac.role not in MARKET_ROLES
+                    and fac.effective_baseline_status == FacilityStatus.EXISTING
+                    and fac.status != FacilityStatus.CLOSED
+                    and not fac.is_forced_closed
+                    and not fac.is_disruption_target
+                    and fac.is_closable):
+                facilities.append(fac.model_copy(update={
+                    "is_mandatory": True,
+                    "is_closable": False,
+                }))
+                held.append(fac.id)
+            else:
+                facilities.append(fac)
+
+        if held:
+            logger.info(
+                "orchestrator.scenario.footprint_held count=%d ids=%s",
+                len(held), ",".join(held[:10]),
+            )
+        return network.model_copy(update={"facilities": facilities})
 
     # ------------------------------------------------------------------
     # Actions
