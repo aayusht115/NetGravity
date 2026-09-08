@@ -112,6 +112,20 @@ def _period_span(state: dict) -> str:
 _SPEND_CONCENTRATION_SHARE = 0.40
 
 
+def _sites(n: Any) -> str:
+    """"site" or "sites", for a count that may arrive as a float."""
+    try:
+        return "site" if abs(float(n) - 1.0) < 1e-9 else "sites"
+    except (TypeError, ValueError):
+        return "sites"
+
+
+def _lead_cap(text: str) -> str:
+    """Capitalise the first letter only - `str.capitalize()` lowercases the rest,
+    which would turn "CO2 transport cost" into "Co2 transport cost"."""
+    return (text[:1].upper() + text[1:]) if text else ""
+
+
 class ReasoningAgent:
     """Produces narrative synthesis over deterministic evidence."""
 
@@ -800,7 +814,8 @@ class ReasoningAgent:
                      if isinstance(total, (int, float)) and total > 0 else "")
             out.append(KPIInsight(
                 theme="Service",
-                headline="I see demand this network cannot serve",
+                headline="This plan leaves demand the network has no way "
+                         "to deliver",
                 severity=InsightSeverity.RISK,
                 narrative=(
                     f"I see {unserved:,.0f} units{share} left unserved. This is a "
@@ -817,8 +832,10 @@ class ReasoningAgent:
             # value the grounding check compares against.
             out.append(KPIInsight(
                 theme="Service",
-                headline=("I see all stated demand served"
-                          if fill >= 1.0 else "I see demand going unmet"),
+                headline=("Every unit of stated demand is served by this "
+                          "plan" if fill >= 1.0 else
+                          "Part of the stated demand is not served by "
+                          "this plan"),
                 narrative=(
                     f"I see a demand fill rate of {fill:.3f}. "
                     + ("Every unit of stated demand is served by this plan, so "
@@ -854,7 +871,8 @@ class ReasoningAgent:
                 if isinstance(unserved, (int, float)) and unserved > 0 else ""
             )
             if methodology == "TRANSIT_TIME_SLA_FEASIBILITY":
-                headline = "I see demand this network cannot reach in time"
+                headline = ("Some demand cannot be reached inside its lead "
+                            "time, so this plan does not serve it at all")
                 narrative = (
                     f"I see {sla_pct:.2f}% of demand served within its stated "
                     f"service level. The rest is not served late — it is not "
@@ -867,7 +885,8 @@ class ReasoningAgent:
                 # An engine whose methodology this result does not record.
                 # State the figure and stop, rather than inventing what the
                 # rest of the demand did.
-                headline = "I see demand outside its stated service level"
+                headline = ("Some demand falls outside its stated service "
+                            "level, and this run does not record why")
                 narrative = (
                     f"I see {sla_pct:.2f}% of demand served within its stated "
                     f"service level. How this run enforced service is not "
@@ -936,7 +955,7 @@ class ReasoningAgent:
                            f"a finding in either direction.")
             return [KPIInsight(
                 theme="Capacity",
-                headline=f"I see {name(only)} at {util:.2f}% of stated capacity",
+                headline=f"{name(only)} is running at {util:.2f}% of its stated capacity",
                 narrative=f"I see {name(only)} running at {util:.2f}% of its stated "
                           f"capacity. {verdict}",
                 metric_refs=refs_for("utilization_pct"),
@@ -946,8 +965,9 @@ class ReasoningAgent:
             named = ", ".join(name(f) for f in over[:3])
             out.append(KPIInsight(
                 theme="Capacity",
-                headline=f"I see {len(over)} site(s) at or above the "
-                         f"{over_pct:.0f}% utilisation threshold",
+                headline=f"{len(over)} {_sites(len(over))} are at or above "
+                         f"the {over_pct:.0f}% utilisation threshold, with "
+                         f"no headroom left",
                 severity=InsightSeverity.RISK,
                 narrative=(
                     f"I see {named} running at or above {over_pct:.0f}% of stated "
@@ -960,7 +980,9 @@ class ReasoningAgent:
         elif isinstance(max_util, (int, float)) and isinstance(avg_util, (int, float)):
             out.append(KPIInsight(
                 theme="Capacity",
-                headline="I see capacity headroom across the footprint",
+                headline=f"No open site reaches the {over_pct:.0f}% "
+                         f"threshold, so capacity is not what limits this "
+                         f"plan",
                 narrative=(
                     f"I see average utilisation at {avg_util:.2f}% and the busiest "
                     f"site at {max_util:.2f}%. No open site reaches the "
@@ -975,8 +997,9 @@ class ReasoningAgent:
             named = ", ".join(name(f) for f in under[:3])
             out.append(KPIInsight(
                 theme="Utilisation",
-                headline=f"I see {len(under)} site(s) at or below "
-                         f"{under_pct:.0f}% utilisation",
+                headline=f"{len(under)} {_sites(len(under))} run at or below "
+                         f"{under_pct:.0f}% utilisation while carrying "
+                         f"full fixed cost",
                 severity=InsightSeverity.OPPORTUNITY,
                 narrative=(
                     f"I see {named} running at or below {under_pct:.0f}% of stated "
@@ -1037,7 +1060,7 @@ class ReasoningAgent:
             name = str(row.get("name") or row.get("facility_id") or "a site")
             when = row.get("peak_period")
             where = f" in period {when}" if when else ""
-            others = (f" {len(hidden) - 1} other site(s) in this footprint read the "
+            others = (f" {len(hidden) - 1} other {_sites(len(hidden) - 1)} in this footprint read the "
                       f"same way." if len(hidden) > 1 else "")
             out.append(KPIInsight(
                 theme="Capacity",
@@ -1063,7 +1086,7 @@ class ReasoningAgent:
             observed = int(num(tight, "periods_observed") or periods)
             name = str(tight.get("name") or tight.get("facility_id") or "a site")
             n_bottlenecks = warehouse.get("n_bottlenecks")
-            across = (f" Across the footprint {n_bottlenecks} open site(s) reach "
+            across = (f" Across the footprint {n_bottlenecks} open {_sites(n_bottlenecks)} reach "
                       f"the threshold at some point in the horizon."
                       if isinstance(n_bottlenecks, int) and n_bottlenecks > 1 else "")
             out.append(KPIInsight(
@@ -1143,7 +1166,8 @@ class ReasoningAgent:
                 else f" across the {periods} periods modelled")
         return [KPIInsight(
             theme="Cost structure",
-            headline=f"I see {label} as the largest cost line",
+            headline=f"{_lead_cap(label)} is the largest single component "
+                     f"of what this network costs",
             narrative=(
                 f"I see {label} at {priced[largest]:,.2f}{span}, the largest "
                 f"single component of this network's cost. Any material saving has "
@@ -1163,10 +1187,11 @@ class ReasoningAgent:
             return []
         return [KPIInsight(
             theme="Footprint",
-            headline=f"I see {closed:.0f} candidate site(s) the plan does not use",
+            headline=f"The plan leaves {closed:.0f} candidate "
+                     f"{_sites(closed)} unused",
             severity=InsightSeverity.OPPORTUNITY,
             narrative=(
-                f"I see {opened:.0f} site(s) open and {closed:.0f} not selected. "
+                f"I see {opened:.0f} {_sites(opened)} open and {closed:.0f} not selected. "
                 f"The unselected sites carry no cost in this plan; what they would "
                 f"cost and save if opened is a scenario question, and I have not "
                 f"run it."
@@ -1183,7 +1208,8 @@ class ReasoningAgent:
             return []
         return [KPIInsight(
             theme="Carbon",
-            headline="I see the transport emissions this plan implies",
+            headline="This plan's emissions come from the transport it "
+                     "routes, on the declared factors",
             narrative=(
                 f"I see {carbon:,.2f} kg of CO2 from the transport in this plan, "
                 f"on the declared emission factors. Whether that is priced into "
@@ -1459,7 +1485,7 @@ class ReasoningAgent:
         under = [f for f in facilities if f["utilization_pct"] <= under_pct]
 
         if over:
-            return (f"I recommend testing relief for the {len(over)} site(s) at or "
+            return (f"I recommend testing relief for the {len(over)} {_sites(len(over))} at or "
                     f"above the {over_pct:.0f}% utilisation threshold — reassigning "
                     f"volume, or added capacity — because that is where service "
                     f"fails first if demand moves. I have not run that scenario, so "
@@ -1502,7 +1528,7 @@ class ReasoningAgent:
                     "open by construction.")
 
         if len(under) >= 2:
-            return (f"I recommend testing consolidation of the {len(under)} site(s) "
+            return (f"I recommend testing consolidation of the {len(under)} {_sites(len(under))} "
                     f"at or below {under_pct:.0f}% utilisation. They carry full "
                     f"fixed cost against little volume; whether consolidating them "
                     f"is worth the service cost is exactly what a scenario answers.")
@@ -1616,7 +1642,9 @@ class ReasoningAgent:
                     # fragment, as the first line on the screen. The other
                     # insight headlines survive that removal as sentences; this
                     # one did not, so it is written as one.
-                    headline="The cost this network runs at today",
+                    headline=("This is what the network costs to run today, "
+                              "and the baseline every scenario is measured "
+                              "against"),
                     narrative=(
                         f"I see business network cost at {cost:,.2f}{span}. I use "
                         "this as the decision baseline for comparing any scenario."
@@ -1720,7 +1748,8 @@ class ReasoningAgent:
             evidence.append(f"highest_exposure_facility = {top}")
             insights.append(KPIInsight(
                 theme="Resilience",
-                headline=f"I see the greatest single-site exposure at {top}",
+                headline=f"{top} is where losing a single site would cost "
+                         f"the most",
                 severity=InsightSeverity.RISK,
                 narrative=(
                     f"I see {top} carrying the highest relative economic exposure "
@@ -1749,16 +1778,17 @@ class ReasoningAgent:
         if negatives:
             named = ", ".join(str(row.get("facility_id")) for row in negatives[:3])
             parts.append(
-                f"I see {len(negatives)} facility(ies) ({named}) whose loss would "
+                f"I see {len(negatives)} {_sites(len(negatives))} ({named}) whose loss would "
                 f"LOWER cost: their fixed cost exceeds the routing benefit they "
                 f"provide, so the footprint is worth reviewing."
             )
             insights.append(KPIInsight(
                 theme="Footprint",
-                headline="I see sites that cost more than the routing they save",
+                headline=f"{len(negatives)} open {_sites(len(negatives))} "
+                         f"cost more than the routing they save",
                 severity=InsightSeverity.OPPORTUNITY,
                 narrative=(
-                    f"I see {len(negatives)} open facility(ies) — {named} — whose "
+                    f"I see {len(negatives)} open {_sites(len(negatives))} — {named} — whose "
                     f"removal would REDUCE network cost, because their fixed cost "
                     f"exceeds the routing benefit they provide. The baseline holds "
                     f"the current footprint open, so this is a finding about the "

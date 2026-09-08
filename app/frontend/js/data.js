@@ -910,12 +910,35 @@ export function insightCategory(insight) {
  */
 export function toInsightRecord(apiInsight) {
   const narrative = String(apiInsight.narrative || '');
-  const firstSentence = (narrative.match(/^[^.!?]*[.!?]/) || [narrative])[0].trim();
+  // A TERMINATOR, not the first full stop.
+  //
+  // This was `/^[^.!?]*[.!?]/`, which stops at the first dot of any kind — so
+  // "Peak utilisation reaches 97.2% against a 90% threshold, so three sites
+  // have no room" came out of it as "Peak utilisation reaches 97." That
+  // sentence fragment is what the Overview's insight tiles print under "Why it
+  // matters", and a finding cut off mid-figure reads as a broken product.
+  //
+  // A sentence ends where a `.`, `!` or `?` is followed by whitespace or by
+  // the end of the string; a decimal point is followed by a digit and is not
+  // one. Same rule as `first_sentence` in reasoning/card.py, which is where
+  // the server-side half of this lives.
+  //
+  // Written without a lookbehind on purpose: Safari did not support them
+  // until 16.4, and a regex that throws at parse time takes the whole module
+  // with it — an insight feed is not worth a blank application.
+  const sentence = narrative.match(/^[\s\S]*?[.!?](?=\s|$)/);
+  const firstSentence = (sentence ? sentence[0] : narrative).trim();
   return {
     id: apiInsight.id,
     title: apiInsight.headline || '',
     subtitle: firstSentence,
     narrative,
+    // What to DO about the finding, in one sentence. Written by the
+    // Reasoning Agent when the narrative layer produced one, and otherwise
+    // the theme-appropriate default `/api/insights` supplies — see
+    // `_recommended_action` there. Never composed here: a recommendation
+    // written in the browser is a recommendation nothing verified.
+    recommendedAction: apiInsight.recommended_action || '',
     theme: apiInsight.theme || '',
     severity: apiInsight.severity || 'INFORMATION',
     category: insightCategory(apiInsight),

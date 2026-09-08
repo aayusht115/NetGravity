@@ -1,9 +1,12 @@
 /* ═══════════════════════════════════════════════════════════
    Netgravity — Sidebar Chrome
-   (Filename is legacy — the old Insights page this file styled has
-   been removed; what's left is the sidebar brand lockup, collapse
-   toggle, and bottom profile block. Insights now live in a full-page
-   deep dive — see insight-detail.css/js.)
+   (Filename is legacy. The Insights page this file once styled is
+   long gone; what's left here is the sidebar brand lockup, the
+   collapse toggle and the bottom profile block. The Insights page
+   that exists TODAY — Baseline > Insights — is styled in
+   home-overview.css under `.insp-*`, beside the Overview tiles it
+   shares its vocabulary with, and one finding's full account is
+   insight-detail.css/js.)
    ═══════════════════════════════════════════════════════════ */
 
 /* ─── Sidebar Collapse Toggle ──────────────────────────────

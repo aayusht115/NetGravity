@@ -45,34 +45,74 @@ _REDACTION_MARKERS = ("[UNGROUNDED CLAIM REMOVED", "[UNSUPPORTED FIGURE REMOVED"
 #: itself — "I see", "My models" — rather than as a report about a network.
 #: Ordered: the shaped rewrites run before the bare removals, so
 #: "I see cost at X" becomes "Cost is X" rather than "Cost at X".
+#:
+#: EVERY REPLACEMENT IS LOWER CASE. A rule that wrote "Stated" copied the
+#: capital off the pronoun it replaced, so "I have not run that scenario, so I
+#: state no saving" came out as "... so Stated no saving" — a capital in the
+#: middle of a sentence, on the line that leads a card. Which words begin a
+#: sentence is not something a per-phrase rule can know; `plain_voice` decides
+#: it once, afterwards, for all of them.
 _VOICE_FIXES = (
     # "I see cost at 4.2 crore" -> "Cost is 4.2 crore". ONLY "at": the same
     # rewrite on "of" turned "I see 139,054 units of 3,956,705 units of demand
     # left unserved" into "139,054 units is 3,956,705 units of demand left
     # unserved", which is not English and was the card's warning line.
     (re.compile(r"\bI see (?:a |an |the )?(.+?) at ", re.I), r"\1 is "),
+    # "I see a demand fill rate of 1.000" -> "The demand fill rate is 1.000".
+    # The bare removal below leaves "A demand fill rate of 1.000." \u2014 a noun
+    # phrase with no verb, which is acceptable in a headline and is not a
+    # sentence.
+    #
+    # The subject is restricted to plain words: lazily matching anything up
+    # to the first " of " turned "I see a structural break detected in 3 of
+    # the 12 series" into "The structural break detected in 3 is the 12
+    # series". A digit inside the subject means the " of " belongs to a
+    # quantity rather than to the reading being named, and this rule then
+    # correctly declines to fire.
+    (re.compile(r"\bI see an? ([a-z][a-z ]{2,40}) of ", re.I), r"The \1 is "),
     (re.compile(r"\bI see (?:that )?", re.I), ""),
     # "I use this as the decision baseline" -> "This is the decision baseline".
-    (re.compile(r"\bI use (?:this|it) as (?:a |an |the )?", re.I), "This is the "),
-    (re.compile(r"\bI found (?:that )?", re.I), ""),
+    (re.compile(r"\bI use (?:this|it) as (?:a |an |the )?", re.I), "this is the "),
+    (re.compile(r"\bI found that ", re.I), ""),
+    # "I found the network INFEASIBLE" -> "This analysis found the network
+    # INFEASIBLE". The rule above only strips "I found THAT ...", where what
+    # follows is a whole clause; without the "that" the sentence loses its
+    # verb ("The network INFEASIBLE under this configuration").
+    (re.compile(r"\bI found\b(?! that\b)", re.I), "this analysis found"),
+    # The negatives. Each of these is the engine saying what it did NOT do,
+    # which is the half of a briefing that must survive rewriting intact —
+    # dropping the pronoun would turn "I am not stating what it would cost"
+    # into a fragment, and dropping the sentence would turn a stated limit
+    # into a silent one.
+    (re.compile(r"\bI am not stating\b", re.I), "this analysis does not state"),
+    (re.compile(r"\bI have not run\b", re.I), "this analysis has not run"),
+    (re.compile(r"\bI have not\b", re.I), "this analysis has not"),
+    (re.compile(r"\bI have no\b", re.I), "there is no"),
+    (re.compile(r"\bI cannot\b", re.I), "this analysis cannot"),
+    (re.compile(r"\bI could not\b", re.I), "this analysis could not"),
+    (re.compile(r"\bI do not\b", re.I), "this analysis does not"),
+    (re.compile(r"\bI state no\b", re.I), "this analysis states no"),
+    # "the scenario I would run next" -> "the scenario to run next".
+    (re.compile(r"\bI would run next\b", re.I), "to run next"),
     # "I recommend reviewing X" -> "Consider reviewing X". Stripping the
     # phrase outright left a bare gerund ("Reviewing X with the people who
-    # would have to carry it out"), which is not an instruction. "Consider"
-    # is also the honest verb: the comparison ranks, and a structural change
-    # is a human decision whatever the economics say.
-    (re.compile(r"\bI recommend (\w+ing)\b", re.I), r"Consider \1"),
-    (re.compile(r"\bI recommend (?:that )?", re.I), ""),
+    # would have to carry it out") or a bare noun phrase ("A footprint
+    # review: at least one open site costs more than it saves") - a label,
+    # not an instruction. "Consider" is also the honest verb: the comparison
+    # ranks, and a structural change is a human decision whatever the
+    # economics say.
+    (re.compile(r"\bI recommend (?:that )?", re.I), "consider "),
     # The one line whose whole point is that the engine is not deciding.
     (re.compile(r"\bnot one I make\b", re.I), "not one this analysis makes"),
-    (re.compile(r"\bI compared\b", re.I), "Compared"),
-    (re.compile(r"\bI measured\b", re.I), "Measured"),
-    (re.compile(r"\bI (?:have )?produced\b", re.I), "Produced"),
-    (re.compile(r"\bI forecast\b", re.I), "Forecast"),
-    (re.compile(r"\bI chose\b", re.I), "Chose"),
-    (re.compile(r"\bI state\b", re.I), "Stated"),
-    (re.compile(r"\bI am\b", re.I), "This is"),
-    (re.compile(r"\bMy models\b", re.I), "The models"),
-    (re.compile(r"\bMy model\b", re.I), "The model"),
+    (re.compile(r"\bI compared\b", re.I), "compared"),
+    (re.compile(r"\bI measured\b", re.I), "measured"),
+    (re.compile(r"\bI (?:have )?produced\b", re.I), "produced"),
+    (re.compile(r"\bI forecast\b", re.I), "forecast"),
+    (re.compile(r"\bI chose\b", re.I), "chose"),
+    (re.compile(r"\bI state\b", re.I), "stated"),
+    (re.compile(r"\bI am\b", re.I), "this is"),
+    (re.compile(r"\bMy models\b", re.I), "the models"),
+    (re.compile(r"\bMy model\b", re.I), "the model"),
     # Urgency nothing computed. The engine ranks and measures; it does not
     # know that anything must happen today.
     (re.compile(r"\b(?:immediately|urgently|as soon as possible)\b,?\s*", re.I), ""),
@@ -115,7 +155,11 @@ def plain_voice(text: str) -> str:
     for pattern, replacement in _VOICE_FIXES:
         result = pattern.sub(replacement, result)
     result = re.sub(r"\s{2,}", " ", result).strip()
-    return (result[0].upper() + result[1:]) if result else ""
+    # Sentence starts, and only sentence starts. `[.!?]` followed by
+    # whitespace is a terminator; a decimal point is followed by a digit and
+    # is not one, so "4.2 crore" keeps its lower case.
+    return re.sub(r"(^|[.!?]\s+)([a-z])",
+                  lambda m: m.group(1) + m.group(2).upper(), result)
 
 
 def trim(text: str, limit: int) -> str:

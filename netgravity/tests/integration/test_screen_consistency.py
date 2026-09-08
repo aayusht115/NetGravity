@@ -434,9 +434,12 @@ class TestTheForecastScreenIsTheMockup:
         assert 'class="ov-signals-card"' in fc
 
         js = _without_comments(_asset("js", "app.js"))
-        assert "function renderOverviewAlert(elId = 'ov-alert')" in js
-        # The default followed the caller when Home's signals card was
-        # replaced by the KPI strip: this renderer's only caller is now the
+        # The default follows the caller. Home's own full alert is gone — it
+        # keeps only an error-only notice, `#ov-notice` — so a default naming
+        # `#ov-alert` would make every bare call a silent no-op, including
+        # ingestion.js's, which is how a shortfall notice reaches a screen.
+        assert "function renderOverviewAlert(elId = 'fc-alert'" in js
+        # Same rule for the signals row: this renderer's only caller is the
         # Forecast tab, and a default naming an element that no longer exists
         # is a trap for the next reader.
         assert "function renderHomeSignals(rowId = 'fc-signals-row')" in js
@@ -462,8 +465,12 @@ class TestTheForecastScreenIsTheMockup:
         assert "renderForecastAttention('fc-attn-body')" in page
         assert "renderHomeAttentionFeed" not in page, (
             "the Forecast screen must not draw the Overview's attention feed")
-        # Home still has its own, unchanged.
-        assert "function renderHomeAttentionFeed(listId = 'ov-attn-body')" in js
+        # And the feed itself is gone from the build entirely: the Overview
+        # replaced it with three insight tiles, which left this renderer with
+        # no caller at all. A dead renderer still aimed at a LIVE container is
+        # how the defect above comes back.
+        assert "function renderHomeAttentionFeed" not in js, (
+            "the Overview's attention feed renderer is still in app.js")
 
     def test_the_forecast_card_reads_the_forecasts_own_briefing(self):
         js = _without_comments(_asset("js", "app.js"))
@@ -508,7 +515,12 @@ class TestTheForecastScreenIsTheMockup:
         assert 'id="ov-alert-link"' not in js
         assert 'id="ov-run-scenario"' not in js
         assert "el.querySelector('.ov-alert-link')" in js
-        assert "list.querySelector('.ov-attn-cta')" in js
+        # The attention card's call to action was the other one addressed by
+        # class for this reason. That card is gone; the Overview's tiles are
+        # wired the same way — queried within the tile they belong to, never
+        # by an id that a second copy on another page would answer to.
+        assert "tile.querySelector('.ov-tile-cta')" in js
+        assert 'id="ov-tile-cta"' not in js
 
     def test_the_chart_title_is_the_series_picker(self):
         """
@@ -634,25 +646,32 @@ class TestTheForecastScreenIsTheMockup:
 
 
 class TestTheFirstScreenIsMeasuredNotGuessed:
-    def test_both_body_grids_are_sized_from_a_measured_offset(self):
+    def test_the_forecast_body_grid_is_sized_from_a_measured_offset(self):
+        """
+        SUPERSEDED: this covered BOTH body grids. The Overview does not have
+        one any more — with the twin gone it is four rows that flow, and a
+        page that flows needs no measurement. The Forecast page's is
+        unchanged, and the helper is still shared.
+        """
         js = _without_comments(_asset("js", "app.js"))
         assert "function sizePageToWindow(selector, varName)" in js
-        assert "'--ov-main-top'" in js
         assert "'--fc-main-top'" in js
+        assert "setProperty('--ov-main-top'" not in js, (
+            "a retired grid offset is being written again")
         assert "requestAnimationFrame(" in js, "coalesced to one per frame"
 
-    def test_the_overview_body_owns_the_first_screen(self):
+    def test_the_overview_grid_is_gone_rather_than_left_sized(self):
         css = _without_comments(_asset("css", "home-overview.css"))
-        main = _rule(css, ".ov-main {")
-        assert "min-height: calc(100vh - var(--ov-main-top" in main, main
-        assert "max-height: calc(100vh - var(--ov-main-top" in main, main
+        assert ".ov-main {" not in css, css[:200]
+        assert "var(--ov-main-top" not in css, (
+            "the stylesheet still reads a measured offset nothing writes")
 
-    def test_and_the_page_may_grow_past_it_for_the_signals(self):
+    def test_and_the_page_may_grow_past_the_first_screen(self):
         css = _without_comments(_asset("css", "home-overview.css"))
         panel = _rule(css, "#tab-home.active {")
         assert "flex: 1 0 auto" in panel, (
-            "`flex: 1` pinned Home to exactly one screen, so the body grid "
-            "and the signals row had to share it"
+            "`flex: 1` pins Home to exactly one screen, so every row has to "
+            "compete with every other for it"
         )
 
 

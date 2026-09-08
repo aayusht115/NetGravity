@@ -66,17 +66,22 @@ const state = {
   // Set from the bound network's own demand periods; there is no default
   // quarter, because no upload has ever stated one.
   selectedPeriod: null,
+  // Which band of findings the Insights page is showing — 'all', a severity,
+  // or 'action'. Held here rather than read back off the DOM so a re-render
+  // triggered by a late briefing keeps the reader's selection.
+  insightsFilter: 'all',
 };
 
 // Insights actioned via the deep-dive page (insight-detail.js) are dropped
-// from Home's feed on the next render — see window.markAttentionItemResolved.
+// from the Overview's tiles and the Insights page on the next render — see
+// window.markAttentionItemResolved.
 //
 // Declared here, above the window exports, because those exports make
 // renderHome() callable immediately: hydrate.js invokes it as soon as the
 // authoritative data lands, which can be before module evaluation reaches the
 // bottom of this file. With the declaration further down, that call hit the
 // temporal dead zone and threw "Cannot access 'resolvedInsightIds' before
-// initialization", leaving Home's attention feed blank.
+// initialization", leaving Home's findings blank.
 const resolvedInsightIds = new Set();
 
 // Expose globally on window
@@ -87,6 +92,14 @@ if (typeof window !== 'undefined') {
   // Called by ingestion.js the moment an analysis finishes, which can be
   // before Home has ever rendered.
   window.renderOverviewAlert = renderOverviewAlert;
+  // Every screen that reports the state of the solve, in one call. The
+  // notice reaches TWO elements now — the Overview's error-only banner and
+  // the Forecast page's full alert — and ingestion.js has no business
+  // knowing either id.
+  window.refreshNetworkNotice = () => {
+    renderOverviewAlert('ov-notice', { errorsOnly: true });
+    renderOverviewAlert('fc-alert');
+  };
   // Exposed so the authoritative hydration can refresh the twin once solved
   // figures arrive. Without this its re-render call was a silent no-op, and
   // the Digital Twin kept showing pre-solve utilisation.
@@ -287,10 +300,9 @@ function renderForecastSummary() {
 /**
  * Draw the whole Forecast screen.
  *
- * The left column is the Overview's alert and attention card, rendered by the
- * SAME two functions into this page's containers — `renderOverviewAlert` and
- * `renderHomeAttentionFeed` both take the element they draw into. Nothing on
- * this page computes a finding, a figure or a recommendation of its own.
+ * The left column is the Overview's alert — `renderOverviewAlert` takes the
+ * element it draws into — above this page's OWN attention card. Nothing here
+ * computes a finding, a figure or a recommendation of its own.
  *
  * On the recommendation: the reasoning agent has no FORECAST scope
  * (netgravity/orchestrator/schemas/reasoning.py lists NETWORK, FACILITY,
@@ -303,9 +315,10 @@ function renderForecastSummary() {
  */
 function renderForecastPage() {
   renderOverviewAlert('fc-alert');
-  // NOT `renderHomeAttentionFeed`. That drew Home's NETWORK-scoped card into
-  // a second container — the same finding, twice, on two screens. This screen
-  // asks a different question and now has its own grounded answer.
+  // This page's own card, about the forecast. The Overview's network-scoped
+  // feed used to be drawn here as well — the same finding, twice, on two
+  // screens, one of them asking a different question. That feed is gone
+  // entirely now; this screen has its own grounded answer.
   renderForecastAttention('fc-attn-body');
   renderHomeSignals('fc-signals-row');
   renderAnalysisTimestamp();
@@ -887,11 +900,10 @@ if (typeof window !== 'undefined') window.scrollPageToTop = scrollPageToTop;
 export function navigateToTab(tab) {
   updateTopBarLayout(tab);
 
-  // Sidebar is flat (Home, KPIs, Digital Twin, Forecast, Scenario
-  // Planning). Insights/Recommendations pages are gone — an insight card
-  // on Home opens a full-page deep dive instead (see insight-detail.js),
-  // which is not itself a sidebar destination and manages its own nav
-  // highlighting/panel display independent of this function.
+  // Overview, then Baseline (Digital Twin / KPIs / Insights), then Forecast
+  // and Scenarios. The full-page insight deep dive is NOT a sidebar
+  // destination — it is opened from a tile, a row or a card, and manages its
+  // own nav highlighting and panel display independently of this function.
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navKey = (tab === 'overview') ? 'home' : tab;
   document.querySelector(`.nav-item[data-tab="${navKey}"]`)?.classList.add('active');
@@ -928,7 +940,17 @@ export function navigateToTab(tab) {
     return;
   }
 
-  // 3. Other Top Tabs (Digital Twin, Scenario Planning, Forecasting)
+  // 3. Insights — every finding about the baseline, not just the three
+  //    that lead on Home.
+  if (tab === 'insights') {
+    document.getElementById('tab-insights')?.classList.add('active');
+    state.activeTab = 'insights';
+    renderInsightsPage();
+    scrollPageToTop();
+    return;
+  }
+
+  // 4. Other Top Tabs (Digital Twin, Scenario Planning, Forecasting)
   const panel = document.getElementById('tab-' + tab);
   if (panel) panel.classList.add('active');
 
@@ -1134,9 +1156,11 @@ function syncNavGroups() {
 }
 
 function initTabs() {
-  // Primary nav items (flat: Home, KPIs, Digital Twin, Forecast, Scenario
-  // Planning — see navigateToTab for how Insights/Recommendations, which
-  // no longer have their own sidebar entry, still route correctly).
+  // Every sidebar entry that names a tab: Overview, Baseline's three
+  // (Digital Twin, KPIs, Insights), Forecast and Scenarios. The Baseline
+  // group HEAD is deliberately not one of them — it carries `data-group-tab`
+  // instead, so it opens its first child without competing with that child
+  // for the active mark.
   document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
     item.addEventListener('click', () => {
       const tab = item.dataset.tab;
@@ -1638,14 +1662,17 @@ function populateFacilitySelector() {
 /**
  * Tell a page's body grid how much window is left for it.
  *
- * The Overview's `.ov-main` and the Forecast page's `.fc-main` are both sized
- * to fill the rest of the FIRST screen, so the row below each of them — the
- * signals — begins below the fold. Each needs the distance from the top of
- * the window down to its own top edge: the global top bar, the page-title row
- * where there is one, the page's padding and the head row. Those vary with
- * the viewport and with which page is showing, and none of them can be
+ * The Forecast page's `.fc-main` is sized to fill the rest of the FIRST
+ * screen, so the row below it — the signals — begins below the fold. It needs
+ * the distance from the top of the window down to its own top edge: the global
+ * top bar, the page-title row, the page's padding and the head row. Those vary
+ * with the viewport and with which page is showing, and none of them can be
  * expressed in CSS from inside the grid, so the distance is measured once per
  * render and written back as a custom property.
+ *
+ * The Overview had a `.ov-main` sized the same way. It does not any more: with
+ * the twin gone that page is four rows that flow, and a page that flows needs
+ * no measurement.
  *
  * Reading the top of the element whose height we are about to set is not
  * circular: its top is fixed by what comes BEFORE it, and nothing before it
@@ -1660,51 +1687,48 @@ function sizePageToWindow(selector, varName) {
   if (shell) shell.style.setProperty(varName, top + 'px');
 }
 
+/**
+ * Keep Home's bottom rows clear of the fixed "Ask Netgravity" button.
+ *
+ * SUPERSEDED, and deliberately kept as one function rather than deleted: this
+ * used to size a fixed-height body grid (`.ov-main`) to the first screen, and
+ * to measure the KPI strip so four figures landed above the fold. Neither is
+ * needed any more — the grid is gone with the twin, and the strip is the FIRST
+ * row of the page. Both variables are cleared here so a cached stylesheet
+ * cannot go on subtracting a height nobody is writing.
+ *
+ * What is left is the one measurement this page still needs. "Ask Netgravity"
+ * is `position: fixed` at the bottom right of the VIEWPORT, and Home's last
+ * two rows — the data requests and the "last analysed" line — are what end up
+ * underneath it. `--ov-fab-reserve` is the width to keep clear on their right.
+ *
+ * Measured rather than reserved as a constant: the button's width is its
+ * label's width, which follows the type scale, and it is hidden outright until
+ * a user is signed in (`display: none`, so there is no rect at all).
+ *
+ * Visibility is read from the rect, not from `offsetParent`: that property is
+ * null for EVERY `position: fixed` element, visible or not, so the obvious
+ * test reports the button hidden and reserves nothing. A hidden button has a
+ * zero-width rect, which is the thing actually being asked.
+ */
 function sizeOverviewToWindow() {
-  sizePageToWindow('#tab-home.active .ov-main', '--ov-main-top');
-  // SUPERSEDED: this also measured the KPI strip and wrote `--ov-strip-h`,
-  // which `.ov-main` subtracted so the strip landed on the first screen.
-  // The findings are what this page is for, and buying the strip 95px cost
-  // the attention card the height its recommendation needed. The strip is
-  // now the first thing below the fold; nothing measures it any more, and
-  // the stale variable is cleared so a cached stylesheet cannot keep
-  // subtracting a height nobody is writing.
-  const strip = document.querySelector('#tab-home.active .home2-kpi-strip');
   const shell = document.querySelector('.main-content');
-  if (!shell) return;
-  shell.style.removeProperty('--ov-strip-h');
-  if (!strip) return;
-  const box = strip.getBoundingClientRect();
+  if (shell) {
+    shell.style.removeProperty('--ov-strip-h');
+    shell.style.removeProperty('--ov-main-top');
+  }
 
-  // How much of the strip's right end the "Ask Netgravity" button covers.
-  //
-  // That button is `position: fixed` at the bottom-right of the VIEWPORT and
-  // the strip is the bottom row of the page, so the two share a band of
-  // screen whatever the layout does. "View all KPIs" is the strip's
-  // rightmost element, and it is what ends up underneath.
-  //
-  // Measured rather than reserved as a constant: the button's width is its
-  // label's width, which follows the type scale, and it is hidden outright
-  // until a user is signed in — `display: none`, so there is no rect at all.
-  //
-  // Visibility is read from the rect, not from `offsetParent`: that property
-  // is null for EVERY `position: fixed` element, visible or not, so the
-  // obvious test reports the button hidden and reserves nothing. A hidden
-  // button has a zero-width rect, which is the thing actually being asked.
+  const page = document.querySelector('#tab-home.active');
+  if (!page) return;
+  const box = page.getBoundingClientRect();
+
   const fab = document.getElementById('floating-chatbot-fab');
   const fabBox = fab ? fab.getBoundingClientRect() : null;
-  // No vertical test any more. It used to check whether the two currently
-  // share a band of screen, which was true when the strip was on the first
-  // screen and is false the moment it is measured below the fold — so the
-  // gutter came out 0 and the button landed under the chat bubble as soon
-  // as the reader scrolled down to it. The chat button is fixed to the
-  // bottom of the VIEWPORT and the strip is the last row of the page:
-  // scrolling to one always brings the other alongside. What is left to
-  // measure is how much of the strip's right end it covers.
   const reserve = (fabBox && fabBox.width > 0)
     ? Math.max(0, Math.round(box.right - fabBox.left) + 16) : 0;
-  strip.style.setProperty('--ov-fab-reserve', reserve + 'px');
+  page.style.setProperty('--ov-fab-reserve', reserve + 'px');
 }
+
 
 if (typeof window !== 'undefined') {
   let sizingFrame = null;
@@ -1723,16 +1747,27 @@ if (typeof window !== 'undefined') {
 }
 
 // ─── Render Full Home ───────────────────────────────────────
+// Four rows, in the order the page is read: the figures, the findings, the
+// data the analysis did not have, and when it last ran.
+//
+// `renderOverviewAlert` is NOT called here for the whole state of the solve —
+// only for the one state a tile cannot express, an infeasible network. The
+// attention feed that used to sit beside it is gone: the three insight tiles
+// say the same things with the recommendation on screen rather than behind an
+// internal scroller.
+//
+// Nor is `renderHomeDigitalTwin`. The twin preview is gone from this page; it
+// is one click away under Baseline, and it is the same scene.
 function renderHome() {
   renderSidebarMeta();
-  renderOverviewAlert();
-  renderHomeForecast();
-  renderHomeDigitalTwin();
-  renderHomeAttentionFeed();
+  renderOverviewAlert('ov-notice', { errorsOnly: true });
   renderHomeKpiStrip();
+  renderHomeInsightTiles();
+  renderHomeDataStrip();
+  renderHomeForecast();
   renderAnalysisTimestamp();
-  // After the head row has its final text, so the measurement is of the head
-  // that is actually on screen.
+  // After the rows have their final content, so the measurement is of the
+  // page that is actually on screen.
   requestAnimationFrame(sizeOverviewToWindow);
 }
 
@@ -1766,10 +1801,28 @@ function renderHome() {
  * link to the rows behind it. The per-market detail is not deleted — it is
  * what the linked view is for.
  */
-function renderOverviewAlert(elId = 'ov-alert') {
+// Default is the FORECAST page's element. Home carried this card until the
+// insight tiles replaced it; `#ov-alert` is not in the markup any more, so a
+// default naming it would make every bare call a silent no-op — including
+// ingestion.js's, which is how the shortfall notice reaches a screen at all.
+function renderOverviewAlert(elId = 'fc-alert', { errorsOnly = false } = {}) {
   const el = document.getElementById(elId);
   if (!el) return;
   const notice = window.__ngNetworkNotice || null;
+
+  // ERRORS ONLY, for the Overview's notice slot. That page states an unserved
+  // shortfall as a finding — the first insight tile — so repeating it in a
+  // banner above the figures would be the same conclusion twice. What a tile
+  // cannot state is that there is no plan at all: an infeasible network
+  // produces no briefing, so the tiles would render "no findings have been
+  // generated yet" over a genuine engine failure. That case, and only that
+  // case, needs a banner.
+  if (errorsOnly && !(notice && notice.tone === 'error')) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  el.hidden = false;
   const base = getOptimizedBaseCase()?.baseline || {};
   const unserved = (typeof base.unservedDemand === 'number') ? base.unservedDemand : null;
   const total = (typeof base.totalDemand === 'number') ? base.totalDemand : null;
@@ -2284,58 +2337,15 @@ function renderHomeForecast() {
   }, 40);
 }
 
-// ─── Home Digital Twin Map Preview (3D — same engine as the Digital
-//     Twin tab, re-parented into Home's preview container) ──────────
-function renderHomeDigitalTwin() {
-  setTimeout(() => {
-    try {
-      // initTwin3D re-parents/resumes the existing scene when already
-      // initialised, so it's safe to call every time Home renders.
-      initTwin3D('home-map-twin');
-      window.dispatchEvent(new Event('resize'));
-    } catch (e) {
-      console.warn('Home 3D twin init:', e);
-    }
-  }, 50);
-  renderHomeTwinCallout();
-}
-
-// Floating "key info" card on the Digital Twin preview — whichever
-// facility is selected in the topbar (Facility selector) surfaces its
-// utilisation snapshot directly on the map, matching
-// Dump/Updated Home Page.png's "Insight context" callout.
-function renderHomeTwinCallout() {
-  const el = document.getElementById('home-twin-callout');
-  if (!el) return;
-
-  const fac = state.selectedFacility && state.selectedFacility !== 'ALL'
-    ? getFacilityById(state.selectedFacility) : null;
-
-  if (!fac) {
-    el.innerHTML = '';
-    el.classList.remove('visible');
-    return;
-  }
-
-  // Utilisation is a solver output. Until a solve has produced one it is
-  // absent, and absent must read as "—" — it used to interpolate straight
-  // into the template and render the literal text "undefined%".
-  const hasUtil = typeof fac.utilPct === 'number' && Number.isFinite(fac.utilPct);
-  const utilLabel = hasUtil ? getUtilLabel(fac.utilPct) : null;
-  const tone = utilLabel === 'Critical' ? 'red' : utilLabel === 'Stress' ? 'amber'
-             : utilLabel ? 'green' : 'muted';
-
-  el.innerHTML = `
-    <div class="home-twin-callout-head">
-      <span class="home-twin-callout-icon">✨</span>
-      <span>Facility snapshot</span>
-    </div>
-    <div class="home-twin-callout-name">${fac.name} utilization</div>
-    <div class="home-twin-callout-value tone-${tone}">${hasUtil ? fac.utilPct + '%' : '—'}</div>
-    <div class="home-twin-callout-sub">${formatNumber(fac.throughput)} / ${formatNumber(fac.capacity)} ${perPeriodLabel()} capacity</div>
-  `;
-  el.classList.add('visible');
-}
+// The Home twin preview and its facility callout are GONE, renderers and all.
+//
+// They drew the 3D scene into `#home-map-twin` and a utilisation snapshot into
+// `#home-twin-callout`, neither of which is in the markup any more. Leaving
+// the two functions behind would be a second, unreachable copy of the Digital
+// Twin's own view — which is how a screen ends up with two versions of one
+// scene that disagree. The scene itself is untouched: `initTwin3D` is called
+// by the Digital Twin tab (see navigateToTab), which is where it belongs, and
+// the facility snapshot is on that tab and on the KPI page.
 
 // ─── Home Numbered Insights (Right Rail) ─────────────────────
 // ─── Attention feed categorisation ───────────────────────────
@@ -2376,23 +2386,41 @@ function categorizeAttentionLabel(text) {
 // loop: the response fires `insightsLoaded`, which re-renders, which fetches.
 const requestedFacilityInsights = new Set();
 
-function renderHomeAttentionFeed(listId = 'ov-attn-body') {
-  const list = document.getElementById(listId);
-  if (!list) return;
-
-  // A scoped briefing costs a reasoning pass, so it is fetched for the facility
-  // actually being looked at rather than for all of them at load time. The
-  // response re-renders this feed through the `insightsLoaded` listener below.
+/**
+ * Ask for the selected facility's own briefing, once.
+ *
+ * A scoped briefing costs a reasoning pass, so it is fetched for the facility
+ * actually being looked at rather than for all of them at load time. The
+ * response re-renders every consumer through the `insightsLoaded` listener
+ * below.
+ *
+ * Shared by the Overview's insight tiles, the Insights page and the Forecast
+ * page's attention card, so that whichever of them a reader lands on first is
+ * what triggers the request — and the other two get it for nothing.
+ */
+function ensureFacilityInsights() {
   const selected = state.selectedFacility;
-  if (selected && selected !== 'ALL' && !requestedFacilityInsights.has(selected)) {
-    requestedFacilityInsights.add(selected);
-    // Dynamically imported, matching how this file already reaches hydrate.js:
-    // a static import would pull the whole integration layer into the initial
-    // bundle for a feature that only fires once a facility is chosen.
-    import('./integration/hydrate.js')
-      .then((m) => m.loadFacilityInsights(selected))
-      .catch(() => { /* the feed renders without the facility's own findings */ });
-  }
+  if (!selected || selected === 'ALL') return;
+  if (requestedFacilityInsights.has(selected)) return;
+  requestedFacilityInsights.add(selected);
+  // Dynamically imported, matching how this file already reaches hydrate.js:
+  // a static import would pull the whole integration layer into the initial
+  // bundle for a feature that only fires once a facility is chosen.
+  import('./integration/hydrate.js')
+    .then((m) => m.loadFacilityInsights(selected))
+    .catch(() => { /* the screens render without the facility's own findings */ });
+}
+
+/**
+ * Every finding about what is on screen, most serious first.
+ *
+ * ONE ranking, read by three screens — the Overview's tiles, the Insights
+ * page and the Forecast page's attention card. It was inlined in the feed,
+ * so the tiles would have had to re-derive "which finding leads" and the two
+ * answers would have drifted the first time either changed.
+ */
+function rankedAttentionInsights() {
+  ensureFacilityInsights();
 
   // Network findings first, then the selected facility's own.
   //
@@ -2436,9 +2464,15 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
     return s !== 0 ? s : (a.rank || 0) - (b.rank || 0);
   });
 
-  const insightItems = insights.map(ins => ({
+  return insights.map(ins => ({
     kind: 'insight',
     id: ins.id,
+    // The record itself, so a consumer that needs more than the feed's five
+    // fields — the evidence rows, the theme, the recommended action — reads
+    // them off the finding rather than being handed a copy that can go stale.
+    record: ins,
+    theme: ins.theme || '',
+    severity: ins.severity || 'INFORMATION',
     // The chip's words. An insight's chip has always shown its severity;
     // actions need their own vocabulary in the same slot, so both carry it
     // explicitly rather than one of them being inferred at render time.
@@ -2453,23 +2487,31 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
     headline: (ins.evidence && ins.evidence[0])
       ? ins.evidence[0].display_value : '',
   }));
+}
 
-  // Action items are not findings. Nothing was solved to produce them — the
-  // completeness gate read the upload and reported a column that is not
-  // there — so they carry their own category and their own label rather
-  // than borrowing the severity vocabulary the Reasoning Agent's findings
-  // use. A missing column presented as a RISK the engine identified would
-  // be this application claiming an analysis it did not run.
-  //
-  // The record shape changed with the store: `expectedImpact` was a
-  // prototype field describing a cost and an SLA delta for a demo action,
-  // and no engine produces either for a missing column. The server sends a
-  // title and a sentence built from the gap itself; both are used as sent.
+/**
+ * What the completeness gate needs a PERSON to supply, most urgent first.
+ *
+ * Action items are not findings. Nothing was solved to produce them — the
+ * completeness gate read the upload and reported a column that is not there
+ * — so they carry their own category and their own label rather than
+ * borrowing the severity vocabulary the Reasoning Agent's findings use. A
+ * missing column presented as a RISK the engine identified would be this
+ * application claiming an analysis it did not run.
+ *
+ * The record shape changed with the store: `expectedImpact` was a prototype
+ * field describing a cost and an SLA delta for a demo action, and no engine
+ * produces either for a missing column. The server sends a title and a
+ * sentence built from the gap itself; both are used as sent.
+ */
+function attentionActionItems() {
   const actionItems = HOME_ACTION_ITEMS
     .filter(act => !resolvedInsightIds.has(act.id))
     .map(act => ({
       kind: 'action',
       id: act.id,
+      record: act,
+      required: act.severity === 'REQUIRED',
       category: act.severity === 'REQUIRED' ? 'RISK' : 'OPPORTUNITY',
       label: act.severity === 'REQUIRED' ? 'DATA NEEDED' : 'OPTIONAL DATA',
       title: act.title,
@@ -2484,155 +2526,24 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
   // about the network and an action is a request to a person — and the feed
   // is read top-down.
   actionItems.sort((a, b) => (a.category === 'RISK' ? 0 : 1) - (b.category === 'RISK' ? 0 : 1));
-
-  const items = [...insightItems, ...actionItems];
-
-  // An empty feed means no insight has been generated for this network — it
-  // does NOT mean the network is healthy. The old copy ("network is
-  // performing within target") asserted a clean bill of health from the
-  // absence of evidence, which is the one conclusion absence cannot support.
-  if (!items.length) {
-    list.innerHTML = `<div class="ov-attn-empty">No insights have been generated
-      for this network yet.</div>`;
-    return;
-  }
-
-  // The top-ranked finding, in full. The feed used to be a scrolling list of
-  // every finding at equal weight, which asks the reader to trade off six
-  // things before doing one — and the recommendation, rendered into a separate
-  // block below it, overlapped the third card.
-  //
-  // The rest are not dropped: they are listed underneath, and every one still
-  // opens its own deep dive.
-  //
-  // ACTIONS COME FIRST in that list, ahead of the remaining findings. A
-  // finding is something to read; an action is something only a person can
-  // do, and it is holding up an analysis until they do it. Ordered the other
-  // way round — findings, then actions, which is where they landed when the
-  // two lists were simply concatenated — the four data requests on a real
-  // upload sat seventh to tenth inside a scrolling card, below the fold. A
-  // request nobody scrolls to has not been raised.
-  //
-  // The LEAD stays the top-ranked finding when there is one: it is the
-  // engine's own answer to "what should I look at", and an action item is
-  // not ranked against it by anything.
-  const lead = insightItems[0] || actionItems[0] || items[0];
-  const rest = [...actionItems, ...insightItems].filter((it) => it !== lead);
-  const rec = getNetworkRecommendation();
-
-  // What the algorithm recommends CHANGING, as distinct from what it
-  // recommends doing next. `rec` is the engine's prose; this is the concrete
-  // move — close this, open that, reroute those — read from the plans that
-  // were actually solved. Quiet here: a reader on Home who has run no plan is
-  // not owed a line saying so, and the Digital Twin states it for the reader
-  // who goes looking.
-  const change = recommendedChangeSummary({ quietWhenNothing: true });
-  const changeHtml = change ? `
-    <div class="ov-attn-next">
-      <span class="ov-attn-next-icon">${OV_ICONS.chart}</span>
-      <div class="ov-attn-next-text">
-        <div class="ov-attn-section-label tone-next">Recommended change</div>
-        <div class="ov-attn-next-sub">${change.html}</div>
-      </div>
-    </div>` : '';
-
-  /* The finding's figure and its sentence, without saying the figure twice.
-     An insight's `subtitle` usually restates its own headline evidence — "I
-     see 452,610 units of 1,435,985 units of demand left unserved" already
-     contains "452,610" — so printing the headline in front of it produced
-     "452,610 units I see 452,610 units of ... left unserved". */
-  /* "3 further findings" was true when the feed held only findings. It now
-     holds two different kinds of thing — conclusions the engine reached, and
-     requests it needs a person to make — and counting an action as a finding
-     asserts an analysis that did not happen. Both are named, or neither is. */
-  function restSummary(list) {
-    const actions = list.filter((it) => it.isAction).length;
-    const findings = list.length - actions;
-    const parts = [];
-    if (findings) parts.push(`${findings} further finding${findings === 1 ? '' : 's'}`);
-    if (actions) parts.push(`${actions} action${actions === 1 ? '' : 's'} to take`);
-    return parts.join(' \u00b7 ');
-  }
-
-  function impactHtml(item) {
-    const head = (item.headline || '').trim();
-    const sub = (item.subtitle || '').trim();
-    if (!head && !sub) return '';
-    const restated = head && sub
-      && sub.replace(/[\s,]/g, '').includes(head.replace(/[\s,]/g, '').replace(/units$/i, ''));
-    const body = restated
-      ? escapeInsightText(sub)
-      : [head ? `<strong>${escapeInsightText(head)}</strong>` : '',
-         escapeInsightText(sub)].filter(Boolean).join('<br>');
-    return `
-      <div class="ov-attn-section">
-        <div class="ov-attn-section-label tone-impact">Impact</div>
-        <div class="ov-attn-section-text">${body}</div>
-      </div>`;
-  }
-
-  list.innerHTML = `
-    <div class="ov-attn-lead" data-kind="${lead.kind}" data-id="${lead.id}">
-      <div class="ov-attn-section">
-        <div class="ov-attn-section-label tone-why">Why it matters</div>
-        <div class="ov-attn-section-text">${escapeInsightText(lead.title)}</div>
-      </div>
-      ${impactHtml(lead)}
-      <button type="button" class="ov-attn-more-link" data-open-lead>
-        <span>${lead.isAction ? 'Open this action' : 'View the full finding'}</span>
-        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
-      </button>
-    </div>
-
-    ${changeHtml}
-
-    ${rec ? `
-    <div class="ov-attn-next">
-      <span class="ov-attn-next-icon">${OV_ICONS.chart}</span>
-      <div class="ov-attn-next-text">
-        <div class="ov-attn-section-label tone-next">Recommended next step</div>
-        <div class="ov-attn-next-title">${escapeInsightText(rec.headline)}</div>
-        <div class="ov-attn-next-sub">${escapeInsightText(rec.text)}</div>
-        ${rec.limitation ? `<div class="ov-attn-next-limit">${escapeInsightText(rec.limitation)}</div>` : ''}
-      </div>
-    </div>
-    <button type="button" class="ov-attn-cta">
-      <span>${escapeInsightText(rec.cta)}</span>
-      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
-    </button>` : ''}
-
-    ${rest.length ? `
-    <!-- Open. The card is as tall as the column beside the twin now, and a
-         collapsed summary in a card with 200px of white space under it is
-         asking the reader to click to find out whether there is anything
-         there. It still closes. -->
-    <details class="ov-attn-rest" open>
-      <summary>${restSummary(rest)}</summary>
-      <div class="ov-attn-rest-list">
-        ${rest.map((it) => `
-          <button type="button" class="ov-attn-rest-item"
-                  data-kind="${it.kind}" data-id="${it.id}">
-            <span class="ov-attn-rest-cat cat-${(it.category || 'info').toLowerCase()}${it.isAction ? ' is-action' : ''}">${escapeInsightText(it.label || it.category || '')}</span>
-            <span class="ov-attn-rest-title">${escapeInsightText(it.title)}</span>
-          </button>`).join('')}
-      </div>
-    </details>` : ''}`;
-
-  const open = (kind, id) => {
-    if (typeof window.showInsightDetail === 'function') {
-      window.showInsightDetail(kind, id);
-    }
-  };
-  list.querySelector('[data-open-lead]')?.addEventListener('click', () => {
-    open(lead.kind, lead.id);
-  });
-  list.querySelectorAll('.ov-attn-rest-item').forEach((el) => {
-    el.addEventListener('click', () => open(el.dataset.kind, el.dataset.id));
-  });
-  list.querySelector('.ov-attn-cta')?.addEventListener('click', () => {
-    if (typeof window.navigateToTab === 'function') window.navigateToTab('scenarios');
-  });
+  return actionItems;
 }
+
+// The Home attention feed is GONE, renderer and all.
+//
+// It drew one scrolling card — the lead finding with a heading, a "why it
+// matters" block, an impact block, a recommended change, a recommended next
+// step and a collapsed list of everything else — into `#ov-attn-body`. That
+// element is not in the markup any anymore: the Overview shows three insight
+// tiles instead, and every finding it used to hide behind "3 further
+// findings" is on the Insights page.
+//
+// It had no second caller. The Forecast page looks like it shares this card
+// and does not: `renderForecastAttention` draws the FORECAST's own briefing
+// into `#fc-attn-body`, and pointing this renderer at that element would put
+// the network's finding under the forecast's question — the exact defect
+// that function was written to fix. Keeping a dead renderer aimed at a live
+// container is how that comes back.
 
 if (typeof window !== 'undefined') {
   window.markAttentionItemResolved = id => resolvedInsightIds.add(id);
@@ -2643,12 +2554,24 @@ if (typeof window !== 'undefined') {
   // simply never shown until the next unrelated re-render.
   window.addEventListener('insightsLoaded', () => {
     try {
-      // The recommendation is part of the attention card now, so redrawing
-      // the feed redraws it too — on both pages that show that card.
-      renderHomeAttentionFeed();
-      renderOverviewAlert();
-      renderHomeAttentionFeed('fc-attn-body');
+      // Everything that draws a finding. Home's tiles and the Insights page
+      // read the same ranking the Forecast page's attention card does, so a
+      // briefing that lands after first paint reaches all three or none.
+      renderHomeInsightTiles();
+      renderHomeDataStrip();
+      renderInsightsPage();
+      renderOverviewAlert('ov-notice', { errorsOnly: true });
       renderOverviewAlert('fc-alert');
+    } catch (e) { /* a redraw must never break the page */ }
+  });
+
+  // The completeness gate's own answer, which arrives on its own request.
+  // Without this the data strip rendered once, before the actions existed,
+  // and stayed empty on a network that had four outstanding requests.
+  window.addEventListener('actionsLoaded', () => {
+    try {
+      renderHomeDataStrip();
+      renderInsightsPage();
     } catch (e) { /* a redraw must never break the page */ }
   });
 
@@ -2717,17 +2640,27 @@ function escAttr(value) {
  * Returns null when there is nothing worth putting in front of the reader on
  * a screen that did not ask — Home takes this branch, the twin does not.
  */
-function recommendedChangeSummary({ quietWhenNothing = false } = {}) {
+function recommendedChangeSummary({ quietWhenNothing = false,
+                                    onTwin = true } = {}) {
   const change = recommendedNetworkChanges();
 
   if (change.status === 'CHANGES') {
     const plans = change.plans.map(escAttr).join(', ');
+    // The closing sentence is about WHERE THE READER IS. "The twin
+    // below" is true on the Digital Twin and false anywhere else, and
+    // it was rendered verbatim on Home for as long as that page carried
+    // this line — pointing at a drawing that was not below it.
+    const where = onTwin
+      ? 'The twin below is the network as it runs today \u2014 test the '
+        + 'change as a scenario to see it drawn.'
+      : 'This is a plan that was solved, not a change that has been '
+        + 'made \u2014 open the Digital Twin to see the network it would '
+        + 'replace.';
     return {
       quiet: false,
       html: `<div><strong>The recommended plan would</strong>
         <span class="twin-change-what">${escAttr(change.summary)}</span>.
-        From ${plans}. The twin below is the network as it runs today \u2014 test
-        the change as a scenario to see it drawn.</div>`,
+        From ${plans}. ${where}</div>`,
     };
   }
   if (quietWhenNothing) return null;
@@ -3210,11 +3143,11 @@ function getNetworkRecommendation() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   OVERVIEW — row 2: the network's three headline figures
+   OVERVIEW — row 1: the network's headline figures
    ═══════════════════════════════════════════════════════════════ */
 
 /**
- * The three figures that describe this network, and nothing derived.
+ * The figures that describe this network, and nothing derived.
  *
  * Every value is read from `getOptimizedBaseCase().baseline`, which hydration
  * writes straight from the authoritative KPI layer. This function does no
@@ -3240,6 +3173,21 @@ const HOME_KPI_TILES = [
     name: 'Average utilisation',
     format: (v) => `${v.toFixed(1)}%`,
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 16.8a9 9 0 1 1 16.8 0"/><path d="M12 16.4 16.2 10"/><circle cx="12" cy="16.8" r="1.3" fill="currentColor"/></svg>`,
+  },
+  {
+    // The fifth figure, and the one the strip was missing.
+    //
+    // Cost, utilisation, service level and carbon say what the plan costs,
+    // how hard it works, how much of it lands in time and what it emits.
+    // None of them says how much of the demand is served AT ALL — a network
+    // can hit 100% of its service level on the demand it chooses to serve
+    // and strand the rest, and on this build's own test network it does
+    // exactly that. `demand_fill_rate` is the KPI engine's own answer, and
+    // it is the figure the first insight tile is about.
+    key: 'fillRate',
+    name: 'Demand fill rate',
+    format: (v) => `${v.toFixed(1)}%`,
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 7.4 12 3.2l8.4 4.2v9.2L12 20.8 3.6 16.6z"/><path d="M3.6 7.4 12 11.6l8.4-4.2M12 11.6v9.2"/></svg>`,
   },
   {
     key: 'sla',
@@ -3289,6 +3237,619 @@ function renderHomeKpiStrip(rowId = 'ov-kpi-strip-row') {
         </div>
       </div>`;
   }).join('');
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   OVERVIEW — row 2: the three findings that need a decision
+   ═══════════════════════════════════════════════════════════════
+   Three tiles, side by side, each saying the same four things in the same
+   order (Nielsen #4 — consistency):
+
+     1. the conclusion, in bold, with the figure it turns on;
+     2. why it matters, in figures the engine reported;
+     3. what to do about it, with a button that goes there;
+     4. the way into the full finding.
+
+   This replaces a single scrolling "Needs your attention" card. That card
+   gave the lead finding a heading, a "why it matters" block, an "impact"
+   block, a recommended change, a recommended next step and a collapsed list
+   of everything else — six sections in a 500px column with an internal
+   scroller, so on a 1050px window 204px of it, including the recommendation,
+   sat below its own bottom edge. Three tiles put three findings on one screen
+   with nothing hidden, and the rest are on the Insights page.
+
+   COLOUR IS CARRIED BY ONE TILE. Only a RISK is tinted. A palette applied to
+   every tile distinguishes nothing, and a green "opportunity" beside a red
+   "unserved demand" invites a reader to weigh them against each other as two
+   sides of one choice — which they are not.
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * How a finding of each severity reads on a tile.
+ *
+ * `tone` is a class, not a colour: the values live in home-overview.css with
+ * the rest of the palette, so a change of brand does not mean a change of
+ * JavaScript.
+ */
+const OV_TILE_SEVERITY = {
+  RISK: {
+    tone: 'tone-risk',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>`,
+  },
+  OPPORTUNITY: {
+    tone: 'tone-opportunity',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 16.5 9 9.6 13 13.2 21 4.6"/><polyline points="16.4 4.6 21 4.6 21 9.2"/></svg>`,
+  },
+  INFORMATION: {
+    tone: 'tone-information',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><line x1="12" y1="11" x2="12" y2="16.4"/><line x1="12" y1="7.6" x2="12" y2="7.61"/></svg>`,
+  },
+};
+
+/**
+ * Where a finding's recommended action actually leads.
+ *
+ * The ACTION is the engine's — one sentence, written by the Reasoning Agent
+ * or supplied by `/api/insights` when the briefing wrote none. This map is
+ * only the destination: which of this product's screens that sentence is
+ * asking the reader to open. It is deliberately here rather than on the
+ * server, because which screens exist is the client's knowledge, and a
+ * backend naming a tab is a backend that breaks when a tab is renamed.
+ *
+ * Keyed by the engine's own `theme`, so a new theme falls to the default
+ * rather than to a wrong screen.
+ */
+const OV_TILE_CTA = {
+  'Service':              { label: 'Open scenario planner', tab: 'scenarios' },
+  'Capacity':             { label: 'Open KPIs', tab: 'facility-dashboard' },
+  'Utilisation':          { label: 'Open KPIs', tab: 'facility-dashboard' },
+  'Footprint':            { label: 'Open scenario planner', tab: 'scenarios' },
+  'Resilience':           { label: 'Open Digital Twin', tab: 'twin' },
+  'Cost':                 { label: 'Open KPIs', tab: 'facility-dashboard' },
+  'Cost structure':       { label: 'Open KPIs', tab: 'facility-dashboard' },
+  'Carbon':               { label: 'Open KPIs', tab: 'facility-dashboard' },
+  'Scenario impact':      { label: 'Open scenario planner', tab: 'scenarios' },
+  'Demand outlook':       { label: 'Open forecast', tab: 'forecast' },
+  'Where the growth is':  { label: 'Open forecast', tab: 'forecast' },
+  'External signals':     { label: 'Open forecast', tab: 'forecast' },
+  'History that changed': { label: 'Open forecast', tab: 'forecast' },
+};
+
+const OV_TILE_CTA_DEFAULT = { label: 'Open scenario planner', tab: 'scenarios' };
+
+/**
+ * The finding's own figures, as label/value pairs a reader can check.
+ *
+ * "Why it matters, numerically" is not a sentence this file writes. It is the
+ * evidence the engine attached to the finding — the metric, and whatever it
+ * was compared against — printed with the engine's own formatting.
+ * `display_value` is authoritative for anything a person reads, so the figure
+ * on the tile and the figure in the sentence beside it cannot disagree.
+ *
+ * `skipRef` drops the row already shown as the tile's headline figure, so a
+ * tile never prints the same number twice.
+ */
+function tileEvidenceRows(record, skipRef, limit = 2) {
+  return (record.evidence || [])
+    .filter((e) => e && e.ref !== skipRef && e.display_value
+                   && e.display_value !== 'Not available')
+    .slice(0, limit);
+}
+
+/**
+ * The finding explained, without saying the headline twice.
+ *
+ * The engine writes a narrative of two or three sentences and a headline that
+ * is usually ONE OF THEM. Printing both put the same sentence on the tile
+ * twice — "No open site reaches the 90% threshold, so capacity is not what
+ * limits this plan" as the heading, and again as the first line under it.
+ *
+ * So the description is the narrative MINUS whatever the headline already
+ * says: sentences are compared with punctuation and case removed, and one is
+ * dropped when either string contains the other (the headline is often a
+ * trimmed version of the sentence, not a copy of it).
+ *
+ * Everything left is kept in the engine's own order. If that removes the
+ * whole narrative — a one-sentence finding whose headline is that sentence —
+ * the tile shows no description rather than a restatement.
+ */
+function insightDescription(record, headline) {
+  const narrative = String(record.narrative || '').trim();
+  if (!narrative) return '';
+
+  const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const head = norm(headline);
+  if (!head) return narrative;
+
+  // Split on a terminator followed by whitespace, so "97.2%" and "1,435,985"
+  // are not sentence ends. Same rule as `toInsightRecord` in data.js and
+  // `first_sentence` in reasoning/card.py.
+  const sentences = narrative.match(/[\s\S]*?[.!?](?=\s|$)|[\s\S]+$/g) || [narrative];
+  const kept = sentences
+    .map((line) => line.trim())
+    .filter((line) => {
+      const n = norm(line);
+      if (!n) return false;
+      return !(n.includes(head) || head.includes(n));
+    });
+  return kept.join(' ').trim();
+}
+
+/**
+ * One insight tile.
+ *
+ * Everything on it is read off the record. Nothing is computed here: §9 — a
+ * screen that derives a business figure is a second, unverified KPI engine,
+ * and a screen that writes its own recommendation is a second, unverified
+ * reasoning agent.
+ */
+function insightTileHtml(item, isLead = false) {
+  const rec = item.record || {};
+  const sev = OV_TILE_SEVERITY[item.severity] || OV_TILE_SEVERITY.INFORMATION;
+  let cta = OV_TILE_CTA[item.theme] || OV_TILE_CTA_DEFAULT;
+
+  // THE ONE OVERRIDE, and it is not a special case so much as a better
+  // destination that only exists for one finding. When the engine relaxed
+  // the model it attached the demand it could not serve MARKET BY MARKET,
+  // with its own reason and the sites it opened to get that far. That
+  // breakdown is what a reader of an unserved-demand finding actually wants,
+  // and the scenario planner is not where it is. `openDemandShortfallDetail`
+  // opens the drawer that already exists for it.
+  //
+  // Guarded on the breakdown being there: without rows the drawer would say
+  // "no market breakdown travelled with this run", which is a worse answer
+  // than sending the reader to the planner.
+  const hasShortfall = item.theme === 'Service' && item.severity === 'RISK'
+    && (DEMAND_SHORTFALL.shortMarkets || []).length > 0;
+  if (hasShortfall) cta = { label: 'View affected demand', tab: '' };
+
+  // The headline figure: the first metric the finding cites, with the engine's
+  // own label under it. A finding that cites none simply has no figure line —
+  // never a zero, and never a dash dressed up as a reading.
+  const lead = (rec.evidence || []).find((e) => e && e.display_value
+                                                && e.display_value !== 'Not available');
+  const figureHtml = lead ? `
+      <div class="ov-tile-figure">
+        <span class="ov-tile-figure-value">${escapeInsightText(lead.display_value)}</span>
+        <span class="ov-tile-figure-label">${escapeInsightText(lead.label || '')}</span>
+      </div>` : '';
+
+  // WHAT THE FINDING SAYS, in the engine's own prose and before any figure
+  // is asked to speak for it. The headline alone is a conclusion with no
+  // working; a reader who has not seen this network before cannot act on
+  // "The plan leaves 2 candidate sites unused" without the sentence under it.
+  const description = insightDescription(rec, item.title);
+  const descriptionHtml = description ? `
+      <p class="ov-tile-description">${escapeInsightText(description)}</p>` : '';
+
+  // WHY IT MATTERS — the figures the finding rests on, each with the engine's
+  // own label and formatting, so the number in the prose above and the number
+  // in this list cannot drift apart.
+  const rows = tileEvidenceRows(rec, lead ? lead.ref : null);
+  const rowsHtml = rows.length ? `
+        <dl class="ov-tile-evidence">
+          ${rows.map((e) => `
+            <div class="ov-tile-evidence-row">
+              <dt>${escapeInsightText(e.label || e.ref || '')}</dt>
+              <dd>${escapeInsightText(e.display_value)}</dd>
+            </div>`).join('')}
+        </dl>` : '';
+  const whyHtml = rowsHtml ? `
+      <div class="ov-tile-section">
+        <div class="ov-tile-section-label">Why it matters</div>
+        ${rowsHtml}
+      </div>` : '';
+
+  // RECOMMENDED ACTION. Never composed in the browser: `recommendedAction` is
+  // what `/api/insights` sent, which is the Reasoning Agent's line when it
+  // wrote one and the theme's own default when it did not. An empty one drops
+  // the whole block rather than printing an empty heading.
+  const action = (rec.recommendedAction || '').trim();
+  const actionHtml = action ? `
+      <div class="ov-tile-section ov-tile-action">
+        <div class="ov-tile-section-label">Recommended action</div>
+        <p class="ov-tile-section-text">${escapeInsightText(action)}</p>
+        <button type="button" class="ov-tile-cta" data-cta-tab="${escapeInsightText(cta.tab)}">
+          <span>${escapeInsightText(cta.label)}</span>
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+        </button>
+      </div>` : '';
+
+  // THE TINT GOES ON ONE TILE, and only when that tile is a risk.
+  //
+  // Not on every risk. A network with two of them would put two red cards
+  // beside one white one, and a reader scanning three cards for the one to
+  // start with would be given two answers — which is the same as none. The
+  // findings are already ranked; the leftmost is the lead, and the tint says
+  // so. Every other tile still states its own severity, in its icon and in
+  // the eyebrow above the figure, so nothing is hidden by not being red.
+  const tinted = isLead && item.severity === 'RISK' ? ' is-lead' : '';
+
+  // A finding that cites no figure, carries no narrative and has no step is
+  // rare — `/api/insights` supplies an action for every theme — but it is
+  // reachable from a record whose evidence refs the pack could not resolve.
+  // The tile stretches to its neighbours either way, so the choice is between
+  // a stated absence and 200px of nothing. The absence is stated.
+  const bodyHtml = (whyHtml || actionHtml)
+    ? `${whyHtml}${actionHtml}`
+    : `<p class="ov-tile-bare">This finding cites no figure of its own, and no
+        step has been recorded against it.</p>`;
+  // The description sits between the headline and the figures, so it is
+  // outside the body's own `flex: 1` — the body stretches to keep the three
+  // tiles' calls to action level, and prose that stretched with it would
+  // leave a gap under a short sentence.
+
+  return `
+    <article class="ov-tile ${sev.tone}${tinted}" data-kind="insight" data-id="${escapeInsightText(item.id)}">
+      <div class="ov-tile-head">
+        <span class="ov-tile-icon" aria-hidden="true">${sev.icon}</span>
+        <span class="ov-tile-eyebrow">${escapeInsightText(item.category || item.theme || '')}</span>
+      </div>
+      ${figureHtml}
+      <!-- THE HEADING is the conclusion, not the category above it. The
+           eyebrow is a label — "Capacity Risk" — and a screen reader
+           tabbing the headings of this page would otherwise be read three
+           category names and none of the three findings. -->
+      <h3 class="ov-tile-highlight">${escapeInsightText(item.title || '')}</h3>
+      ${descriptionHtml}
+      <div class="ov-tile-body">
+        ${bodyHtml}
+      </div>
+      <button type="button" class="ov-tile-detail" data-open-detail>
+        <span>View detailed finding</span>
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+      </button>
+    </article>`;
+}
+
+/**
+ * The three findings that lead, as tiles.
+ *
+ * RISK first, because `rankedAttentionInsights()` ranks them that way — so
+ * the leftmost tile is the tinted one whenever anything is wrong, and is not
+ * tinted when nothing is. The tint follows the finding; it is not a slot.
+ */
+function renderHomeInsightTiles(containerId = 'ov-tiles') {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  const items = rankedAttentionInsights();
+
+  // An empty list means no insight has been generated for this network — it
+  // does NOT mean the network is healthy, and this copy has never said so.
+  if (!items.length) {
+    el.innerHTML = `
+      <div class="ov-tiles-empty">
+        <p>No findings have been generated for this network yet.</p>
+        <p class="ov-tiles-empty-sub">Upload a network dataset, or re-run the
+          analysis, and the Reasoning Agent's conclusions appear here.</p>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = items.slice(0, 3).map((it, i) => insightTileHtml(it, i === 0)).join('');
+
+  el.querySelectorAll('.ov-tile').forEach((tile) => {
+    const id = tile.dataset.id;
+    const open = () => {
+      if (typeof window.showInsightDetail === 'function') {
+        window.showInsightDetail('insight', id);
+      }
+    };
+    tile.querySelector('[data-open-detail]')?.addEventListener('click', open);
+    tile.querySelector('.ov-tile-cta')?.addEventListener('click', (ev) => {
+      // The tile is not itself one big button. The two controls on it go to
+      // two different places, and one clickable region with two destinations
+      // is how a reader ends up somewhere they did not choose.
+      ev.stopPropagation();
+      const tab = ev.currentTarget.dataset.ctaTab;
+      // An empty `tab` is the shortfall drawer, not a missing destination —
+      // see the override in insightTileHtml().
+      if (!tab) { openDemandShortfallDetail(); return; }
+      if (typeof window.navigateToTab === 'function') window.navigateToTab(tab);
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OVERVIEW — row 3: what the analysis did not have
+   ═══════════════════════════════════════════════════════════════
+   The completeness gate reads the upload and reports the fields that are not
+   in it. Two kinds, and they must never read as one:
+
+     REQUIRED  a field the analysis needs. Its absence is why some figure on
+               this page is a dash.
+     OPTIONAL  a field that would sharpen the analysis. Its absence costs
+               precision, not the result.
+
+   Both used to be buried inside the attention card's collapsed "further
+   findings" list, seventh to tenth on a real upload — below the fold, inside
+   a card that scrolled. A request nobody scrolls to has not been raised.
+
+   EVERY REQUEST, AND THE FULL WIDTH.
+
+   This showed two per group with an "N more" link into the Insights page.
+   Two is the wrong number for a list whose whole purpose is to be actioned:
+   a reader cannot tell whether the third one matters without opening another
+   screen, and the count that replaced them ("3 more optional fields") is a
+   statistic rather than something anyone can act on. All of them are here.
+
+   And each group is one band across the page rather than a column beside its
+   neighbour. Two side-by-side cards are only ever the same height by
+   accident — with two required fields and three optional ones, the shorter
+   one ends in a block of empty tint. A full-width band ends where its last
+   request ends.
+   ═══════════════════════════════════════════════════════════════ */
+
+const OV_DATA_GROUPS = [
+  {
+    id: 'required',
+    tone: 'tone-required',
+    title: 'Critical missing data',
+    blurb: 'The analysis ran without these. Some figures above are dashes because of them.',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>`,
+  },
+  {
+    id: 'optional',
+    tone: 'tone-optional',
+    title: 'Optional data to enhance',
+    blurb: 'Not needed for a result. Supplying them sharpens the one you have.',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 17.6h5.6M10 20.6h4"/><path d="M12 3.2a5.6 5.6 0 0 0-3.3 10.1v1.4h6.6v-1.4A5.6 5.6 0 0 0 12 3.2z"/></svg>`,
+  },
+];
+
+function dataStripCardHtml(group, items) {
+  // The count belongs in the heading, not in a "+N more" link at the bottom:
+  // a reader deciding whether to deal with this now needs to know it is four
+  // fields before they start reading, and all four are below it.
+  const n = items.length;
+  return `
+    <section class="ov-data-card ${group.tone}">
+      <div class="ov-data-card-head">
+        <span class="ov-data-card-icon" aria-hidden="true">${group.icon}</span>
+        <div class="ov-data-card-headtext">
+          <h3 class="ov-data-card-title">${escapeInsightText(group.title)}
+            <span class="ov-data-card-count">${n} ${n === 1 ? 'field' : 'fields'}</span>
+          </h3>
+          <p class="ov-data-card-blurb">${escapeInsightText(group.blurb)}</p>
+        </div>
+      </div>
+      <ul class="ov-data-list">
+        ${items.map((it) => `
+          <li class="ov-data-item">
+            <div class="ov-data-item-text">
+              <span class="ov-data-item-title">${escapeInsightText(it.title)}</span>
+              ${it.subtitle ? `<span class="ov-data-item-sub">${escapeInsightText(it.subtitle)}</span>` : ''}
+            </div>
+            <button type="button" class="ov-data-item-cta" data-action-id="${escapeInsightText(it.id)}">
+              <span>Request this data</span>
+              <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+            </button>
+          </li>`).join('')}
+      </ul>
+    </section>`;
+}
+
+function renderHomeDataStrip(containerId = 'ov-data-strip') {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  const actions = attentionActionItems();
+  const required = actions.filter((a) => a.required);
+  const optional = actions.filter((a) => !a.required);
+
+  if (!actions.length) {
+    // "Nothing is missing" is a claim, and it is only true once the gate has
+    // actually run. It runs with the briefing, so a network that has findings
+    // has been checked and one that has none has not — and the second says
+    // nothing at all rather than issuing a clean bill of health it cannot
+    // support.
+    const analysed = rankedAttentionInsights().length > 0;
+    el.classList.toggle('is-empty', !analysed);
+    el.innerHTML = analysed ? `
+      <div class="ov-data-clear">
+        <span class="ov-data-clear-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.4"/><polyline points="8.4 12.2 11 14.8 15.8 9.6"/></svg>
+        </span>
+        <span>Your upload carried every field this analysis asked for. No data
+          requests are outstanding.</span>
+      </div>` : '';
+    return;
+  }
+
+  el.classList.remove('is-empty');
+  el.innerHTML = [
+    required.length ? dataStripCardHtml(OV_DATA_GROUPS[0], required) : '',
+    optional.length ? dataStripCardHtml(OV_DATA_GROUPS[1], optional) : '',
+  ].filter(Boolean).join('');
+
+  el.querySelectorAll('.ov-data-item-cta').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      // The same page the feed opened: one destination for one request, with
+      // the recipients, the draft the server composed, and the send.
+      if (typeof window.showInsightDetail === 'function') {
+        window.showInsightDetail('action', btn.dataset.actionId);
+      }
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   INSIGHTS PAGE — every finding, not just the three that lead
+   ═══════════════════════════════════════════════════════════════
+   Home shows three tiles. This is what "View more insights" opens, and what
+   the sidebar's Baseline > Insights entry points at: the same records, all of
+   them, filterable, each row opening the same deep dive a tile does.
+
+   Nielsen #6 — the filters carry their own counts, so a reader can see there
+   are two risks without first selecting "Risks" and counting the rows.
+   ═══════════════════════════════════════════════════════════════ */
+
+const INSIGHTS_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'RISK', label: 'Risks' },
+  { id: 'OPPORTUNITY', label: 'Opportunities' },
+  { id: 'INFORMATION', label: 'For information' },
+  { id: 'action', label: 'Data needed' },
+];
+
+function insightRowHtml(item) {
+  const rec = item.record || {};
+  const sev = OV_TILE_SEVERITY[item.severity] || OV_TILE_SEVERITY.INFORMATION;
+  const isAction = Boolean(item.isAction);
+  const tone = isAction
+    ? (item.required ? 'tone-risk' : 'tone-opportunity') : sev.tone;
+  const icon = isAction ? OV_DATA_GROUPS[item.required ? 0 : 1].icon : sev.icon;
+
+  const lead = isAction ? null
+    : (rec.evidence || []).find((e) => e && e.display_value
+                                       && e.display_value !== 'Not available');
+
+  // A data request's "action" is the request itself, and it is stated rather
+  // than borrowed from the reasoning vocabulary: nothing was solved to
+  // produce it, so it must never read as something the engine concluded.
+  const action = isAction
+    ? (item.required
+        ? 'Request this field from whoever owns it. Until it arrives the analysis runs without it.'
+        : 'Request this field when you can. The result stands without it.')
+    : (rec.recommendedAction || '').trim();
+
+  return `
+    <article class="insp-row ${tone}" data-kind="${item.kind}" data-id="${escapeInsightText(item.id)}"
+             role="button" tabindex="0">
+      <span class="insp-row-icon" aria-hidden="true">${icon}</span>
+      <div class="insp-row-text">
+        <div class="insp-row-eyebrow">${escapeInsightText(item.label || item.category || '')}</div>
+        <h3 class="insp-row-title">${escapeInsightText(item.title || '')}</h3>
+        ${item.subtitle ? `<p class="insp-row-sub">${escapeInsightText(item.subtitle)}</p>` : ''}
+        ${action ? `
+        <p class="insp-row-action">
+          <span class="insp-row-action-label">Recommended action</span>
+          ${escapeInsightText(action)}
+        </p>` : ''}
+      </div>
+      <div class="insp-row-right">
+        ${lead ? `
+        <div class="insp-row-figure">
+          <span class="insp-row-figure-value">${escapeInsightText(lead.display_value)}</span>
+          <span class="insp-row-figure-label">${escapeInsightText(lead.label || '')}</span>
+        </div>` : ''}
+        <span class="insp-row-link">
+          <span>${isAction ? 'Open this request' : 'View detailed finding'}</span>
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+        </span>
+      </div>
+    </article>`;
+}
+
+function renderInsightsPage() {
+  const filterEl = document.getElementById('insp-filters');
+  const listEl = document.getElementById('insp-list');
+  if (!listEl) return;
+
+  const insights = rankedAttentionInsights();
+  const actions = attentionActionItems();
+  const all = [...insights, ...actions];
+
+  // The one recommendation that ranks the findings rather than following from
+  // any single one of them. `getNetworkRecommendation()` is the engine's own,
+  // with its grounding caveat attached; it is stated once, at the head of the
+  // list, because five rows each carrying a step leave a reader working out
+  // which of them is the overall answer.
+  const recEl = document.getElementById('insp-rec');
+  if (recEl) {
+    const rec = getNetworkRecommendation();
+    // What the algorithm recommends CHANGING, as distinct from what it
+    // recommends doing next: close this, open that, read off the plans that
+    // were actually solved. It was on Home, inside the attention card; this
+    // page is where it belongs now, beside the recommendation it makes
+    // concrete. Quiet when nothing has been solved — a reader who has run no
+    // plan is not owed a line saying so, and the Digital Twin states it for
+    // the reader who goes looking.
+    const change = recommendedChangeSummary({ quietWhenNothing: true,
+                                              onTwin: false });
+    recEl.hidden = !rec;
+    recEl.innerHTML = rec ? `
+      <div class="insp-rec-head">
+        <span class="insp-rec-icon" aria-hidden="true">${OV_ICONS.chart}</span>
+        <div>
+          <div class="insp-rec-label">What I recommend for this network</div>
+          <p class="insp-rec-headline">${escapeInsightText(rec.headline)}</p>
+        </div>
+      </div>
+      <p class="insp-rec-text">${escapeInsightText(rec.text)}</p>
+      ${change ? `<div class="insp-rec-change">${change.html}</div>` : ''}
+      ${rec.limitation
+        ? `<p class="insp-rec-limit">${escapeInsightText(rec.limitation)}</p>` : ''}
+      <button type="button" class="insp-rec-cta" data-action="navigateToTab"
+              data-arg="scenarios">
+        <span>${escapeInsightText(rec.cta)}</span>
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+      </button>` : '';
+    // No click handler: `data-action` is dispatched by the delegated listener
+    // in actions.js, and a second one here would navigate twice.
+  }
+
+  const countFor = (id) => id === 'all' ? all.length
+    : id === 'action' ? actions.length
+    : insights.filter((i) => i.severity === id).length;
+
+  const active = INSIGHTS_FILTERS.some((f) => f.id === state.insightsFilter)
+    ? state.insightsFilter : 'all';
+  state.insightsFilter = active;
+
+  if (filterEl) {
+    // A filter that would empty the list is disabled rather than removed: a
+    // control that appears and disappears between renders is a control a
+    // reader cannot learn (Nielsen #4).
+    filterEl.innerHTML = INSIGHTS_FILTERS.map((f) => {
+      const n = countFor(f.id);
+      return `
+        <button type="button" role="tab" class="insp-filter${f.id === active ? ' is-active' : ''}"
+                data-filter="${f.id}" aria-selected="${f.id === active}"
+                ${n === 0 && f.id !== 'all' ? 'disabled' : ''}>
+          <span>${escapeInsightText(f.label)}</span>
+          <span class="insp-filter-count">${n}</span>
+        </button>`;
+    }).join('');
+    filterEl.querySelectorAll('.insp-filter').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.insightsFilter = btn.dataset.filter;
+        renderInsightsPage();
+      });
+    });
+  }
+
+  const rows = active === 'all' ? all
+    : active === 'action' ? actions
+    : insights.filter((i) => i.severity === active);
+
+  if (!rows.length) {
+    listEl.innerHTML = `<div class="insp-empty">${all.length
+      ? 'Nothing in this network matches that filter.'
+      : 'No findings have been generated for this network yet. Upload a '
+        + 'network dataset, or re-run the analysis, and the Reasoning '
+        + 'Agent’s conclusions appear here.'}</div>`;
+    return;
+  }
+
+  listEl.innerHTML = rows.map(insightRowHtml).join('');
+  const open = (row) => {
+    if (typeof window.showInsightDetail === 'function') {
+      window.showInsightDetail(row.dataset.kind, row.dataset.id);
+    }
+  };
+  listEl.querySelectorAll('.insp-row').forEach((row) => {
+    row.addEventListener('click', () => open(row));
+    // A row is a button, so it answers to a keyboard like one.
+    row.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        open(row);
+      }
+    });
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════

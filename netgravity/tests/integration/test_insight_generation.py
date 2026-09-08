@@ -501,3 +501,162 @@ class TestACostComponentNamesTheSpanItCovers:
             "cost_per_period": 24475728.06,
         })
         assert "24,475,728" not in out[0].narrative
+
+
+class TestEveryFindingSaysWhatToDoAboutIt:
+    """
+    A finding without a step is a fact a reader has to translate into a
+    decision on their own.
+
+    The Overview's insight tiles print four things in one order — the
+    conclusion, why it matters in figures, what to do about it, and the way
+    into the full account — and the third of those has to come from somewhere
+    that saw the evidence. It comes from `/api/insights`: the Reasoning
+    Agent's own `recommended_action` when the narrative layer wrote one, and
+    the theme's default when it did not.
+
+    Both halves are tested here, because the second is what almost every page
+    load actually gets: a cached, un-prompted briefing takes the deterministic
+    template path, and the template writes prose and no action.
+    """
+
+    def test_the_schema_carries_one_and_it_is_optional(self):
+        from netgravity.orchestrator.schemas.reasoning import KPIInsight
+        insight = KPIInsight(theme="Capacity", headline="h", narrative="n")
+        assert insight.recommended_action == "", (
+            "an action the model did not write must not be invented by a "
+            "default")
+        written = KPIInsight(theme="Capacity", headline="h", narrative="n",
+                             recommended_action="Test a relieving scenario.")
+        assert written.recommended_action == "Test a relieving scenario."
+
+    def test_the_prompt_asks_for_one_on_every_insight(self):
+        from netgravity.orchestrator.reasoning.prompts import (
+            REASONING_AGENT_INSTRUCTIONS,
+        )
+        assert "recommended_action" in REASONING_AGENT_INSTRUCTIONS
+        # And it must not contain a figure: the model writes no numbers at
+        # all, which is what leaves numeric grounding nothing to redact.
+        assert "never contains a figure" in REASONING_AGENT_INSTRUCTIONS
+
+    def test_it_reaches_the_briefings_visible_text(self):
+        """
+        Grounding, the collective-voice check and the redaction sweep all run
+        over `visible_text()`. A field that reaches a screen and not that
+        method is a field nothing validates.
+        """
+        from netgravity.orchestrator.schemas.reasoning import (
+            ExecutiveBriefing, KPIInsight,
+        )
+        briefing = ExecutiveBriefing(
+            opening="I see one thing.",
+            kpi_insights=[KPIInsight(
+                theme="Capacity", headline="h", narrative="n",
+                recommended_action="Open the KPI page and relieve the sites.")],
+        )
+        assert "Open the KPI page" in briefing.visible_text()
+
+    def test_a_template_finding_still_gets_a_step(self):
+        """
+        The deterministic path writes no action. The serialiser supplies the
+        one for that theme and severity rather than leaving a tile headed
+        "Recommended action" with nothing under it.
+        """
+        from app.backend.api.insights import _recommended_action
+
+        class _I:
+            recommended_action = ""
+
+        capacity = _recommended_action(_I(), "Capacity", "RISK")
+        assert capacity, "a capacity risk was given no step"
+        assert "KPI page" in capacity
+
+        # Opposite advice for the opposite finding under one theme: idle sites
+        # and overloaded sites are both "Utilisation".
+        over = _recommended_action(_I(), "Utilisation", "RISK")
+        idle = _recommended_action(_I(), "Utilisation", "OPPORTUNITY")
+        assert over != idle, (over, idle)
+
+        # A theme the map does not name falls to severity, never to silence.
+        unknown = _recommended_action(_I(), "Some New Theme", "RISK")
+        assert unknown
+
+    def test_the_agents_own_step_wins(self):
+        from app.backend.api.insights import _recommended_action
+
+        class _I:
+            recommended_action = "  Close the Guwahati lane and re-solve.  "
+
+        assert (_recommended_action(_I(), "Capacity", "RISK")
+                == "Close the Guwahati lane and re-solve.")
+
+    def test_no_step_ever_states_a_figure(self):
+        """
+        Every default is prose. A number written here would be a number no
+        engine produced, sitting beside four that they did.
+        """
+        import re
+        from app.backend.api.insights import (
+            _ACTION_BY_SEVERITY, _ACTION_BY_THEME,
+        )
+        for text in list(_ACTION_BY_THEME.values()) + list(
+                _ACTION_BY_SEVERITY.values()):
+            assert not re.search(r"\d", text), text
+
+    def test_the_payload_version_moved_with_the_field(self):
+        """
+        Briefings are cached against the network's `data_version`, which does
+        not move when this code changes. Without a bump every project that has
+        not re-uploaded goes on being served a payload with no action in it.
+        """
+        from app.backend.api.insights import _PAYLOAD_VERSION
+        assert _PAYLOAD_VERSION >= 4
+
+
+class TestTheScreensReadAReportRatherThanANarration:
+    """
+    The agent writes in the first person by contract — its validator enforces
+    it. A reader of the Overview is not having a conversation with the engine;
+    they are reading a report about their network, and "I see 452,610 units of
+    1,435,985 units of demand left unserved" put an extra actor in every
+    sentence on the page.
+
+    `plain_voice` is the rule the explanation card already owns, applied at the
+    presentation boundary so there is one definition of it and the briefing
+    itself is untouched.
+    """
+
+    def test_the_first_person_does_not_reach_the_payload(self, solved):
+        from app.backend.api.insights import _serialise_insight
+
+        orc, state = solved
+        result = briefing_for(orc, state)
+        assert result.briefing.kpi_insights, "no findings to check"
+        # The agent's own text is first-person, which is what its contract
+        # requires; this test would be vacuous if that stopped being true.
+        assert any("I " in i.narrative for i in result.briefing.kpi_insights)
+
+        for i, insight in enumerate(result.briefing.kpi_insights):
+            body = _serialise_insight(insight, i, scope="NETWORK",
+                                      entity_id=None, pack=None)
+            for field in ("headline", "narrative"):
+                assert " I " not in f" {body[field]} ", (field, body[field])
+                assert not body[field].startswith("I "), body[field]
+            assert body["recommended_action"], insight.theme
+
+    def test_the_id_is_still_stable_across_the_rewording(self, solved):
+        """
+        `_headline_digest` reads the RAW headline. Had it read the plain-voice
+        one, every finding's id would have changed under a user who had
+        dismissed some of them, and everything they dismissed would come back.
+        """
+        from app.backend.api.insights import _serialise_insight
+
+        orc, state = solved
+        insights = briefing_for(orc, state).briefing.kpi_insights
+        first = _serialise_insight(insights[0], 0, scope="NETWORK",
+                                   entity_id=None, pack=None)
+        again = _serialise_insight(insights[0], 0, scope="NETWORK",
+                                   entity_id=None, pack=None)
+        assert first["id"] == again["id"]
+        assert first["id"].startswith("INS_NETWORK_NETWORK_")

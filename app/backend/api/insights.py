@@ -90,7 +90,18 @@ _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
 #:   3  the SLA insight no longer describes unserved demand as "served late",
 #:      and a cost COMPONENT names the horizon it covers rather than being
 #:      labelled "per period" on a multi-period solve
-_PAYLOAD_VERSION = 3
+#:   4  every insight carries `recommended_action` — what to DO about the
+#:      finding — and `headline`/`narrative` are emitted in plain voice
+#:      ("Demand fill rate is 0.68") rather than the agent's first person
+#:      ("I see a demand fill rate of 0.68"), which is what the Overview's
+#:      insight tiles read
+#:   5  the deterministic template's headlines are conclusions rather than
+#:      labels — "Facility cost is the largest single component of what this
+#:      network costs", not "Facility cost as the largest cost line". A cached
+#:      entry is keyed on the network's `data_version`, which does not move
+#:      when the wording does, so without this every project that had already
+#:      loaded its insights would keep the old labels for ever.
+_PAYLOAD_VERSION = 5
 
 
 #: Theme -> the per-facility field that theme is ABOUT. A chart for a finding
@@ -285,6 +296,129 @@ def _resolve_evidence(refs: List[str], pack: Any,
     return out
 
 
+#: What to DO about a finding, by theme, when the narrative layer wrote no
+#: action of its own.
+#:
+#: The Reasoning Agent writes `recommended_action` per insight when the LLM
+#: path is live (see `reasoning/prompts.py`). The deterministic template path
+#: — which is what a cached, un-prompted briefing uses, and therefore what
+#: most page loads see — writes prose and no action, and a tile headed
+#: "Recommended action" with nothing under it is worse than no tile.
+#:
+#: These are deliberately ADVISORY and deliberately figure-free. Each names a
+#: step this product can actually carry out (a scenario, the twin, the KPI
+#: page, an upload), so the button beside it goes somewhere real. None of them
+#: claims a saving, a magnitude or an outcome — nothing here has been solved.
+#:
+#: Keyed by (theme, severity), falling back to theme, then to severity: an
+#: idle-capacity finding and an overloaded-site finding share the theme
+#: "Utilisation" and need opposite advice.
+_ACTION_BY_THEME = {
+    ("Service", "RISK"):
+        "Test a scenario that adds capacity or a site near the demand this "
+        "plan cannot reach, and compare it against this baseline.",
+    ("Service", "INFORMATION"):
+        "No service action is needed. Keep this run as the baseline the next "
+        "scenario is measured against.",
+    ("Capacity", "INFORMATION"):
+        "Headroom is not a decision on its own. Test a scenario that puts "
+        "more volume through the sites with room before adding any.",
+    ("Utilisation", "INFORMATION"):
+        "Headroom is not a decision on its own. Test a scenario that puts "
+        "more volume through the sites with room before adding any.",
+    ("Footprint", "INFORMATION"):
+        "Open the Digital Twin to see the footprint this plan actually uses "
+        "before committing to any of it.",
+    ("Resilience", "INFORMATION"):
+        "Open the Digital Twin to see which sites carry the exposure this "
+        "figure summarises.",
+    ("Carbon", "RISK"):
+        "Open the KPI page to see which lanes carry the emissions, then test "
+        "a scenario that shortens them.",
+    ("Cost", "OPPORTUNITY"):
+        "Build a scenario against this cost and compare the two before "
+        "committing to either.",
+    ("Capacity", "RISK"):
+        "Open the KPI page to see which sites are over the threshold, then "
+        "test a scenario that relieves them.",
+    ("Capacity", "OPPORTUNITY"):
+        "Test a scenario that moves volume onto the sites with headroom "
+        "before adding any new capacity.",
+    ("Utilisation", "RISK"):
+        "Open the KPI page to see which sites are over the threshold, then "
+        "test a scenario that relieves them.",
+    ("Utilisation", "OPPORTUNITY"):
+        "Test a consolidation scenario that closes or shrinks the idle sites "
+        "and compare its cost with this baseline.",
+    ("Footprint", "OPPORTUNITY"):
+        "Test a footprint scenario that opens the unused candidate sites, and "
+        "compare its cost and service with this baseline.",
+    ("Footprint", "RISK"):
+        "Review the footprint on the Digital Twin before committing to the "
+        "sites this plan leaves unused.",
+    ("Resilience", "RISK"):
+        "Open the Digital Twin to see which sites carry the exposure, then "
+        "test a scenario that spreads it.",
+    ("Cost", "INFORMATION"):
+        "Use this cost as the baseline. Any scenario you build is compared "
+        "against it.",
+    ("Cost structure", "INFORMATION"):
+        "Open the KPI page for the full cost breakdown, then target the "
+        "largest component with a scenario.",
+    ("Cost structure", "OPPORTUNITY"):
+        "Target the largest cost component with a scenario and compare it "
+        "against this baseline.",
+    ("Carbon", "INFORMATION"):
+        "Open the KPI page to see which lanes carry the emissions before "
+        "changing how volume is routed.",
+    ("Carbon", "OPPORTUNITY"):
+        "Test a scenario that shortens the longest lanes and compare its "
+        "emissions with this baseline.",
+    ("Scenario impact", "OPPORTUNITY"):
+        "Review this scenario against the baseline in the scenario planner "
+        "before taking it further.",
+    ("Demand outlook", "INFORMATION"):
+        "Open the Forecast page to see the series behind this outlook before "
+        "planning capacity against it.",
+    ("Where the growth is", "INFORMATION"):
+        "Open the Forecast page to see which markets carry the growth, then "
+        "test a scenario that serves them.",
+    ("External signals", "INFORMATION"):
+        "Open the Forecast page to see which signals were applied and what "
+        "each one moved.",
+    ("History that changed", "INFORMATION"):
+        "Open the Forecast page to see what changed in the history this "
+        "forecast was built on.",
+}
+
+#: Last resort, by severity alone — a theme this map does not name yet.
+_ACTION_BY_SEVERITY = {
+    "RISK": "Open the full finding to see the sites and figures behind it, "
+            "then test a scenario that addresses them.",
+    "OPPORTUNITY": "Build a scenario that tests this change and compare it "
+                   "against the current baseline.",
+    "INFORMATION": "No decision is needed. Open the full finding for the "
+                   "figures behind it.",
+}
+
+
+def _recommended_action(insight: Any, theme: str, severity: str) -> str:
+    """
+    The one step to take about this finding.
+
+    The narrative layer's own line wins whenever it wrote one, because it saw
+    the evidence. Everything below is the honest default for a briefing that
+    did not: advisory, figure-free, and pointing at a screen that exists.
+    """
+    written = str(getattr(insight, "recommended_action", "") or "").strip()
+    if written:
+        return written
+    return (_ACTION_BY_THEME.get((theme, severity))
+            or _ACTION_BY_THEME.get((theme, "INFORMATION"))
+            or _ACTION_BY_SEVERITY.get(severity)
+            or _ACTION_BY_SEVERITY["INFORMATION"])
+
+
 def _serialise_insight(insight: Any, index: int, *, scope: str,
                        entity_id: Optional[str],
                        pack: Any = None) -> Dict[str, Any]:
@@ -296,10 +430,14 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
     feed that lets a user dismiss an item needs an id that survives a re-fetch,
     and a UUID per request would resurrect everything they had dismissed.
     """
+    from netgravity.orchestrator.reasoning.card import plain_voice
+
     theme = str(getattr(insight, "theme", "") or "GENERAL")
     slug = theme.upper().replace(" ", "_")
     entity = (entity_id or "NETWORK").replace(" ", "_")
     severity = getattr(insight, "severity", None)
+    severity_name = (severity.value if hasattr(severity, "value")
+                     else str(severity or "INFORMATION"))
     metric_refs = list(getattr(insight, "metric_refs", []) or [])
     comparison_refs = list(getattr(insight, "comparison_refs", []) or [])
     driver_refs = list(getattr(insight, "driver_refs", []) or [])
@@ -313,15 +451,31 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
         # dismissable feed needs, and what a UUID per request would destroy.
         "id": f"INS_{scope}_{entity}_{slug}_{_headline_digest(insight)}",
         "theme": theme,
-        "headline": getattr(insight, "headline", ""),
-        "narrative": getattr(insight, "narrative", ""),
+        # PLAIN VOICE, not the agent's own.
+        #
+        # The Reasoning Agent writes in the first person by contract — "I see
+        # 452,610 units of 1,435,985 units of demand left unserved" — because
+        # that is the voice its validator enforces and its grounding checks.
+        # A reader of the Overview is not having a conversation with the
+        # engine; they are reading a report about their network, and the extra
+        # actor in every sentence is what made the tiles read as machine
+        # output. `plain_voice` is the rule the explanation card already owns
+        # (netgravity/orchestrator/reasoning/card.py) — applied here, at the
+        # presentation boundary, so there is one definition of it and the
+        # briefing itself is untouched.
+        "headline": plain_voice(getattr(insight, "headline", "") or ""),
+        "narrative": plain_voice(getattr(insight, "narrative", "") or ""),
+        # What to DO about it. The narrative layer's own line when it wrote
+        # one; a theme-appropriate, figure-free default when it did not. A
+        # finding a reader has to translate into a decision on their own is
+        # half a finding.
+        "recommended_action": _recommended_action(insight, theme, severity_name),
         # Stated by the engine, not inferred from the wording by the client.
         # The Home feed used to decide a card's colour, icon and priority by
         # searching its prose for "high impact" / "opportunity" / "positive",
         # so an insight phrased differently was rendered neutral whatever it
         # had found.
-        "severity": (severity.value if hasattr(severity, "value")
-                     else str(severity or "INFORMATION")),
+        "severity": severity_name,
         "metric_refs": metric_refs,
         "comparison_refs": comparison_refs,
         "driver_refs": driver_refs,
@@ -545,6 +699,8 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
         variant = f"insights:v{_PAYLOAD_VERSION}:{scope_arg}:{entity_id or ''}"
 
         def compute() -> Dict[str, Any]:
+            from netgravity.orchestrator.reasoning.card import plain_voice
+
             _, state = _resolve_state(project_id, user_id)
             try:
                 result, pack = _briefing_for(state, scope, entity_id, question,
@@ -580,11 +736,17 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 # The recommendation is ONE string chosen by the evidence, not a
                 # list of options. A list would imply the engine had ranked
                 # alternatives it has not evaluated.
-                "recommendation": briefing.recommendation,
-                "opening": briefing.opening,
-                "context": briefing.context,
-                "key_drivers": list(briefing.key_drivers),
-                "limitation": briefing.limitation,
+                #
+                # In plain voice, like the insights above it. It reaches the
+                # Insights page as the one recommendation that ranks the
+                # findings rather than following from any single one, and a
+                # page of reports with one paragraph of "I recommend" in the
+                # middle of it reads as two different documents.
+                "recommendation": plain_voice(briefing.recommendation or ""),
+                "opening": plain_voice(briefing.opening or ""),
+                "context": plain_voice(briefing.context or ""),
+                "key_drivers": [plain_voice(d) for d in briefing.key_drivers],
+                "limitation": plain_voice(briefing.limitation or ""),
                 "suggested_questions": list(briefing.suggested_questions),
                 "missing_information": [m.model_dump(mode="json")
                                         for m in briefing.missing_information],

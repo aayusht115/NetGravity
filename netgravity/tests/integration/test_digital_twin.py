@@ -1504,32 +1504,60 @@ class TestTheRecommendedChangeIsStated:
         assert "renderTwinClosureNote" not in _js("app.js")
 
     def test_one_reader_serves_both_screens(self):
-        """Two screens that could disagree about what was recommended would be
-        worse than one that says nothing."""
+        """
+        Two screens that could disagree about what was recommended would be
+        worse than one that says nothing.
+
+        The second screen used to be Home's attention card. Home shows three
+        insight tiles now, each carrying the step for ITS OWN finding, and a
+        network-wide "close this, open that" is not one of those - it sits on
+        the Insights page, beside the recommendation it makes concrete. Same
+        function, same sentence, one more screen away.
+        """
         app_js = _js("app.js")
         assert "function recommendedChangeSummary(" in app_js
         for caller in ("function renderRecommendedChangeNote()",
-                       "renderHomeAttentionFeed"):
+                       "function renderInsightsPage()"):
             assert caller in app_js, caller
-        # Home asks the same function for the same sentence.
-        feed = app_js[app_js.index("function renderHomeAttentionFeed"):]
-        feed = feed[:feed.index("\nfunction ")]
-        assert "recommendedChangeSummary({ quietWhenNothing: true })" in feed
-        assert "Recommended change" in feed
+        page = app_js[app_js.index("function renderInsightsPage()"):]
+        page = page[:page.index("\n}\n")]
+        assert "recommendedChangeSummary({ quietWhenNothing: true," in page
+        assert "onTwin: false" in page, page
+        assert "insp-rec-change" in page
 
-    def test_home_is_not_told_there_is_nothing_to_do(self):
+    def test_the_sentence_names_a_screen_the_reader_is_actually_on(self):
         """
-        A reader on Home who has run no plan is not owed a line saying so; the
-        twin states it for the reader who goes looking. `quietWhenNothing`
-        returns null, and the card renders nothing rather than a reassurance.
+        The closing clause was the literal "The twin below is the network as
+        it runs today", rendered wherever this summary was drawn - including
+        on Home, which has no twin below it and has not had one since the
+        preview was removed. `onTwin` picks the clause: the Digital Twin keeps
+        the original, and everywhere else says where the twin actually is.
+        """
+        app_js = _js("app.js")
+        block = app_js[app_js.index("function recommendedChangeSummary("):]
+        block = block[:block.index("\n/**")]
+        assert "onTwin = true" in block, block
+        assert "const where = onTwin" in block, block
+        assert "The twin below is the network as it runs today" in block
+        assert "open the Digital Twin to see the network it would" in block
+        # The twin's own caller takes the default, and says so by not passing.
+        note = app_js[app_js.index("function renderRecommendedChangeNote()"):]
+        note = note[:note.index("\n}\n")]
+        assert "recommendedChangeSummary()" in note, note
+
+    def test_a_screen_is_not_told_there_is_nothing_to_do(self):
+        """
+        A reader who has run no plan is not owed a line saying so; the twin
+        states it for the reader who goes looking. `quietWhenNothing` returns
+        null, and the caller renders nothing rather than a reassurance.
         """
         app_js = _js("app.js")
         block = app_js[app_js.index("function recommendedChangeSummary("):]
         block = block[:block.index("\n/**")]
         assert "if (quietWhenNothing) return null;" in block
-        feed = app_js[app_js.index("const changeHtml = change ?"):]
-        feed = feed[:feed.index("` : '';") + 7]
-        assert "` : '';" in feed
+        page = app_js[app_js.index("function renderInsightsPage()"):]
+        page = page[:page.index("\n}\n")]
+        assert "${change ? `<div class=" in page, page
 
     def test_the_note_names_the_plan_behind_the_change(self):
         """"Close this site" without "recommended by what" is a statement the

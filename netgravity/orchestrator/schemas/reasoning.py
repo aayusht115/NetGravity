@@ -85,6 +85,19 @@ class KPIInsight(BaseModel):
     theme: str = Field(max_length=60)
     headline: str = Field(max_length=140)
     narrative: str = Field(max_length=700)
+    #: What to DO about this finding — one plain-English step, no figures.
+    #:
+    #: A finding without an action is a fact a reader has to translate into a
+    #: decision on their own, and the Overview's insight tiles are read by
+    #: people who want the decision. It is deliberately prose-only: the model
+    #: writes no numbers anywhere (see `reasoning/card.py`), so this line
+    #: cannot drift from the authoritative figures beside it, and numeric
+    #: grounding has nothing here to redact.
+    #:
+    #: Optional, and empty is a legitimate value: the deterministic template
+    #: path does not write one, and the presentation layer supplies a
+    #: theme-appropriate default rather than leaving the tile mute.
+    recommended_action: str = Field(default="", max_length=200)
     severity: InsightSeverity = InsightSeverity.INFORMATION
     metric_refs: List[str] = Field(default_factory=list, max_length=6)
     comparison_refs: List[str] = Field(default_factory=list, max_length=4)
@@ -121,7 +134,8 @@ class ExecutiveBriefing(BaseModel):
         """All prose that can reach a UI, in display order."""
         values = [self.opening, self.context]
         for insight in self.kpi_insights:
-            values.extend((insight.headline, insight.narrative))
+            values.extend((insight.headline, insight.narrative,
+                           insight.recommended_action))
         values.extend(self.key_drivers)
         values.extend((self.recommendation, self.limitation))
         for item in self.missing_information:

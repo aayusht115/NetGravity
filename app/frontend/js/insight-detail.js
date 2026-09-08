@@ -569,13 +569,26 @@ function metricTileHtml(icon, tone, label, value, sub) {
 function recommendationCardHtml(record) {
   const rec = NETWORK_RECOMMENDATION;
 
+  // THIS finding's own recommended action, when it has one.
+  //
+  // Every insight carries one now — written by the Reasoning Agent, or the
+  // theme-appropriate default `/api/insights` supplies — and it is the same
+  // sentence the Overview's tile for this finding printed. Showing the
+  // network-level recommendation instead meant a reader who pressed "View
+  // detailed finding" on a capacity risk was given the advice about the
+  // network's biggest cost component, which is a different subject.
+  //
+  // The network recommendation is not dropped: where the finding has none it
+  // is still what this card shows, under the caveat that says so.
+  const own = String(record.recommendedAction || '').trim();
+
   const tones = ['purple', 'green', 'amber'];
   const tiles = (record.evidence || []).slice(0, 3).map((e, i) =>
     metricTileHtml(ICON.gauge, tones[i] || 'purple', e.label, e.display_value,
                    `via ${e.source}`)).join('');
   const metricsRow = tiles ? `<div class="insd-metrics-row">${tiles}</div>` : '';
 
-  if (!rec.text) {
+  if (!own && !rec.text) {
     return `
       <div class="insd-card">
         <div class="insd-rec-head">${ICON.sparkle}Recommended action</div>
@@ -596,17 +609,29 @@ function recommendationCardHtml(record) {
     ? `<p class="insd-chart-note">${ICON.info}<span>Limitation: ${insdEsc(rec.limitation)}</span></p>`
     : '';
 
+  // The wider advice, kept as context under the finding's own step. Where the
+  // finding has no step of its own, the network's IS the recommendation and
+  // leads the card — with the caveat that it was drawn from every finding.
+  const wider = (own && rec.text) ? `
+      <div class="insd-why-stat" style="display:block">
+        <span class="insd-why-stat-label">For the network as a whole</span>
+        <div class="insd-why-text" style="margin-top:6px">${insdEsc(rec.text)}</div>
+      </div>` : '';
+
   return `
     <div class="insd-card">
       <div class="insd-rec-head">${ICON.sparkle}Recommended action</div>
-      <p class="insd-rec-sentence">${insdEsc(rec.text)}</p>
+      <p class="insd-rec-sentence">${insdEsc(own || rec.text)}</p>
       ${metricsRow}
       <div class="insd-why-row">
         <span class="insd-why-icon">${ICON.bulb}</span>
         <div style="flex:1;min-width:0">
           <div class="insd-why-title">Why this works</div>
-          <div class="insd-why-text">This is a network-level recommendation drawn
-            from every finding, not from this one alone.</div>
+          <div class="insd-why-text">${own
+            ? 'This step follows from this finding and the figures above it.'
+            : 'This is a network-level recommendation drawn from every finding, '
+              + 'not from this one alone.'}</div>
+          ${wider}
           ${drivers}
         </div>
       </div>
@@ -683,7 +708,7 @@ function renderDeepDive() {
 
   page.innerHTML = `
     <div class="insd-page">
-      <button type="button" class="insd-back-link" id="insd-back-btn">${ICON.arrowLeft}<span>Back to Home</span></button>
+      <button type="button" class="insd-back-link" id="insd-back-btn">${ICON.arrowLeft}<span>${insdOrigin.label}</span></button>
 
       <div class="insd-header-row">
         <h1 class="insd-title">${insdEsc(record.title)}</h1>
@@ -713,7 +738,7 @@ function renderDeepDive() {
 }
 
 function bindDeepDive() {
-  document.getElementById('insd-back-btn')?.addEventListener('click', backToHome);
+  document.getElementById('insd-back-btn')?.addEventListener('click', backToOrigin);
 
   document.getElementById('insd-why-btn')?.addEventListener('click', () => {
     document.getElementById('insd-why-reveal')?.classList.toggle('open');
@@ -1000,7 +1025,7 @@ function renderActionDetail() {
   const required = item.severity === 'REQUIRED';
   page.innerHTML = `
     <div class="insd-page">
-      <button type="button" class="insd-back-link" id="insd-back-btn">${ICON.arrowLeft}<span>Back to Home</span></button>
+      <button type="button" class="insd-back-link" id="insd-back-btn">${ICON.arrowLeft}<span>${insdOrigin.label}</span></button>
 
       <div class="insd-header-row">
         <h1 class="insd-title">${insdEsc(item.title)}</h1>
@@ -1048,7 +1073,7 @@ function renderActionDetail() {
 }
 
 function bindActionDetail() {
-  document.getElementById('insd-back-btn')?.addEventListener('click', backToHome);
+  document.getElementById('insd-back-btn')?.addEventListener('click', backToOrigin);
 
   document.getElementById('insd-why-btn')?.addEventListener('click', () => {
     document.getElementById('insd-why-reveal')?.classList.toggle('open');
@@ -1173,10 +1198,34 @@ async function sendRequest() {
  * gate now does, so this is that branch. An id matching neither store opens
  * nothing, rather than opening a page about the wrong thing.
  */
+/**
+ * The page the reader was on when they opened this one.
+ *
+ * "Back to Home" was literal: every route out of this page called
+ * `navigateToTab('home')`, so a reader who opened a finding from the Insights
+ * list was returned to the Overview and had to find their way back to the
+ * list, losing their filter on the way. Nielsen #3 — a way out that goes
+ * somewhere the reader did not come from is not an exit.
+ *
+ * Read off the DOM rather than passed in, because every caller would
+ * otherwise have to remember to pass it, and the one that forgot would be
+ * the bug this fixes.
+ */
+const INSD_ORIGINS = {
+  'tab-insights': { tab: 'insights', label: 'Back to Insights', nav: 'nav-item-insights' },
+  'tab-forecast': { tab: 'forecast', label: 'Back to Forecast', nav: 'nav-item-forecast' },
+};
+const INSD_ORIGIN_HOME = { tab: 'home', label: 'Back to Home', nav: 'nav-item-home' };
+let insdOrigin = INSD_ORIGIN_HOME;
+
 export function showInsightDetail(kind, id) {
   const action = (kind === 'action') ? findAction(id) : null;
   const hit = action ? null : findRecord(id);
   if (!action && !hit) return;
+
+  // Before any panel is switched, so it reads the page being left.
+  const from = document.querySelector('.tab-panel.active');
+  insdOrigin = (from && INSD_ORIGINS[from.id]) || INSD_ORIGIN_HOME;
 
   if (action) {
     insdAction.item = action;
@@ -1197,7 +1246,7 @@ export function showInsightDetail(kind, id) {
   if (page) page.classList.add('active');
 
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('nav-item-home')?.classList.add('active');
+  document.getElementById(insdOrigin.nav)?.classList.add('active');
 
   const subTopbar = document.getElementById('app-sub-topbar');
   if (subTopbar) subTopbar.style.display = 'none';
@@ -1211,14 +1260,16 @@ export function showInsightDetail(kind, id) {
   else window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function backToHome() {
+function backToOrigin() {
   // Chart.js keeps a live instance bound to a canvas this page is about to
   // discard. Destroying it here keeps one instance per canvas at most.
   Object.keys(insdCharts).forEach((id) => {
     insdCharts[id].destroy();
     delete insdCharts[id];
   });
-  if (typeof window.navigateToTab === 'function') window.navigateToTab('home');
+  if (typeof window.navigateToTab === 'function') {
+    window.navigateToTab(insdOrigin.tab);
+  }
 }
 
 export function initInsightDetail() {

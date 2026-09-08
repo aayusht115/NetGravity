@@ -278,9 +278,10 @@
           </div>
         </div>
 
-        <!-- Flat nav: Home, KPIs, Digital Twin, Forecast, Scenario Planning.
-             Insights/Recommendations no longer have their own sidebar entry —
-             they live in Home's merged attention feed instead. -->
+        <!-- Overview, then Baseline (Digital Twin / KPIs / Insights), then
+             Forecast and Scenarios. Insights has its own entry again: Home
+             shows the three findings that lead, and a reader who wants the
+             rest needs somewhere to go that is not a card on another page. -->
         <div class="sidebar-nav">
           <div class="nav-item active" data-tab="home" id="nav-item-home" title="Overview">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -290,8 +291,9 @@
           </div>
 
           <!-- Baseline: the network as uploaded and solved, before any
-               scenario. Its two views are the twin (what it looks like) and
-               the KPIs (what it measures).
+               scenario. Its three views are the twin (what it looks like),
+               the KPIs (what it measures) and the Insights (what the
+               Reasoning Agent concluded about it).
 
                The head opens the first of them. It was a pure disclosure —
                a click toggled the group and went nowhere — on the reasoning
@@ -342,6 +344,18 @@
                     <path d="M3 3v14h14M7 13v-4M11 13V7M15 13v-7" />
                   </svg>
                   <span>KPIs</span>
+                </div>
+
+                <!-- Every finding about the baseline, not just the three
+                     that lead on Home. It belongs in this group for the
+                     same reason the twin and the KPIs do: all three are
+                     accounts of the network as uploaded and solved. -->
+                <div class="nav-item nav-sub" data-tab="insights" id="nav-item-insights" title="Insights">
+                  <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M10 2.6a5 5 0 0 0-2.9 9.07V13.5h5.8v-1.83A5 5 0 0 0 10 2.6z" />
+                    <path d="M8.3 15.9h3.4M8.8 17.8h2.4" />
+                  </svg>
+                  <span>Insights</span>
                 </div>
               </div>
             </div>
@@ -515,21 +529,31 @@
         </div>
 
         <!-- ─────────────────── TAB: HOME (Overview) ───────────────
-             Laid out against Dump/home overview.png:
+             Laid out against Dump/Home Overview-updated1.png:
 
                row 0  "Overview" and its strapline, on one line
-               row 1  the alert and what needs a decision, beside the twin —
-                      one grid, with the twin spanning both of its rows
-               row 2  three headline KPIs, with the rest a click away
+               row 1  the network's headline figures, at the TOP, with the
+                      rest of them one click away at the foot of the strip
+               row 2  the three findings that need a decision, side by side,
+                      the most serious one first and colour-coded
+               row 3  what the upload did not carry, and what would sharpen
+                      it, each with the request it needs
+               row 4  when this was last analysed, and the re-run
 
-             The KPI band used to sit between rows 0 and 1, on top of the
-             twin, and was removed to give the twin the full height of the
-             column beside it. It is back at the BOTTOM, where it takes the
-             width rather than the height, and it replaces a strip of external
-             signals: nothing in this build routes a signal into a forecast,
-             so that card showed three rows of the user's own spreadsheet
-             under a chip reading "Not yet applied". The signals themselves
-             are on the Forecast tab, drawn by the same renderer.
+             WHY THE FIGURES MOVED TO THE TOP. They were the last row, on the
+             reasoning that findings outrank figures. In use a reader opening
+             this page has one question first — "is the network alright" —
+             and four figures answer it in a glance, which is what the top of
+             a page is for. The findings are still the tallest thing on the
+             screen and still the only content that is nowhere else.
+
+             THE DIGITAL TWIN IS GONE FROM THIS PAGE. It took the whole right
+             half of the first screen to draw a network the reader can open
+             in full from the sidebar, and it left the findings a 500px column
+             with an internal scroller — the recommendation a reader is meant
+             to act on could sit below the bottom of its own card. Baseline >
+             Digital Twin is one click away and is the same scene; nothing was
+             removed from the product, only from this page.
 
              Scope — project, facility, period — is the top bar's, and it is
              the same bar on every screen (see updateTopBarLayout). -->
@@ -543,80 +567,114 @@
             </div>
           </div>
 
-          <!-- rows 1 + 2, as ONE grid.
-               Left column: the alert, then what needs a decision.
-               Right column: the digital twin, spanning both of those rows so
-               it stands the full height of the column beside it rather than
-               starting halfway down it. -->
-          <div class="ov-main">
-            <div class="ov-alert" id="ov-alert"><!-- renderOverviewAlert() --></div>
+          <!-- The one state that outranks every figure and every finding on
+               this page: a network the solver could not produce a plan for.
+               There is nothing below to read in that case, and the insight
+               tiles would render their "no findings yet" empty state over a
+               genuine engine error.
 
-            <div class="ov-attn-card">
-              <div class="ov-attn-head">
-                <span class="ov-attn-star" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2.6 14.9 9 21.8 9.8 16.7 14.5 18.1 21.3 12 17.9 5.9 21.3 7.3 14.5 2.2 9.8 9.1 9"/></svg>
-                </span>
-                <h2 class="ov-attn-title">Needs your attention</h2>
-              </div>
-              <div class="ov-attn-body" id="ov-attn-body">
-                <!-- renderHomeAttentionFeed(): why it matters / impact /
-                     recommended next step, plus the rest of the findings -->
-              </div>
-              <div class="ov-attn-foot">
-                <span class="ov-status-pill" id="ov-status-pill">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.4"/><polyline points="8.4 12.2 11 14.8 15.8 9.6"/></svg>
-                  <span id="ov-status-text">Data uploaded successfully</span>
-                </span>
-                <span class="ov-refresh-text">Last analysed:
-                  <span id="home2-refresh-time">not yet analysed</span>
-                  <button type="button" class="ov-refresh-btn" id="home2-refresh-btn"
-                          title="Re-run the analysis" aria-label="Re-run the analysis">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                  </button>
-                </span>
-              </div>
-            </div>
+               ONLY that state. `renderOverviewAlert(id, {errorsOnly:true})`
+               leaves this element empty for a network that solved — the
+               unserved-demand shortfall is a finding, and the first tile is
+               where a finding belongs. -->
+          <div class="ov-notice" id="ov-notice" hidden><!-- renderOverviewAlert() --></div>
 
-            <div class="ov-twin-card" id="home-twin-block">
-              <div class="ov-twin-head">
-                <h2 class="ov-twin-title">Network overview (Digital Twin)</h2>
-                <button class="home-section-link" id="btn-open-digital-twin"
-                        data-action="navigateToTab" data-arg="twin">
-                  <span>Open Digital Twin</span>
-                  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
-                </button>
-              </div>
-              <!-- The wrapper stays put across re-renders: twin3d.js clears
-                   #home-map-twin's innerHTML when (re)initialising the scene,
-                   so the callout lives as a sibling or it is wiped with it. -->
-              <div class="home-twin-map-wrap">
-                <div class="home-twin-map-container" id="home-map-twin"></div>
-                <div class="home-twin-callout" id="home-twin-callout"></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- row 2: the network's three headline figures.
+          <!-- row 1: the network's headline figures.
                Filled by renderHomeKpiStrip() from the authoritative KPI
-               layer. "View all KPIs" opens the dashboard behind them. -->
-          <div class="home2-kpi-strip" id="ov-kpi-strip">
-            <span class="home2-kpi-strip-label">Network today</span>
+               layer. "View all KPIs" at the foot of the strip opens the
+               dashboard behind them — it sits at the BOTTOM edge because
+               that is where a reader's eye leaves the strip, and because a
+               link in the top-right of a card competes with the figures
+               for the first fixation. -->
+          <section class="home2-kpi-strip" id="ov-kpi-strip"
+                   aria-labelledby="ov-kpi-strip-label">
+            <h2 class="ov-visually-hidden" id="ov-kpi-strip-label">Network today</h2>
             <div class="home2-kpi-strip-row" id="ov-kpi-strip-row">
               <!-- renderHomeKpiStrip() -->
             </div>
-            <button class="home-section-link home2-kpi-strip-viewall"
-                    id="btn-view-all-kpis"
-                    data-action="navigateToTab" data-arg="facility-dashboard">
-              <span>View all KPIs</span>
-              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+            <div class="home2-kpi-strip-foot">
+              <button class="home-section-link home2-kpi-strip-viewall"
+                      id="btn-view-all-kpis"
+                      data-action="navigateToTab" data-arg="facility-dashboard">
+                <span>View all KPIs</span>
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+              </button>
+            </div>
+          </section>
+
+          <!-- row 2: what needs a decision.
+               Three tiles, written by renderHomeInsightTiles(). Each one is
+               the same four things in the same order — the conclusion, why
+               it matters in figures, what to do about it, and the way into
+               the full finding — so a reader learns the shape once and
+               reads the other two without re-learning it (Nielsen #4). -->
+          <div class="ov-insights-head">
+            <h2 class="ov-insights-title">Key insights &amp; recommendations</h2>
+            <button class="home-section-link" id="btn-view-more-insights"
+                    data-action="navigateToTab" data-arg="insights">
+              <span>View more insights</span>
+              <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
             </button>
+          </div>
+          <div class="ov-tiles" id="ov-tiles">
+            <!-- renderHomeInsightTiles() -->
+          </div>
+
+          <!-- row 3: what the analysis did not have.
+               Written by renderHomeDataStrip() from the completeness gate's
+               own findings (HOME_ACTION_ITEMS). Required first, then
+               optional: one is holding an analysis up and the other would
+               sharpen it, and they must never read as the same request. -->
+          <div class="ov-data-strip" id="ov-data-strip">
+            <!-- renderHomeDataStrip() -->
+          </div>
+
+          <!-- row 4: when this was last analysed, and how to re-run it.
+               Nielsen #1 — every figure above is as old as this line says. -->
+          <div class="ov-foot">
+            <span class="ov-refresh-text">Last analysed:
+              <span id="home2-refresh-time">not yet analysed</span>
+              <button type="button" class="ov-refresh-btn" id="home2-refresh-btn"
+                      title="Re-run the analysis" aria-label="Re-run the analysis">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+              </button>
+            </span>
           </div>
 
         </section>
 
-        <!-- Insights and Recommendations tabs removed: an insight card on
-             Home now opens a full-page deep dive (see insight-detail.js)
-             instead of navigating to a nested feed page. -->
+        <!-- ─────────────────── TAB: INSIGHTS ──────────────────────
+             Every finding the Reasoning Agent reached about this network,
+             and every request the completeness gate raised — the full list
+             behind Home's three tiles.
+
+             It lives under Baseline in the sidebar because that is what it
+             is about: the network as uploaded and solved, before any
+             scenario. Home shows the three that lead; this shows all of
+             them, filterable, and each row opens the same deep dive
+             (insight-detail.js) that Home's tiles do — one destination for
+             one finding, never two accounts of it. -->
+        <section class="tab-panel" id="tab-insights">
+          <!-- What the engine recommends for the network AS A WHOLE, drawn
+               from every finding rather than from any one of them. Each row
+               below carries its own step; this is the one that ranks them,
+               and it is stated once, here, so a reader is never left to
+               work out which of five recommendations is the overall one. -->
+          <div class="insp-rec" id="insp-rec" hidden><!-- renderInsightsPage() --></div>
+
+          <div class="insp-filters" id="insp-filters" role="tablist"
+               aria-label="Filter findings">
+            <!-- renderInsightsPage() -->
+          </div>
+          <div class="insp-list" id="insp-list">
+            <!-- renderInsightsPage() -->
+          </div>
+        </section>
+
+        <!-- The full account of ONE finding, or of one data request. Opened
+             from a tile on Home, from a row on the Insights page, or from the
+             Forecast page's attention card — all three land here, so a
+             finding has one page and never two accounts of itself. -->
         <section class="tab-panel" id="tab-insight-detail">
           <!-- Populated by insight-detail.js: showInsightDetail(kind, id) -->
         </section>
@@ -1090,7 +1148,7 @@
                 <h2 class="ov-attn-title">Needs your attention</h2>
               </div>
               <div class="ov-attn-body" id="fc-attn-body">
-                <!-- renderHomeAttentionFeed('fc-attn-body') -->
+                <!-- renderForecastAttention('fc-attn-body') -->
               </div>
               <div class="ov-attn-foot">
                 <span class="ov-status-pill" id="fc-status-pill">
