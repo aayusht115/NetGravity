@@ -115,7 +115,12 @@ export function renderForecastChart(canvasId) {
   // `new Array(histLabels.length - 1)`, which is `new Array(-1)` for an empty
   // series and throws `RangeError: Invalid array length` — so an empty
   // forecast took the whole screen down instead of showing an empty state.
-  if (!histLabels.length) {
+  // An uploaded forecast can exist for a market whose history this upload
+  // does not carry. Bailing out on empty history alone told the reader "no
+  // forecast can be produced" while a forecast sat in the response — the exact
+  // opposite of the truth. There is nothing to draw only when BOTH halves are
+  // empty.
+  if (!histLabels.length && !foreLabels.length) {
     const host = ctx.parentElement;
     if (host && !host.querySelector('.ng-forecast-empty')) {
       const note = document.createElement('div');
@@ -139,9 +144,19 @@ export function renderForecastChart(canvasId) {
   const histData = [...DEMAND_HISTORY.northIndia, ...new Array(foreLabels.length).fill(null)];
 
   // Forecast data: nulls for historical + forecast values (overlap last historical point)
-  const foreData = [...new Array(histLabels.length - 1).fill(null), DEMAND_HISTORY.northIndia[histLabels.length - 1], ...FORECAST.northIndia];
-  const upperData = [...new Array(histLabels.length - 1).fill(null), DEMAND_HISTORY.northIndia[histLabels.length - 1], ...FORECAST.upper];
-  const lowerData = [...new Array(histLabels.length - 1).fill(null), DEMAND_HISTORY.northIndia[histLabels.length - 1], ...FORECAST.lower];
+  //
+  // The pad ends on the last OBSERVED point so the forecast line joins the
+  // history rather than starting a pixel to its right. With no history there is
+  // no point to repeat and no join to make, and the forecast starts at index 0
+  // — `new Array(-1)` is a RangeError, which is why this used to be unreachable
+  // behind a guard that refused to draw a forecast without history at all.
+  const joinPad = histLabels.length
+    ? [...new Array(histLabels.length - 1).fill(null),
+       DEMAND_HISTORY.northIndia[histLabels.length - 1]]
+    : [];
+  const foreData = [...joinPad, ...FORECAST.northIndia];
+  const upperData = [...joinPad, ...FORECAST.upper];
+  const lowerData = [...joinPad, ...FORECAST.lower];
 
   // Capacity line — drawn only when a threshold is actually known for this
   // series. All-null keeps the dataset present (so the legend is stable) but

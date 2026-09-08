@@ -250,12 +250,24 @@ function renderForecastSummary() {
 
   const mase = meta.accuracy && typeof meta.accuracy.mase === 'number'
     ? meta.accuracy.mase : null;
-  set('fc-model', meta.engine || 'Not reported');
+  // A forecast that arrived with the upload was not produced here, and every
+  // field on this card that describes a model has to say so. Reporting an
+  // engine name, a horizon "modelled" and an accuracy for numbers nothing was
+  // fitted to would attribute the upload's own projection to this build.
+  const supplied = meta.source === 'uploaded';
+  set('fc-model', supplied
+    ? 'Supplied with this upload — not recalculated'
+    : (meta.engine || 'Not reported'));
   set('fc-horizon', `${FORECAST.months.length} periods`);
   // MASE < 1 means the model beats a naive seasonal forecast; the comparison
   // is stated because the bare number means nothing to most readers.
-  set('fc-accuracy', mase === null ? 'Not reported'
-    : `${mase.toFixed(2)} (${mase < 1 ? 'better' : 'worse'} than naive)`);
+  //
+  // "Not applicable" rather than "Not reported" when nothing was fitted: a
+  // measurement that could not exist is a different fact from one that was not
+  // taken, and this row is read as a quality claim either way.
+  set('fc-accuracy', supplied ? 'Not applicable — no model was fitted'
+    : (mase === null ? 'Not reported'
+       : `${mase.toFixed(2)} (${mase < 1 ? 'better' : 'worse'} than naive)`));
   // The series ACTUALLY plotted, which changes when the picker changes.
   // `meta.shown` is written once at hydration, so the title kept naming the
   // default series after the user selected a different one.
@@ -267,14 +279,28 @@ function renderForecastSummary() {
   set('fc-series-count', `${meta.series} market-product pair(s)`);
   // The chart's title IS the series picker (see #fc-series-select), so there
   // is no separate title string to write; the picker names the series.
-  set('fc-chart-tag', meta.status === 'OK' ? 'Observed + forecast' : meta.status);
+  set('fc-chart-tag', supplied ? 'Supplied forecast'
+    : (meta.status === 'OK' ? 'Observed + forecast' : meta.status));
+  // The band is named only when there is one to name. A supplied forecast
+  // without stated bounds is drawn as a line, and promising a p10–p90 band
+  // beside it would describe a shape that is not on the chart.
+  const banded = FORECAST.upper.length && FORECAST.lower.length;
   set('fc-chart-subtitle',
     `${DEMAND_HISTORY.months.length} observed periods + `
-    + `${FORECAST.months.length}-period forecast · p10–p90 band`);
-  set('fc-method-prov',
-    'Produced by netgravity.forecasting, routed through the orchestrator '
-    + 'capability "forecast.demand". No language model is involved in the '
-    + 'figures on this chart.');
+    + `${FORECAST.months.length}-period forecast`
+    + (banded ? ' · p10–p90 band' : ' · no confidence band was supplied')
+    + (meta.uncovered
+      ? ` · ${meta.uncovered} market-product pair(s) in this network are not in `
+        + 'the upload and have no forecast' : ''));
+  set('fc-method-prov', supplied
+    ? 'Supplied with this upload and shown exactly as received. No forecasting '
+      + 'engine ran against these figures: no ETS or quantile model, no '
+      + 'intermittent-demand model, no structural-break detection, no '
+      + 'rolling-origin backtest, and no external signal was applied. The '
+      + 'periods on the axis are the ones the upload states.'
+    : 'Produced by netgravity.forecasting, routed through the orchestrator '
+      + 'capability "forecast.demand". No language model is involved in the '
+      + 'figures on this chart.');
   renderForecastSeriesSelect();
   renderForecastAxisNote();
   renderForecastCapacityKey();
@@ -420,10 +446,13 @@ function renderForecastAttention(listId = 'fc-attn-body') {
           </button>`).join('')}
       </div>` : ''}
     <div class="text-xs text-muted" style="margin-top:10px;line-height:1.5">
-      ${card && card.source === 'llm'
-        ? 'Written by the model from the forecaster\'s own output.'
-        : 'Written by the deterministic template from the forecaster\'s own output.'}
-      Every figure here is the forecasting engine's.
+      ${(window.__ngForecastMeta || {}).source === 'uploaded'
+        ? 'Every figure here is summed from the forecast supplied with this '
+          + 'upload. Nothing was modelled, adjusted or recalculated.'
+        : `${card && card.source === 'llm'
+            ? 'Written by the model from the forecaster\'s own output.'
+            : 'Written by the deterministic template from the forecaster\'s own output.'}
+           Every figure here is the forecasting engine's.`}
     </div>`;
 
   list.querySelectorAll('[data-fc-action]').forEach((btn) => {
@@ -533,7 +562,16 @@ function renderForecastAxisNote() {
   }
   note.hidden = false;
   if (histEl) histEl.style.flexGrow = String(hist);
-  if (foreEl) foreEl.style.flexGrow = String(fore);
+  if (foreEl) {
+    foreEl.style.flexGrow = String(fore);
+    // Name the right-hand half for what it actually is. "Forecast" alone reads
+    // as this build's forecast on a chart where it is not.
+    const label = foreEl.lastChild;
+    if (label && label.nodeType === 3) {
+      label.textContent = (window.__ngForecastMeta || {}).source === 'uploaded'
+        ? 'Forecast (supplied)' : 'Forecast';
+    }
+  }
 }
 
 /**

@@ -38,6 +38,7 @@ from app.backend.services.errors import (
 )
 from app.backend.services.demand_history_store import (
     demand_history_store,
+    uploaded_forecast_store,
     uploaded_signal_store,
 )
 from app.backend.services.correlation import orchestrator_request_id
@@ -264,6 +265,161 @@ def _forecast_explanation(ctx: Any) -> Dict[str, Any]:
     }
 
 
+#: Rows listed in an outlook's "fastest growing" and "shrinking" lists,
+#: matching `registry._OUTLOOK_ROWS` so the two paths render the same length.
+_OUTLOOK_ROWS = 5
+
+
+def _uploaded_forecast_payload(
+    project_id: str, snapshot_id: str, network_id: str, horizon: int,
+    snapshot: Any,
+) -> Dict[str, Any]:
+    """
+    A forecast that arrived with the upload, in the shape the screen reads.
+
+    Every key `GET /api/forecast` returns is present and means the same thing.
+    Four are deliberately different, and each difference is a fact the reader
+    needs: `engine` is UPLOADED, `accuracy` is None because no model was
+    fitted, `execution_id` is None because no orchestrator run produced this,
+    and `provenance.recalculated` is False.
+
+    NOTHING IS COMPUTED FROM A MODEL HERE. `outlook` is summed from the
+    upload's own points against the observed history — every figure in it is a
+    sum or a ratio over numbers the upload already stated. It is built rather
+    than omitted because the attention card renders "no forecast has been
+    produced for this network yet" when it has neither a briefing nor an
+    outlook, which would contradict the chart beside it.
+    """
+    series, warnings = uploaded_forecast_store.series(network_id, horizon=horizon)
+
+    observed: List[Any] = []
+    if snapshot is not None:
+        try:
+            observed, _ = demand_history_store.for_snapshot(snapshot)
+        except Exception as exc:  # noqa: BLE001 - the forecast still stands
+            logger.warning("forecast.uploaded.history_attach_failed: %s", exc)
+    by_pair = {(o.market_id, o.product_id): o for o in observed}
+
+    forecast_total = recent_total = 0.0
+    rows: List[Dict[str, Any]] = []
+    for row in series:
+        row.update({
+            "status": "OK",
+            # Names what produced the numbers, exactly as the engine field does
+            # on a modelled forecast. Nothing ran, and this says so.
+            "engine": "UPLOADED",
+            "engine_version": "",
+            "pattern": None,
+            # Measured error requires a model and a backtest. There was
+            # neither, which is a different statement from "the error was
+            # small" and must not be rendered as "not reported".
+            "accuracy": None,
+            "signal_adjustments": [],
+        })
+        source = by_pair.get((row["market_id"], row["product_id"]))
+        history = (sorted(getattr(source, "history", []) or [],
+                          key=lambda x: x.period) if source else [])
+        row["n_history_periods"] = len(history)
+        row["history"] = [
+            {"period": p.period, "timestamp": p.timestamp, "quantity": p.quantity}
+            for p in history
+        ]
+
+        n_points = len(row["points"])
+        future = sum(p["mean"] for p in row["points"] if p["mean"] is not None)
+        # The same number of periods, immediately before the forecast starts.
+        recent = sum(p.quantity for p in history[-n_points:]) if history else 0.0
+        forecast_total += future
+        recent_total += recent
+        rows.append({
+            "market_id": row["market_id"],
+            "product_id": row["product_id"],
+            "forecast_units": round(future, 2),
+            # None, not 0.0: a pair with no comparable observed window has an
+            # UNKNOWN growth rate, and 0.0 reads as "demand is flat".
+            "recent_units": round(recent, 2) if history else None,
+            "growth_pct": (round((future - recent) / recent * 100.0, 2)
+                           if recent > 0 and history else None),
+            "n_history_periods": len(history),
+        })
+
+    # Pairs this network has that the upload's forecast does not cover.
+    #
+    # Named, never silently absent — and deliberately NOT filled in by running
+    # our own model for them, which would put two sources on one screen without
+    # saying so. An uploaded forecast is the whole answer or it is not the
+    # answer; a chart mixing the two is two different quantities on one axis.
+    covered = {(r["market_id"], r["product_id"]) for r in rows}
+    uncovered = sorted(
+        f"{d.market_id}/{d.product_id}"
+        for d in (getattr(getattr(snapshot, "network", None), "demands", []) or [])
+        if (d.market_id, d.product_id) not in covered
+    )
+    if uncovered:
+        warnings.append(
+            f"The uploaded forecast covers {len(covered)} market-product "
+            f"pair(s). {len(uncovered)} pair(s) in this network are not in the "
+            f"upload and have no forecast: {', '.join(uncovered[:5])}"
+            f"{'…' if len(uncovered) > 5 else ''}. No model was run for them."
+        )
+
+    movers = [r for r in rows if r["growth_pct"] is not None]
+    movers.sort(key=lambda r: -(r["forecast_units"] - (r["recent_units"] or 0)))
+
+    return {
+        "project_id": project_id,
+        "snapshot_id": snapshot_id,
+        # No orchestrator execution produced this, and saying so is the point.
+        "execution_id": None,
+        "status": "OK",
+        #: "uploaded" or "model". The field every consumer branches on.
+        "forecast_source": "uploaded",
+        "horizon": max((len(r["points"]) for r in series), default=0),
+        "series": series,
+        "n_series_uncovered": len(uncovered),
+        # No reasoning step ran, so there is no briefing. Empty, not borrowed
+        # from the network's — which is what the screen used to do.
+        "explanation": {},
+        "outlook": {
+            "horizon": horizon,
+            "n_series_forecast": len(series),
+            "n_series_total": len(series) + len(uncovered),
+            "total_forecast_units": round(forecast_total, 2),
+            "comparable_recent_units": (round(recent_total, 2)
+                                        if recent_total else None),
+            "growth_pct": (round((forecast_total - recent_total)
+                                 / recent_total * 100.0, 2)
+                           if recent_total > 0 else None),
+            "fastest_growing": movers[:_OUTLOOK_ROWS],
+            "shrinking": [r for r in reversed(movers)
+                          if r["growth_pct"] < 0][:_OUTLOOK_ROWS],
+            # Nothing was adjusted and nothing was detected, because nothing
+            # ran. Empty rather than absent, so the shape matches.
+            "signal_adjustments": [], "n_signal_adjustments": 0,
+            "structural_breaks": [], "n_structural_breaks": 0,
+        },
+        "signals": {
+            "attached": 0, "series_adjusted": 0,
+            "applied_signal_ids": [], "unreadable": [],
+            "notice": ("Uploaded signals were not applied. This forecast came "
+                       "with the upload and was not recalculated."),
+        },
+        "warnings": warnings,
+        "provenance": {
+            "authoritative_source": "upload",
+            "routed_through": None,
+            "llm_used": False,
+            "explanation_source": None,
+            #: The one fact the screen must not get wrong.
+            "recalculated": False,
+            "notice": ("Supplied with the upload and returned unchanged. No "
+                       "forecasting engine, quantile model, intermittent-demand "
+                       "model, structural-break detection or signal enrichment "
+                       "was run against these figures."),
+        },
+    }
+
+
 def create_forecast_blueprint(orchestrator: Optional[Orchestrator] = None,
                               url_prefix: str = "/api/forecast"):
     bp = Blueprint("forecast", __name__, url_prefix=url_prefix)
@@ -294,6 +450,41 @@ def create_forecast_blueprint(orchestrator: Optional[Orchestrator] = None,
             raise ValidationError("horizon must be an integer.")
         if not 1 <= horizon <= 24:
             raise ValidationError("horizon must be between 1 and 24 periods.")
+
+        # A forecast that ARRIVED WITH THE UPLOAD is the forecast.
+        #
+        # Returned before the signals are routed and before the orchestrator
+        # request is built, so nothing below this point runs: no ETS, Croston
+        # or quantile engine, no sup-F structural-break detection, no signal
+        # enrichment, no rolling-origin backtest, no reasoning step. A forecast
+        # this build produced beside one the upload supplied would be a second
+        # answer to a question the upload has already answered, and "their
+        # forecast, adjusted by our model" is a number nobody supplied and
+        # nobody could audit.
+        #
+        # A project whose upload carried no forecast never enters this branch
+        # and takes the engine path below exactly as before.
+        try:
+            snapshot = orchestrator.snapshots.get(snapshot_id)
+            network_id = snapshot.network.network_id
+        except Exception as exc:  # noqa: BLE001 - the engine path reports it
+            logger.info("forecast.snapshot_unreadable snapshot=%s error=%s",
+                        snapshot_id, exc)
+            snapshot, network_id = None, ""
+
+        if network_id and uploaded_forecast_store.has(network_id):
+            # The upload's own horizon, not this endpoint's default. Truncating
+            # a twelve-period forecast to six would discard half of the file
+            # the user is being shown their own numbers from. An explicit
+            # ?horizon= still wins.
+            if request.args.get("horizon") is None:
+                stated = len(uploaded_forecast_store.periods(network_id))
+                horizon = max(1, min(stated, 24)) or horizon
+            logger.info(
+                "forecast.uploaded project_id=%s network_id=%s horizon=%d",
+                project_id, network_id, horizon)
+            return jsonify(_uploaded_forecast_payload(
+                project_id, snapshot_id, network_id, horizon, snapshot)), 200
 
         # Signals the client uploaded WITH this network, handed to the
         # forecaster through the orchestrator's own routing.
@@ -416,6 +607,9 @@ def create_forecast_blueprint(orchestrator: Optional[Orchestrator] = None,
             "snapshot_id": snapshot_id,
             "execution_id": response.execution_id,
             "status": "OK",
+            #: "uploaded" or "model". Stated on both paths so a consumer never
+            #: has to infer which one answered from the absence of a field.
+            "forecast_source": "model",
             "horizon": horizon,
             "series": series,
             # The forecast's own grounded briefing, FORECAST-scoped, from the
@@ -440,6 +634,8 @@ def create_forecast_blueprint(orchestrator: Optional[Orchestrator] = None,
                 # than as a bare False, which said nothing about the words.
                 "llm_used": False,
                 "explanation_source": explanation.get("source") or "template",
+                #: This forecast was computed by the engines named above.
+                "recalculated": True,
             },
         }), 200
 

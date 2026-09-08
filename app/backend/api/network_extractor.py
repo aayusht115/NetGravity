@@ -157,6 +157,50 @@ COST_TYPE_COLS = ("cost_type", "cost_category", "expense_type")
 EFFECTIVE_DATE_COLS = ("effective_date", "valid_from", "effective_from", "as_of")
 CURRENCY_COLS = ("currency", "ccy", "rate_currency", "currency_code")
 
+#: A forecast that ARRIVED WITH THE UPLOAD, rather than one this build
+#: produced. Deliberately disjoint from `DEMAND_COLS`: a projection read as an
+#: observation becomes the network's current demand and is then solved against
+#: as if it had already happened.
+#:
+#: `Forecast_Units` matched no alias at all, so a forecast sheet fell past every
+#: branch of `classify_sheet` to "markets" — and its rows overwrote the real
+#: market master, replacing stated names, SLAs and uploaded coordinates with a
+#: bare market id and a hash-grid position. A sheet headed `Quantity`, `Units`
+#: or `Volume` was worse: those ARE demand aliases, so the projection was read
+#: as observed history, set every market's current demand from a future period,
+#: and was handed to the forecasting engine as the history to fit.
+FORECAST_COLS = ("forecast_units", "forecast_quantity", "forecast",
+                 "forecast_demand", "forecast_volume", "forecast_qty",
+                 "projected_demand", "projected_units", "projected_volume",
+                 "planned_demand", "planned_units")
+#: The band, when the upload states one. Absent is absent: a forecast with no
+#: stated bounds is drawn as a line, never as a band this build invented for it.
+FORECAST_P10_COLS = ("forecast_p10", "p10", "forecast_low", "forecast_lower",
+                     "low", "lower_bound")
+FORECAST_P50_COLS = ("forecast_p50", "p50", "forecast_median", "median")
+FORECAST_P90_COLS = ("forecast_p90", "p90", "forecast_high", "forecast_upper",
+                     "high", "upper_bound")
+
+#: Words in a SHEET NAME that say the table is a projection, and words that say
+#: it is not. Used only to break one tie: a sheet whose quantity column is
+#: named `Quantity`, `Units` or `Volume` is identical to demand history in its
+#: column signature, and nothing else can separate the two.
+#:
+#: Columns decide everywhere else, and that stays true — this fires only when
+#: the columns have already been read as `demand_history`. It is a deliberate
+#: trade between two failure modes. Reading a forecast as history is silent and
+#: corrupts the solve: it sets every market's current demand from a future
+#: period and hands the projection to the forecaster as the history to fit.
+#: Reading history as a forecast is loud — the screen says "uploaded forecast"
+#: and the model reports no history — so it is caught in seconds. The decision
+#: is recorded as a note either way, so it is never silent in either direction.
+_FORECAST_NAME_WORDS = ("forecast", "projection", "projected", "plan",
+                        "planned", "outlook", "budget")
+#: Beats the words above: a sheet named `Actual_vs_Forecast` states both, and a
+#: table holding actuals must never be reclassified off its own column meaning.
+_OBSERVED_NAME_WORDS = ("actual", "history", "historic", "observed", "vs",
+                        "versus")
+
 #: ISO 4217 codes this build recognises when a header names its unit, e.g.
 #: `Monthly_Cost_USD`. Deliberately a closed list: a three-letter suffix that
 #: is not a currency (`Facility_ID_XYZ`) must not be read as one.
@@ -361,7 +405,24 @@ def infer_geography(nodes: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def classify_sheet(df: "pd.DataFrame") -> str:
+def names_a_forecast(sheet_name: str) -> bool:
+    """
+    True when a sheet's NAME says it holds a projection and nothing says
+    otherwise.
+
+    Both lists must be consulted: `Actual_vs_Forecast` contains "forecast" and
+    is not a forecast table, and a sheet that states both is exactly the one
+    whose columns must be trusted instead.
+    """
+    text = str(sheet_name or "").lower()
+    if not text:
+        return False
+    if any(w in text for w in _OBSERVED_NAME_WORDS):
+        return False
+    return any(w in text for w in _FORECAST_NAME_WORDS)
+
+
+def classify_sheet(df: "pd.DataFrame", sheet_name: str = "") -> str:
     """
     Decide what one sheet *is*, from its column signature.
 
@@ -374,13 +435,39 @@ def classify_sheet(df: "pd.DataFrame") -> str:
 
     Order matters: the time-series sheets are checked before the master sheets
     they share an id column with.
+
+    `sheet_name` is consulted for exactly one decision — see
+    `_FORECAST_NAME_WORDS` — and is optional, so every existing caller keeps
+    working and every sheet is still identified by its columns first.
     """
     cols = {str(c).strip().lower() for c in df.columns}
     has = lambda *n: any(x in cols for x in n)  # noqa: E731
 
     # --- time series first (they share id columns with the master tables) ---
     if has(*PERIOD_COLS):
+        # An UPLOADED forecast is checked before demand history, and only when
+        # the sheet states no demand column. The two share Period and Market_ID
+        # entirely, so nothing but the quantity column tells them apart.
+        #
+        # A sheet carrying both states actuals and a projection side by side. It
+        # stays `demand_history` — the observed half must never be lost to the
+        # forecast branch — and the forecast pass in
+        # `build_network_from_dataframes` reads the extra column off it, so
+        # neither half is discarded.
+        if has(*MARKET_ID_COLS) and has(*FORECAST_COLS) and not has(*DEMAND_COLS):
+            return "uploaded_forecast"
         if has(*MARKET_ID_COLS) and has(*DEMAND_COLS):
+            # `Period | Market_ID | Quantity` is what a forecast looks like
+            # when its quantity column happens to be named with a demand
+            # alias. The columns cannot separate the two; the sheet's own name
+            # can, and only when it says one thing unambiguously.
+            #
+            # A sheet stating a forecast column AND a demand column is exempt:
+            # it has already said it is both, and no name may collapse it to
+            # one. `Demand_Plan` reads as a projection to the name test, which
+            # would have discarded the actuals sitting in the column beside it.
+            if not has(*FORECAST_COLS) and names_a_forecast(sheet_name):
+                return "uploaded_forecast"
             return "demand_history"
         if has(*FACILITY_ID_COLS):
             return "capacity_history"
@@ -492,6 +579,15 @@ _COLUMN_ROLES: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
         ("Product ID", PRODUCT_ID_COLS),
         ("Demand quantity", DEMAND_COLS),
     ),
+    "uploaded_forecast": (
+        ("Period", PERIOD_COLS),
+        ("Market ID", MARKET_ID_COLS),
+        ("Product ID", PRODUCT_ID_COLS),
+        ("Forecast quantity", FORECAST_COLS),
+        ("Forecast P10", FORECAST_P10_COLS),
+        ("Forecast P50", FORECAST_P50_COLS),
+        ("Forecast P90", FORECAST_P90_COLS),
+    ),
     "capacity_history": (
         ("Facility ID", FACILITY_ID_COLS),
         ("Period", PERIOD_COLS),
@@ -534,6 +630,7 @@ SHEET_TEMPLATE_NAMES: Dict[str, str] = {
     "lanes": "Lanes",
     "products": "Products",
     "demand_history": "Demand_History",
+    "uploaded_forecast": "Forecast",
     "capacity_history": "Capacity_History",
     "lane_rates": "Lane_Rates",
     "warehouse_costs": "Warehouse_Costs",
@@ -718,6 +815,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
     products: List[Dict[str, Any]] = []
     demand_history: List[Dict[str, Any]] = []
     capacity_history: List[Dict[str, Any]] = []
+    uploaded_forecast: List[Dict[str, Any]] = []
     signals: List[Dict[str, Any]] = []
     notes: List[str] = []
 
@@ -728,8 +826,15 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
     # Classify every sheet up front so each is read exactly once, in an order
     # that lets later passes join onto earlier ones.
     by_role: Dict[str, List[Tuple[str, pd.DataFrame]]] = {}
+    #: Sheets whose NAME, not their columns, decided they were a forecast.
+    #: Recorded so the decision appears in the notes rather than being taken
+    #: silently — it is the one place a name overrides a column signature.
+    named_as_forecast: List[str] = []
     for sheet_name, df in tables.items():
-        by_role.setdefault(classify_sheet(df), []).append((sheet_name, df))
+        role = classify_sheet(df, sheet_name)
+        if role == "uploaded_forecast" and classify_sheet(df) == "demand_history":
+            named_as_forecast.append(str(sheet_name))
+        by_role.setdefault(role, []).append((sheet_name, df))
 
     def sheets(role: str):
         return by_role.get(role, [])
@@ -1200,6 +1305,73 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 "used": _num(row, used_col),
             })
 
+    # ---- Uploaded forecast -------------------------------------------
+    # A forecast the upload BROUGHT WITH IT, kept strictly apart from the
+    # observed history above. Read after it, so `current` demand has already
+    # been taken from the latest OBSERVED period and cannot be reached from
+    # here.
+    #
+    # Read from `uploaded_forecast` sheets and from any `demand_history` sheet
+    # that also carries a forecast column, so a table stating actuals and a
+    # projection side by side loses neither half to the other's role.
+    for _, df in sheets("uploaded_forecast") + sheets("demand_history"):
+        cl = {str(c).strip().lower(): c for c in df.columns}
+        qty_col = _pick(cl, *FORECAST_COLS)
+        if qty_col is None:
+            continue
+        period_col = _pick(cl, *PERIOD_COLS)
+        mkt_col = _pick(cl, *MARKET_ID_COLS)
+        prod_col = _pick(cl, *PRODUCT_ID_COLS)
+        p10_col = _pick(cl, *FORECAST_P10_COLS)
+        p50_col = _pick(cl, *FORECAST_P50_COLS)
+        p90_col = _pick(cl, *FORECAST_P90_COLS)
+        for _, row in df.iterrows():
+            m_id, qty = _text(row, mkt_col), _num(row, qty_col)
+            if not m_id or qty is None:
+                continue
+            uploaded_forecast.append({
+                "period": _text(row, period_col),
+                "marketId": m_id,
+                "productId": _text(row, prod_col) or None,
+                "mean": qty,
+                # None, never widened and never invented. A band the upload
+                # does not state is a claim about uncertainty nobody made.
+                "p10": _num(row, p10_col),
+                "p50": _num(row, p50_col),
+                "p90": _num(row, p90_col),
+            })
+
+    if named_as_forecast:
+        notes.append(
+            "These sheets state a demand-shaped quantity column but are named "
+            "as a projection, so they were read as a forecast rather than as "
+            "observed history: " + ", ".join(named_as_forecast[:6]) + ". Rename "
+            "the sheet, or head the column 'Forecast_Units', if that is wrong."
+        )
+
+    if uploaded_forecast:
+        fc_periods = sorted({r["period"] for r in uploaded_forecast if r["period"]})
+        span = f" ({fc_periods[0]} to {fc_periods[-1]})" if fc_periods else ""
+        notes.append(
+            f"{len(uploaded_forecast)} forecast row(s) across "
+            f"{len(fc_periods)} period(s){span} were read as a PROJECTION. They "
+            f"set no market's current demand, are not part of the observed "
+            f"history, and no model was fitted to them."
+        )
+        # A forecast period that is also an observed period restates something
+        # already measured. Reported, and neither value is dropped: the
+        # observation stays the observation and the forecast stays the forecast.
+        observed_labels = {d["period"] for d in demand_history if d["period"]}
+        overlap = sorted(set(fc_periods) & observed_labels)
+        if overlap:
+            notes.append(
+                f"{len(overlap)} forecast period(s) also appear in the demand "
+                f"history ({', '.join(overlap[:5])}"
+                f"{'…' if len(overlap) > 5 else ''}). The observed value is kept "
+                f"as the observation and the forecast as the forecast; neither "
+                f"was overwritten."
+            )
+
     # ---- External signals --------------------------------------------
     for _, df in sheets("signals"):
         cl = {str(c).strip().lower(): c for c in df.columns}
@@ -1294,6 +1466,10 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         "lanes": lanes,
         "products": products,
         "demandHistory": demand_history,
+        #: A forecast that arrived WITH the upload. Deliberately a separate
+        #: key from `demandHistory`: nothing downstream may read a projection
+        #: as an observation, and one shared key is how that happens.
+        "uploadedForecast": uploaded_forecast,
         "capacityHistory": capacity_history,
         "signals": signals,
         "notes": notes,
@@ -1315,6 +1491,8 @@ _FOREIGN_KEYS: Tuple[Tuple[str, Tuple[str, ...], str, str], ...] = (
     ("lane_rates", PRODUCT_ID_COLS, "products", "product"),
     ("demand_history", MARKET_ID_COLS, "markets", "market"),
     ("demand_history", PRODUCT_ID_COLS, "products", "product"),
+    ("uploaded_forecast", MARKET_ID_COLS, "markets", "market"),
+    ("uploaded_forecast", PRODUCT_ID_COLS, "products", "product"),
     ("capacity_history", FACILITY_ID_COLS, "facilities", "facility"),
     ("warehouse_costs", FACILITY_ID_COLS, "facilities", "facility"),
     ("signals", MARKET_ID_COLS, "markets", "market"),
@@ -1354,7 +1532,7 @@ def _check_referential_integrity(
 
     problems: List[Dict[str, Any]] = []
     for label, df in tables.items():
-        role = classify_sheet(df)
+        role = classify_sheet(df, label)
         cl = {str(c).strip().lower(): c for c in df.columns}
         for fk_role, id_cols, target, noun in _FOREIGN_KEYS:
             if role != fk_role:

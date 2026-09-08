@@ -1226,6 +1226,8 @@ const SHEET_ROLE_LABELS = {
   lanes: 'Read as: lanes',
   products: 'Read as: products',
   demand_history: 'Read as: demand history',
+  uploaded_forecast: 'Read as: forecast supplied in this upload (a projection, '
+    + 'not observed demand)',
   capacity_history: 'Read as: capacity history',
   lane_rates: 'Read as: freight rates',
   signals: 'Read as: external signals',
@@ -1254,6 +1256,7 @@ const ROLE_NOUNS = {
   lanes: 'lanes',
   products: 'products',
   demand_history: 'demand history',
+  uploaded_forecast: 'a supplied forecast',
   capacity_history: 'capacity history',
   lane_rates: 'freight rates',
   signals: 'external signals',
