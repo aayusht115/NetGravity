@@ -914,20 +914,15 @@ class TestTheScreen:
 
     def test_there_is_exactly_one_export_control(self):
         """
-        One button, one format. The PDF is the view as it looks with the
-        filters that produced it named on it, which is the thing a reader
-        circulates; a second format behind a menu was one more click in front
-        of the only one anybody asked for.
+        Two buttons made the reader work out which half each one covered
+        before they could trust either file. There is one, and it is Excel.
         """
         html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
         panel = html[html.index('id="tab-facility-dashboard"'):]
         panel = panel[:panel.index("</section>")]
-        assert panel.count('id="btn-export-pdf"') == 1
-        # The CSV path is gone, not hidden.
-        assert "exportFacilityReport" not in panel
-        assert "btn-export-csv" not in panel
-        assert "btn-export-warehouse" not in panel
-
+        assert panel.count('id="btn-export-xlsx"') == 1
+        assert 'id="btn-export-pdf"' not in panel
+        assert "Export Excel" in panel
 
     def test_the_csv_export_is_gone_not_hidden(self):
         """
@@ -1525,31 +1520,31 @@ class TestTheThreeTiers:
     def test_switching_lens_returns_to_that_lens_whole_population(self):
         """
         A selected site is never carried across: the same name on another lens
-        is a different site or no site at all. Region and Status describe a
-        facility and mean nothing to a corridor.
+        is a different site or no site at all. Region and Status used to be
+        cleared here too; they no longer exist to clear.
         """
         view = _asset("kpi-view.js")
         block = view[view.index("function setDomain(domain)"):]
         block = block[:block.index("\n}")]
-        for cleared in ("view.entityId = null", "view.region = 'all'",
-                        "view.status = 'all'", "view.mode = 'all'"):
+        for cleared in ("view.entityId = null", "view.mode = 'all'",
+                        "view.origin = 'all'", "view.destination = 'all'"):
             assert cleared in block, cleared
 
-    def test_narrowing_cannot_strand_the_reader_inside_a_removed_site(self):
+    def test_the_period_control_is_the_applications_own(self):
         """
-        A filter that removes the site being viewed drops back to the roll-up
-        rather than showing a detail page for a row that is no longer in the
-        population above it.
-
-        Checked at APPLY now: the controls stage, so the moment a narrowing
-        becomes real is the moment it is committed, not the moment a select
-        changes.
+        NOT A SECOND ONE. The KPI screen did not get a period of its own; it
+        got the one that already existed, moved out of the global top bar onto
+        the screen it describes. Same list, same selected period, same
+        re-render — so a period set here and a period set anywhere else are
+        the same period.
         """
         view = _asset("kpi-view.js")
-        block = view[view.index("el('kpi-filters-apply')?.addEventListener"):]
+        block = view[view.index("el('kpi-filter-period')?.addEventListener"):]
         block = block[:block.index("\n  });")]
-        assert "warehouseFacets().entities.some" in block
-        assert "view.entityId = null" in block
+        assert "hooks.selectPeriod" in block
+        app = _asset("app.js")
+        assert "populatePeriods: (select) => populatePeriodSelect(select)" in app
+        assert "state.selectedPeriod = value" in app
 
     def test_the_drill_down_replaces_the_rollup_rather_than_sitting_below_it(self):
         """
@@ -1804,29 +1799,29 @@ class TestTheCorridorLens:
     def test_each_control_means_one_thing(self):
         """
         The Status slot used to be relabelled "Mode" on this lens — one select
-        meaning two different things depending on a tab, which a reader has to
-        check before they can trust it.
+        that meant two different things depending on a tab, which is a control
+        a reader has to check before they can trust it. Each dimension has its
+        own; Status itself is gone, along with Region.
         """
         panel = self._panel()
-        for control in ("kpi-filter-origin", "kpi-filter-dest", "kpi-filter-mode",
-                        "kpi-filter-status", "kpi-filter-region", "kpi-filter-entity"):
+        for control in ("kpi-filter-entity", "kpi-filter-period",
+                        "kpi-filter-origin", "kpi-filter-dest", "kpi-filter-mode"):
             assert f'id="{control}"' in panel, control
-        view = _asset("kpi-view.js")
-        # No renaming of a control's label at runtime any more.
-        assert "label.textContent = 'Mode'" not in view
+        for gone in ("kpi-filter-region", "kpi-filter-status"):
+            assert f'id="{gone}"' not in panel, gone
 
     def test_each_lens_shows_only_the_dimensions_that_describe_it(self):
-        """A corridor has no health band and a facility has no origin."""
+        """A corridor has no facility and a facility has no origin."""
         view = _asset("kpi-view.js")
-        block = view[view.index("function renderControls() {"):]
-        block = block[:block.index("/** What is on screen")]
-        lane = block[block.index("if (isLane) {"):block.index("const facets = warehouseFacets();")]
-        assert "show('kpi-filter-entity-wrap', false)" in lane
-        assert "show('kpi-filter-status-wrap', false)" in lane
-        assert "show('kpi-filter-origin-wrap', true)" in lane
-        facility = block[block.index("const facets = warehouseFacets();"):]
-        assert "show('kpi-filter-origin-wrap', false)" in facility
-        assert "show('kpi-filter-mode-wrap', false)" in facility
+        fn = view[view.index("function renderControls() {"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "show('kpi-filter-entity-wrap', !isLane)" in fn
+        assert "show('kpi-filter-origin-wrap', isLane)" in fn
+        assert "show('kpi-filter-dest-wrap', isLane)" in fn
+        # A network whose corridors state no mode has nothing to filter by,
+        # and a network stating one period has nothing to choose between.
+        assert "facets.modes.length > 0" in fn
+        assert "period.options.length > 1" in fn
 
     def test_origin_and_destination_are_dependent(self):
         """
@@ -1841,30 +1836,37 @@ class TestTheCorridorLens:
         assert "view.origin === 'all'" in block
 
     def test_a_narrowing_clears_a_pair_that_can_no_longer_exist(self):
-        """Choosing an origin can leave the destination naming a corridor the
-        narrowed set no longer contains, so the panel re-offers only what is
-        reachable before the reader commits."""
-        view = _asset("kpi-view.js")
-        start = view.index("el('kpi-filter-origin')?.addEventListener")
-        block = view[start:view.index("\n  });", start)]
-        assert "staged.destination = 'all'" in block
-        assert "renderControls()" in block
-
-    def test_there_is_no_single_lane_or_period_control(self):
         """
-        Origin and destination together already narrow to one corridor and
-        degrade gracefully on the way; a single-lane control would leave three
-        panels saying less than the table row the reader came from.
-
-        And a flow row carries no per-period breakdown, so a period control
-        would show the same figures whichever period was chosen — the dead
-        control this product refuses to ship.
+        Picking an origin leaves only the destinations something actually runs
+        to from there. A destination already chosen that is not among them is
+        dropped, rather than left naming a corridor this pair has no route on
+        — which would show an empty table under two controls that both look
+        set correctly.
         """
-        panel = self._panel()
-        assert 'id="kpi-filter-lane"' not in panel
-        assert 'id="kpi-filter-lane-period"' not in panel
         view = _asset("kpi-view.js")
-        assert "view.period" not in view
+        block = view[view.index("el('kpi-filter-origin')?.addEventListener"):]
+        block = block[:block.index("\n  });")]
+        assert "view.destination = 'all'" in block
+        assert "laneFacets().destinations" in block
+
+    def test_it_narrows_in_both_directions(self):
+        """
+        The reverse was not covered and is the same failure: choosing a
+        destination first has to narrow the origins to the ones that reach it.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("el('kpi-filter-dest')?.addEventListener"):]
+        block = block[:block.index("\n  });")]
+        assert "view.origin = 'all'" in block
+        assert "laneFacets().origins" in block
+
+    def test_a_mode_can_remove_both_ends(self):
+        """Switching to Rail can leave a road-only pair naming nothing."""
+        view = _asset("kpi-view.js")
+        block = view[view.index("el('kpi-filter-mode')?.addEventListener"):]
+        block = block[:block.index("\n  });")]
+        assert "view.origin = 'all'" in block
+        assert "view.destination = 'all'" in block
 
 
 class TestTheBriefingStatesAFinding:
@@ -1968,40 +1970,108 @@ class TestOneFigureMeansOneThing:
 
 
 class TestTheExport:
+    """
+    EXCEL, NOT THE PDF IT REPLACES.
+
+    The PDF was the screen as it looks, which is the right artefact for
+    circulating a conclusion and the wrong one for the question this button is
+    actually pressed to answer: somebody wants these figures in a model of
+    their own, and a picture of a table has to be retyped.
+    """
+
+    def test_the_button_asks_the_service_for_a_workbook(self):
+        view = _asset("kpi-view.js")
+        assert "el('btn-export-xlsx')?.addEventListener" in view
+        assert "exportKpiViewToExcel" in view
+        block = view[view.index("export async function exportKpiViewToExcel("):]
+        block = block[:block.index("\n}\n")]
+        assert "kpiService.downloadWorkbook" in block
+        # The bytes are handed to the browser here, as with every other
+        # download on this product.
+        assert "URL.createObjectURL" in block
+
+    def test_it_exports_what_is_on_screen(self):
+        """
+        A workbook built over the whole network while the reader is looking at
+        three southern sites is a confident file about the wrong population —
+        and unlike a chart, a file gets forwarded.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("export async function exportKpiViewToExcel("):]
+        block = block[:block.index("\n}\n")]
+        assert "warehouseFacets().entities" in block
+        assert "lensLabel" in block
+        assert "activeFilterText()" in block
+
+    def test_the_ids_are_a_selection_not_a_source(self):
+        """
+        The client says which rows were on screen; the server reads them out
+        of this project's own solved records. An id the analysis does not
+        contain is dropped rather than trusted.
+        """
+        api = (REPO_ROOT / "app" / "backend" / "api" / "kpis.py").read_text(encoding="utf-8")
+        block = api[api.index("def export_kpi_workbook():"):]
+        block = block[:block.index("\n    @bp.route")]
+        assert "k.facility_id in order" in block
+        assert "build_kpi_workbook" in block
+
+    def test_every_population_on_the_screen_gets_a_sheet(self):
+        book = (REPO_ROOT / "netgravity" / "reporting"
+                / "kpi_workbook.py").read_text(encoding="utf-8")
+        for sheet in ("Cover", "Network", "Facility health",
+                      "Facility cost", "Corridors"):
+            assert f'"{sheet}"' in book, sheet
+
+    def test_an_absent_reading_is_an_empty_cell_and_never_a_zero(self):
+        """
+        A spreadsheet is exactly where that distinction gets lost: a zero sums
+        and an empty cell does not.
+        """
+        book = (REPO_ROOT / "netgravity" / "reporting"
+                / "kpi_workbook.py").read_text(encoding="utf-8")
+        fn = book[book.index("def _num(value: Any)"):]
+        fn = fn[:fn.index("\n\n")]
+        assert "return None" in fn
+        assert "or 0" not in fn
+
+    def test_the_cover_states_what_the_figures_are_of(self):
+        """A workbook outlives the screen it came from."""
+        book = (REPO_ROOT / "netgravity" / "reporting"
+                / "kpi_workbook.py").read_text(encoding="utf-8")
+        fn = book[book.index("def _cover("):]
+        fn = fn[:fn.index("\ndef ")]
+        for field in ("Project", "View", "Filters applied", "Horizon",
+                      "Snapshot", "Exported"):
+            assert f'"{field}"' in fn, field
+
+
+class TestTheScreenStillPrints:
+    """
+    THE BUTTON IS EXCEL; PRINTING IS THE BROWSER'S OWN.
+
+    Ctrl+P is an affordance this application does not own and cannot remove,
+    so what it produces still has to be worth having: the chrome suppressed,
+    the page fitted to the paper, and a header naming the project, the horizon
+    and the filters behind the figures. What went is the BUTTON, which offered
+    a picture of a table to readers who wanted the table.
+    """
 
     def _panel(self) -> str:
         html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
         panel = html[html.index('id="tab-facility-dashboard"'):]
         return panel[:panel.index("</section>")]
 
-    def test_the_export_is_wired(self):
+    def test_the_header_is_filled_whoever_starts_the_print(self):
         """
-        It was not. A block replacement in this module removed the listener
-        along with the menu it belonged to, so the control rendered and did
-        nothing — which is worse than a missing button, because the reader
-        keeps pressing it.
-        """
-        panel = self._panel()
-        assert 'id="btn-export-pdf"' in panel
-        view = _asset("kpi-view.js")
-        assert "el('btn-export-pdf')?.addEventListener" in view
-        assert "exportKpiViewAsPdf()" in view
-
-    def test_the_pdf_is_the_page_itself(self):
-        """
-        The requirement is "exactly the visuals displayed". The thing that IS
-        exactly those visuals is the page — a client-side renderer would
-        re-draw every chart and could drift from what the reader is looking at,
-        which is the class of bug this screen has been spent removing.
+        It used to be filled by the export button, so a Ctrl+P produced the
+        same page with an empty header — figures with no statement of scope.
+        `beforeprint` fires for both.
         """
         view = _asset("kpi-view.js")
-        assert "export function exportKpiViewAsPdf()" in view
-        block = view[view.index("export function exportKpiViewAsPdf()"):]
-        block = block[:block.index("\n}")]
-        assert "window.print()" in block
-        # An open explanation floats OVER a chart, so printing with it open
-        # would hide the visual it describes.
-        assert "closeKpiExplainPanels()" in block
+        assert "beforeprint" in view
+        assert "renderPrintHeader" in view
+        # And no button calls a function of its own any more.
+        assert "exportKpiViewAsPdf" not in view
 
     def test_the_printed_copy_states_what_produced_it(self):
         """A PDF that does not name the project, the horizon and the filters
@@ -2190,12 +2260,17 @@ class TestAMissingFlowIsNotAZeroFlow:
         assert "report none" in block
         assert "report no volume" in block
 
-class TestTheFilterPanel:
+class TestTheFilterRow:
     """
-    Three loose selects read as a form, and each one re-solved the screen the
-    moment it changed — so narrowing by region and then by status redrew
-    everything twice, and the reader watched the page move under a decision
-    they had not finished making.
+    THE PANEL IS GONE, AND SO IS THE DOOR IN FRONT OF IT.
+
+    The controls lived behind a "Filters" trigger that opened an elevated
+    panel and committed on Apply. Two clicks and a decision stood between a
+    reader and the only question the bar answers — which sites, which period —
+    and with the panel shut the screen's scope was a number on a chip.
+
+    Staging earned its keep at six controls. At the three a lens now carries
+    it buys nothing, so each control writes to the view and redraws.
     """
 
     def _panel(self) -> str:
@@ -2203,69 +2278,58 @@ class TestTheFilterPanel:
         panel = html[html.index('id="tab-facility-dashboard"'):]
         return panel[:panel.index("</section>")]
 
-    def test_the_controls_live_in_one_elevated_panel(self):
+    def test_the_controls_are_on_the_bar(self):
         panel = self._panel()
-        for part in ("kpi-filters-trigger", "kpi-filters-panel",
-                     "kpi-filters-apply", "kpi-filter-reset"):
+        for part in ("kpi-filter-row", "kpi-filter-entity", "kpi-filter-period",
+                     "kpi-filter-origin", "kpi-filter-dest", "kpi-filter-mode"):
             assert part in panel, part
-        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
-        block = css[css.index(".kpi-filters-panel {"):]
-        block = block[:block.index("}")]
-        assert "box-shadow: var(--shadow-lg)" in block
 
-    def test_nothing_moves_until_apply(self):
-        """The whole point: set three things, see the consequence once."""
+    def test_there_is_no_trigger_no_panel_and_no_apply(self):
+        panel = self._panel()
+        for gone in ("kpi-filters-trigger", "kpi-filters-panel",
+                     "kpi-filters-apply", "kpi-filters-count"):
+            assert gone not in panel, gone
         view = _asset("kpi-view.js")
-        for control in ("kpi-filter-entity", "kpi-filter-region", "kpi-filter-status"):
+        for gone in ("staged.", "stageFromView", "renderFilterTrigger", "openPanel"):
+            assert gone not in view, gone
+
+    def test_every_control_applies_as_it_is_set(self):
+        view = _asset("kpi-view.js")
+        for control in ("kpi-filter-entity", "kpi-filter-origin",
+                        "kpi-filter-dest", "kpi-filter-mode"):
             start = view.index(f"el('{control}')?.addEventListener")
             block = view[start:view.index("\n  });", start)]
-            assert "staged." in block, control
-            # A staging control must not redraw the screen behind the panel.
-            assert "applyView()" not in block, control
-        commit = view[view.index("el('kpi-filters-apply')?.addEventListener"):]
-        commit = commit[:commit.index("\n  });")]
-        assert "applyView()" in commit
+            assert "applyView()" in block, control
 
-    def test_the_panel_opens_on_what_is_actually_on_screen(self):
-        """An abandoned edit must not leak into the next one."""
+    def test_region_and_status_are_gone_entirely(self):
+        """
+        Region duplicated a narrowing the facility list already makes visible.
+        Status filtered a screen whose entire top half exists to report status
+        — hiding the tight sites is the one thing a reader of a capacity
+        screen never wants.
+        """
+        panel = self._panel()
+        assert 'id="kpi-filter-region"' not in panel
+        assert 'id="kpi-filter-status"' not in panel
         view = _asset("kpi-view.js")
-        block = view[view.index("const openPanel = (open) =>"):]
-        block = block[:block.index("\n  };")]
-        assert "stageFromView()" in block
+        assert "view.region" not in view
+        assert "view.status" not in view
 
-    def test_clicking_away_abandons_rather_than_half_applies(self):
+    def test_the_facility_control_is_named_for_its_bucket(self):
+        """"Facility" over a list of plants is the generic word for the thing
+        the tab above has already narrowed."""
         view = _asset("kpi-view.js")
-        assert "if (!el('kpi-filters')?.contains(e.target)) openPanel(false);" in view
+        block = view[view.index("const label = el('kpi-filter-entity-label');"):]
+        block = block[:block.index("\n  }")]
+        assert "'Plant'" in block
+        assert "'Distribution centre'" in block
 
-    def test_the_closed_control_says_what_is_active(self):
-        """A filtered screen has to say it is filtered with the panel shut."""
-        view = _asset("kpi-view.js")
-        assert "function renderFilterTrigger()" in view
-        block = view[view.index("function renderFilterTrigger()"):]
-        block = block[:block.index("\n}")]
-        assert "activeFilterCount()" in block
-        # It names the selections, not just a count.
-        assert "endpointName(view.origin)" in block
-        assert "view.region" in block
-
-    def test_reset_clears_both_the_edit_and_the_view(self):
-        """There is no half-reset state to be surprised by."""
+    def test_reset_clears_the_view_and_the_period(self):
         view = _asset("kpi-view.js")
         block = view[view.index("el('kpi-filter-reset')?.addEventListener"):]
         block = block[:block.index("\n  });")]
-        assert "stageFromView()" in block
-        assert "view.region = 'all'" in block
+        assert "view.entityId = null" in block
         assert "applyView()" in block
-
-    def test_the_panel_does_not_print(self):
-        """A control nobody can click, on paper. The header carries the
-        selections instead."""
-        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
-        rule = ".kpi-filters-panel, .kpi-filters-trigger { display: none !important; }"
-        assert rule in css
-        # There is more than one print block in this sheet, so the check is
-        # that the rule sits inside one — not inside the last one.
-        assert css.index("@media print {") < css.index(rule)
 
 
 class TestTheAiButtonInvitesWithoutNagging:
@@ -2473,29 +2537,26 @@ class TestTheCorridorDetailStatesAbsence:
         assert "const reportedFlows = connectedLanes" in app_js
 
 
-class TestTheFilterPanelCanActuallyHide:
+class TestTheHiddenAttributeStillWins:
 
     def test_an_author_display_does_not_defeat_the_hidden_attribute(self):
         """
-        `.kpi-filters-panel { display: flex }` BEATS the browser's own
-        `[hidden] { display: none }`, so the panel was permanently visible
-        however the attribute was set — through Apply, through clicking away,
-        through a reload.
+        An author `display` BEATS the browser's own `[hidden] { display: none }`.
+        The panel this was written for is gone, but every control on the row
+        is toggled by `hidden` or by `style.display`, so the rule still has to
+        be there — and it is written once for the file rather than per
+        component.
         """
         css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
         assert "[hidden] { display: none !important; }" in css
 
     def test_the_controls_sit_side_by_side(self):
-        """A column of six was taller than the charts it was filtering, and
-        the Apply button fell below the fold."""
+        """A column of controls was taller than the charts it was filtering."""
         css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
-        block = css[css.index(".kpi-filters-panel {"):]
+        block = css[css.index(".kpi-filter-row {"):]
         block = block[:block.index("}")]
         assert "flex-wrap: wrap" in block
         assert "flex-direction: column" not in block
-        # An absolutely positioned wrapping flex container shrink-wraps to its
-        # widest item, not the sum — which stacked them anyway.
-        assert "width: max-content" in block
 
 
 class TestTheOverlayLeavesTheChartReadable:

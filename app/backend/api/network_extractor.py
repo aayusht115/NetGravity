@@ -125,6 +125,43 @@ def _has(cols_lower: Dict[str, Any], *names: str) -> bool:
     return any(n in cols_lower for n in names)
 
 
+#: Fixed-cost column names that state a YEAR, and ones that state a MONTH.
+#:
+#: The extractor accepted all of these into one field and the assembler
+#: multiplied every one of them by twelve, on the convention that these
+#: workbooks quote a monthly figure. For a column literally named
+#: `annual_fixed_cost` that is a TWELVEFOLD OVERSTATEMENT — and the
+#: assumption line it wrote said so out loud without noticing: "fixed cost
+#: read as ₹30,000,000/month and annualised to ₹360,000,000/year", for a
+#: column whose header was the word annual.
+#:
+#: On a single-period solve the effect lands whole: the year's fixed cost is
+#: charged as one month's, so opening one distribution centre on a network
+#: costing ₹23M a month added ₹31M and the screen reported +134%.
+_FIXED_COST_YEARLY = ("annual_fixed_cost", "fixed_cost_per_year",
+                      "fixed_cost_annual", "yearly_fixed_cost",
+                      "fixed_cost_yearly")
+_FIXED_COST_MONTHLY = ("fixed_cost_monthly", "fixed_cost_per_month",
+                       "monthly_fixed_cost")
+
+
+def _fixed_cost_basis(column: Any) -> str:
+    """
+    'year', 'month', or 'unknown' — what the header itself claims.
+
+    UNKNOWN IS NOT A GUESS. A bare `fixed_cost` states no period, and the
+    convention in these workbooks is a monthly figure, so it is still
+    annualised; the difference is that the assumption line says the header
+    named no period, which is the sentence that gets the column renamed.
+    """
+    name = str(column or "").strip().lower().replace(" ", "_")
+    if name in _FIXED_COST_YEARLY or "year" in name or "annual" in name:
+        return "year"
+    if name in _FIXED_COST_MONTHLY or "month" in name:
+        return "month"
+    return "unknown"
+
+
 #: Column aliases, kept in one place so a new client dialect is a one-line
 #: change rather than an edit scattered through the parsing branches.
 FACILITY_ID_COLS = ("facility_id", "plant_id", "dc_id", "site_id", "node_id", "warehouse_id")
@@ -914,6 +951,10 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 # plants together came to more than twice the fixed cost the
                 # network reported. Both stay None when the column is absent.
                 "fixedCost": _num(row, fixed_col),
+                # WHAT PERIOD THAT FIGURE IS FOR, from the column's own name.
+                # Carried rather than inferred downstream, because the
+                # assembler cannot see the header this came out of.
+                "fixedCostBasis": _fixed_cost_basis(fixed_col),
                 "handlingCost": _num(row, handling_col),
                 # One-time cost to open, for a site that is not open yet. None
                 # when the sheet states none — NOT zero, which the solver would

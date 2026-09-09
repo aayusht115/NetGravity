@@ -301,6 +301,86 @@ def test_fixed_cost_annualisation_is_stated(normalised_tables):
     assert any("annualised" in a and "F004" in a for a in assumptions)
 
 
+def _facilities_with_fixed_cost_column(column: str, amount: float):
+    """One DC and one market, with the fixed-cost column named as given."""
+    return {
+        "Facilities": pd.DataFrame([
+            ("F001", "A DC", "DC", "Delhi", 28.7, 77.1, 1000, amount, "Existing"),
+        ], columns=["Facility_ID", "Facility_Name", "Facility_Type", "City",
+                    "Latitude", "Longitude", "Capacity_Units", column, "Status"]),
+        "Markets": pd.DataFrame([
+            ("M001", "A market", "Delhi", 28.7, 77.1, 500),
+        ], columns=["Market_ID", "Market_Name", "City", "Latitude",
+                    "Longitude", "Demand_Units"]),
+        "Lanes": pd.DataFrame([
+            ("F001", "M001", 10.0, 100.0, 1),
+        ], columns=["Origin_ID", "Destination_ID", "Cost_Per_Unit",
+                    "Distance_KM", "Transit_Days"]),
+    }
+
+
+class TestAnAnnualFixedCostIsNotMultipliedByTwelve:
+    """
+    THE TWELVEFOLD OVERSTATEMENT.
+
+    The assembler multiplied every fixed cost by twelve, on the convention
+    that these workbooks quote a monthly figure — including columns named
+    `Annual_Fixed_Cost` and `fixed_cost_per_year`, which the extractor accepts
+    into the very same field. The assumption line it wrote said so out loud
+    without noticing: "fixed cost read as ₹30,000,000/month and annualised to
+    ₹360,000,000/year", for a column whose header was the word annual.
+
+    On a single-period solve the error lands whole, because the engine charges
+    one twelfth of the annual figure per month: a year's fixed cost became one
+    month's. Opening one distribution centre on a network costing ₹23M a month
+    added ₹31M, and the comparison reported a cost increase of 134%.
+    """
+
+    def test_a_column_that_says_annual_is_used_unchanged(self):
+        tables = _facilities_with_fixed_cost_column("Annual_Fixed_Cost", 1_200_000)
+        structure = build_network_from_dataframes(tables)
+        network, assumptions, _ = assemble_network_from_structure(
+            structure, network_id="test_net")
+        dc = next(f for f in network.facilities if f.id == "F001")
+        assert dc.fixed_cost_per_year == pytest.approx(1_200_000)
+        assert any("as the column states" in a and "F001" in a for a in assumptions)
+
+    def test_a_column_that_says_monthly_is_annualised(self):
+        tables = _facilities_with_fixed_cost_column("Fixed_Cost_Monthly", 100_000)
+        structure = build_network_from_dataframes(tables)
+        network, assumptions, _ = assemble_network_from_structure(
+            structure, network_id="test_net")
+        dc = next(f for f in network.facilities if f.id == "F001")
+        assert dc.fixed_cost_per_year == pytest.approx(1_200_000)
+        assert any("states a monthly figure" in a for a in assumptions)
+
+    def test_a_column_naming_no_period_keeps_the_convention_and_says_so(self):
+        """
+        Still annualised — that IS the convention these workbooks follow. What
+        changes is that the assumption admits the header named no period,
+        which is the sentence that gets the column renamed.
+        """
+        tables = _facilities_with_fixed_cost_column("Fixed_Cost", 100_000)
+        structure = build_network_from_dataframes(tables)
+        network, assumptions, _ = assemble_network_from_structure(
+            structure, network_id="test_net")
+        dc = next(f for f in network.facilities if f.id == "F001")
+        assert dc.fixed_cost_per_year == pytest.approx(1_200_000)
+        assert any("names no period" in a for a in assumptions)
+
+    def test_the_two_readings_differ_by_exactly_twelve(self):
+        """The size of the bug, held as a number."""
+        annual = _facilities_with_fixed_cost_column("Annual_Fixed_Cost", 600_000)
+        monthly = _facilities_with_fixed_cost_column("Fixed_Cost_Monthly", 600_000)
+        out = []
+        for tables in (annual, monthly):
+            network, _, _ = assemble_network_from_structure(
+                build_network_from_dataframes(tables), network_id="test_net")
+            out.append(next(f for f in network.facilities
+                            if f.id == "F001").fixed_cost_per_year)
+        assert out[1] == pytest.approx(out[0] * 12)
+
+
 def test_upload_without_demand_is_refused_not_defaulted():
     """A network with no demand must not be solved against invented quantities."""
     tables = {

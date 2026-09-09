@@ -86,6 +86,53 @@ export const kpiService = {
     return apiClient.get('/api/kpis/warehouse', params, solveOptions);
   },
 
+  /**
+   * The KPI screen, as a workbook.
+   *
+   * UNLIKE the read methods on this service it THROWS. Those return a failure
+   * as a status the screen renders, because a dashboard must draw something;
+   * a download is a thing a person just asked for, and a button that silently
+   * does nothing is the worst possible answer to a click.
+   *
+   * `scope` carries what is on screen — the sites, the lens and the filters —
+   * so the workbook's cover states the population its figures are of.
+   */
+  async downloadWorkbook(scope = {}, projectId = null) {
+    const id = projectId || getActiveProjectId();
+    return apiClient.download('/api/kpis/export.xlsx',
+      { project_id: id }, {
+        method: 'POST',
+        body: {
+          project_id: id,
+          facility_ids: scope.facilityIds || [],
+          lens_label: scope.lensLabel || '',
+          filters: scope.filters || '',
+          horizon: scope.horizon || '',
+        },
+        timeout: CONFIG.DOCUMENT_TIMEOUT_MS,
+      });
+  },
+
+  /**
+   * How the figures on this screen are calculated, as a .docx.
+   *
+   * Throws, like every other download on this service: a button that
+   * silently does nothing is the worst possible answer to a click.
+   */
+  async downloadMethod(scope = {}, projectId = null) {
+    const id = projectId || getActiveProjectId();
+    return apiClient.download('/api/kpis/method.docx',
+      { project_id: id }, {
+        method: 'POST',
+        body: {
+          project_id: id,
+          facility_ids: scope.facilityIds || [],
+          lens_label: scope.lensLabel || '',
+        },
+        timeout: CONFIG.DOCUMENT_TIMEOUT_MS,
+      });
+  },
+
   async getThresholds() {
     return apiClient.get('/api/kpis/thresholds');
   },

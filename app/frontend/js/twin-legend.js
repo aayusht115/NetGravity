@@ -70,11 +70,11 @@ import { LANES, formatNumber } from './data.js';
  */
 export const NODE_STYLE = {
   plant:  { glyph: '\u{1F3ED}', color: '#6B2FA0', hex3d: 0x6b2fa0,
-            label: 'Plant', radius: 15 },
+            label: 'Plant', radius: 19 },
   dc:     { glyph: '\u{1F3EA}', color: '#2563eb', hex3d: 0x2563eb,
-            label: 'Distribution Centre', radius: 14 },
+            label: 'Distribution Centre', radius: 18 },
   market: { glyph: '\u{1F4E6}', color: '#0891b2', hex3d: 0x0891b2,
-            label: 'Demand Market', radius: 10 },
+            label: 'Demand Market', radius: 13 },
 };
 
 /**
@@ -90,8 +90,16 @@ export const NODE_STYLE = {
  * A FRACTION of the marker rather than an offset from it: a DC's marker grows
  * with its utilisation, and subtracting a constant made the glyph shrink
  * relative to its own circle as the circle grew.
+ *
+ * RAISED AGAIN, to 19/18/13 at 1.15 — a 22px plant, a 21px DC, a 15px market.
+ * The first correction took the glyphs from unreadable to legible-if-you-look;
+ * at the zoom a national network is framed at, telling a plant from a shop
+ * still meant leaning in. The twin is the whole screen now rather than a
+ * 580px band, so the markers have the room — and which KIND of site is where
+ * is the thing a reader scans for, which makes it the thing that should be
+ * readable without effort.
  */
-export const GLYPH_SCALE = 1.05;
+export const GLYPH_SCALE = 1.15;
 
 /** The glyph size for a marker of this radius, in CSS pixels. */
 export function glyphSize(radius) {
@@ -226,7 +234,7 @@ export function twinLegendHtml(perPeriod = 'units/period') {
     ${flowSection}
     <div class="tw-legend-group">
       <div class="tw-legend-title">Distribution centre load
-        <span class="tw-legend-unit">(its ring, and its colour in 3D)</span></div>
+        <span class="tw-legend-unit">(ring, and 3D colour)</span></div>
       <div class="tw-legend-row">
         <span class="tw-legend-ring" style="border-color:#dc2626" aria-hidden="true"></span>
         <span class="tw-legend-label">Critical &mdash; above 95%</span>
@@ -318,7 +326,7 @@ export function scenarioLegendHtml(perPeriod = 'units/period') {
                   stroke-width="3" stroke-dasharray="6 4"/>
           </svg>
         </span>
-        <span>Corridor this plan moves volume on</span>
+        <span class="tw-legend-label">Corridor this plan moves volume on</span>
       </div>
       <div class="tw-legend-row">
         <span class="tw-legend-swatch">
@@ -326,12 +334,12 @@ export function scenarioLegendHtml(perPeriod = 'units/period') {
             <line x1="1" y1="4" x2="25" y2="4" stroke="#94a3b8" stroke-width="3"/>
           </svg>
         </span>
-        <span>Corridor unchanged from today</span>
+        <span class="tw-legend-label">Corridor unchanged from today</span>
       </div>
       <div class="tw-legend-row">
         <span class="tw-legend-swatch"
               style="color:${NODE_STYLE.dc.color};font-weight:800">+</span>
-        <span>Site this scenario adds</span>
+        <span class="tw-legend-label">Site this scenario adds</span>
       </div>
     </div>`;
 }

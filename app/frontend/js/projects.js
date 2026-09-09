@@ -1136,13 +1136,17 @@ export function enterApp({ hydrate = true } = {}) {
       })
       .then((report) => {
         endAnalysisLoading();
-        if (report?.ok) {
-          showProjectNotice(
-            `${report.kpisValid} of ${report.kpisTotal} KPIs computed from `
-            + `snapshot ${report.snapshotId} · ${report.facilities} facilities.`,
-            'success',
-          );
-        }
+        // NOTHING IS ANNOUNCED WHEN IT WORKS.
+        //
+        // This posted "27 of 27 KPIs computed from snapshot snap_9dd1b976fe01
+        // · 7 facilities." across the top of the Overview every time a
+        // project opened. Three of those four facts are plumbing — a KPI
+        // count, an internal snapshot id, a facility count — and the fourth
+        // is that nothing went wrong, which is what the screen full of
+        // figures underneath it already says.
+        //
+        // The failure branches below still speak, because a project with no
+        // network bound looks exactly like one that is merely empty.
       })
       .catch((err) => {
         // A project with no bound network is the ordinary state for a new

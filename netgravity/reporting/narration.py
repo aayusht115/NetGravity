@@ -106,6 +106,18 @@ def allowed_figures(report: Any) -> List[float]:
         for figure in getattr(step, "figures", []) or []:
             texts.append(str(getattr(figure, "value", "") or ""))
             texts.append(str(getattr(figure, "label", "") or ""))
+        # THE ARITHMETIC COUNTS TOO.
+        #
+        # A step's equations carry values the figures table does not always
+        # repeat — the substituted line's operands, a variable's reading for
+        # this network. Without them the verifier struck out any sentence that
+        # walked the reader through the calculation, which is the one thing a
+        # methodology document is written to do.
+        for equation in getattr(step, "equations", []) or []:
+            texts.append(str(getattr(equation, "substituted", "") or ""))
+            texts.append(str(getattr(equation, "note", "") or ""))
+            for variable in getattr(equation, "variables", []) or []:
+                texts.append(str(getattr(variable, "value", "") or ""))
     for line in (getattr(report, "assumptions", []) or []):
         texts.append(str(line))
 

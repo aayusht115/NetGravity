@@ -369,16 +369,39 @@ def assemble_network_from_structure(
 
         fixed = _as_float(raw.get("fixedCost"))
         if fixed is not None and fixed > 0:
-            # The engine wants an annual figure. A monthly cost is the common
-            # convention in these workbooks, so anything that looks like a
-            # monthly figure is annualised — and either way the interpretation
-            # is stated, because reading a yearly cost as monthly would
-            # overstate fixed cost twelvefold.
-            record.fixed_cost_per_year = fixed * 12.0
-            assumptions.append(
-                f"{fid}: fixed cost read as {_money(fixed)}/month and annualised "
-                f"to {_money(record.fixed_cost_per_year)}/year."
-            )
+            # THE ENGINE WANTS AN ANNUAL FIGURE, AND THE COLUMN SAYS WHICH IT
+            # GAVE.
+            #
+            # This multiplied every fixed cost by twelve on the convention
+            # that these workbooks quote a monthly figure — including columns
+            # named `annual_fixed_cost` and `fixed_cost_per_year`, which the
+            # extractor accepts into the same field. That is a twelvefold
+            # overstatement, and on a single-period solve it lands whole: the
+            # year's fixed cost is charged as one month's, so opening one
+            # distribution centre on a network costing ₹23M a month added
+            # ₹31M and the comparison reported +134%.
+            #
+            # The basis comes from the header the figure was read out of. A
+            # header that states no period is still annualised — that IS the
+            # convention — but the assumption says so, which is the sentence
+            # that gets the column renamed.
+            basis = str(raw.get("fixedCostBasis") or "unknown").lower()
+            if basis == "year":
+                record.fixed_cost_per_year = fixed
+                assumptions.append(
+                    f"{fid}: fixed cost read as {_money(fixed)}/year, as the "
+                    f"column states, and used unchanged."
+                )
+            else:
+                record.fixed_cost_per_year = fixed * 12.0
+                stated = ("the column states a monthly figure" if basis == "month"
+                          else "the column names no period, so the monthly "
+                               "convention for these workbooks is applied")
+                assumptions.append(
+                    f"{fid}: fixed cost read as {_money(fixed)}/month "
+                    f"({stated}) and annualised to "
+                    f"{_money(record.fixed_cost_per_year)}/year."
+                )
         facilities.append(record)
 
     for p in plants:

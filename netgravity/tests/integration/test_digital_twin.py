@@ -1385,283 +1385,96 @@ def _js(name: str) -> str:
     return (_FRONTEND / "js" / name).read_text(encoding="utf-8")
 
 
-class TestTheRecommendedChangeIsStated:
+class TestTheTwinShowsTheTwinAndNothingElse:
     """
-    What the algorithm recommends changing about the network, in words, on the
-    two screens a reader looks at: the Digital Twin, and Home's "Needs your
-    attention" card.
+    WHAT WAS TAKEN OFF THIS SCREEN, AND WHY.
 
-    These read the frontend as text. There is no JS engine in this
-    environment, so what can be checked is that the wiring exists and that the
-    honest-absence rules are written into it — the drawing itself was verified
-    in a browser.
+    A toolbar row, a "what the engine recommends changing" strip, a card fixed
+    at 58vh and a strip of per-facility figures underneath it. Between them
+    the map — the entire content of the screen — got about half the window.
+
+    The recommendation is a statement about the PLAN, not about the way the
+    plan is drawn. It belongs to the Overview's findings and to the Scenario
+    Planner, both of which carry it with the evidence behind it; above a map
+    it was a conclusion with nowhere to check it. The figures strip restated
+    the KPI screen, which states the same numbers with their history, their
+    corridors and their bands.
     """
 
-    # -- what counts as a recommended change -------------------------
-
-    def test_the_change_set_comes_from_solved_plans_only(self):
-        js = _js("data.js")
-        block = js[js.index("export function recommendedNetworkChanges()"):]
-        block = block[:block.index("\n}")]
-        assert "SCENARIOS.forEach" in block
-        assert "scn.scenarioFacilities" in block
-        assert "scn.scenarioFlows" in block
-        # Nothing is manufactured for a network without one.
-        assert "DC_DELHI" not in block
-
-    def test_the_baseline_is_not_a_plan(self):
-        """
-        `baselineFromScenarioRecord()` puts the observed network into
-        `SCENARIOS` with `scenarioFacilities` set to `baseline_facilities` —
-        the same object on both sides, so it can never differ from itself.
-        Counting it let a network nobody had run a scenario against report "no
-        change is recommended", which is a conclusion from comparing the
-        network with itself rather than from anything an optimiser decided.
-        """
-        js = _js("data.js")
-        block = js[js.index("export function recommendedNetworkChanges()"):]
-        block = block[:block.index("\n}")]
-        assert "scn.type === 'BASELINE'" in block
-        assert "'SCN_ACTUAL'" in block
-        # ...and that is the id the mapper actually gives it.
-        mapper = (_FRONTEND / "js" / "integration" / "mappers"
-                  / "scenario-mapper.js").read_text(encoding="utf-8")
-        assert "BASELINE_SCENARIO_ID = 'SCN_ACTUAL'" in mapper
-        assert "type: 'BASELINE'" in mapper
-
-    def test_nothing_solved_and_nothing_changed_are_different_answers(self):
-        """
-        Reporting "no change is recommended" for a network nobody has analysed
-        is a conclusion drawn from absence, which is the one thing absence
-        cannot support. Three states, not two.
-        """
-        js = _js("data.js")
-        block = js[js.index("export function recommendedNetworkChanges()"):]
-        block = block[:block.index("\n}")]
-        for status in ("'NO_PLAN'", "'NO_CHANGE'", "'CHANGES'"):
-            assert status in block, status
-        assert "No plan has been solved against this network" in block
-        assert "No change is recommended." in block
-
-    def test_an_unbuilt_candidate_is_neither_a_closure_nor_an_opening(self):
-        """
-        A proposed DC the solver declined to build and a DC the plan shuts both
-        arrive with `isOpen === false`, and they are not the same event.
-        Drawing a stop sign on a warehouse nobody has built yet would report a
-        demolition that is not happening — so a row counts only when the site's
-        state actually moved between that plan's own before and after.
-        """
-        js = _js("data.js")
-        block = js[js.index("export function recommendedNetworkChanges()"):]
-        block = block[:block.index("\n}")]
-        assert "was === true && now === false" in block
-        assert "was === false && now === true" in block
-
-    def test_sub_unit_drift_is_not_a_reroute(self):
-        """Solver noise is not a recommendation to move anything."""
-        js = _js("data.js")
-        block = js[js.index("export function recommendedNetworkChanges()"):]
-        block = block[:block.index("\n}")]
-        assert "Math.abs(shift) < 1" in block
-
-    # -- the twin ----------------------------------------------------
-
-    def test_the_twin_states_it_even_when_there_is_nothing_to_state(self):
-        """
-        "No change is recommended" is a finding. A reader who cannot see it has
-        to guess whether the engine had nothing to say or was never asked.
-        """
+    def _panel(self) -> str:
         html = (_FRONTEND / "index.html").read_text(encoding="utf-8")
         panel = html[html.index('id="tab-twin"'):]
-        panel = panel[:panel.index("</section>")]
-        assert 'id="twin-change-note"' in panel
-        # Above both views: a statement about the PLAN, not about the drawing.
-        assert panel.index("twin-change-note") < panel.index("twin-2d-panel")
-        assert panel.index("twin-change-note") < panel.index("twin-3d-panel")
+        return panel[:panel.index("</section>")]
 
+    def test_the_recommendation_strip_is_gone(self):
+        assert 'id="twin-change-note"' not in self._panel()
         app_js = _js("app.js")
-        block = app_js[app_js.index("function renderRecommendedChangeNote()"):]
-        block = block[:block.index("\n}")]
-        assert "node.hidden = false" in block
-        assert "node.hidden = true" not in block
+        assert "renderRecommendedChangeNote" not in app_js
 
-    def test_the_recommendation_is_not_dressed_as_an_alert(self):
+    def test_the_figures_strip_is_gone(self):
+        assert 'id="twin-metrics"' not in self._panel()
+        app_js = _js("app.js")
+        assert "renderTwinMetrics" not in app_js
+
+    def test_the_reader_is_still_told_what_is_recommended(self):
         """
-        A red strip across the top of the screen every time the engine has a
-        suggestion teaches the reader to ignore the colour. The note is the
-        card surface the rest of the product uses.
-        """
-        css = (_FRONTEND / "css" / "style.css").read_text(encoding="utf-8")
-        assert ".twin-closure-note" not in css
-        block = css[css.index(".twin-change-note {"):]
-        block = block[:block.index("}")]
-        assert "var(--bg-card)" in block
-        assert "var(--red" not in block
-        assert "#fecaca" not in block
-
-        html = (_FRONTEND / "index.html").read_text(encoding="utf-8")
-        assert "twin-closure-note" not in html
-        assert "renderTwinClosureNote" not in _js("app.js")
-
-    def test_one_reader_serves_both_screens(self):
-        """
-        Two screens that could disagree about what was recommended would be
-        worse than one that says nothing.
-
-        The second screen used to be Home's attention card. Home shows three
-        insight tiles now, each carrying the step for ITS OWN finding, and a
-        network-wide "close this, open that" is not one of those - it sits on
-        the Insights page, beside the recommendation it makes concrete. Same
-        function, same sentence, one more screen away.
+        Removed from this screen, not from the product. The Overview's
+        attention card reads the same function.
         """
         app_js = _js("app.js")
         assert "function recommendedChangeSummary(" in app_js
-        for caller in ("function renderRecommendedChangeNote()",
-                       "function renderInsightsPage()"):
-            assert caller in app_js, caller
-        page = app_js[app_js.index("function renderInsightsPage()"):]
-        page = page[:page.index("\n}\n")]
-        assert "recommendedChangeSummary({ quietWhenNothing: true," in page
-        assert "onTwin: false" in page, page
-        assert "insp-rec-change" in page
+        assert app_js.count("recommendedChangeSummary") >= 2
 
-    def test_the_sentence_names_a_screen_the_reader_is_actually_on(self):
-        """
-        The closing clause was the literal "The twin below is the network as
-        it runs today", rendered wherever this summary was drawn - including
-        on Home, which has no twin below it and has not had one since the
-        preview was removed. `onTwin` picks the clause: the Digital Twin keeps
-        the original, and everywhere else says where the twin actually is.
-        """
-        app_js = _js("app.js")
-        block = app_js[app_js.index("function recommendedChangeSummary("):]
-        block = block[:block.index("\n/**")]
-        assert "onTwin = true" in block, block
-        assert "const where = onTwin" in block, block
-        assert "The twin below is the network as it runs today" in block
-        assert "open the Digital Twin to see the network it would" in block
-        # The twin's own caller takes the default, and says so by not passing.
-        note = app_js[app_js.index("function renderRecommendedChangeNote()"):]
-        note = note[:note.index("\n}\n")]
-        assert "recommendedChangeSummary()" in note, note
-
-    def test_a_screen_is_not_told_there_is_nothing_to_do(self):
-        """
-        A reader who has run no plan is not owed a line saying so; the twin
-        states it for the reader who goes looking. `quietWhenNothing` returns
-        null, and the caller renders nothing rather than a reassurance.
-        """
-        app_js = _js("app.js")
-        block = app_js[app_js.index("function recommendedChangeSummary("):]
-        block = block[:block.index("\n/**")]
-        assert "if (quietWhenNothing) return null;" in block
-        page = app_js[app_js.index("function renderInsightsPage()"):]
-        page = page[:page.index("\n}\n")]
-        assert "${change ? `<div class=" in page, page
-
-    def test_the_note_names_the_plan_behind_the_change(self):
-        """"Close this site" without "recommended by what" is a statement the
-        reader cannot check."""
-        app_js = _js("app.js")
-        block = app_js[app_js.index("function recommendedChangeSummary("):]
-        block = block[:block.index("\n/**")]
-        assert "change.plans" in block
-        assert "change.summary" in block
-
-    def test_names_from_an_uploaded_file_are_escaped(self):
-        app_js = _js("app.js")
-        assert "function escAttr(value)" in app_js
-        block = app_js[app_js.index("function escAttr(value)"):]
-        block = block[:block.index("\n}")]
-        assert "&amp;" in block and "&lt;" in block
-        summary = app_js[app_js.index("function recommendedChangeSummary("):]
-        summary = summary[:summary.index("\n/**")]
-        # Every value that came out of an uploaded file: the plan names,
-        # the change sentence (which carries facility names) and the
-        # reason (which carries plan names).
-        assert "change.plans.map(escAttr)" in summary
-        assert "escAttr(change.summary)" in summary
-        assert "escAttr(change.reason)" in summary
-
-    # -- one twin, of one network -----------------------------------
-
-    def test_the_twin_has_no_second_network_to_show(self):
-        """
-        This screen is the twin of the network the client RUNS. A
-        "Recommended" state offering a second one asked the reader to hold two
-        footprints in mind on a screen whose job is to show them one — and what
-        the engine recommends changing is said in words above it, and tested as
-        a scenario in the Scenario Planner.
-        """
-        html = (_FRONTEND / "index.html").read_text(encoding="utf-8")
-        panel = html[html.index('id="tab-twin"'):]
-        panel = panel[:panel.index("</section>")]
-        assert 'id="map-toggle-twin"' not in panel
-        assert 'data-state="recommended"' not in panel
-        assert 'data-state="actual"' not in panel
-        # The 2D/3D toggle is a view of the same network, and stays.
-        assert 'id="twin-view-toggle"' in panel
-        assert 'data-view="2d"' in panel and 'data-view="3d"' in panel
-
-    def test_no_module_still_switches_a_network_state(self):
-        app_js = _js("app.js")
-        for gone in ("setTwin3DState", "setNetworkState", "state.networkState",
-                     "map-toggle-twin"):
-            assert gone not in app_js, gone
-        for gone in ("setTwin3DState", "twin3dState", "closingNow",
-                     "getTwin3DFlowsForState"):
-            assert gone not in _js("twin3d.js"), gone
-        for gone in ("setNetworkState", "stateHasOwnPlan", "getFlowsForState",
-                     "plannedFacilityClosures"):
-            assert gone not in _js("map.js"), gone
-
-    def test_the_corridors_are_the_ones_the_solve_reports(self):
-        """
-        The per-state flow functions manufactured an "optimised" and a
-        "recommended" corridor set by scaling three named prototype lanes —
-        multipliers that came from nobody's optimiser and matched no id in an
-        uploaded network, so all three toggles already drew identical corridors
-        while claiming to show three different plans. Both are gone with the
-        state that called them.
-        """
-        import re
-
-        # Code only. Both files still NAME those lanes, in the comment
-        # that records why the function went — which is the paragraph a
-        # reader needs when they wonder where the toggle used to lead.
-        def code_only(text):
-            text = re.sub(r"/\*.*?\*/", " ", text, flags=re.S)
-            return re.sub(r"//[^\n]*", " ", text)
-
-        for name in ("twin3d.js", "map.js"):
-            js = code_only(_js(name))
-            assert "PLT_BADDI" not in js, name
-            assert "DC_KOLKATA" not in js, name
-            # ...and nothing scales a solved lane volume by a literal.
-            assert not re.search(r"flow\s*\*\s*[01]\.\d", js), name
-        twin = _js("twin3d.js")
-        block = twin[twin.index("function setupFlowArcs()"):]
-        block = block[:block.index("\n}")]
-        assert "const flowData = LANES;" in block
-
-    def test_the_change_note_no_longer_promises_a_mark_on_the_twin(self):
-        """It said "sites it closes are marked on the twin in slate". Nothing
-        is marked any more, and a note describing a signal that is not there is
-        worse than no note."""
-        app_js = _js("app.js")
-        block = app_js[app_js.index("function recommendedChangeSummary("):]
-        block = block[:block.index("\n/**")]
-        assert "marked on the twin" not in block
-        assert "the network as it runs today" in block
-
-    def test_the_closure_colours_went_with_the_state_that_used_them(self):
-        twin = _js("twin3d.js")
-        block = twin[twin.index("const THEME_COLORS = {"):]
-        block = block[:block.index("};")]
-        assert "closing:" not in block and "closingRing:" not in block
-        assert "flowOptim" not in block and "flowRecom" not in block
+    def test_the_map_fills_the_stage(self):
         css = (_FRONTEND / "css" / "style.css").read_text(encoding="utf-8")
-        assert ".hud-badge.closing" not in css
+        stage = css[css.index(".twin-stage {"):]
+        stage = stage[:stage.index("}")]
+        assert "100vh" in stage
+        assert "--global-topbar-h" in stage
+        # The panel defers to the stage rather than carrying its own clamp.
+        # Comments stripped first: the rule explains what it replaced, and the
+        # phrase being asserted absent is named in that explanation.
+        import re
+        panel = css[css.index("#tab-twin .twin-view-panel {"):]
+        panel = panel[:panel.index("}")]
+        declarations = re.sub(r"/\*.*?\*/", "", panel, flags=re.S)
+        assert "clamp(" not in declarations
+        assert "height: 100%" in declarations
+
+    def test_the_two_three_d_toggle_sits_on_the_title_row(self):
+        html = (_FRONTEND / "index.html").read_text(encoding="utf-8")
+        actions = html.index('id="sub-topbar-actions"')
+        title = html.index('id="sub-topbar-title-wrap"')
+        bar = html.index('id="app-sub-topbar"')
+        assert bar < title < actions
+        assert 'id="twin-view-toggle"' in html[actions:actions + 600]
+
+    def test_the_key_docks_at_the_foot_and_opens_upward(self):
+        panel = self._panel()
+        assert 'id="twin-legend-dock"' in panel
+        assert 'id="twin-legend-toggle"' in panel
+        css = (_FRONTEND / "css" / "style.css").read_text(encoding="utf-8")
+        dock = css[css.index(".tw-legend-dock {"):]
+        dock = dock[:dock.index("}")]
+        assert "bottom:" in dock
+        # The open panel is ordered ABOVE the handle, which is what makes it
+        # rise over the map instead of dropping out of the card.
+        opened = css[css.index(".tw-legend-dock-panel {"):]
+        opened = opened[:opened.index("}")]
+        assert "order: -1" in opened
+
+    def test_the_handle_shows_the_glyphs_the_map_draws(self):
+        """
+        Built from `NODE_STYLE`, so the three symbols on the handle are the
+        three symbols on the map by construction.
+        """
+        app_js = _js("app.js")
+        block = app_js[app_js.index("function initTwinLegendDock()"):]
+        block = block[:block.index("\nfunction ")]
+        assert "NODE_STYLE" in block
+        assert "'plant', 'dc', 'market'" in block
+        assert "NODE_STYLE" in app_js[:app_js.index("\n\n")] or \
+            "NODE_STYLE } from './twin-legend.js'" in app_js
 
 
 class TestTheRecommendationCardScrolls:
@@ -1680,10 +1493,20 @@ class TestTheRecommendationCardScrolls:
         block = block[:block.index("\n}")]
         assert "position: sticky" in block
         assert "overflow-y: auto" in block
-        # Bounded to the viewport, and by the same offset it is stuck at, so
-        # the card never runs off the bottom edge.
-        assert "max-height: calc(100vh - 32px)" in block
-        assert "top: 16px" in block
+        # BOUNDED BELOW THE BAR IT IS PINNED UNDER.
+        #
+        # It was `calc(100vh - 32px)`, which is the viewport less the offset
+        # it used to be stuck at. It is stuck below the top bar now, so the
+        # bound has to subtract the same measured bar height the offset does —
+        # otherwise the card is exactly one top bar too tall and its last
+        # section sits below the fold with nothing to scroll it into view.
+        assert "max-height: calc(100vh - var(--global-topbar-h" in block
+        assert "top: calc(var(--global-topbar-h" in block
+        # `top: 16px` is what this used to assert, and it is precisely the
+        # defect: sixteen pixels from the top of the SCROLLPORT is behind the
+        # sticky top bar, so the card's heading scrolled underneath it and
+        # stayed there.
+        assert "top: 16px" not in block
 
     def test_a_wheel_that_reaches_the_end_stops_there(self):
         """Chaining to the page underneath would scroll the comparison table
@@ -1778,9 +1601,13 @@ class TestClickingANodeOpensItsDiagnostics:
         """
         assert "window.openFacilityPanel(data.id)" in _js("twin3d.js")
         assert "window.openFacilityPanel(node.id)" in _js("map.js")
+        # There were three doors; the third was a button on the figures strip
+        # under the map, and that strip is gone — it restated the KPI screen
+        # below the one picture this screen exists to show. The two that
+        # remain are the two on the map itself, and they open the same panel
+        # through the same global — which app.js defines exactly once.
         app_js = _js("app.js")
-        assert "data-facility-panel" in app_js
-        assert "window.openFacilityPanel(id)" in app_js
+        assert app_js.count("window.openFacilityPanel = function") == 1
 
     def test_the_door_is_only_offered_where_it_leads_somewhere(self):
         """

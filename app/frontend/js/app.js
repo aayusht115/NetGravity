@@ -20,7 +20,7 @@ import {
   FORECAST_BRIEFING, recommendedNetworkChanges, DEMAND_SHORTFALL
 } from './data.js';
 // The twin's legend and the encoding it describes, shared with both views.
-import { twinLegendHtml, facilityLabel } from './twin-legend.js';
+import { twinLegendHtml, facilityLabel, NODE_STYLE } from './twin-legend.js';
 import { initMap, invalidateMapSize, refreshAllMaps,
          revealMap, renderMapLegendCounts, refreshTwinMapLegend } from './map.js';
 import { initTwin3D, resizeTwin3D } from './twin3d.js';
@@ -145,6 +145,17 @@ function bootApp() {
         }
       },
       renderEntity: () => renderFacilityDashboard(),
+      // The period control, filled and read exactly as the top bar's was.
+      // One list, one selected period, one `renderForSelection()` — the KPI
+      // screen did not get a period of its own, it got the one that already
+      // existed, on the screen that describes it.
+      populatePeriods: (select) => populatePeriodSelect(select),
+      selectPeriod: (value) => {
+        state.selectedPeriod = value;
+        const sel = document.getElementById('sel-period');
+        if (sel && [...sel.options].some((o) => o.value === value)) sel.value = value;
+        renderForSelection();
+      },
       // The KPI screen's Network lens shows the Overview's four figures, and
       // shows them by calling the Overview's OWN renderer. One source, so the
       // two screens cannot report different numbers for one network — a
@@ -160,6 +171,7 @@ function bootApp() {
       },
     });
   } catch (e) { console.error('initKpiView error:', e); }
+  try { initTwinLegendDock(); } catch (e) { console.error('twin legend dock:', e); }
   try { renderHome(); } catch (e) { console.error('renderHome error:', e); }
   try { renderTwinTables(); } catch (e) { console.error('renderTwinTables error:', e); }
   try { initScenarios(); } catch (e) { console.error('initScenarios error:', e); }
@@ -544,10 +556,32 @@ function renderForecastAttention(listId = 'fc-attn-body') {
 
   const actions = forecastActions(outlook);
 
+  // WHOSE FORECAST THIS IS, BEFORE ANY OF ITS FIGURES.
+  //
+  // It was one muted sentence at the foot of the card, under the numbers,
+  // the actions and the download. A reader who takes a growth rate off this
+  // card and repeats it in a meeting has to know whether this application
+  // produced it or simply added up a column somebody handed it — and that is
+  // the first thing they need to know, not the last.
+  const uploaded = (window.__ngForecastMeta || {}).source === 'uploaded';
+
   list.innerHTML = `
+    ${uploaded ? `
+      <div class="fc-attn-provenance">
+        <span class="fc-attn-provenance-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 9l5-5 5 5M12 4v12"/>
+          </svg>
+        </span>
+        <span><strong>This forecast was uploaded with your data.</strong>
+          NetGravity has not modelled, adjusted or recalculated any of it —
+          the figures below are read from the sheet you supplied.</span>
+      </div>` : ''}
     ${card && card.headline
       ? `<div class="ov-attn-lead"><div class="ov-attn-section">
-           <div class="ov-attn-section-label tone-why">What the projection says</div>
+           <div class="ov-attn-section-label tone-why">${uploaded
+             ? 'What the supplied forecast says' : 'What the projection says'}</div>
            <div class="ov-attn-section-text">${escapeInsightText(card.headline)}</div>
          </div></div>` : ''}
     ${rows.length ? `<dl class="fc-attn-facts">
@@ -569,19 +603,20 @@ function renderForecastAttention(listId = 'fc-attn-body') {
         </div>
       </div>` : ''}
     ${actions.length ? `
-      <div class="fc-attn-actions">
+      <div class="scn-take-section-title" style="margin-top:14px">Recommended actions</div>
+      <div class="scn-take-actions">
         ${actions.map((a, i) => `
-          <button type="button" class="fc-attn-action${a.primary ? ' primary' : ''}"
+          <button type="button" class="scn-take-action${a.primary ? ' primary' : ''}"
                   data-fc-action="${i}">
-            <span class="fc-attn-action-label">${escapeInsightText(a.label)}</span>
-            <span class="fc-attn-action-detail">${escapeInsightText(a.detail)}</span>
+            <span class="scn-take-action-label">${escapeInsightText(a.label)}</span>
+            <span class="scn-take-action-detail">${escapeInsightText(a.detail)}</span>
+            <span class="scn-take-action-go">Set this up →</span>
           </button>`).join('')}
       </div>` : ''}
     ${forecastDownloadHtml()}
     <div class="text-xs text-muted" style="margin-top:10px;line-height:1.5">
-      ${(window.__ngForecastMeta || {}).source === 'uploaded'
-        ? 'Every figure here is summed from the forecast supplied with this '
-          + 'upload. Nothing was modelled, adjusted or recalculated.'
+      ${uploaded
+        ? 'Every figure here is summed from that sheet, and from nothing else.'
         : `${card && card.source === 'llm'
             ? 'Written by the model from the forecaster\'s own output.'
             : 'Written from the forecaster\'s own output without a model.'}
@@ -993,10 +1028,24 @@ function updateTopBarLayout(tab) {
   // are worse than none: a reader who sets a facility and sees the chart
   // unchanged has to work out whether the control is broken or the network
   // is. Hiding a dead control is more honest than showing it.
-  const scopeApplies = (tab !== 'scenarios' && tab !== 'forecast');
+  // THE PAIR IS GONE FROM THE TOP BAR, on every screen.
+  //
+  // It was hidden one screen at a time as each was found not to use it —
+  // Scenario Planning, then Forecast, then the KPI screen — and the remaining
+  // three were no better. The Overview reports the whole network by
+  // definition; the Digital Twin is a map of every site, narrowed by clicking
+  // one; Insights are findings about the network, each naming its own
+  // facility. On all three the control moved nothing a reader could see,
+  // which teaches them that scope on this product does not work.
+  //
+  // Scope now lives on the screen that HAS one, in the words of that screen:
+  // the KPI page's own lens dropdowns, the Forecast's series picker, the
+  // twin's node selection. `#sel-facility` / `#sel-period` in the hidden
+  // sub-topbar row remain the application's source of truth and are
+  // untouched — this removes a control, not the state behind it.
   const topScope = document.getElementById('home-top-controls');
   if (topScope) {
-    topScope.style.display = scopeApplies ? 'flex' : 'none';
+    topScope.style.display = 'none';
   }
 
   // The KPI screen owns its own Facility control, inside the filter bar that
@@ -1020,17 +1069,16 @@ function updateTopBarLayout(tab) {
   // honest than showing one. It is untouched on the Digital Twin, the
   // Forecast and the Overview, which do scope by period. If the KPI cards are
   // ever given per-period figures, deleting this branch brings it back.
-  const topFacility = document.getElementById('home-top-facility')?.closest('.topbar-control-group');
-  if (topFacility) {
-    topFacility.style.display = (tab === 'facility-dashboard') ? 'none' : '';
-  }
-  const topPeriod = document.getElementById('home-top-period')?.closest('.topbar-control-group');
-  if (topPeriod) {
-    topPeriod.style.display = (tab === 'facility-dashboard') ? 'none' : '';
-  }
 
   // Home carries its own page head ("Overview · Your network health…"), so it
   // does not need the generic title row. Every other page does.
+  // The 2D/3D pair describes how the twin is drawn and means nothing
+  // anywhere else, so it appears on the title row of exactly one screen.
+  const twinActions = document.getElementById('sub-topbar-actions');
+  if (twinActions) {
+    twinActions.style.display = (tab === 'twin') ? 'flex' : 'none';
+  }
+
   const subTopbar = document.getElementById('app-sub-topbar');
   if (subTopbar) {
     subTopbar.style.display = isHomeOverview ? 'none' : 'flex';
@@ -1193,8 +1241,7 @@ export function navigateToTab(tab) {
         renderTwinTables();
         // A scenario solved since the last render changes what is recommended,
         // and this is the screen that states it.
-        renderRecommendedChangeNote();
-      } catch (err) {
+            } catch (err) {
         console.error('Twin initialization warning:', err);
       }
       window.dispatchEvent(new Event('resize'));
@@ -1907,6 +1954,41 @@ function populateFacilitySelector() {
  * padding plus a row of controls whose size follows the type scale, and it
  * changes with the project-name button's line count on a narrow window.
  */
+/**
+ * The key's dock: the glyphs it shows shut, and opening it.
+ *
+ * The peek is built from `NODE_STYLE`, which is the same source the markers,
+ * the 3D badges and the key's own rows are drawn from — so the three symbols
+ * on the handle are the three symbols on the map, by construction rather than
+ * by a second list that would drift.
+ */
+function initTwinLegendDock() {
+  const toggle = document.getElementById('twin-legend-toggle');
+  const panel = document.getElementById('twin3d-legend');
+  const peek = document.getElementById('twin-legend-peek');
+  if (!toggle || !panel) return;
+
+  if (peek && !peek.textContent) {
+    peek.textContent = ['plant', 'dc', 'market']
+      .map((k) => (NODE_STYLE[k] || {}).glyph || '').join('');
+  }
+
+  toggle.addEventListener('click', () => {
+    const open = panel.hidden;
+    panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  // A click on the map is a click on the thing the key describes, so the key
+  // gets out of the way rather than staying open over it.
+  document.getElementById('twin-stage')?.addEventListener('click', (e) => {
+    if (panel.hidden) return;
+    if (document.getElementById('twin-legend-dock')?.contains(e.target)) return;
+    panel.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+  });
+}
+
 function publishTopBarHeight() {
   const bar = document.querySelector('.app-global-topbar');
   const shell = document.querySelector('.main-content');
@@ -3022,21 +3104,6 @@ function recommendedChangeSummary({ quietWhenNothing = false,
   };
 }
 
-/**
- * The recommended change, above the twin that draws it.
- *
- * Always on screen here, in both states. "No change is recommended" is a
- * finding: a reader who cannot see it has to guess whether the engine had
- * nothing to say or was never asked, and those are different things.
- */
-function renderRecommendedChangeNote() {
-  const node = document.getElementById('twin-change-note');
-  if (!node) return;
-  const summary = recommendedChangeSummary();
-  node.hidden = false;
-  node.classList.toggle('is-quiet', summary.quiet);
-  node.innerHTML = summary.html;
-}
 
 function renderTwinStats() {
   const nodeCount = PLANTS.length + DCS.length + MARKETS.length;
@@ -3066,7 +3133,6 @@ function renderTwinStats() {
       : '';
   });
 
-  renderRecommendedChangeNote();
 
   // BOTH LEGENDS, from one function, on every refresh.
   //
@@ -3165,149 +3231,8 @@ function openStatusTag(node) {
    dash with the solver's own reason on it, never as a zero.
    ═══════════════════════════════════════════════════════════════ */
 
-/** One figure in the band. `value` is already formatted, or null for a dash. */
-function twinMetricHtml(label, value, sub, reason, tone = '') {
-  const has = value !== null && value !== undefined && value !== '';
-  const title = has ? '' : ` title="${escapeInsightText(reason
-    || 'This figure was not reported by the solve for this network.')}"`;
-  return `
-    <div class="tw-metric"${title}>
-      <div class="tw-metric-value${tone}">${has ? escapeInsightText(value) : '—'}</div>
-      <div class="tw-metric-label">${escapeInsightText(label)}</div>
-      ${sub ? `<div class="tw-metric-sub">${escapeInsightText(sub)}</div>` : ''}
-    </div>`;
-}
 
-/**
- * How the selected period relates to what was solved.
- *
- * The control does not re-optimise anything: there is one solved plan over
- * the demand the model was given. Some periods carry a solved reading of
- * their own and the rest fall back to the horizon average, and showing those
- * two identically is how a reader mistakes "not modelled" for a finding.
- */
-function twinPeriodNote(periodId) {
-  if (!periodId) return '';
-  const solved = new Set(Object.values(SOLVE_HORIZON.periodLabels || {}));
-  if (!solved.size) return '';
-  return solved.has(periodId)
-    ? `${periodId} is one of the periods the model solved, and these are its own figures.`
-    : `${periodId} is outside the modelled horizon, so these are the horizon `
-      + `average rather than that period's own solved figures.`;
-}
 
-function renderTwinMetrics(containerId = 'twin-metrics') {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-
-  const periodId = state.selectedPeriod || '';
-  const periodNote = twinPeriodNote(periodId);
-  const facility = getFacilityById(state.selectedFacility);
-
-  // ─── The whole network ────────────────────────────────────
-  // "All facilities" is a legitimate selection and the band answers it with
-  // the network's own solved figures, from the same authoritative base case
-  // the Overview reads. Not a sum computed here: a total this file added up
-  // would be a second, unverified KPI engine.
-  if (!facility) {
-    const base = getOptimizedBaseCase() || {};
-    const figures = base.baseline || {};
-    const reason = base.unavailableReason || '';
-    const num = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : null;
-    const cost = num(figures.totalCost);
-    const fill = num(figures.fillRate);
-    const util = num(figures.avgUtilization);
-    const co2 = num(figures.co2);
-
-    el.innerHTML = `
-      <div class="tw-metrics-head">
-        <div>
-          <h3 class="tw-metrics-title">Whole network</h3>
-          <p class="tw-metrics-scope">${escapeInsightText(
-            `${PLANTS.length + DCS.length} facilities · ${MARKETS.length} markets · `
-            + `${LANES.length} corridors${periodId ? ` · ${periodId}` : ''}`)}</p>
-        </div>
-        ${(PLANTS.length + DCS.length) ? `<span class="tw-metrics-hint">Select a
-          facility above to see its own figures</span>` : ''}
-      </div>
-      <div class="tw-metrics-row">
-        ${twinMetricHtml('Total network cost', cost === null ? null : formatCurrency(cost),
-                         'per period, from the solve', reason)}
-        ${twinMetricHtml('Demand fill rate', fill === null ? null : `${fill.toFixed(1)}%`,
-                         'of stated demand served', reason)}
-        ${twinMetricHtml('Average utilisation', util === null ? null : `${util.toFixed(1)}%`,
-                         'across open facilities', reason)}
-        ${twinMetricHtml('CO\u2082e from solved flow',
-                         co2 === null ? null : `${formatNumber(Math.round(co2))} kg`,
-                         'on the declared factors', reason)}
-      </div>
-      ${periodNote ? `<p class="tw-metrics-note">${escapeInsightText(periodNote)}</p>` : ''}`;
-    return;
-  }
-
-  // ─── One facility ─────────────────────────────────────────
-  const kpis = getKpisForFacility(facility.id, periodId);
-  const role = facilityRole(facility.id);
-  const roleLabel = role === 'PLANT' ? 'Plant'
-    : role === 'DC' ? 'Distribution Centre' : 'Facility';
-
-  const num = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : null;
-  // Utilisation is the DC's own solved figure. For a plant the engine reports
-  // throughput against capacity rather than a utilisation percentage, and
-  // dividing one by the other here would be this screen computing a KPI.
-  const util = num(kpis?.util?.value) ?? num(facility.utilPct);
-  const throughput = num(kpis?.throughput?.value) ?? num(facility.throughput);
-  const capacity = num(kpis?.capacity?.value) ?? num(facility.capacity);
-  const costPerUnit = num(kpis?.costPerUnit?.value) ?? num(facility.handlingCost);
-  const corridors = LANES.filter(
-    (l) => l.from === facility.id || l.to === facility.id).length;
-
-  const tone = util === null ? ''
-    : util >= 95 ? ' is-critical' : util >= 85 ? ' is-stress' : ' is-healthy';
-  const reason = 'This figure is a solver output, and no solve has reported it '
-    + 'for this facility yet.';
-
-  el.innerHTML = `
-    <div class="tw-metrics-head">
-      <div>
-        <h3 class="tw-metrics-title">${escapeInsightText(facilityLabel(facility))}</h3>
-        <p class="tw-metrics-scope">${escapeInsightText(
-          `${roleLabel}${facility.city ? ` · ${facility.city}` : ''}`
-          + `${periodId ? ` · ${periodId}` : ''}`)}</p>
-      </div>
-      <div class="tw-metrics-actions">
-        ${openStatusTag(facility)}
-        <button type="button" class="tw-metrics-cta"
-                data-facility-panel="${escapeInsightText(facility.id)}">
-          <span>View full diagnostics</span>
-          <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
-        </button>
-      </div>
-    </div>
-    <div class="tw-metrics-row">
-      ${twinMetricHtml('Utilisation', util === null ? null : `${Number(util).toFixed(1)}%`,
-                       'of stated capacity', reason, tone)}
-      ${twinMetricHtml('Throughput', throughput === null ? null : formatNumber(throughput),
-                       perPeriodLabel(), reason)}
-      ${twinMetricHtml('Capacity', capacity === null ? null : formatNumber(capacity),
-                       perPeriodLabel() + ', from your upload',
-                       'Your upload states no capacity for this facility.')}
-      ${twinMetricHtml('Handling cost', costPerUnit === null ? null : formatCurrencyExact(costPerUnit),
-                       'per unit, from your upload',
-                       'Your upload states no handling cost for this facility.')}
-      ${twinMetricHtml('Corridors', String(corridors),
-                       corridors === 1 ? 'lane touches this site' : 'lanes touch this site')}
-    </div>
-    ${periodNote ? `<p class="tw-metrics-note">${escapeInsightText(periodNote)}</p>` : ''}`;
-
-  // The same panel the 3D scene and the 2D map open, opened the same way —
-  // so a fix to one is a fix to all three. This was the third door and it
-  // used to be a row in the Distribution Centres table.
-  el.querySelector('[data-facility-panel]')?.addEventListener('click', (e) => {
-    const id = e.currentTarget.dataset.facilityPanel;
-    if (typeof window.openFacilityPanel === 'function') window.openFacilityPanel(id);
-  });
-}
 
 /**
  * Everything on the Digital Twin that is not the scene itself.
@@ -3320,7 +3245,6 @@ function renderTwinMetrics(containerId = 'twin-metrics') {
  */
 function renderTwinTables() {
   renderTwinStats();
-  renderTwinMetrics();
 }
 
 // ─── Facility Panel ─────────────────────────────────────────

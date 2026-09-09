@@ -716,31 +716,41 @@ class TestTheOverviewPageIsShapedLikeTheMockup:
         assert 'id="ov-view"' not in home
         assert 'class="ov-head-controls"' not in home
 
-    def test_one_scope_pair_and_it_is_the_same_one_on_every_page(self):
+    def test_the_scope_pair_is_gone_from_the_top_bar(self):
         """
-        Facility and Period used to be in the top bar on Home and one row
-        lower on every other tab: the same two controls in two positions,
-        which is Nielsen #4 twice over. There is one pair, in the top bar,
-        and the sub-topbar's copy is never shown.
-        """
-        js = _without_comments(_asset("js", "app.js"))
-        block = js[js.index("const scopeApplies"):]
-        block = block[:block.index("if (isHomeOverview) return;")]
-        assert "tab !== 'scenarios'" in block, block
-        assert "scopeApplies ? 'flex' : 'none'" in block, block
+        IT WAS REMOVED ONE SCREEN AT A TIME AND THEN ALTOGETHER.
 
-        tail = js[js.index("const controls = document.getElementById('topbar-controls');"):]
-        tail = tail[:tail.index("}") + 1]
-        assert "controls.style.display = 'none'" in tail, tail
+        Scenario Planning hid it first (a scenario is solved over the whole
+        network), then Forecast (a forecast is per market-product series),
+        then the KPI screen (which reports the whole horizon and owns its own
+        facility control). The three that were left — Overview, Digital Twin,
+        Insights — were no better: the Overview reports the whole network by
+        definition, the twin is a map of every site narrowed by clicking one,
+        and an insight names its own facility.
 
-    def test_scenario_planning_gets_no_facility_or_period(self):
+        A control that moves nothing teaches a reader that scope on this
+        product does not work, so it is gone rather than dead.
         """
-        A scenario is solved over the whole network for the horizon it was
-        built with. A facility or period picker there would be a control that
-        changes nothing, and a dead control is worse than none.
+        js = _asset("app.js")
+        fn = js[js.index("function updateTopBarLayout(tab) {"):]
+        fn = fn[:fn.index("\n/**")]
+        block = fn[fn.index("const topScope"):]
+        block = block[:block.index("\n\n")]
+        assert "'none'" in block
+        # No tab is excepted: an exception is how it came to be shown on three
+        # screens that did not use it.
+        assert "tab !==" not in block
+        assert "===" not in block
+
+    def test_the_state_behind_it_is_untouched(self):
         """
-        js = _without_comments(_asset("js", "app.js"))
-        assert "const scopeApplies = (tab !== 'scenarios');" in js
+        `#sel-facility` / `#sel-period` in the hidden sub-topbar row remain
+        the application's source of truth. Removing them would mean rewiring
+        the scope of the whole application to delete one visible pair.
+        """
+        html = _asset("index.html")
+        assert 'id="sel-facility"' in html
+        assert 'id="sel-period"' in html
 
     def test_upload_data_is_on_every_page_like_the_rest_of_the_bar(self):
         js = _without_comments(_asset("js", "app.js"))

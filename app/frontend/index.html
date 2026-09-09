@@ -507,6 +507,20 @@
             <span class="sub-topbar-sub-title" id="sub-topbar-sub-title">· Network Decision Command Center</span>
           </div>
 
+          <!-- WHAT THIS SCREEN IS DRAWN WITH, beside what the screen IS.
+               The 2D/3D pair had a row of its own under the title, right
+               aligned against nothing — a full-width strip carrying one
+               control and, on a screen whose whole point is the map, a row of
+               height taken from it. It is a property of the view, so it sits
+               on the view's own title line. Shown only where it applies;
+               `updateTopBarLayout` owns that. -->
+          <div class="sub-topbar-actions" id="sub-topbar-actions">
+            <div class="toggle-group" id="twin-view-toggle">
+              <button class="toggle-btn" data-view="2d">2D Map</button>
+              <button class="toggle-btn active" data-view="3d">3D Twin</button>
+            </div>
+          </div>
+
           <div class="topbar-controls" id="topbar-controls">
             <div class="topbar-control-group">
               <span class="control-label">Facility</span>
@@ -720,13 +734,28 @@
                  filters that produced it named on it — which is the thing a
                  reader circulates. A second format behind a menu was one more
                  click in front of the only one anybody asked for. -->
-            <button class="btn btn-secondary btn-export-kpi" id="btn-export-pdf" type="button"
-                    title="Export the current view as a PDF"
+            <button class="btn btn-secondary btn-export-kpi" id="btn-export-xlsx" type="button"
+                    title="Export the current view to Excel — one sheet per population"
                     style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;font-size:12.5px;font-weight:600;border-radius:8px;background:#ffffff;border:1px solid #e5e7eb;color:#374151;cursor:pointer;flex-shrink:0">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
               </svg>
-              <span>Export PDF</span>
+              <span>Export Excel</span>
+            </button>
+            <!-- HOW THE NUMBERS WERE ARRIVED AT, beside the numbers.
+                 The workbook carries the figures; this carries the rules
+                 behind them, worked through with this network's own values.
+                 A reader about to repeat one of these figures to somebody
+                 who will challenge it needs the second file, and needs to
+                 find it where they found the first. -->
+            <button class="btn btn-secondary btn-export-kpi" id="btn-export-method" type="button"
+                    title="Download how these figures are calculated — formulas, variables and worked examples"
+                    style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;font-size:12.5px;font-weight:600;border-radius:8px;background:#ffffff;border:1px solid #e5e7eb;color:#374151;cursor:pointer;flex-shrink:0">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <path d="M14 2v6h6M8 13h8M8 17h5"/>
+              </svg>
+              <span>How it is calculated</span>
             </button>
           </div>
 
@@ -816,48 +845,40 @@
                trust. Each dimension now has its own, and each lens shows only
                the ones that describe it: a corridor has no health band and a
                facility has no origin. -->
+          <!-- TIER 2 — HOW FAR IN, in the vocabulary of the lens above.
+
+               ONE CONTROL, ONE THING, AND NO DOOR IN FRONT OF THEM.
+
+               These lived behind a "Filters" button that opened a panel and
+               committed on Apply. Two clicks and a decision stood between a
+               reader and the only question this bar answers — which sites,
+               which period — and with the panel shut the screen's scope was a
+               count on a chip. They are on the bar now and they apply as they
+               are set: this bar carries at most three controls, so the
+               staging a six-control panel needed buys nothing here.
+
+               REGION AND STATUS ARE GONE. Region duplicated a narrowing the
+               facility list already makes visible, and Status filtered a
+               screen whose entire top half exists to report status — hiding
+               the tight sites is the one thing a reader of a capacity screen
+               never wants. What is left describes the lens: a bucket of
+               facilities and a period, or the two ends of a corridor and its
+               mode. -->
           <div class="kpi-filter-bar" id="kpi-filter-bar">
-            <!-- ONE ELEVATED PANEL, APPLIED TOGETHER.
-
-                 Three bare selects in a row read as a form, and each one
-                 re-solved the screen the moment it changed — so narrowing by
-                 region and then by status redrew everything twice, and the
-                 reader watched the page move under a decision they had not
-                 finished making. Choices are staged in the panel and committed
-                 by one purple Apply.
-
-                 The trigger carries whatever is active, so a filtered screen
-                 says it is filtered with the panel shut. -->
-            <div class="kpi-filters" id="kpi-filters">
-              <button type="button" class="kpi-filters-trigger" id="kpi-filters-trigger"
-                      aria-haspopup="dialog" aria-expanded="false">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                  <path d="M3 5h18M7 12h10M11 19h2"/>
-                </svg>
-                <span id="kpi-filters-label">Filters</span>
-                <span class="kpi-filters-count" id="kpi-filters-count" hidden></span>
-              </button>
-
-              <div class="kpi-filters-panel" id="kpi-filters-panel" hidden role="dialog"
-                   aria-label="Filter this view">
-                <label class="kpi-filter" id="kpi-filter-entity-wrap"><span>Facility</span>
-                  <select class="control-select" id="kpi-filter-entity"></select></label>
-                <label class="kpi-filter" id="kpi-filter-region-wrap"><span>Region</span>
-                  <select class="control-select" id="kpi-filter-region"></select></label>
-                <label class="kpi-filter" id="kpi-filter-status-wrap"><span>Status</span>
-                  <select class="control-select" id="kpi-filter-status"></select></label>
-                <label class="kpi-filter" id="kpi-filter-origin-wrap"><span>Origin</span>
-                  <select class="control-select" id="kpi-filter-origin"></select></label>
-                <label class="kpi-filter" id="kpi-filter-dest-wrap"><span>Destination</span>
-                  <select class="control-select" id="kpi-filter-dest"></select></label>
-                <label class="kpi-filter" id="kpi-filter-mode-wrap"><span>Mode</span>
-                  <select class="control-select" id="kpi-filter-mode"></select></label>
-                <div class="kpi-filters-actions">
-                  <button type="button" class="kpi-filter-reset" id="kpi-filter-reset">Reset filters</button>
-                  <button type="button" class="kpi-filters-apply" id="kpi-filters-apply">Apply</button>
-                </div>
-              </div>
+            <div class="kpi-filter-row" id="kpi-filter-row">
+              <label class="kpi-filter" id="kpi-filter-entity-wrap">
+                <span id="kpi-filter-entity-label">Facility</span>
+                <select class="control-select" id="kpi-filter-entity"></select></label>
+              <label class="kpi-filter" id="kpi-filter-period-wrap"><span>Period</span>
+                <select class="control-select" id="kpi-filter-period"></select></label>
+              <label class="kpi-filter" id="kpi-filter-origin-wrap"><span>Origin</span>
+                <select class="control-select" id="kpi-filter-origin"></select></label>
+              <label class="kpi-filter" id="kpi-filter-dest-wrap"><span>Destination</span>
+                <select class="control-select" id="kpi-filter-dest"></select></label>
+              <label class="kpi-filter" id="kpi-filter-mode-wrap"><span>Mode</span>
+                <select class="control-select" id="kpi-filter-mode"></select></label>
+              <button type="button" class="kpi-filter-reset" id="kpi-filter-reset"
+                      hidden>Reset</button>
             </div>
             <div class="kpi-showing" id="kpi-showing">&mdash;</div>
           </div>
@@ -1204,29 +1225,16 @@
 
                 <!-- ─────────────────── TAB: DIGITAL TWIN -->
         <section class="tab-panel" id="tab-twin">
-          <!-- Controls Bar (2D/3D & Network State Toggles aligned like other pages) -->
-          <div class="twin-toolbar" style="display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-bottom:14px;margin-top:2px;">
-            <!-- 2D / 3D View Toggle -->
-            <div class="toggle-group" id="twin-view-toggle">
-              <button class="toggle-btn" data-view="2d">2D Map</button>
-              <button class="toggle-btn active" data-view="3d">3D Twin</button>
-            </div>
-            <!-- No network-state toggle. This screen is the twin of the
-                 network the client RUNS, and nothing else. A "Recommended"
-                 state offering a second network here asked the reader to hold
-                 two footprints in mind on a screen whose job is to show them
-                 one; what the engine recommends changing is said in words
-                 above, and tested as a scenario in the Scenario Planner. -->
-          </div>
+          <!-- NO TOOLBAR ROW, AND NO RECOMMENDATION STRIP.
+               The 2D/3D toggle is on the page title's own line now. The
+               "what the engine recommends changing" note that sat here is a
+               statement about the PLAN, not about the map — it belongs to the
+               Overview's findings and to the Scenario Planner, both of which
+               carry it with the evidence behind it. Above a map it was a
+               conclusion with nowhere to check it.
 
-          <!-- What the algorithm recommends changing about this network.
-               One note, above both views, because it is a statement about the
-               PLAN rather than about the way the plan is being drawn — and it
-               stays on screen when the answer is "nothing", which is a finding
-               a reader would otherwise have to guess at. Filled by
-               renderRecommendedChangeNote(). -->
-          <div class="twin-change-note" id="twin-change-note" hidden></div>
-
+               What is left on this screen is the twin. -->
+          <div class="twin-stage" id="twin-stage">
           <!-- 2D Leaflet Map (hidden by default) -->
           <div class="card twin-view-panel" id="twin-2d-panel" style="padding:0;overflow:hidden;display:none;position:relative;z-index:0">
             <div class="map-container tall" id="map-twin"></div>
@@ -1302,33 +1310,47 @@
                  same module that decides the line weights it describes. The
                  two legends used to be two hand-written blocks in two files
                  and had already drifted from each other. -->
-            <div class="tw-legend tw-legend-3d" id="twin3d-legend"></div>
           </div>
 
-          <!-- WHAT THE SELECTED FACILITY DOES, IN THE PERIOD SELECTED.
-               ═══════════════════════════════════════════════════════════
-               This replaces three tables — Plants, Distribution Centres and
-               Demand Markets — that listed every node in the network with
-               four columns each. Three problems with them, and the third is
-               the one that mattered:
+          <!-- THE KEY, DOCKED AT THE FOOT OF THE STAGE.
+               ═══════════════════════════════════════════
+               It was a panel floating over the bottom-right of the canvas —
+               the corner a national network's southern sites occupy — and it
+               was open always, so the reader paid for it whether or not they
+               were reading it.
 
-                 * they ignored the Facility and Period controls at the top
-                   of the screen entirely. A reader who selected one DC to
-                   look at got the same three full tables, and nothing on the
-                   page acknowledged the selection;
-                 * they restated the map. Every figure in them is in the
-                   node's own tooltip, and the KPI screen carries the same
-                   ones with their history and their corridors;
-                 * on a 21-DC network the middle table scrolled inside a card
-                   the height of four rows, so "the network's distribution
-                   centres" was a four-row window onto a list nobody could
-                   see the shape of.
+               Collapsed it is one strip carrying the three facility glyphs,
+               which is the half of the key anybody needs at a glance. Opening
+               it raises the full key UP over the map rather than dropping it
+               down out of the card: the strip is at the bottom edge, and a
+               drawer that opens away from its handle leaves the handle
+               pointing at nothing.
 
-               What is here instead is the one thing the page could not
-               answer: the figures for the site the reader has selected, in
-               the period they have selected. Filled by renderTwinMetrics().
-               -->
-          <section class="tw-metrics" id="twin-metrics"></section>
+               One dock for both views. Only one is on screen at a time, and
+               the key says the same thing about either — it is the same
+               `twinLegendHtml()` both were already built from. -->
+          <div class="tw-legend-dock" id="twin-legend-dock">
+            <div class="tw-legend tw-legend-dock-panel" id="twin3d-legend" hidden></div>
+            <button type="button" class="tw-legend-dock-bar" id="twin-legend-toggle"
+                    aria-expanded="false" aria-controls="twin3d-legend">
+              <span class="tw-legend-dock-peek" id="twin-legend-peek" aria-hidden="true"></span>
+              <span class="tw-legend-dock-label">Key</span>
+              <svg class="tw-legend-dock-chevron" width="14" height="14" viewBox="0 0 24 24"
+                   fill="none" stroke="currentColor" stroke-width="2.4"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M6 15l6-6 6 6"/>
+              </svg>
+            </button>
+          </div>
+          </div><!-- /#twin-stage -->
+
+          <!-- NO FIGURES STRIP UNDER THE MAP.
+               It carried the selected site's throughput, utilisation and cost
+               below the twin — the same figures the KPI screen states with
+               their history, their corridors and their bands, and the same
+               ones the node's own tooltip carries on the map above it. Two
+               copies of one set of numbers, and the lower one pushed the map
+               it belonged to off the top of the screen. -->
         </section>
 
         <!-- ─────────────────── TAB: FORECAST -->
@@ -1363,7 +1385,14 @@
                 <span class="ov-attn-star" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2.6 14.9 9 21.8 9.8 16.7 14.5 18.1 21.3 12 17.9 5.9 21.3 7.3 14.5 2.2 9.8 9.1 9"/></svg>
                 </span>
-                <h2 class="ov-attn-title">Needs your attention</h2>
+                <!-- THE SAME HEADING THE SCENARIO PLANNER USES.
+                     "Needs your attention" names a queue, and a queue implies
+                     things to work through; what is under it is one briefing
+                     about one forecast. It also said nothing about where the
+                     words came from, on a card whose prose is written by the
+                     model over the forecaster's own figures. Same star, same
+                     words, same promise on both screens. -->
+                <h2 class="ov-attn-title">NetGravity's Recommendation</h2>
               </div>
               <div class="ov-attn-body" id="fc-attn-body">
                 <!-- renderForecastAttention('fc-attn-body') -->

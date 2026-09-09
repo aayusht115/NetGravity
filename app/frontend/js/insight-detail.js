@@ -456,21 +456,38 @@ function renderInsightChart(canvasId, plan) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        // BARS, NOT COLUMNS — the same way as every other chart on this page.
+        //
+        // This one drew its entities as vertical columns with the names along
+        // the foot at a 42-degree rotation, while the chart directly above it
+        // in the same panel drew its entities as horizontal bars with the
+        // names read straight. Two pictures of the same shape of finding, in
+        // two orientations, one of which needs the reader's head tilted.
+        //
+        // Horizontal is the right one of the two here: these labels are
+        // facility names, which are long and of uneven length, and a bar
+        // chart gives a name the whole width of the plot to be read across
+        // rather than a column's worth to be rotated into.
+        indexAxis: 'y',
         plugins: {
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: (c) => c.dataset.label + ': ' + c.parsed.y + plan.unitSuffix,
+              label: (c) => c.dataset.label + ': ' + c.parsed.x + plan.unitSuffix,
             },
           },
         },
         scales: {
-          y: {
+          // The VALUE axis is x now, and the category axis is y. Swapping
+          // `indexAxis` without swapping these leaves the ticks formatted for
+          // the wrong quantity — the unit suffix printed against the facility
+          // names instead of against their figures.
+          x: {
             beginAtZero: true,
             ticks: { callback: (v) => v + plan.unitSuffix },
             grid: { color: grid },
           },
-          x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 42 } },
+          y: { grid: { display: false }, ticks: { autoSkip: false } },
         },
       },
     };

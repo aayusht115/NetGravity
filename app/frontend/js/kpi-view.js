@@ -48,6 +48,7 @@ import { setWarehouseFilter, warehouseFacets, warehouseRow,
          warehouseViewLabel, warehouseAttributedHolding } from './warehouse.js';
 import { initKpiExplain, closeKpiExplainPanels,
          startKpiExplainShimmer } from './kpi-explain.js';
+import { kpiService } from './integration/services/kpi-service.js';
 
 /** The whole screen's state. Read by `applyView()` and by the export. */
 const view = {
@@ -55,8 +56,6 @@ const view = {
   domain: 'network',
   /** A facility id, or null for the roll-up. Only ever set on a facility lens. */
   entityId: null,
-  region: 'all',
-  status: 'all',
   /** Lane lens only — the corridors are not facilities and carry no band.
    *
    *  There is no "one corridor" selection and deliberately so: origin and
@@ -78,72 +77,14 @@ const view = {
   laneSearch: '',
 };
 
-/**
- * WHAT THE PANEL IS CURRENTLY SHOWING, before Apply.
- *
- * Every control used to write straight to `view` and redraw, so narrowing by
- * region and then by status rebuilt the screen twice and the page moved under
- * a decision the reader had not finished making. Choices land here; Apply
- * copies them across and renders once.
- */
-const staged = { entityId: null, region: 'all', status: 'all',
-                 mode: 'all', origin: 'all', destination: 'all' };
-
-function stageFromView() {
-  staged.entityId = view.entityId;
-  staged.region = view.region;
-  staged.status = view.status;
-  staged.mode = view.mode;
-  staged.origin = view.origin;
-  staged.destination = view.destination;
-}
-
-/** How many narrowings are active, for the closed trigger. */
-function activeFilterCount() {
-  if (view.domain === 'lane') {
-    return [view.origin, view.destination, view.mode]
-      .filter((v) => v !== 'all').length;
-  }
-  return [view.region, view.status].filter((v) => v !== 'all').length
-    + (view.entityId ? 1 : 0);
-}
-
-/** The trigger says what is active, so a filtered screen says so with the
- *  panel shut. */
-function renderFilterTrigger() {
-  const label = el('kpi-filters-label');
-  const count = el('kpi-filters-count');
-  const n = activeFilterCount();
-  if (label) {
-    const parts = view.domain === 'lane'
-      ? [view.origin !== 'all' ? endpointName(view.origin) : null,
-         view.destination !== 'all' ? endpointName(view.destination) : null,
-         view.mode !== 'all' ? view.mode : null]
-      : [view.entityId ? (warehouseRow(view.entityId)?.facility_name || view.entityId) : null,
-         view.region !== 'all' ? view.region : null,
-         view.status !== 'all' ? (BAND_TEXT[view.status] || view.status) : null];
-    const named = parts.filter(Boolean);
-    label.textContent = named.length ? named.join(' · ') : 'Filters';
-  }
-  if (count) {
-    count.hidden = n === 0;
-    count.textContent = String(n);
-  }
-  const trigger = el('kpi-filters-trigger');
-  if (trigger) trigger.classList.toggle('is-active', n > 0);
-}
-
 /** Set by `initKpiView()`. Kept as hooks rather than imports so this module
  *  and `app.js` do not import each other. */
 let hooks = { selectEntity: null, renderEntity: null,
-              renderNetworkScorecard: null, networkInventoryCost: null };
+              renderNetworkScorecard: null, networkInventoryCost: null,
+              populatePeriods: null, selectPeriod: null };
 
 let wired = false;
 
-const BAND_TEXT = {
-  CRITICAL: 'Over capacity', TIGHT: 'Tight', HEALTHY: 'Healthy',
-  UNDERUSED: 'Under-used', NOT_OPERATING: 'Not in this plan',
-};
 
 const DOMAIN_LABEL = { network: 'Network', dc: 'Distribution centres',
                        plant: 'Plants', lane: 'Corridors' };
@@ -456,70 +397,80 @@ function renderControls() {
   const isLane = view.domain === 'lane';
 
   // Each lens shows only the dimensions that describe it. A corridor has no
-  // health band and a facility has no origin, so the other three are hidden
-  // rather than left on screen as controls that narrow nothing.
+  // facility and a facility has no origin, so the others are hidden rather
+  // than left on the bar as controls that narrow nothing.
   const show = (id, on) => {
     const wrap = el(id);
     if (wrap) wrap.style.display = on ? '' : 'none';
   };
 
+  show('kpi-filter-entity-wrap', !isLane);
+  show('kpi-filter-period-wrap', !isLane);
+  show('kpi-filter-origin-wrap', isLane);
+  show('kpi-filter-dest-wrap', isLane);
+
   if (isLane) {
     const facets = laneFacets();
-    show('kpi-filter-entity-wrap', false);
-    show('kpi-filter-region-wrap', false);
-    show('kpi-filter-status-wrap', false);
-    show('kpi-filter-origin-wrap', true);
-    show('kpi-filter-dest-wrap', true);
     // A network whose corridors state no mode has nothing to filter by.
     show('kpi-filter-mode-wrap', facets.modes.length > 0);
 
+    // DEPENDENT BOTH WAYS. `laneFacets` narrows each list by the OTHER
+    // selection, so picking Bengaluru as an origin leaves only the
+    // destinations something actually runs to from there — and the same in
+    // reverse. It reads `view`, which these controls now write directly, so
+    // the lists are correct the moment either changes.
     const origin = el('kpi-filter-origin');
     if (origin) {
-      origin.innerHTML = option('all', 'All origins', staged.origin === 'all')
-        + facets.origins.map((o) => option(o.id, o.name, o.id === staged.origin)).join('');
+      origin.innerHTML = option('all', 'All origins', view.origin === 'all')
+        + facets.origins.map((o) => option(o.id, o.name, o.id === view.origin)).join('');
     }
     const dest = el('kpi-filter-dest');
     if (dest) {
-      dest.innerHTML = option('all', 'All destinations', staged.destination === 'all')
-        + facets.destinations.map((d) => option(d.id, d.name, d.id === staged.destination)).join('');
+      dest.innerHTML = option('all', 'All destinations', view.destination === 'all')
+        + facets.destinations.map((d) => option(d.id, d.name, d.id === view.destination)).join('');
     }
     const mode = el('kpi-filter-mode');
     if (mode) {
-      mode.innerHTML = option('all', 'All modes', staged.mode === 'all')
-        + facets.modes.map((m) => option(m, modeLabel(m), staged.mode === m)).join('');
+      mode.innerHTML = option('all', 'All modes', view.mode === 'all')
+        + facets.modes.map((m) => option(m, modeLabel(m), view.mode === m)).join('');
     }
     return;
   }
 
-  const facets = warehouseFacets();
-  show('kpi-filter-entity-wrap', true);
-  show('kpi-filter-status-wrap', true);
-  show('kpi-filter-origin-wrap', false);
-  show('kpi-filter-dest-wrap', false);
   show('kpi-filter-mode-wrap', false);
-  // A network whose sites carry no region has nothing to filter by.
-  show('kpi-filter-region-wrap', facets.regions.length > 0);
+  const facets = warehouseFacets();
+
+  // THE CONTROL IS NAMED FOR ITS BUCKET. "Facility" over a list of plants is
+  // the generic word for the thing the tab above has already narrowed.
+  const label = el('kpi-filter-entity-label');
+  if (label) {
+    label.textContent = view.domain === 'plant' ? 'Plant'
+      : view.domain === 'dc' ? 'Distribution centre' : 'Facility';
+  }
 
   const entity = el('kpi-filter-entity');
   if (entity) {
     entity.innerHTML = option('all',
       `All ${view.domain === 'plant' ? 'plants'
         : view.domain === 'network' ? 'facilities' : 'distribution centres'}`,
-      staged.entityId === null)
-      + facets.entities.map((e) => option(e.id, e.name, e.id === staged.entityId)).join('');
+      view.entityId === null)
+      + facets.entities.map((e) => option(e.id, e.name, e.id === view.entityId)).join('');
   }
 
-  const region = el('kpi-filter-region');
-  if (region) {
-    region.innerHTML = option('all', 'All regions', staged.region === 'all')
-      + facets.regions.map((r) => option(r, r, r === staged.region)).join('');
+  // THE APPLICATION'S OWN PERIOD CONTROL, moved here from the top bar.
+  //
+  // Not a second list and not a new mechanism: `hooks.populatePeriods` is the
+  // same `populatePeriodSelect` every other screen's period control is filled
+  // by, reading the client's recorded capacity history, and it selects the
+  // same `state.selectedPeriod`. The control was in the global top bar and is
+  // on the screen it describes instead.
+  const period = el('kpi-filter-period');
+  if (period && hooks.populatePeriods) {
+    const had = period.value;
+    hooks.populatePeriods(period);
+    if (had && [...period.options].some((o) => o.value === had)) period.value = had;
   }
-
-  const status = el('kpi-filter-status');
-  if (status) {
-    status.innerHTML = option('all', 'All states', staged.status === 'all')
-      + facets.statuses.map((s) => option(s.value, s.label, s.value === staged.status)).join('');
-  }
+  show('kpi-filter-period-wrap', Boolean(period) && period.options.length > 1);
 }
 
 /**
@@ -641,7 +592,12 @@ export function applyView() {
   // that caption before this line labelled the Plants tab "every facility",
   // because it was still reading the lens the reader had just left.
   if (!isLane) {
-    setWarehouseFilter({ domain: view.domain, region: view.region, status: view.status });
+    // The lens IS the narrowing now. Region and Status were the other two and
+    // both are gone — region duplicated what the facility list already shows,
+    // and hiding tight sites is the one thing a reader of a capacity screen
+    // never wants — so they are pinned open rather than left as stale state
+    // some other caller could set.
+    setWarehouseFilter({ domain: view.domain, region: 'all', status: 'all' });
   }
 
   // TIER 0 FOLLOWS THE SCOPE. The Network lens shows the four figures the
@@ -672,17 +628,23 @@ export function applyView() {
     // population and then naming what it is NOT is what separates them.
     const lens = view.domain === 'plant' ? 'Plant'
       : view.domain === 'dc' ? 'Distribution-centre' : 'Network';
+    // ONLY WHERE THERE IS SOMETHING TO SAY.
+    //
+    // "These figures describe plants." restated the tab already highlighted
+    // above it and the "Showing:" line already beside it — a third label for
+    // a population nobody had asked twice about. The two lines kept are the
+    // two that state something neither of those does: that a drill-down's
+    // scorecard is NOT about the selected site, and that the Network lens
+    // agrees with the Overview.
     note.textContent = onEntity
       ? `${lens} network summary — not this facility's own figures, which are below.`
       : isNetwork
         ? 'Every facility in this plan — the same figures the Overview reports.'
-        : isLane ? 'These figures describe the corridors shown below.'
-        : `These figures describe ${warehouseViewLabel().toLowerCase()}.`;
+        : '';
+    note.hidden = !note.textContent;
   }
 
-  stageFromView();
   renderControls();
-  renderFilterTrigger();
   renderCostAttribution();
   renderShowing();
   renderBreadcrumb();
@@ -734,13 +696,10 @@ function selectEntity(facilityId) {
 function setDomain(domain) {
   if (view.domain === domain) return;
   view.domain = domain;
-  // A lens change always returns to that lens's whole population. Region and
-  // Status describe a facility and mean nothing to a corridor; carrying a
-  // selected site across is worse still, since the same name on another lens
-  // is a different site or no site at all.
+  // A lens change always returns to that lens's whole population. Carrying a
+  // selected site across would be worse than useless: the same name on
+  // another lens is a different site or no site at all.
   view.entityId = null;
-  view.region = 'all';
-  view.status = 'all';
   view.mode = 'all';
   view.origin = 'all';
   view.destination = 'all';
@@ -786,25 +745,107 @@ function renderPrintHeader() {
     `<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join('');
 }
 
-/** The current view, as a PDF, through the browser's print dialog. */
-export function exportKpiViewAsPdf() {
-  renderPrintHeader();
-  // Any open explanation is a floating overlay ON TOP of a chart, so printing
-  // with it open would hide the very visual it describes.
-  closeKpiExplainPanels();
-
-  // NOTHING TOUCHES THE DOM AFTER THIS POINT.
-  //
-  // There was a body class here, added before printing and removed on a
-  // 1500ms timer. It was styled by nothing — the print rules are all in a
-  // media query and never needed it — and the timer fired while Chrome was
-  // still generating the preview, mutating the document underneath it. The
-  // preview sat on "Loading preview…" and never resolved.
-  //
-  // The layout the printer gets is the layout that is already on screen, so
-  // the correct amount of work to do here is none.
-  window.print();
+/**
+ * The current view, as a workbook.
+ *
+ * WHY EXCEL AND NOT THE PDF THIS REPLACES. The PDF was the screen as it
+ * looks, which is the right artefact for circulating a conclusion and the
+ * wrong one for the question this button is actually pressed to answer:
+ * somebody wants these figures in a model of their own. A picture of a table
+ * has to be retyped.
+ *
+ * The scope travels with it. The sites are the ones the screen is showing
+ * after its lens and filters, so the workbook is about the population the
+ * reader was looking at — and its cover says which population that was.
+ */
+export async function exportKpiViewToExcel(button) {
+  const label = button && button.querySelector('span');
+  const original = label ? label.textContent : '';
+  if (button) button.disabled = true;
+  if (label) label.textContent = 'Preparing\u2026';
+  try {
+    const { blob, filename } = await kpiService.downloadWorkbook({
+      facilityIds: view.domain === 'lane'
+        ? [] : warehouseFacets().entities.map((e) => e.id),
+      lensLabel: currentKpiView().label || DOMAIN_LABEL[view.domain] || '',
+      filters: activeFilterText(),
+      horizon: (el('wh-basis') || {}).textContent || '',
+    });
+    // The service returns the bytes; handing them to the browser is the
+    // caller's job, the same way every other download on this product works.
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'netgravity-kpis.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (label) label.textContent = original;
+  } catch (err) {
+    // ON the button, not in a console nobody has open.
+    if (label) label.textContent = 'Could not export';
+    setTimeout(() => { if (label) label.textContent = original; }, 3200);
+  } finally {
+    if (button) button.disabled = false;
+  }
 }
+
+/**
+ * How these figures are calculated, as a document.
+ *
+ * A document takes a solve and, where the gateway is configured, a
+ * text-generation call — which the gateway allows itself a minute for. A
+ * button that says the same thing for that long reads as a hung one, so it
+ * says what it is doing as it goes.
+ */
+export async function exportKpiMethod(button) {
+  const label = button && button.querySelector('span');
+  const original = label ? label.textContent : '';
+  if (button) button.disabled = true;
+  if (label) label.textContent = 'Preparing\u2026';
+  const staged = setTimeout(() => {
+    if (label && button && button.disabled) {
+      label.textContent = 'Writing the explanation\u2026';
+    }
+  }, 5000);
+  try {
+    const { blob, filename } = await kpiService.downloadMethod({
+      facilityIds: view.domain === 'lane'
+        ? [] : warehouseFacets().entities.map((e) => e.id),
+      lensLabel: currentKpiView().label || DOMAIN_LABEL[view.domain] || '',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'netgravity-method.docx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (label) label.textContent = original;
+  } catch (err) {
+    if (label) label.textContent = 'Could not build the document';
+    if (button) button.title = (err && err.message) || '';
+    setTimeout(() => { if (label) label.textContent = original; }, 3600);
+  } finally {
+    clearTimeout(staged);
+    if (button) button.disabled = false;
+  }
+}
+
+/** The narrowings in force, in words, for the workbook's cover. */
+function activeFilterText() {
+  const parts = view.domain === 'lane'
+    ? [view.origin !== 'all' ? `from ${endpointName(view.origin)}` : null,
+       view.destination !== 'all' ? `to ${endpointName(view.destination)}` : null,
+       view.mode !== 'all' ? `by ${modeLabel(view.mode)}` : null]
+    : [view.entityId
+        ? (warehouseRow(view.entityId)?.facility_name || view.entityId) : null];
+  const named = parts.filter(Boolean);
+  return named.length ? named.join(' · ') : 'None';
+}
+
 
 // ─── Wiring ─────────────────────────────────────────────────
 
@@ -813,6 +854,25 @@ export function exportKpiViewAsPdf() {
  * do itself: set the application's selected facility, and draw that facility's
  * detail — both of which live in `app.js`, which imports this file.
  */
+/**
+ * Fill the print header whenever a print starts, from wherever it started.
+ *
+ * It used to be filled by the export button, which meant a reader pressing
+ * Ctrl+P got the same page with an EMPTY header — a sheet of figures with no
+ * statement of what they are of. The button is Excel now and prints no longer
+ * pass through it at all, so this listens for the thing itself.
+ */
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeprint', () => {
+    try {
+      renderPrintHeader();
+      // An open explanation floats OVER a chart, so printing with it open
+      // would hide the visual it describes.
+      closeKpiExplainPanels();
+    } catch (e) { /* a print must not be blocked by its own header */ }
+  });
+}
+
 export function initKpiView(nextHooks) {
   hooks = { ...hooks, ...(nextHooks || {}) };
   if (wired) return;
@@ -823,104 +883,71 @@ export function initKpiView(nextHooks) {
     if (tab) setDomain(tab.dataset.domain);
   });
 
-  // ── The filter panel ──
+  // ── The filter row ──
   //
-  // Every control STAGES. Nothing below the panel moves until Apply, so the
-  // reader can set three things and see the consequence once.
-  const panel = el('kpi-filters-panel');
-  const trigger = el('kpi-filters-trigger');
-
-  const openPanel = (open) => {
-    if (!panel || !trigger) return;
-    panel.hidden = !open;
-    trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
-    // Opening always starts from what is actually on screen, so an abandoned
-    // edit cannot leak into the next one.
-    if (open) { stageFromView(); renderControls(); }
-  };
-
-  trigger?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    openPanel(panel?.hidden !== false);
-  });
+  // Each control writes to `view` and redraws. There is no staging: the bar
+  // carries at most three controls, and Apply on three controls is a click
+  // that buys the reader nothing they did not already have.
 
   el('kpi-filter-entity')?.addEventListener('change', (e) => {
-    staged.entityId = e.target.value === 'all' ? null : e.target.value;
-  });
-  el('kpi-filter-region')?.addEventListener('change', (e) => {
-    staged.region = e.target.value;
-  });
-  el('kpi-filter-status')?.addEventListener('change', (e) => {
-    staged.status = e.target.value;
-  });
-  el('kpi-filter-origin')?.addEventListener('change', (e) => {
-    staged.origin = e.target.value;
-    // Dependent: an origin narrows which destinations exist, and the panel
-    // has to offer only those before the reader picks one.
-    if (staged.destination !== 'all') {
-      const was = view.destination; view.destination = staged.destination;
-      const wasO = view.origin; view.origin = staged.origin;
-      if (!laneFacets().destinations.some((d) => d.id === staged.destination)) {
-        staged.destination = 'all';
-      }
-      view.destination = was; view.origin = wasO;
+    const next = e.target.value === 'all' ? null : e.target.value;
+    const changed = next !== view.entityId;
+    view.entityId = next;
+    if (view.entityId && changed && hooks.selectEntity) {
+      hooks.selectEntity(view.entityId);
     }
-    renderControls();
-  });
-  el('kpi-filter-dest')?.addEventListener('change', (e) => {
-    staged.destination = e.target.value;
-    renderControls();
-  });
-  el('kpi-filter-mode')?.addEventListener('change', (e) => {
-    staged.mode = e.target.value;
-    renderControls();
+    applyView();
+    if (changed) scrollViewToTop();
   });
 
-  // Quiet, beside Apply: it undoes rather than does, so it must not compete
-  // with the button that changes the screen. Clears the staged edit AND the
-  // committed view, so there is no half-reset state to be surprised by.
+  // The same period the rest of the application is scoped to.
+  el('kpi-filter-period')?.addEventListener('change', (e) => {
+    if (hooks.selectPeriod) hooks.selectPeriod(e.target.value);
+    applyView();
+  });
+
+  el('kpi-filter-origin')?.addEventListener('change', (e) => {
+    view.origin = e.target.value;
+    // An origin narrows which destinations exist. If the one already chosen
+    // is not among them, it is dropped rather than left naming a corridor
+    // this pair has no route on.
+    if (view.destination !== 'all'
+        && !laneFacets().destinations.some((d) => d.id === view.destination)) {
+      view.destination = 'all';
+    }
+    applyView();
+  });
+  el('kpi-filter-dest')?.addEventListener('change', (e) => {
+    view.destination = e.target.value;
+    if (view.origin !== 'all'
+        && !laneFacets().origins.some((o) => o.id === view.origin)) {
+      view.origin = 'all';
+    }
+    applyView();
+  });
+  el('kpi-filter-mode')?.addEventListener('change', (e) => {
+    view.mode = e.target.value;
+    // A mode can remove both ends of the pair that was chosen.
+    const facets = laneFacets();
+    if (view.origin !== 'all' && !facets.origins.some((o) => o.id === view.origin)) {
+      view.origin = 'all';
+    }
+    if (view.destination !== 'all'
+        && !facets.destinations.some((d) => d.id === view.destination)) {
+      view.destination = 'all';
+    }
+    applyView();
+  });
+
   el('kpi-filter-reset')?.addEventListener('click', () => {
     view.entityId = null;
-    view.region = 'all';
-    view.status = 'all';
     view.mode = 'all';
     view.origin = 'all';
     view.destination = 'all';
     view.laneSearch = '';
-    stageFromView();
     const box = el('kpi-lane-search');
     if (box) box.value = '';
-    openPanel(false);
     applyView();
-  });
-
-  el('kpi-filters-apply')?.addEventListener('click', () => {
-    const changedEntity = staged.entityId !== view.entityId;
-    view.region = staged.region;
-    view.status = staged.status;
-    view.mode = staged.mode;
-    view.origin = staged.origin;
-    view.destination = staged.destination;
-    view.entityId = staged.entityId;
-    // A narrowing can remove the very site being viewed.
-    if (view.entityId && view.domain !== 'lane') {
-      setWarehouseFilter({ domain: view.domain, region: view.region, status: view.status });
-      if (!warehouseFacets().entities.some((x) => x.id === view.entityId)) {
-        view.entityId = null;
-      }
-    }
-    if (view.entityId && changedEntity && hooks.selectEntity) {
-      hooks.selectEntity(view.entityId);
-    }
-    openPanel(false);
-    applyView();
-    if (changedEntity) scrollViewToTop();
-  });
-
-  // Clicking away abandons the edit rather than half-applying it.
-  document.addEventListener('click', (e) => {
-    if (!panel || panel.hidden) return;
-    if (!el('kpi-filters')?.contains(e.target)) openPanel(false);
   });
 
   el('kpi-lane-search')?.addEventListener('input', (e) => {
@@ -930,7 +957,10 @@ export function initKpiView(nextHooks) {
     renderLaneView();
   });
 
-  el('btn-export-pdf')?.addEventListener('click', () => exportKpiViewAsPdf());
+  el('btn-export-xlsx')?.addEventListener('click',
+    (e) => exportKpiViewToExcel(e.currentTarget));
+  el('btn-export-method')?.addEventListener('click',
+    (e) => exportKpiMethod(e.currentTarget));
 
   el('kpi-crumb-back')?.addEventListener('click', () => selectEntity(null));
 

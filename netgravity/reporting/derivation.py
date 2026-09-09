@@ -58,12 +58,58 @@ class Figure:
 
 
 @dataclass(frozen=True)
+class Variable:
+    """
+    One symbol in an equation: what it means, what it was, where it came from.
+
+    A formula with undefined symbols is decoration. `value` is the display
+    string for THIS network — the same string the screen shows — so a reader
+    can follow the arithmetic with the actual numbers rather than being shown
+    the shape of a calculation and left to trust it.
+    """
+
+    symbol: str
+    meaning: str
+    value: str = ""
+    source: str = ""
+
+
+@dataclass(frozen=True)
+class Equation:
+    """
+    One calculation, three ways: symbolically, with its symbols defined, and
+    with this network's numbers substituted in.
+
+    WHY ALL THREE. The symbolic form is what a reader checks against their own
+    understanding of the metric. The substitution is what they check against
+    the figure on the screen. Neither alone is convincing: a formula with no
+    numbers cannot be verified, and an arithmetic line with no formula cannot
+    be generalised to the next network.
+
+    `substituted` is written by the caller from the same values the figures
+    table carries, never re-derived here — a document whose worked example
+    disagrees with its own results table is worse than one with no example.
+    """
+
+    name: str
+    formula: str
+    variables: Sequence[Variable] = field(default_factory=tuple)
+    substituted: str = ""
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class DerivationStep:
     """One stage of the working, with the figures read at that stage."""
 
     title: str
     detail: str = ""
     figures: Sequence[Figure] = field(default_factory=tuple)
+    #: The arithmetic behind this stage. Empty where the stage is a reading
+    #: rather than a calculation — "the solver reported these flows" has no
+    #: equation, and inventing one for it would be describing work that was
+    #: not done.
+    equations: Sequence[Equation] = field(default_factory=tuple)
 
 
 @dataclass
@@ -141,6 +187,66 @@ def _heading(doc, text: str) -> None:
     p.paragraph_format.space_before = Pt(14)
 
 
+def _equation_block(doc, equation: "Equation") -> None:
+    """
+    One equation: its name, the formula, what each symbol is, and the same
+    formula with this network's numbers in it.
+
+    The formula is set in a monospaced face and indented, because a reader
+    scanning for "what was actually calculated" finds it by shape before they
+    read a word of it.
+    """
+    from docx.shared import Pt, Inches
+
+    if equation.name:
+        _para(doc, equation.name, size=9.5, bold=True, space_after=2)
+
+    formula = _para(doc, equation.formula, size=10.5, space_after=2)
+    formula.paragraph_format.left_indent = Inches(0.25)
+    for run in formula.runs:
+        run.font.name = "Consolas"
+
+    if equation.substituted:
+        worked = _para(doc, equation.substituted, size=10.5, space_after=4,
+                       colour=_ACCENT)
+        worked.paragraph_format.left_indent = Inches(0.25)
+        for run in worked.runs:
+            run.font.name = "Consolas"
+            run.bold = True
+
+    variables = [v for v in (equation.variables or ()) if v is not None]
+    if variables:
+        table = doc.add_table(rows=1 + len(variables), cols=4)
+        table.style = "Table Grid"
+        table.autofit = False
+        widths = (Inches(0.85), Inches(2.7), Inches(1.5), Inches(1.75))
+        for col, (head, width) in enumerate(
+                zip(("Symbol", "What it is", "This network", "From"), widths)):
+            cell = table.cell(0, col)
+            cell.text = ""
+            run = cell.paragraphs[0].add_run(head)
+            run.bold = True
+            run.font.size = Pt(8.5)
+            _shade(cell, "F3ECFA")
+            cell.width = width
+        for r, variable in enumerate(variables, start=1):
+            for col, text in enumerate((variable.symbol, variable.meaning,
+                                        variable.value, variable.source)):
+                cell = table.cell(r, col)
+                cell.text = ""
+                run = cell.paragraphs[0].add_run(text or "—")
+                run.font.size = Pt(8.5)
+                if col == 0:
+                    run.font.name = "Consolas"
+                    run.bold = True
+                cell.width = widths[col]
+        doc.add_paragraph()
+
+    if equation.note:
+        _para(doc, equation.note, size=9, colour=_MUTED, italic=True,
+              space_after=6)
+
+
 def build_derivation_docx(report: DerivationReport) -> bytes:
     """
     Render one report as a .docx, and return its bytes.
@@ -202,6 +308,14 @@ def build_derivation_docx(report: DerivationReport) -> bytes:
         _heading(doc, f"Step {index} — {step.title}")
         if step.detail:
             _para(doc, step.detail, size=10, space_after=6)
+        # ── the arithmetic, before the figures it produced ──────────
+        #
+        # A reader following a derivation wants the rule before the result:
+        # the equation says what was computed, the substitution shows it being
+        # computed, and the table below records what came out.
+        for equation in (step.equations or ()):
+            _equation_block(doc, equation)
+
         rows = [f for f in step.figures if f is not None]
         if not rows:
             continue

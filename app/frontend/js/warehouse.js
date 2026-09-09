@@ -16,7 +16,7 @@
  * ONE EXPORT
  * ----------
  * This file writes no file. The screen's export is a PDF of the view as it
- * is drawn — see `exportKpiViewAsPdf()` in `kpi-view.js` — so there is no
+ * is drawn — the print stylesheet in `style.css` — so there is no
  * second serialisation here to drift from what is on screen.
  *
  * ONE VOCABULARY

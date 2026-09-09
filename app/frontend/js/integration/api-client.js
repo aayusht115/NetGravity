@@ -159,12 +159,33 @@ class ApiClient {
     if (this.token) headers.set('Authorization', `Bearer ${this.token}`);
     headers.set('X-Request-ID', this._generateRequestId());
 
+    // A DOWNLOAD IS NOT ALWAYS A GET.
+    //
+    // This was hard-wired to GET, which is right for a document identified by
+    // its id and wrong for one built from a SELECTION: the KPI workbook is
+    // scoped by the list of facilities on screen, and a list that can run to
+    // every site in a large network does not belong in a query string. So the
+    // method and body are honoured, with the same double-submit CSRF token
+    // every other unsafe request on this client carries — without it the
+    // server refuses the POST and the button reports a failure that is really
+    // a missing header.
+    const method = (options.method || 'GET').toUpperCase();
+    let body;
+    if (options.body !== undefined && method !== 'GET') {
+      headers.set('Content-Type', 'application/json');
+      body = JSON.stringify(options.body);
+    }
+    if (UNSAFE_METHODS.has(method) && !headers.has(CSRF_HEADER)) {
+      const csrf = readCookie(CSRF_COOKIE);
+      if (csrf) headers.set(CSRF_HEADER, csrf);
+    }
+
     const controller = new AbortController();
     const budget = options.timeout || CONFIG.REQUEST_TIMEOUT_MS;
     const timeout = setTimeout(() => controller.abort(), budget);
     try {
       const response = await fetch(url, {
-        method: 'GET', headers, credentials: 'include', signal: controller.signal,
+        method, headers, body, credentials: 'include', signal: controller.signal,
       });
       if (!response.ok) {
         // The server's own reason, where it sent one, rather than "download

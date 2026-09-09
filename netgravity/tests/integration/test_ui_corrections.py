@@ -190,10 +190,16 @@ class TestTheScenarioKeySitsBelowItsMap:
     def test_the_groups_run_across_the_strip_not_down_it(self, style_css):
         """Four stacked groups is the shape that was too tall for the map."""
         rule = _rule(style_css, ".tw-legend-below {")
-        assert "display: flex" in rule
+        # A GRID, not a flex row. Sized to their own content the four columns
+        # came out at four different widths, and the scenario group — which
+        # carries the longest sentences — got the narrowest share and ran its
+        # labels off the card. Equal tracks that wrap as whole columns.
+        assert "display: grid" in rule
+        assert "grid-template-columns: repeat(auto-fit" in rule
         assert "max-width: none" in rule
-        group = _rule(style_css, ".tw-legend-below .tw-legend-group {")
-        assert "flex: 1 1" in group
+        # Every column's rows start on the same line, whatever its heading did.
+        title = _rule(style_css, ".tw-legend-below .tw-legend-title {")
+        assert "min-height" in title
 
     def test_it_is_not_bounded_or_scrolled_any_more(self, style_css):
         """
@@ -225,11 +231,16 @@ class TestTheScenarioKeySitsBelowItsMap:
 
 class TestTheForecastScreenDropsDeadScope:
     def test_the_facility_and_period_pair_is_hidden_there(self):
+        """
+        Hidden on Forecast by an exception at first; hidden everywhere now,
+        because the three screens still showing it did not use it either. The
+        Forecast screen is still covered — by the rule that covers them all.
+        """
         js = _asset("js", "app.js")
         fn = js[js.index("function updateTopBarLayout(tab) {"):]
         fn = fn[:fn.index("\n/**")]
-        assert "tab !== 'forecast'" in fn
-        assert "tab !== 'scenarios'" in fn
+        block = fn[fn.index("const topScope"):]
+        assert "'none'" in block[:block.index("}")]
 
     def test_the_screen_keeps_the_picker_that_does_narrow_it(self):
         """
@@ -476,3 +487,56 @@ class TestTheFacilityDetailRenders:
     def test_the_escaper_it_uses_is_defined_in_that_file(self):
         js = _asset("js", "app.js")
         assert "function escAttr(value) {" in js
+
+
+class TestTheMarkupIsBalanced:
+    """
+    ONE STRAY `</div>` TAKES THE WHOLE APPLICATION DOWN, AND SILENTLY.
+
+    Replacing the KPI filter panel with a row left one extra closing tag. The
+    browser reported no error — a stray close is not a parse failure, it just
+    ends the nearest open element early — so every module loaded, every
+    function ran, and the console stayed clean. What happened instead was that
+    the tab panel closed before the elements after it, which lifted them out
+    of the app shell: the sidebar and the top bar vanished, two tab panels
+    were visible at once, and the Overview was simply gone.
+
+    Nothing else in this suite could have caught it. Every other check reads
+    strings out of the file, and the file contained exactly the right strings.
+    """
+
+    def _body(self) -> str:
+        """The markup, less comments — commented-out tags are not markup."""
+        import re
+        html = _asset("index.html")
+        return re.sub(r"<!--.*?-->", "", html, flags=re.S)
+
+    def test_every_div_is_closed_exactly_once(self):
+        import re
+        body = self._body()
+        opened = len(re.findall(r"<div\b", body))
+        closed = len(re.findall(r"</div>", body))
+        assert opened == closed, (
+            f"{opened} <div> against {closed} </div> — a difference of "
+            f"{opened - closed}. A stray close ends the nearest open element "
+            f"early and lifts everything after it out of the app shell."
+        )
+
+    def test_the_other_containers_balance_too(self):
+        import re
+        body = self._body()
+        for tag in ("section", "table", "tbody", "thead", "ul", "label"):
+            opened = len(re.findall(rf"<{tag}\b", body))
+            closed = len(re.findall(rf"</{tag}>", body))
+            assert opened == closed, f"<{tag}>: {opened} open, {closed} closed"
+
+    def test_the_kpi_screen_still_holds_its_own_sections(self):
+        """
+        The specific nesting that broke: the filter bar, the roll-up, the
+        corridor lens and the entity view are all INSIDE the KPI tab panel.
+        """
+        html = _asset("index.html")
+        panel = html[html.index('id="tab-facility-dashboard"'):]
+        panel = panel[:panel.index("</section>")]
+        for part in ("kpi-filter-bar", "kpi-rollup", "kpi-lanes", "kpi-entity"):
+            assert part in panel, part

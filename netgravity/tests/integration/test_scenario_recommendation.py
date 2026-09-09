@@ -794,14 +794,22 @@ class TestTheSharedBudgetIsSpentOnlyWhereItBuysSomething:
         Verdict, what it means, the figures behind it, what it asks of the
         network, the risk — then what to do.
         """
+        # ANCHORED ON THE REAL CARD, not on the first `innerHTML` in the
+        # function — the three above it are the empty, loading and failed
+        # states, and slicing from the first one measured the order of a
+        # string that is not the card.
         js = _asset("scenarios.js")
-        block = js[js.index("container.innerHTML = takeHeadHtml("):]
+        block = js[js.index("container.innerHTML = takeHeadHtml(source, cached)"):]
         block = block[:block.index("container.querySelectorAll(")]
+        # `capacityResponseHtml` is NOT here any more, and deliberately: the
+        # per-site capacity account is the working behind the recommendation
+        # and moved to the detail drawer when the card was cut from 1,519px
+        # to 809px so its actions would sit above the fold.
+        assert "capacityResponseHtml(" not in block
         order = [block.index(part) for part in (
             "scn-take-headline",          # the conclusion
             "narrativeHtml(",             # what it means
             "atAGlanceHtml(",             # the facts behind it
-            "capacityResponseHtml(",      # what it asks of the network
             "warningBandHtml(",           # what not to miss
             "takeActionsHtml(",           # what to do about it
             "takeFooterHtml(",            # and how to look closer
