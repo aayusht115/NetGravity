@@ -214,6 +214,16 @@ export function mapScenarioRecord(raw) {
     // a scenario solved before it existed, and the card renders nothing
     // rather than deriving a substitute here.
     capacityResponse: raw.capacity_response || null,
+
+    // WHAT TO DO ABOUT IT, decided on the server from the solved result.
+    //
+    // This list used to be built here in the browser. One definition means
+    // the sentence a reader acts on is the sentence in the document they
+    // forward, and that the reasoning behind a recommendation is auditable
+    // rather than living in a render function. `/compare` recomputes it
+    // against the record as it now stands, so a scenario solved before this
+    // existed still gets one.
+    recommendedActions: raw.recommended_actions || null,
     // What the builder actually did, in its own words.
     overrides: raw.overrides || [],
     triggeredThresholds: raw.triggered_thresholds || [],

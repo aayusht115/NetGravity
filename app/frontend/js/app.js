@@ -555,7 +555,7 @@ function renderForecastAttention(listId = 'fc-attn-body') {
           + 'upload. Nothing was modelled, adjusted or recalculated.'
         : `${card && card.source === 'llm'
             ? 'Written by the model from the forecaster\'s own output.'
-            : 'Written by the deterministic template from the forecaster\'s own output.'}
+            : 'Written from the forecaster\'s own output without a model.'}
            Every figure here is the forecasting engine's.`}
     </div>`;
 
@@ -947,11 +947,20 @@ function updateTopBarLayout(tab) {
   // and a user who had just set a facility on Home looking for it in the
   // wrong row on the Digital Twin.
   //
-  // Scenario Planning is the one exception, and by request: a scenario is
-  // solved over the whole network for the horizon it was built with, so a
-  // facility or period picker there would be a control that changes nothing.
-  // Hiding it is more honest than showing a dead one.
-  const scopeApplies = (tab !== 'scenarios');
+  // Two screens are exceptions, both because the pair would be dead there.
+  //
+  // Scenario Planning: a scenario is solved over the whole network for the
+  // horizon it was built with, so neither control changes anything.
+  //
+  // Forecast: a demand forecast is per market-product SERIES, and the screen
+  // has its own picker for that (`#fc-series-select`) — a facility does not
+  // narrow it, because a forecast is about demand and demand belongs to
+  // markets. Nor does the period: the horizon is the forecast's own and is
+  // stated on the card. Two controls that look like scope and move nothing
+  // are worse than none: a reader who sets a facility and sees the chart
+  // unchanged has to work out whether the control is broken or the network
+  // is. Hiding a dead control is more honest than showing it.
+  const scopeApplies = (tab !== 'scenarios' && tab !== 'forecast');
   const topScope = document.getElementById('home-top-controls');
   if (topScope) {
     topScope.style.display = scopeApplies ? 'flex' : 'none';
@@ -1031,6 +1040,9 @@ if (typeof window !== 'undefined') window.scrollPageToTop = scrollPageToTop;
 // ─── Tab Routing & Sub-Navigation ───────────────────────────
 export function navigateToTab(tab) {
   updateTopBarLayout(tab);
+  // After the bar has been laid out for this tab: its height changes with
+  // what it carries, and anything pinned below it has to know.
+  requestAnimationFrame(publishTopBarHeight);
 
   // Overview, then Baseline (Digital Twin / KPIs / Insights), then Forecast
   // and Scenarios. The full-page insight deep dive is NOT a sidebar
@@ -1810,6 +1822,35 @@ function populateFacilitySelector() {
  * circular: its top is fixed by what comes BEFORE it, and nothing before it
  * depends on its height.
  */
+/**
+ * The height of the in-page top bar, published for anything that has to sit
+ * clear of it.
+ *
+ * `.app-global-topbar` is `position: sticky; top: 0` inside `.main-content`,
+ * which is the scroll container. Anything else sticky in that container pins
+ * to the same scrollport — so the scenario recommendation card, at
+ * `top: 16px`, pinned SIXTEEN PIXELS FROM THE TOP OF THE SCROLLPORT, which is
+ * behind the bar. Its heading and the first line of the verdict scrolled
+ * underneath and stayed there.
+ *
+ * Measured rather than written as a constant: the bar's height is its own
+ * padding plus a row of controls whose size follows the type scale, and it
+ * changes with the project-name button's line count on a narrow window.
+ */
+function publishTopBarHeight() {
+  const bar = document.querySelector('.app-global-topbar');
+  const shell = document.querySelector('.main-content');
+  if (!bar || !shell) return;
+  const h = Math.round(bar.getBoundingClientRect().height);
+  if (Number.isFinite(h) && h > 0) {
+    shell.style.setProperty('--global-topbar-h', `${h}px`);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', publishTopBarHeight);
+}
+
 function sizePageToWindow(selector, varName) {
   const el = document.querySelector(selector);
   if (!el || el.offsetParent === null) return;

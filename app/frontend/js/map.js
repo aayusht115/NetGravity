@@ -27,7 +27,8 @@ import { CONFIG } from './integration/config.js';
 // One definition of what a corridor's thickness means, shared with the 3D
 // twin and with the legend that describes it — see the module header.
 import { flowBands, bandForFlow, twinLegendHtml, facilityLabel,
-         facilityShortLabel, NODE_STYLE } from './twin-legend.js';
+         facilityShortLabel, glyphSize, NODE_STYLE,
+         scenarioLegendHtml } from './twin-legend.js';
 
 // ─── State ──────────────────────────────────────────────────
 const maps = {}; // containerId → L.Map
@@ -912,7 +913,10 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
   const iconMap = { plant: NODE_STYLE.plant.glyph, dc: NODE_STYLE.dc.glyph,
                     market: NODE_STYLE.market.glyph };
   const colorMap = { plant: COLORS.plant, dc: COLORS.dc, market: COLORS.market };
-  const sizeMap = { plant: 16, dc: 14, market: 9 };
+  // From `NODE_STYLE`, so the marker, the legend chip and the 3D badge
+  // are one decision rather than three numbers in three files.
+  const sizeMap = { plant: NODE_STYLE.plant.radius, dc: NODE_STYLE.dc.radius,
+                    market: NODE_STYLE.market.radius };
   const color = colorMap[type];
   const size = sizeMap[type];
 
@@ -941,7 +945,13 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
   const isDc = type === 'dc';
   let border = isDc ? `3px solid ${getUtilColor(utilPct)}` : 'none';
   if (isDc) {
-    adjustedSize = Math.max(12, Math.min(22, 10 + ((utilPct || 0) / 100) * 14));
+    // A DC's marker still grows with its load — a second reading of the same
+    // node, agreeing with the ring's colour. The band moved up with the base
+    // size so a lightly-loaded DC is never smaller than a market.
+    adjustedSize = Math.max(
+      NODE_STYLE.market.radius + 2,
+      Math.min(NODE_STYLE.dc.radius + 8,
+               NODE_STYLE.dc.radius - 3 + ((utilPct || 0) / 100) * 11));
   }
   if (isClosed) border = '3px dashed #94a3b8';
   if (isNew) border = '3px solid #6B2FA0';
@@ -993,7 +1003,7 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
       border:${border};
       opacity:${isClosed ? 0.6 : 1};
       display:flex;align-items:center;justify-content:center;
-      font-size:${Math.max(11, adjustedSize - 3)}px;
+      font-size:${glyphSize(adjustedSize)}px;
       cursor:pointer;
       box-shadow: 0 1px 4px rgba(0,0,0,0.15);
       transition: transform .2s;
@@ -1058,19 +1068,12 @@ function escapeHtml(value) {
 }
 
 // ─── Legend ──────────────────────────────────────────────────
-// Simple icon chips that mirror the exact marker glyphs on the map, so
-// the legend reads at a glance instead of requiring a color-to-meaning
-// lookup. Facility-type icons and the utilisation-risk ring colors are
-// shown as two clearly separate groups since they answer different
-// questions (what is this node vs. how loaded is it).
-function iconChip(bg, glyph) {
-  return `<span style="display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:${bg}22;font-size:10px;margin-right:6px;flex-shrink:0">${glyph}</span>`;
-}
-
-/** A "n" chip for a legend row, so the legend says how big the network is. */
-function legendCount(kind) {
-  return `<span class="map-legend-count" data-legend-count="${kind}">0</span>`;
-}
+// Both legends on this module are composed in `twin-legend.js`, which is the
+// one place node identity, the flow bands and the utilisation bands are
+// defined. `iconChip` and `legendCount` used to be written out here for the
+// scenario map's own three-row key; that key now comes from the same place as
+// the twin's, and the counts are emitted by `twinLegendHtml` as
+// `[data-legend-count]` rows that `renderMapLegendCounts` fills.
 
 /**
  * Fill every legend count on the page from the network as it now stands.
@@ -1094,15 +1097,16 @@ function addLegend(map, isCompact = false) {
   legend.onAdd = function () {
     const div = L.DomUtil.create('div');
     if (isCompact) {
-      // The scenario planner's small map. Unchanged: it is a thumbnail beside
-      // a comparison table, and the full key would cover a third of it.
-      div.style.cssText =
-        'background:rgba(255,255,255,0.94);padding:7px 10px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,.1);font-size:11.5px;line-height:1.7;font-family:Inter,sans-serif;border:1px solid #cbd5e1';
-      div.innerHTML = `
-        <div style="display:flex;align-items:center">${iconChip(COLORS.plant, NODE_STYLE.plant.glyph)}Plant${legendCount('plant')}</div>
-        <div style="display:flex;align-items:center">${iconChip(COLORS.dc, NODE_STYLE.dc.glyph)}Distribution Centre${legendCount('dc')}</div>
-        <div style="display:flex;align-items:center">${iconChip(COLORS.market, NODE_STYLE.market.glyph)}Market${legendCount('market')}</div>
-      `;
+      // THE SAME KEY THE TWIN USES, plus the three encodings only a scenario
+      // map has. This branch used to render three rows — plant, DC, market —
+      // on the grounds that the scenario map was a thumbnail. It is the
+      // full-width panel at the foot of the page, and it was drawing a purple
+      // dashed corridor for a moved lane, a grey one for an unmoved one and a
+      // utilisation band on every DC, with a key that explained none of them.
+      div.className = 'tw-legend tw-legend-2d tw-legend-scenario';
+      div.innerHTML = scenarioLegendHtml(perPeriodLabel());
+      L.DomEvent.disableClickPropagation(div);
+      L.DomEvent.disableScrollPropagation(div);
     } else {
       // The Digital Twin's own map, and the only place this branch renders.
       // Built from `twinLegendHtml` so it says exactly what the 3D twin's
@@ -1144,7 +1148,12 @@ function legendKeyFor(map) {
 export function refreshTwinMapLegend() {
   if (typeof document === 'undefined') return;
   document.querySelectorAll('.tw-legend-2d').forEach((el) => {
-    el.innerHTML = twinLegendHtml(perPeriodLabel());
+    // Each legend redraws as what it IS. Rewriting every `.tw-legend-2d` with
+    // `twinLegendHtml` would strip the scenario map's own three rows on the
+    // first refresh after a network loaded — which is every refresh.
+    el.innerHTML = el.classList.contains('tw-legend-scenario')
+      ? scenarioLegendHtml(perPeriodLabel())
+      : twinLegendHtml(perPeriodLabel());
   });
   renderMapLegendCounts();
 }

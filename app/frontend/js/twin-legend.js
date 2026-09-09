@@ -70,12 +70,33 @@ import { LANES, formatNumber } from './data.js';
  */
 export const NODE_STYLE = {
   plant:  { glyph: '\u{1F3ED}', color: '#6B2FA0', hex3d: 0x6b2fa0,
-            label: 'Plant' },
+            label: 'Plant', radius: 15 },
   dc:     { glyph: '\u{1F3EA}', color: '#2563eb', hex3d: 0x2563eb,
-            label: 'Distribution Centre' },
+            label: 'Distribution Centre', radius: 14 },
   market: { glyph: '\u{1F4E6}', color: '#0891b2', hex3d: 0x0891b2,
-            label: 'Demand Market' },
+            label: 'Demand Market', radius: 10 },
 };
+
+/**
+ * How big the glyph inside a node is drawn, from the node's own radius.
+ *
+ * `radius` on `NODE_STYLE` is the marker's half-width in CSS pixels on the 2D
+ * map. It was 16 / 14 / 9, with the glyph rendered at `size - 3` — so a plant
+ * was a 13px emoji and a market an 11px one, both below the smallest body
+ * text in the product. At the zoom a national network is framed at, a reader
+ * could see that a marker was there and could not tell a factory from a shop
+ * without hovering it, which is the entire job of a glyph.
+ *
+ * A FRACTION of the marker rather than an offset from it: a DC's marker grows
+ * with its utilisation, and subtracting a constant made the glyph shrink
+ * relative to its own circle as the circle grew.
+ */
+export const GLYPH_SCALE = 1.05;
+
+/** The glyph size for a marker of this radius, in CSS pixels. */
+export function glyphSize(radius) {
+  return Math.round(Math.max(13, radius * GLYPH_SCALE));
+}
 
 /** Line weight in the 2D map, thickest band first. */
 const WEIGHT_2D = [6, 4, 2.5, 1.25];
@@ -154,7 +175,9 @@ function facilityRow(kind) {
   return `
     <div class="tw-legend-row">
       <span class="tw-legend-glyph"
-            style="background:${style.color}1f;border-color:${style.color}59"
+            style="background:${style.color}1f;border-color:${style.color}59;
+                   width:${style.radius * 2}px;height:${style.radius * 2}px;
+                   font-size:${glyphSize(style.radius)}px"
             aria-hidden="true">${style.glyph}</span>
       <span class="tw-legend-label">${style.label}</span>
       <span class="tw-legend-count" data-legend-count="${kind}">0</span>
@@ -264,4 +287,51 @@ export function facilityShortLabel(node, maxName = 18) {
 
   if (!id) return tail;
   return tail ? `${id} · ${tail}` : id;
+}
+
+
+/**
+ * The key for a SCENARIO map: the twin's own, plus the three things a
+ * scenario map draws that the twin does not.
+ *
+ * WHY IT IS THE TWIN'S KEY. The scenario map had a three-row key — plant, DC,
+ * market — on the grounds that it was "a thumbnail beside a comparison table
+ * and the full key would cover a third of it". It is not a thumbnail any
+ * more: it is the full-width panel at the foot of the page. Meanwhile it
+ * drew a purple dashed corridor for a lane the scenario moved, a grey one for
+ * a lane it did not, and coloured every DC by its utilisation band — none of
+ * which the three rows explained. A reader was looking at four visual
+ * encodings and a key for one of them.
+ *
+ * The rows below are the ones that are TRUE ONLY HERE. Everything else comes
+ * from `twinLegendHtml`, so a chip on this map and the same chip on the twin
+ * cannot drift apart — which is the whole reason this module exists.
+ */
+export function scenarioLegendHtml(perPeriod = 'units/period') {
+  return twinLegendHtml(perPeriod) + `
+    <div class="tw-legend-group">
+      <div class="tw-legend-title">What this scenario changes</div>
+      <div class="tw-legend-row">
+        <span class="tw-legend-swatch">
+          <svg width="26" height="8" aria-hidden="true">
+            <line x1="1" y1="4" x2="25" y2="4" stroke="${NODE_STYLE.plant.color}"
+                  stroke-width="3" stroke-dasharray="6 4"/>
+          </svg>
+        </span>
+        <span>Corridor this plan moves volume on</span>
+      </div>
+      <div class="tw-legend-row">
+        <span class="tw-legend-swatch">
+          <svg width="26" height="8" aria-hidden="true">
+            <line x1="1" y1="4" x2="25" y2="4" stroke="#94a3b8" stroke-width="3"/>
+          </svg>
+        </span>
+        <span>Corridor unchanged from today</span>
+      </div>
+      <div class="tw-legend-row">
+        <span class="tw-legend-swatch"
+              style="color:${NODE_STYLE.dc.color};font-weight:800">+</span>
+        <span>Site this scenario adds</span>
+      </div>
+    </div>`;
 }

@@ -185,13 +185,27 @@ class TestALongSolveCanBeLeftRunning:
 
 class TestTheActionsSayWhatTheChangeAsksOfTheNetwork:
 
-    def test_the_card_carries_the_capacity_account(self, scenarios_js):
-        assert "function capacityResponseHtml(scn, { title = true, rows = 5 } = {})"             in scenarios_js
-        # Three on the card, five in the drawer: the card already carries the
-        # verdict, the figures, the band and the actions, and a recommendation
-        # whose primary action is pushed below the fold by its own supporting
-        # detail is one nobody acts on. What is not shown is still counted.
-        assert "capacityResponseHtml(focus, { rows: 3 })" in scenarios_js
+    def test_the_capacity_account_is_in_the_detail_view(self, scenarios_js):
+        """
+        WHICH SITES THE PLAN FILLS moved off the card and into the drawer.
+
+        It was three rows on the card and five in the drawer, on the reasoning
+        that a recommendation needs its supporting detail beside it. In use it
+        was 203px of a 966px card, and the card ran to 1,519px — so the thing
+        it exists to say, the recommended action, was below the fold. That is
+        the same defect the three rows were trimmed to avoid, one level up.
+
+        It is the WORKING behind the recommendation, and the drawer is where
+        the working goes: one press, under the heading it already had.
+        """
+        assert "function capacityResponseHtml(scn, { title = true, rows = 5 } = {})" \
+            in scenarios_js
+        drawer = scenarios_js[scenarios_js.index("export function openScenarioDrawer"):]
+        assert "capacityResponseHtml(scn, { title: false })" in drawer
+        # And no longer on the card.
+        card = scenarios_js[scenarios_js.index("container.innerHTML = takeHeadHtml("):]
+        card = card[:card.index("container.querySelectorAll(")]
+        assert "capacityResponseHtml(" not in card, card
 
     def test_it_renders_nothing_when_the_backend_supplied_nothing(self, scenarios_js):
         block = scenarios_js[scenarios_js.index("function capacityResponseHtml(scn,"):]
@@ -216,29 +230,57 @@ class TestTheActionsSayWhatTheChangeAsksOfTheNetwork:
             encoding="utf-8")
         assert "capacityResponse: raw.capacity_response || null," in mapper
 
-    def test_a_full_site_gets_an_action_that_names_it(self, scenarios_js):
-        block = scenarios_js[scenarios_js.index("function recommendedActions(scn, comparison)"):]
-        block = block[:block.index("\n/**")]
-        assert "`Add capacity at ${site.name}`" in block
-        assert "openCreateToolboxWith('CHANGE_CAPACITY', { facilityId: site.id })" in block
-
-    def test_reopening_is_offered_before_building(self, scenarios_js):
-        block = scenarios_js[scenarios_js.index("function recommendedActions(scn, comparison)"):]
-        block = block[:block.index("\n/**")]
-        assert block.index("Test reopening") < block.index("Site a new facility in")
-
-    def test_a_new_site_is_only_proposed_where_the_backend_found_no_room(
+    def test_the_screen_renders_the_recommendations_it_was_given(
             self, scenarios_js):
         """
-        The backend qualifies a region on three conditions at once — a site at
-        its ceiling, nothing closed, no headroom on anything open. Anything the
-        browser decided for itself would be a recommendation to spend money,
-        made in JavaScript.
+        WHICH actions to recommend is now decided on the server, and the
+        substance of that decision is held in `test_scenario_document.py`
+        against `_recommended_actions` itself — a full site gets an action
+        naming it, reopening is offered before building, a new site only where
+        a region has no room left.
+
+        It moved because deriving it here meant the reasoning behind a
+        recommendation to spend money lived in a render function, could not be
+        audited, and had to be written a second time for the document. What is
+        left to assert HERE is what this file is about: that the screen renders
+        what it was given and decides nothing of its own.
         """
         block = scenarios_js[scenarios_js.index("function recommendedActions(scn, comparison)"):]
         block = block[:block.index("\n/**")]
-        assert "cap.regions_without_room" in block
-        assert "if (regions.length) {" in block
+        # The comparison's list first — recomputed against the record as it now
+        # stands — with the record's own as the fallback.
+        assert "comparison.recommended_actions" in block
+        assert "scn.recommendedActions" in block
+        # No threshold, no capacity arithmetic, no site selection here.
+        for derived in ("cap.regions_without_room", "at_ceiling", "util_pct",
+                        "capacityResponse", "unserved"):
+            assert derived not in block, derived
+
+    def test_every_action_key_opens_the_form_that_performs_it(self, scenarios_js):
+        """
+        The one thing the screen still owns: what pressing a recommendation
+        does. A key the server can send and the screen cannot open would be a
+        recommendation with no way to act on it.
+        """
+        block = scenarios_js[scenarios_js.index("function recommendedActions(scn, comparison)"):]
+        block = block[:block.index("\n/**")]
+        assert "openCreateToolboxWith('CHANGE_CAPACITY'" in block
+        assert "openCreateToolboxWith('OPEN_FACILITY'" in block
+        assert "openCreateToolboxWith('CHANGE_DEMAND')" in block
+        # Reopening names the site it reopens; building names no facility,
+        # because there is not one yet.
+        assert "openMode: 'EXISTING'" in block
+        assert "openMode: 'NEW'" in block
+
+    def test_a_statement_is_not_given_a_button(self, scenarios_js):
+        """
+        "No network change is indicated" is an answer to "what should I do",
+        and a control under it would open a form contradicting the sentence.
+        """
+        block = scenarios_js[scenarios_js.index("function recommendedActions(scn, comparison)"):]
+        block = block[:block.index("\n/**")]
+        assert "row.key === 'NO_ACTION'" in block
+        assert "statement:" in block
 
     def test_an_uploaded_site_name_cannot_inject_markup(self, scenarios_js):
         """
@@ -269,13 +311,24 @@ class TestTheActionsSayWhatTheChangeAsksOfTheNetwork:
 
 class TestTheAssistantOpensOnThisScenario:
 
-    def test_the_action_opens_the_panel(self, scenarios_js):
-        block = scenarios_js[scenarios_js.index("function recommendedActions(scn, comparison)"):]
-        block = block[:block.index("\n/**")]
-        assert "Chat with Netgravity about this scenario" in block
-        assert "openChatAboutScenario(scn, comparison)" in block
-        # The old call, which rendered into an overlay it never opened.
-        assert "window.askChatbotPrompt(" not in block
+    def test_the_assistant_is_reachable_from_the_card(self, scenarios_js):
+        """
+        Talking about a scenario is not a thing to DO about the network, so it
+        is no longer offered as a recommended action — it sits in the footer
+        with the other ways into the analysis. It still has to open the panel:
+        `askChatbotPrompt` alone renders into an overlay it does not open, so
+        the button did nothing visible and sent a question to the orchestrator
+        anyway.
+        """
+        footer = scenarios_js[scenarios_js.index("function takeFooterHtml()"):]
+        footer = footer[:footer.index("\n}\n")]
+        assert "scn-open-chat" in footer
+        assert "Ask about this scenario" in footer
+
+        assert "openChatAboutScenario(focus, comparison)" in scenarios_js
+        block = scenarios_js[scenarios_js.index("function openChatAboutScenario("):]
+        block = block[:block.index("\n}\n")]
+        assert "window.openChatbotWithBriefing(" in block
 
     def test_the_chatbot_exposes_a_way_in_that_does_not_restore_a_thread(self):
         """
@@ -329,7 +382,9 @@ class TestTheAssistantOpensOnThisScenario:
         block = scenarios_js[scenarios_js.index("function openChatAboutScenario(scn, comparison)"):]
         block = block[:block.index("\n/** One authoritative KPI value")]
         assert "card.source === 'llm'" in block
-        assert "no model was reached" in block.lower()
+        # Reworded away from "the deterministic template", which names a code
+        # path rather than telling a reader who wrote the words.
+        assert "without a model" in block.lower()
 
     def test_every_uploaded_value_is_escaped_into_the_thread(self, scenarios_js):
         """

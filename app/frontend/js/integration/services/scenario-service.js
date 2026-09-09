@@ -60,6 +60,23 @@ export const scenarioService = {
    * request the explanation may spend, and only for a set never compared
    * before.
    */
+  /**
+   * One scenario, as the .docx a decision gets taken from.
+   *
+   * UNLIKE the read methods on this service it THROWS. Those return their
+   * failure as a status the screen renders, because a dashboard must draw
+   * something; a download is a thing a person just asked for, and a button
+   * that silently does nothing is the worst possible answer to a click.
+   */
+  async downloadDerivation(scenarioId, projectId = null) {
+    const id = projectId || getActiveProjectId();
+    return apiClient.download(
+      `/api/scenarios/${encodeURIComponent(scenarioId)}/document`,
+      { project_id: id },
+      { timeout: CONFIG.DOCUMENT_TIMEOUT_MS },
+    );
+  },
+
   async compareScenarios(scenarioIds, projectId = null) {
     const id = projectId || getActiveProjectId();
     return apiClient.post(

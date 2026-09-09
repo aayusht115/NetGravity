@@ -47,16 +47,32 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+#: The WORDING these explanations are written in. Part of every fingerprint.
+#:
+#: A saved explanation is keyed by the result it describes, which is right for
+#: the figures and says nothing about the sentences. So a correction to
+#: materially wrong prose — "a demand fill rate of 1.000", a cost quoted with
+#: no currency — changed no fingerprint at all, and every project that had
+#: already been explained kept being served the older words for the life of
+#: the store. A stale explanation that outlives a deploy is indistinguishable,
+#: from the reader's side, from a build that was never fixed.
+#:
+#: BUMP THIS whenever the narration changes: a template sentence, a prompt, or
+#: the formatting of a figure inside one.
+PROSE_VERSION = 2
+
+
 def fingerprint(*parts: Any) -> str:
     """
-    A stable id for the result an explanation describes.
+    A stable id for the result an explanation describes, in the wording of
+    this build.
 
     Built from whatever identifies that result — an execution id, a data
-    version, a sorted set of scenario ids. Order-independent for collections,
-    because comparing A and B is the same analysis as comparing B and A and
-    should not spend a second request.
+    version, a sorted set of scenario ids — plus `PROSE_VERSION`.
+    Order-independent for collections, because comparing A and B is the same
+    analysis as comparing B and A and should not spend a second request.
     """
-    flat: List[str] = []
+    flat: List[str] = [f"prose:v{PROSE_VERSION}"]
     for part in parts:
         if part is None:
             continue

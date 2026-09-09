@@ -1294,6 +1294,34 @@
                   <!-- Populated by JS -->
                 </div>
               </div>
+
+              <!-- THE MAP IS IN THE EVIDENCE COLUMN, not below the whole grid.
+
+                   It used to be a full-width card after the two columns, which
+                   meant the grid row ended at the taller of the table and the
+                   recommendation — and the recommendation card is `position:
+                   sticky`, which travels only inside its own column. With no
+                   column left to travel in it did not stick at all: scrolling
+                   down to the map carried the card up under the top bar and
+                   out of the window, so the reader was looking at a scenario's
+                   network with no recommendation about it on screen.
+
+                   In this column the card stays pinned for the whole length of
+                   the evidence. The map loses about a quarter of its width and
+                   keeps its height; a recommendation you can still read while
+                   you look at the network it is about is worth more than the
+                   width. -->
+              <div class="scn-visual-context-card">
+                <div class="scn-table-header-row" style="margin-bottom:8px">
+                  <div class="scn-table-title">Digital Twin — Visual Context</div>
+                  <div class="toggle-group" id="scn-map-toggle-group">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+                <div class="scn-map-wrap" id="scenario-map-wrap">
+                  <div id="scenario-leaflet-map" style="width:100%;height:100%"></div>
+                </div>
+              </div>
             </div>
 
             <!-- Right column: NetGravity's take -->
@@ -1301,21 +1329,6 @@
               <div class="scn-take-card" id="scn-multi-take-card">
                 <!-- Populated by JS -->
               </div>
-            </div>
-          </div>
-
-          <!-- Digital Twin visual context, full width at the bottom — one
-               toggle button per currently-selected scenario (up to 3) so you
-               can flip between seeing each one's proposed network changes. -->
-          <div class="scn-visual-context-card mt-lg">
-            <div class="scn-table-header-row" style="margin-bottom:8px">
-              <div class="scn-table-title">Digital Twin — Visual Context</div>
-              <div class="toggle-group" id="scn-map-toggle-group">
-                <!-- Populated by JS -->
-              </div>
-            </div>
-            <div class="scn-map-wrap" id="scenario-map-wrap">
-              <div id="scenario-leaflet-map" style="width:100%;height:100%"></div>
             </div>
           </div>
 

@@ -864,22 +864,28 @@ async function loadComparison(ids) {
   renderMultiScenarioTakeCard();
 }
 
-function takeCheckItem(good, text) {
-  return `
-    <div class="scn-take-check-item">
-      <span class="scn-take-check-icon ${good === null ? 'warn' : (good ? 'good' : 'warn')}">${good ? '✓' : '!'}</span>
-      <span>${text}</span>
-    </div>`;
-}
 
 /** The card head, with where the words came from. Visibility of system status. */
 function takeHeadHtml(source, cached) {
-  const badge = !source ? ''
-    : source === 'llm'
-      ? `<span class="scn-take-source" title="${cached
-          ? 'Written once by the model for this analysis and saved against it — reopening it spends nothing.'
-          : 'Written by the model from the deterministic results. Every figure on this card is supplied by the engine, not by the model.'}">AI${cached ? ' · saved' : ''}</span>`
-      : '<span class="scn-take-source muted" title="Written by the deterministic template. No model was reached.">Rule-based</span>';
+  // THE BADGE SAYS WHERE THE WORDS CAME FROM, and says nothing when they came
+  // from the fallback.
+  //
+  // It used to print "Rule-based" there. Two things were wrong with that. It
+  // is jargon about this application's internals, which is not what a chip
+  // beside a recommendation is for; and it was showing on a build with a
+  // working gateway, because the model's reply was being truncated at the
+  // gateway's output budget and silently discarded — so the label was
+  // reporting a defect as if it were a design.
+  //
+  // Nothing is claimed instead. Labelling template prose "AI" would be a
+  // false statement about provenance, and the honest account stays where a
+  // reader can reach it: "How this was decided" carries the attribution line
+  // either way.
+  const badge = source === 'llm'
+    ? `<span class="scn-take-source" title="${cached
+        ? 'Written once by the model for this analysis and saved against it — reopening it spends nothing.'
+        : 'Written by the model from the deterministic results. Every figure on this card is supplied by the engine, not by the model.'}">AI${cached ? ' · saved' : ''}</span>`
+    : '';
   return `
     <div class="scn-take-head">
       <span class="scn-take-icon">✨</span>
@@ -888,189 +894,66 @@ function takeHeadHtml(source, cached) {
     </div>`;
 }
 
-/** Up to three supporting numbers, exactly as the backend supplied them. */
-function takeFiguresHtml(figures) {
-  const shown = (figures || []).slice(0, 3);
-  if (!shown.length) return '';
-  return `
-    <div class="scn-take-figures">
-      ${shown.map((f) => {
-        const value = f.format === 'currency'
-          ? (typeof f.amount === 'number' ? formatCurrency(f.amount) : 'Not available')
-          : (f.value || 'Not available');
-        return `
-        <div class="scn-take-figure">
-          <div class="scn-take-figure-label">${f.label}</div>
-          <div class="scn-take-figure-value">${value}</div>
-        </div>`;
-      }).join('')}
-    </div>`;
-}
 
 /**
- * What a reader can actually DO about this scenario, given what it found.
+ * What a reader should DO about this scenario, and what pressing it opens.
  *
- * Every item maps to something this application performs. None of them
- * approves anything: opening or closing a site is classified HUMAN_ONLY by
- * governance whatever the economics say, and the backend says so on the
- * comparison — so the actions offered are ways to examine, test and ask,
- * which is what a what-if screen supports.
+ * THE LIST IS THE SERVER'S. It used to be derived here, in a render function,
+ * from the same capacity block the backend already had — so the reasoning
+ * behind a recommendation lived in the browser, could not be audited, and had
+ * to be written a second time for the document. `_recommended_actions` in
+ * `app/backend/api/scenarios.py` decides; this maps each `key` to the form it
+ * opens and nothing else.
  *
- * The list is context-specific in the strict sense: each entry is gated on a
- * FINDING in this scenario's own solved result, so a scenario that stranded no
- * demand is never offered "test more capacity", and a scenario that changed no
- * topology is never labelled a structural decision.
+ * Every entry is a NETWORK INTERVENTION. "Review the proposed changes" was
+ * the first item on every scenario whatever the solve found, and it is not a
+ * recommendation: it told a reader to look at the screen they were already
+ * looking at. Reading the detail is a way INTO the analysis, offered
+ * separately below the list, and asking the assistant is a way to talk about
+ * it — neither is a thing to do about the network.
  */
 function recommendedActions(scn, comparison) {
-  const actions = [];
-  if (!scn) return actions;
+  if (!scn) return [];
+  // `/compare` recomputes the list against the record as it now stands, so it
+  // is preferred over the copy saved with the scenario at simulate time.
+  const fromComparison = comparison && comparison.recommended_actions
+    ? comparison.recommended_actions[scn.id] : null;
+  const rows = fromComparison || scn.recommendedActions || [];
 
-  // The governance verdict is NOT here. Opening or closing a site is a human
-  // decision whatever the economics say, and that is a statement about the
-  // change rather than something a reader can press — see `governanceHtml`.
-  const row = ((comparison && comparison.ranked) || [])
-    .find((r) => r.scenario_id === scn.id) || {};
-  const action = (scn.request && scn.request.action) || '';
-
-  // Always first: read what the solver actually did before acting on it.
-  actions.push({
-    label: 'Review the proposed changes',
-    detail: 'Sites, corridors and cost, component by component, from this solve.',
-    primary: true,
-    run: () => openScenarioDrawer(scn.id),
+  return rows.map((row) => {
+    const target = row.target || {};
+    const base = {
+      label: row.label || '',
+      detail: row.reason || '',
+      key: row.key,
+      // A statement, not a control. Rendered as prose: there is nothing to
+      // press when the finding is that nothing needs doing.
+      statement: row.key === 'NO_ACTION',
+    };
+    switch (row.key) {
+      case 'REOPEN_FACILITY':
+        return { ...base, primary: true,
+          run: () => openCreateToolboxWith('OPEN_FACILITY', {
+            facilityId: target.facility_id, openMode: 'EXISTING',
+            name: `Reopen ${target.name || target.facility_id || 'site'}` }) };
+      case 'ADD_CAPACITY':
+        return { ...base, primary: true,
+          run: () => openCreateToolboxWith('CHANGE_CAPACITY',
+            target.facility_id ? { facilityId: target.facility_id } : {}) };
+      case 'OPEN_NEW_FACILITY':
+        return { ...base,
+          run: () => openCreateToolboxWith('OPEN_FACILITY', {
+            openMode: 'NEW', name: `New site in ${target.region || ''}`.trim() }) };
+      case 'SCOPE_DEMAND_GROWTH':
+        return { ...base, run: () => openCreateToolboxWith('CHANGE_DEMAND') };
+      case 'REQUEST_DATA':
+        return { ...base, run: () => {
+          if (typeof window.navigateToTab === 'function') window.navigateToTab('home');
+        } };
+      default:
+        return base;
+    }
   });
-
-  // What the change asks of the network, and what can be done about it.
-  //
-  // These used to be one generic entry — "Test more capacity at the busiest
-  // site", which named no site and opened an empty capacity form. The backend
-  // now says WHICH sites the plan fills, how much extra each carries, what
-  // capacity was left closed and which regions have nothing left, so each
-  // action can name its target and open the builder already pointed at it.
-  const cap = scn.capacityResponse || null;
-  const unserved = readKpiValue(scn.scenarioKpis, 'unserved_demand');
-  const full = (cap && cap.at_ceiling) || [];
-  const idle = (cap && cap.idle) || [];
-  const regions = (cap && cap.regions_without_room) || [];
-
-  // Reopening beats building, so it is offered first when both are available.
-  if (idle.length && (typeof unserved !== 'number' || unserved > 0)) {
-    const site = idle[0];
-    actions.push({
-      label: `Test reopening ${site.name}`,
-      detail: `This plan left ${formatNumber(Math.round(site.capacity || 0))} units `
-        + `of capacity closed at ${site.name}`
-        + `${site.region ? ` in ${site.region}` : ''}. Opens a scenario that holds `
-        + 'it open, to see what the network does with it.',
-      run: () => openCreateToolboxWith('OPEN_FACILITY',
-        { facilityId: site.id, openMode: 'EXISTING',
-          name: `Reopen ${site.name}` }),
-    });
-  }
-
-  if (full.length) {
-    const site = full[0];
-    const at = typeof site.util_pct === 'number' ? `${site.util_pct.toFixed(0)}%` : 'its ceiling';
-    actions.push({
-      label: `Add capacity at ${site.name}`,
-      detail: `${site.name} runs at ${at} in this plan`
-        + `${typeof site.added_units === 'number' && site.added_units > 0
-            ? `, carrying ${formatNumber(Math.round(site.added_units))} units more `
-              + 'than it does today' : ''}`
-        + '. Opens a capacity scenario on that site — it tests the idea, it does '
-        + 'not apply it.',
-      run: () => openCreateToolboxWith('CHANGE_CAPACITY', { facilityId: site.id }),
-    });
-  } else if (typeof unserved === 'number' && unserved > 0) {
-    actions.push({
-      label: 'Test more capacity at the busiest site',
-      detail: `This plan leaves ${formatNumber(Math.round(unserved))} units unserved. `
-        + 'Opens a capacity scenario — it tests the idea, it does not apply it.',
-      run: () => openCreateToolboxWith('CHANGE_CAPACITY'),
-    });
-  } else if (String(scn.capacityRisk || '').toLowerCase() === 'high') {
-    actions.push({
-      label: 'Test more capacity at the busiest site',
-      detail: 'Capacity risk stays high in this plan. Opens a capacity scenario '
-        + 'to see what relieving it costs.',
-      run: () => openCreateToolboxWith('CHANGE_CAPACITY'),
-    });
-  }
-
-  // A new site is proposed only where the backend found a region with sites at
-  // their ceiling, nothing closed to reopen, and no headroom on anything open.
-  // Anything weaker recommends building where a reopening would have done.
-  if (regions.length) {
-    const region = regions[0].region;
-    actions.push({
-      label: `Site a new facility in ${region}`,
-      detail: `Every site in ${region} is at its ceiling in this plan and none `
-        + 'is closed, so more demand there has nowhere to go. Opens the '
-        + 'greenfield form — you supply the location, capacity and costs.',
-      run: () => openCreateToolboxWith('OPEN_FACILITY',
-        { openMode: 'NEW', name: `New site in ${region}` }),
-    });
-  }
-
-  // Growth stated for the whole network, on an upload that names regions.
-  // Loading every warehouse with growth happening in one region overstates the
-  // case for expanding the ones that are not.
-  const scoped = scn.request
-    && (scn.request.demand_region || scn.request.demand_product_category);
-  if (action === 'CHANGE_DEMAND' && !scoped
-      && (NETWORK_REGIONS.length || PRODUCT_CATEGORIES.length)) {
-    actions.push({
-      label: 'Re-run this growth for one region or category',
-      detail: 'This scenario grew every demand row. Your upload states '
-        + `${NETWORK_REGIONS.length ? `${NETWORK_REGIONS.length} regions` : ''}`
-        + `${NETWORK_REGIONS.length && PRODUCT_CATEGORIES.length ? ' and ' : ''}`
-        + `${PRODUCT_CATEGORIES.length ? `${PRODUCT_CATEGORIES.length} product categories` : ''}`
-        + ', so the growth can be scoped to where it is actually happening.',
-      run: () => openCreateToolboxWith('CHANGE_DEMAND'),
-    });
-  }
-
-  // The change moved nothing: the solver reaches the same plan without it.
-  if (typeof row.change_effect === 'number' && Math.abs(row.change_effect) < 1
-      && typeof row.reoptimisation_effect === 'number'
-      && Math.abs(row.reoptimisation_effect) >= 1) {
-    actions.push({
-      label: 'Look at the redesign on its own',
-      detail: 'The whole difference here comes from re-optimising the footprint '
-        + 'you already have — this change adds nothing to it.',
-      run: () => openScenarioDrawer(scn.id),
-    });
-  }
-
-  // Evidence the briefing itself says it did not have.
-  const missing = (scn.explanation && scn.explanation.missing_information) || [];
-  if (missing.length) {
-    actions.push({
-      label: 'Request the missing data',
-      detail: `${missing.length} input this scenario needed was not in the upload. `
-        + 'Opens the action list, where a request can be sent to whoever owns it.',
-      run: () => {
-        if (typeof window.navigateToTab === 'function') window.navigateToTab('home');
-      },
-    });
-  }
-
-  // Always last: ask about it in words.
-  //
-  // This used to call `askChatbotPrompt` alone, which renders into an overlay
-  // it does not open: the button did nothing visible and sent a question to
-  // the orchestrator anyway. And the question was unanswerable as asked — the
-  // chat layer knows nothing about a saved scenario, so it would have analysed
-  // the baseline network and answered about that, minutes later.
-  actions.push({
-    label: 'Chat with Netgravity about this scenario',
-    detail: 'Opens the assistant on this scenario\'s own briefing — its cost, '
-      + 'what it leaves unserved, and what it asks of each site — and you can '
-      + 'ask from there.',
-    run: () => openChatAboutScenario(scn, comparison),
-  });
-
-  return actions;
 }
 
 /**
@@ -1144,8 +1027,8 @@ function openChatAboutScenario(scn, comparison) {
     + (card && card.source === 'llm'
         ? 'Written by the model from this scenario\'s solved results; every '
           + 'figure is the engine\'s.'
-        : 'Written by the deterministic template — no model was reached for '
-          + 'this scenario.')
+        : 'Written from this scenario\'s solved results without a model — '
+          + 'the figures are the same either way.')
     + ' Ask a follow-up below and I will answer it from your network.</p>');
 
   window.openChatbotWithBriefing({
@@ -1236,8 +1119,7 @@ if (typeof window !== 'undefined') {
 
 function takeActionsHtml(actions) {
   if (!actions.length) return '';
-  // Actions now name the sites they are about — "Add capacity at Toronto DC" —
-  // and those names came out of an uploaded spreadsheet. Nothing here has ever
+  // Site names come out of an uploaded spreadsheet. Nothing here has ever
   // carried markup deliberately, so escaping costs nothing and closes the way
   // in.
   const esc = (t) => String(t == null ? '' : t)
@@ -1246,14 +1128,97 @@ function takeActionsHtml(actions) {
   return `
     <div class="scn-take-section-title" style="margin-top:14px">Recommended actions</div>
     <div class="scn-take-actions">
-      ${actions.map((a, i) => `
-        <button type="button" class="scn-take-action${a.primary ? ' primary' : ''}"
+      ${actions.map((a, i) => (a.statement
+        // "Nothing needs doing" is an ANSWER, and a button that opens a form
+        // would contradict it. Same block, drawn as a finding.
+        ? `<div class="scn-take-action is-statement">
+             <span class="scn-take-action-label">${esc(a.label)}</span>
+             <span class="scn-take-action-detail">${esc(a.detail)}</span>
+           </div>`
+        : `<button type="button" class="scn-take-action${a.primary ? ' primary' : ''}"
                 data-action-index="${i}">
-          <span class="scn-take-action-label">${esc(a.label)}</span>
-          <span class="scn-take-action-detail">${esc(a.detail)}</span>
-        </button>`).join('')}
+             <span class="scn-take-action-label">${esc(a.label)}</span>
+             <span class="scn-take-action-detail">${esc(a.detail)}</span>
+             <span class="scn-take-action-go">Set this up →</span>
+           </button>`)).join('')}
     </div>`;
 }
+
+/**
+ * The two ways INTO a scenario, under the recommendations rather than among
+ * them.
+ *
+ * Reading the detail and asking the assistant about it are not things to do
+ * about the network — offering them as "recommended actions" is what made
+ * "Review the proposed changes" the first recommendation on every scenario
+ * ever solved. They are how a reader gets from the summary to the evidence,
+ * which is a different job and belongs in a different row (Nielsen #6:
+ * visible, not recalled — but not competing with the answer either).
+ */
+function takeFooterHtml() {
+  return `
+    <div class="scn-take-footer">
+      <button type="button" class="scn-take-secondary" id="scn-open-detail">
+        <span>View full detail</span>
+        <span class="scn-take-secondary-sub">What changed, what it moved, and why</span>
+      </button>
+      <button type="button" class="scn-take-secondary" id="scn-open-chat">
+        <span>Ask about this scenario</span>
+        <span class="scn-take-secondary-sub">Opens the assistant on its own briefing</span>
+      </button>
+      <button type="button" class="insd-download scn-take-download" id="scn-download-doc">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+             stroke-width="1.9" aria-hidden="true">
+          <path d="M10 3v9m0 0 3.5-3.5M10 12 6.5 8.5M4 15.5h12"/>
+        </svg>
+        <span>Download the full analysis</span>
+        <span class="insd-download-ext">DOCX</span>
+      </button>
+    </div>`;
+}
+
+/**
+ * Fetch the scenario's derivation and hand it to the browser to save.
+ *
+ * The same contract as the deep dive's and the forecast's downloads: the
+ * button says what it is doing throughout, and a failure says so ON the
+ * button rather than in a console nobody has open.
+ */
+async function downloadScenarioDerivation(button, scenarioId) {
+  if (!button || button.disabled || !scenarioId) return;
+  const label = button.querySelector('span:not([class*="ext"])');
+  const original = label ? label.textContent : '';
+  button.disabled = true;
+  if (label) label.textContent = 'Preparing\u2026';
+  const stage = setTimeout(() => {
+    if (label && button.disabled) label.textContent = 'Writing the explanation\u2026';
+  }, 5000);
+
+  try {
+    const { blob, filename } = await scenarioService.downloadDerivation(scenarioId);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'scenario-analysis.docx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (label) label.textContent = original;
+  } catch (err) {
+    if (label) label.textContent = 'Could not build the document';
+    button.classList.add('is-failed');
+    button.title = err && err.message ? err.message : '';
+    setTimeout(() => {
+      if (label) label.textContent = original;
+      button.classList.remove('is-failed');
+    }, 4000);
+  } finally {
+    clearTimeout(stage);
+    button.disabled = false;
+  }
+}
+
 
 /**
  * The whole recommendation in four lines, before any prose.
@@ -1609,14 +1574,42 @@ function narrativeHtml(card, verdict, aboutTheSet, comparedCount, focus) {
     if (stem && meaning.trim().toLowerCase().startsWith(stem)) headline = '';
   }
   if (!headline && !meaning) return '';
+
+  // ONE PARAGRAPH, and the interpretation rather than the conclusion.
+  //
+  // This printed two: the model's own headline under a bold "Across the 3
+  // compared:" prefix, then the meaning beneath it. The verdict directly
+  // above has already stated the conclusion, so the first paragraph was a
+  // third phrasing of it — and the bold prefix broke the line early, leaving
+  // a four-line paragraph whose longest line used half the column.
+  //
+  // `meaning` is what the verdict does not say: what the figures imply for
+  // the business. The headline is the fallback for a briefing that produced
+  // no meaning, not a companion to it.
+  // AND NOT THE VERDICT AGAIN.
+  //
+  // Measured on a live +15% demand run: the briefing's `meaning` opened
+  // "Simulating Demand +15% produced a feasible plan that serves all demand
+  // with open facilities…" — word for word the verdict printed directly above
+  // it. The old code ran `saysTheSameThing` against the HEADLINE and rendered
+  // the meaning underneath it, so switching to one paragraph carried the
+  // check past the string it now prints.
+  //
+  // Where both restate the verdict there is nothing left to add, and this
+  // section is omitted rather than filled: a heading reading "What this
+  // means" over a sentence the reader has just read is worse than no heading.
+  let body = meaning;
+  if (saysTheSameThing(body, verdict)) body = '';
+  if (!body && !saysTheSameThing(headline, verdict)) body = headline;
+  if (!body) return '';
+
+  const scope = aboutTheSet
+    ? `Across the ${comparedCount} compared` : scenarioDisplayName(focus);
   return `
     <div class="scn-take-section-title" style="margin-top:16px">
       ${card && card.source === 'llm' ? 'What this means' : 'What the figures say'}
     </div>
-    ${headline ? `<p class="scn-take-para" style="margin-bottom:8px"><strong>${
-      aboutTheSet ? `Across the ${comparedCount} compared`
-                  : scenarioDisplayName(focus)}:</strong> ${headline}</p>` : ''}
-    ${meaning ? `<p class="scn-take-para">${meaning}</p>` : ''}`;
+    <p class="scn-take-para"><span class="scn-take-scope">${scope}</span> ${body}</p>`;
 }
 
 /** The technical account, collapsed. One conclusion is said once above it. */
@@ -1718,17 +1711,10 @@ function renderMultiScenarioTakeCard() {
   const caveats = comparison.caveats || [];
   const warning = comparison.warning || '';
 
-  const rest = ranked
-    .filter((r) => r.scenario_id !== focus.id)
-    .map((r) => `
-    <div class="flex items-center justify-between text-xs" style="padding:4px 0;border-bottom:1px solid var(--border-light)">
-      <span>${r.name || r.scenario_id}${r.scenario_id === recommendedId ? ' <span class="tag tag-success" style="font-size:9px">ranked first</span>' : ''}</span>
-      <span style="font-weight:700;color:${(r.cost_delta ?? 0) < 0 ? 'var(--green)' : 'var(--red)'}">
-        ${r.cost_delta === null || r.cost_delta === undefined
-          ? '—' : `${r.cost_delta < 0 ? '↓' : '↑'} ${formatCurrency(Math.abs(r.cost_delta))}`}
-      </span>
-    </div>`).join('');
-
+  // "Also compared" is gone from this card. It listed the other selected
+  // scenarios and their cost deltas — which is the comparison table filling
+  // the left half of this same screen, at more width and with every metric
+  // rather than one.
   const actions = recommendedActions(focus, comparison);
 
   // THE ORDER A READER NEEDS, not the order the pieces were built in.
@@ -1742,21 +1728,37 @@ function renderMultiScenarioTakeCard() {
   // Nothing is dropped. The narration moves under "Why this, in full", which
   // is open by default when a model wrote it — that IS the AI recommendation
   // and hiding it would be answering a different complaint.
+  // ── WHAT FITS ON THE CARD ─────────────────────────────────────
+  //
+  // The finding, the evidence a reader needs to believe it, the risk, and
+  // what to do about it — and the recommendation ABOVE THE FOLD, which is the
+  // constraint everything else is cut to meet.
+  //
+  // It ran to 1,519px in a 966px card. Everything in it was true and most of
+  // it belonged somewhere else:
+  //
+  //   * the per-site capacity account (203px) — which sites the plan fills,
+  //     what it left closed. That is the WORKING behind the recommendation,
+  //     and the drawer already carries it under the same heading;
+  //   * the figure strip (52px), which restated three numbers the four-fact
+  //     band above it had already given;
+  //   * "Also compared" (72px) — the other scenarios' cost deltas, which is
+  //     the comparison table filling the left half of this same screen;
+  //   * "Next step" (53px), a sentence recommending an action, above a list
+  //     of recommended actions. When they agreed it was said twice; when they
+  //     did not, the reader had two recommendations and no way to choose.
+  //
+  // None of it is lost: each is one press away in "View full detail", which
+  // is what that button is for. A card a reader has to scroll to reach the
+  // answer on has buried the answer.
   container.innerHTML = takeHeadHtml(source, cached)
     + `<div class="scn-take-headline">${verdict}</div>`
+    + narrativeHtml(card, verdict, aboutTheSet, selected.length, focus)
     + atAGlanceHtml(focus, comparison)
     + warningBandHtml(warning, card && card.warning)
     + governanceHtml(comparison, focus)
-    + (card && card.next_step
-        ? `<div class="scn-take-section-title">Next step</div>
-           <div class="scn-take-checklist">${takeCheckItem(null, card.next_step)}</div>` : '')
     + takeActionsHtml(actions)
-    + narrativeHtml(card, verdict, aboutTheSet, selected.length, focus)
-    + capacityResponseHtml(focus, { rows: 3 })
-    + takeFiguresHtml(card && card.figures)
-    + (rest ? `
-      <div class="scn-take-section-title" style="margin-top:14px">Also compared</div>
-      ${rest}` : '')
+    + takeFooterHtml()
     + takeDetailsHtml([
         ...caveats,
         ...((card && card.details) || []),
@@ -1776,6 +1778,16 @@ function renderMultiScenarioTakeCard() {
     if (!item || typeof item.run !== 'function') return;
     btn.addEventListener('click', item.run);
   });
+
+  // The ways into the detail, and out to a file. All three act on `focus` —
+  // the scenario the map toggle is showing — so the panel, the document and
+  // the recommendation above them are about the same scenario.
+  document.getElementById('scn-open-detail')?.addEventListener('click',
+    () => openScenarioDrawer(focus.id));
+  document.getElementById('scn-open-chat')?.addEventListener('click',
+    () => openChatAboutScenario(focus, comparison));
+  document.getElementById('scn-download-doc')?.addEventListener('click',
+    (e) => downloadScenarioDerivation(e.currentTarget, focus.id));
 }
 
 // ─── Open Scenario Detail Drawer ────────────────────────────
@@ -1805,6 +1817,17 @@ export function openScenarioDrawer(scenarioId) {
 
   const changes = describeScenarioChanges(scn);
   const moved = laneMovements(scn).slice(0, 8);
+  // The same recommendations the card shows, from the same server list.
+  const drawerActions = recommendedActions(scn, comparisonState.data);
+  // The briefing's own closing sentence. It sat on the card above the
+  // recommended actions, saying the same thing in different words — or, worse,
+  // a different thing. Here it reads as what it is: the narrative's view,
+  // beside the list derived from the solve.
+  const drawerNextStep = ((scn.explanation && scn.explanation.card
+                           && scn.explanation.card.next_step) || '').trim();
+  const escapeDrawer = (t) => String(t == null ? '' : t)
+    .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;',
+                                   '"': '&quot;', "'": '&#39;' }[c]));
 
   const requestRows = [];
   const req = scn.request || {};
@@ -1990,6 +2013,33 @@ export function openScenarioDrawer(scenarioId) {
       </div>
     </div>
 
+    <!-- What follows from all of it.
+
+         The drawer is opened from "View full detail", so it is read by
+         somebody who has seen the recommendation and wants the basis for it.
+         Ending on a cost table left them to carry the recommendation across
+         from the card in their head. Same list, same server, same reasons —
+         one definition, so the panel and the card cannot disagree about what
+         is being recommended. -->
+    ${drawerActions.length ? `
+    <div class="scn-section-box">
+      <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:4px">What is recommended, and why</h4>
+      <div class="text-xs text-muted" style="margin-bottom:10px;line-height:1.5">
+        Each is gated on a finding in this scenario's own solved result, not on
+        a general rule about networks.
+      </div>
+      ${drawerNextStep ? `
+        <div class="scn-drawer-action is-statement">
+          <div class="scn-drawer-action-label">The briefing's own next step</div>
+          <div class="scn-drawer-action-reason">${escapeDrawer(drawerNextStep)}</div>
+        </div>` : ''}
+      ${drawerActions.map((a) => `
+        <div class="scn-drawer-action${a.statement ? ' is-statement' : ''}">
+          <div class="scn-drawer-action-label">${escapeDrawer(a.label)}</div>
+          <div class="scn-drawer-action-reason">${escapeDrawer(a.detail)}</div>
+        </div>`).join('')}
+    </div>` : ''}
+
     <div class="scn-section-box">
       <span class="provenance-badge model-fact">MODEL FACT</span>
       <div class="text-xs text-muted" style="margin-top:8px;line-height:1.5">
@@ -2001,7 +2051,15 @@ export function openScenarioDrawer(scenarioId) {
     </div>
 
     <div class="flex gap-sm mt-lg">
-      <button class="btn btn-secondary" id="btn-close-scenario-drawer" style="flex:1">Close</button>
+      <button type="button" class="insd-download scn-drawer-download" id="scn-drawer-download">
+        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+             stroke-width="1.9" aria-hidden="true">
+          <path d="M10 3v9m0 0 3.5-3.5M10 12 6.5 8.5M4 15.5h12"/>
+        </svg>
+        <span>Download the full analysis</span>
+        <span class="insd-download-ext">DOCX</span>
+      </button>
+      <button class="btn btn-secondary" id="btn-close-scenario-drawer">Close</button>
     </div>
   `;
 
@@ -2013,6 +2071,8 @@ export function openScenarioDrawer(scenarioId) {
   document.getElementById('btn-close-scenario-drawer')?.addEventListener('click', () => {
     overlay.classList.remove('visible');
   });
+  document.getElementById('scn-drawer-download')?.addEventListener('click',
+    (e) => downloadScenarioDerivation(e.currentTarget, scn.id));
 }
 
 // ─── Open Metric Drilldown Modal ────────────────────────────

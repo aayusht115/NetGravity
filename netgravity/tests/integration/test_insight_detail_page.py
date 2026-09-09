@@ -391,7 +391,12 @@ class TestTheDerivationCanLeaveTheApplication:
         4xx (a blank tab instead of a reason), and a popup blocker eats it.
         """
         client = _without_comments(_asset("js", "integration", "api-client.js"))
-        assert "async download(endpoint, params = {})" in client
+        # The signature carries an options bag now: a document runs a solve and
+        # a gateway call the gateway allows itself a minute for, and inheriting
+        # the 30-second request budget aborted the fetch while the server was
+        # still writing the file.
+        assert "async download(endpoint, params = {}, options = {})" in client
+        assert "options.timeout || CONFIG.REQUEST_TIMEOUT_MS" in client
         assert "credentials: 'include'" in client
         assert "content-disposition" in client, (
             "the file is named by whoever built it, not by the URL")

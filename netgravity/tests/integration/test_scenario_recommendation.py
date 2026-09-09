@@ -631,14 +631,42 @@ class TestTheEvidenceFitsInsideTheAnswer:
         A narrative that says "three sites" about a network of twenty is worse
         than one that knows it was shown eight rows of twenty.
         """
-        out = self._bounded({"rei": {"facilities": [{"id": i} for i in range(20)]}})
-        rows = out["rei"]["facilities"]
+        out = self._bounded({"lanes": {"rows": [{"id": i} for i in range(20)]}})
+        rows = out["lanes"]["rows"]
         assert len(rows) == 9                      # eight rows plus the note
         assert rows[-1] == "...12 more rows not shown here; 20 in total"
 
     def test_a_short_list_is_untouched(self):
-        out = self._bounded({"rei": {"facilities": [{"id": i} for i in range(4)]}})
-        assert out["rei"]["facilities"] == [{"id": i} for i in range(4)]
+        out = self._bounded({"lanes": {"rows": [{"id": i} for i in range(4)]}})
+        assert out["lanes"]["rows"] == [{"id": i} for i in range(4)]
+
+    def test_the_biggest_blocks_are_cut_harder_than_the_rest(self):
+        """
+        MEASURED, not guessed. On a scenario run the payload was 11,807
+        characters and `rei` alone was 5,704 of them — one row per facility,
+        each a full exposure decomposition. The model bills its internal
+        deliberation to the same 2,000-token budget it writes with, so half a
+        prompt of resilience rows is paid for out of the words the reader
+        gets: the reply came back truncated mid-JSON often enough that the
+        scenario card was routinely written by the fallback on a build with a
+        working gateway.
+
+        The KIND of evidence survives — the block is there, it still says how
+        many rows exist, and a briefing can still cite the most exposed site.
+        What goes is the tail nothing cites.
+        """
+        out = self._bounded({"rei": {"facilities": [{"id": i} for i in range(20)]}})
+        rows = out["rei"]["facilities"]
+        assert len(rows) == 4                      # three rows plus the note
+        assert rows[-1] == "...17 more rows not shown here; 20 in total"
+
+    def test_a_narrowed_block_still_says_how_many_it_left_out(self):
+        """
+        The whole reason a cut list carries a note. A briefing that says "of
+        twenty sites" needs to know there were twenty.
+        """
+        out = self._bounded({"facilities": {"rows": [{"id": i} for i in range(9)]}})
+        assert out["facilities"]["rows"][-1].endswith("9 in total")
 
     def test_it_stays_inside_the_character_bound(self):
         from netgravity.orchestrator.agents.reasoning_agent import ReasoningAgent
@@ -746,40 +774,99 @@ class TestTheSharedBudgetIsSpentOnlyWhereItBuysSomething:
         block = block[:block.index("\n}\n")]
         assert "!saysTheSameThing(card.headline, verdict)" in block
 
-    def test_the_answer_comes_before_the_reasoning_about_it(self):
+    def test_the_finding_comes_before_what_to_do_about_it(self):
         """
-        Measured on the +50% demand run: the reader met the verdict, then the
-        model's headline, then a paragraph restating the cost in a different
-        format, then the attribution arithmetic, then a figure strip, then the
-        capacity account, then two warnings — and the recommended actions
-        ninth, below the fold.
+        THE ORDER, CORRECTED TWICE, AND THIS IS WHY.
 
-        Every one of those was true. The order was the defect.
+        First pass: the reader met the verdict, then the model's headline,
+        then a paragraph restating the cost in a different format, then the
+        attribution arithmetic, then a figure strip, then the capacity
+        account, then two warnings — and the recommended actions ninth, below
+        the fold. Every one of those was true; the order was the defect. So
+        the actions were moved up, above the prose.
+
+        That over-corrected. It put the buttons above the reasoning, which
+        asks a reader to act before they have been told why — and this card is
+        read by people who have to justify the decision to somebody else. The
+        finding and its evidence come first now, the actions follow them, and
+        the ways into the detail sit below both.
+
+        Verdict, what it means, the figures behind it, what it asks of the
+        network, the risk — then what to do.
         """
         js = _asset("scenarios.js")
         block = js[js.index("container.innerHTML = takeHeadHtml("):]
         block = block[:block.index("container.querySelectorAll(")]
         order = [block.index(part) for part in (
-            "scn-take-headline",          # the verdict
-            "atAGlanceHtml(",             # the four facts
+            "scn-take-headline",          # the conclusion
+            "narrativeHtml(",             # what it means
+            "atAGlanceHtml(",             # the facts behind it
+            "capacityResponseHtml(",      # what it asks of the network
             "warningBandHtml(",           # what not to miss
-            "takeActionsHtml(",           # what to do
-            "narrativeHtml(",             # why
+            "takeActionsHtml(",           # what to do about it
+            "takeFooterHtml(",            # and how to look closer
         )]
         assert order == sorted(order), (
-            "the card must read verdict -> facts -> risk -> action -> reasoning")
+            "the card must read conclusion -> reasoning -> evidence -> risk "
+            "-> action -> the way in")
 
-    def test_the_screen_renders_whichever_briefing_it_asked_for(self):
+    def test_reading_the_detail_is_not_a_recommended_action(self):
         """
-        The card was rendering the FOCUSED SCENARIO'S briefing under a verdict
-        about three scenarios — an explanation of one thing beneath a
-        conclusion about another — while the comparison briefing it had just
-        paid for went unused.
+        "Review the proposed changes" was the FIRST recommended action on
+        every scenario ever solved, whatever the solve found. It is not a
+        recommendation: it tells a reader to look at the screen they are
+        already looking at, and it pushed the interventions that answer the
+        question — add capacity, reopen a site, build one — below it.
+
+        A senior reader opens this card to learn what to do about their
+        network. Reading the detail and asking the assistant are how they get
+        from the summary to the evidence; they belong under the answer, not
+        among it.
         """
         js = _asset("scenarios.js")
-        block = js[js.index("function renderMultiScenarioTakeCard()"):]
-        assert "comparison.explanation && comparison.explanation.card" in block
-        assert "selected.length > 1 && comparisonCard" in block
+        actions = js[js.index("function recommendedActions("):]
+        actions = actions[:actions.index("\n}\n")]
+        assert "Review the proposed changes" not in actions
+        assert "openScenarioDrawer(" not in actions, (
+            "opening the drawer is a way in, not a thing to do about the network")
+        # It is still reachable — moved, not dropped.
+        assert "function takeFooterHtml(" in js
+        footer = js[js.index("function takeFooterHtml("):]
+        footer = footer[:footer.index("\n}\n")]
+        assert "scn-open-detail" in footer
+        assert "scn-download-doc" in footer
+
+    def test_the_recommendations_are_the_servers_not_the_screens(self):
+        """
+        This list used to be derived in a render function, from the same
+        capacity block the backend already had. So the reasoning behind a
+        recommendation lived in the browser where it could not be audited, and
+        had to be written a second time for the document — two definitions of
+        what this application recommends, free to disagree.
+        """
+        js = _asset("scenarios.js")
+        actions = js[js.index("function recommendedActions("):]
+        actions = actions[:actions.index("\n}\n")]
+        assert "recommended_actions" in actions, "the comparison's own list"
+        assert "scn.recommendedActions" in actions, "the record's, as a fallback"
+        for key in ("ADD_CAPACITY", "OPEN_NEW_FACILITY", "REOPEN_FACILITY"):
+            assert key in actions, key
+        # Nothing is re-derived here: no threshold, no capacity arithmetic.
+        assert "at_ceiling" not in actions, actions
+        assert "capacityResponse" not in actions, actions
+
+    def test_a_finding_that_needs_no_action_is_still_an_answer(self):
+        """
+        A scenario that fills nothing and strands nothing has no intervention
+        to recommend, and an empty "Recommended actions" heading answers
+        nothing. The server states the finding instead, and the screen draws
+        it as prose — a button would contradict the sentence.
+        """
+        js = _asset("scenarios.js")
+        render = js[js.index("function takeActionsHtml("):]
+        render = render[:render.index("\n}\n")]
+        assert "a.statement" in render
+        assert "is-statement" in render
 
     def test_the_governance_verdict_is_a_statement_not_a_control(self):
         """
@@ -792,9 +879,13 @@ class TestTheSharedBudgetIsSpentOnlyWhereItBuysSomething:
         actions = js[js.index("function recommendedActions("):]
         actions = actions[:actions.index("\n}\n")]
         assert "This one is a human decision" not in actions
-        # And nothing in the list is inert any more.
-        assert "disabled" not in js[js.index("function takeActionsHtml("):
-                                    js.index("function warningBandHtml(")]
+        # And nothing in the list is inert any more. Scoped to the renderer
+        # itself: the window used to run to the next named function, and a
+        # download handler added between them put `button.disabled` — a
+        # perfectly good busy state on an unrelated control — inside it.
+        render = js[js.index("function takeActionsHtml("):]
+        render = render[:render.index("\n}\n")]
+        assert "disabled" not in render, render
 
     def test_the_fallback_reason_is_shown_rather_than_hidden(self):
         """

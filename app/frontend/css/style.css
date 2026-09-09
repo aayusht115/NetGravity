@@ -1916,7 +1916,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   padding: 20px 22px;
   box-shadow: 0 4px 18px rgba(107, 47, 160, 0.08);
   position: sticky;
-  top: 16px;
+  /* BELOW THE BAR, not behind it.
+     `.app-global-topbar` is sticky at `top: 0` in this same scroll container,
+     so a card pinned at 16px pinned sixteen pixels from the top of the
+     SCROLLPORT — underneath it. The card's heading and the first line of the
+     verdict scrolled under the bar and stayed there.
+     `--global-topbar-h` is measured on every navigation (see
+     `publishTopBarHeight`); the fallback is the bar's height at the default
+     type scale, so the card is right even if the measurement never runs. */
+  top: calc(var(--global-topbar-h, 52px) + 12px);
 
   /* THE CARD SCROLLS, not the page past it.
      It is `position: sticky`, so once its content is taller than the viewport
@@ -1927,7 +1935,10 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
      whole reason the card exists — permanently out of reach.
      Bounded to the viewport and given its own scrollbar instead. The last
      16px matches `top`, so the card never touches the bottom edge. */
-  max-height: calc(100vh - 32px);
+  /* And bounded by what is left of the window under that bar, rather than by
+     the whole window — which is what made the card taller than the space it
+     had and pushed its foot off the bottom while its head was under the top. */
+  max-height: calc(100vh - var(--global-topbar-h, 52px) - 28px);
   overflow-y: auto;
   /* A wheel that reaches the end of this card stops there rather than
      carrying on and scrolling the page underneath it. */
@@ -1941,6 +1952,22 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+
+  /* PINNED INSIDE THE CARD, which is itself a scroll container.
+     The card runs to about 1,500px against a viewport of 1,000, so a reader
+     three sections down had scrolled the title off and was looking at a
+     paragraph and a list of sites with nothing saying what they belonged to.
+     A scrolled panel that has lost its own heading is the commonest way a
+     dense screen becomes unreadable (Nielsen #1).
+     The negative margins and the padding let the opaque strip run to the
+     card's own edges, so text passing underneath is covered rather than
+     showing through beside it. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -20px -22px 12px;
+  padding: 14px 22px 10px;
+  background: linear-gradient(180deg, #faf5ff 0%, #faf5ff 72%, rgba(250, 245, 255, 0) 100%);
 }
 
 .scn-take-icon { font-size: 16px; }
@@ -1965,6 +1992,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   line-height: 1.55;
   margin-bottom: 16px;
 }
+
+/* Which scenarios the paragraph is about, inline rather than as a bold lead.
+   As `<strong>` on its own line it broke the wrap early: a four-line
+   paragraph whose longest line used half the column. */
+.scn-take-scope {
+  font-weight: 700;
+  color: var(--text-1);
+}
+.scn-take-scope::after { content: ':'; }
 
 .scn-take-section-title {
   font-size: 11.5px;
@@ -2290,6 +2326,109 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   margin-top: 2px;
 }
 
+/* A recommendation in the drawer: the same wording as the card, laid out for
+   reading rather than for pressing. Nothing here opens a form — the reader
+   came for the basis of the recommendation, and a control competing with the
+   card's would leave two places to act on one decision. */
+.scn-drawer-action {
+  border-left: 3px solid var(--primary);
+  background: var(--bg-subtle, #f8fafc);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+}
+
+.scn-drawer-action.is-statement { border-left-color: var(--border-light); }
+
+.scn-drawer-action-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.35;
+}
+
+.scn-drawer-action-reason {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+  margin-top: 3px;
+}
+
+.scn-drawer-download { margin-top: 0; flex: 1; }
+
+/* A recommendation that is a FINDING rather than a control.
+   "No network change is indicated" is an answer to "what should I do", and
+   the worst thing to do with it is leave the space blank — but it must not
+   look pressable either, because there is nothing behind it. Same block,
+   no hover, no cursor, and a flat ground so it reads as prose. */
+.scn-take-action.is-statement {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-subtle, #f8fafc);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--r-md);
+  padding: 9px 11px;
+  cursor: default;
+}
+
+/* What pressing it does, said on the control (Nielsen #2: the system's
+   language, not ours). Without it "Increase capacity at Western DC" reads as
+   a claim that capacity HAS been increased. */
+.scn-take-action-go {
+  display: block;
+  margin-top: 5px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: var(--primary);
+}
+
+.scn-take-action.primary .scn-take-action-go { color: rgba(255, 255, 255, 0.95); }
+
+/* The ways INTO the analysis, under the recommendations and visibly not among
+   them. Quieter than an action, because reading the detail is not a decision. */
+.scn-take-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--purple-100, #e9d5ff);
+}
+
+.scn-take-secondary {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+  background: transparent;
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-md);
+  padding: 8px 11px;
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+
+.scn-take-secondary:hover { border-color: var(--purple-300); background: #ffffff; }
+.scn-take-secondary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.scn-take-secondary-sub {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* Borrowed from the deep dive rather than restyled: the same control doing
+   the same job, so a reader who has pressed one recognises this (Nielsen #4). */
+.scn-take-download { margin-top: 0; font-size: 12px; }
+
 /* The technical account, collapsed. The conclusion above is said once; this
    is where the caveats and the working live. */
 .scn-take-details {
@@ -2392,6 +2531,22 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-width: 0;
+}
+
+/* THE COLUMN THE CARD STICKS INSIDE, given something to stick inside.
+
+   `.scn-single-2col` is `align-items: start`, so this column was exactly as
+   tall as the card in it. A sticky element travels within its own containing
+   block and no further, so with zero travel the card did not stick at all: it
+   scrolled up with the page, under the top bar, and out of the window —
+   while its own `max-height` and internal scrollbar made it look as though it
+   were pinned.
+
+   Stretched to the row, so the card stays pinned for as long as the
+   comparison table beside it is on screen. */
+.scn-single-right {
+  align-self: stretch;
   min-width: 0;
 }
 
@@ -2520,7 +2675,12 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
      two thousand miles of empty Atlantic. A taller box brings the zoom up and
      the network fills the frame — and the space it takes was empty page
      underneath it anyway. */
-  height: clamp(360px, 46vh, 520px);
+  /* Declared once and read by the key inside it. A Leaflet control sits in a
+     chain of auto-height ancestors, so a `max-height: 100%` on it resolves
+     against nothing and is dropped — the key stayed 456px tall in a 360px map
+     and `overflow: hidden` below simply cut its top off. */
+  --scn-map-h: clamp(360px, 46vh, 520px);
+  height: var(--scn-map-h);
   border-radius: var(--r-md);
   overflow: hidden;
   position: relative;
@@ -3325,6 +3485,34 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   max-width: 232px;
 }
 
+/* THE SCENARIO MAP'S KEY, BOUNDED BY ITS MAP.
+
+   The scenario map's panel is `clamp(360px, 46vh, 520px)` tall, and this key
+   — the twin's own three groups plus three scenario rows — measured 461px.
+   At the short end of that clamp it was taller than the map it sat in: the
+   Leaflet control anchors bottom-right, so the overflow ran off the TOP of
+   the panel and the first group's heading was cut in half.
+
+   Bounded to the panel rather than shortened, because a key that omits an
+   encoding the map is drawing is the problem it was built to fix. It scrolls
+   inside itself when the viewport is too short for all of it, and the
+   scrolling is contained so a wheel over the key does not zoom the map
+   underneath (Nielsen #3 — the reader chooses what moves). */
+.tw-legend-scenario {
+  /* The map's own height, inherited from `.scn-map-wrap` — a definite value,
+     which `100%` was not. */
+  max-height: calc(var(--scn-map-h, 460px) - 28px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* Denser than the twin's own key, which has a whole page to sit in. */
+  padding: 10px 12px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.tw-legend-scenario .tw-legend-group + .tw-legend-group { margin-top: 9px; }
+.tw-legend-scenario .tw-legend-row { gap: 7px; }
+
 .tw-legend-3d {
   position: absolute;
   bottom: 16px;
@@ -3439,6 +3627,27 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
    second thing to click, and a pill sitting over a marker would otherwise
    eat the click that opens the facility panel. */
 .map-node-label,
+/* The node's own mark, on the 3D scene, at the size the map draws it and the
+   key prints it. Sized inline from `NODE_STYLE` so there is one number.
+
+   `pointer-events: none` deliberately: the badge sits over the node, and the
+   scene picks nodes by raycasting the canvas underneath. A badge that took
+   the pointer would make a node unhoverable by covering it. */
+.twin3d-node-glyph {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  line-height: 1;
+  pointer-events: none;
+  will-change: transform;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.35);
+}
+
 .twin3d-node-label {
   position: absolute;
   pointer-events: none;

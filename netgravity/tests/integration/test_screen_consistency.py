@@ -252,8 +252,15 @@ class TestTheDigitalTwinPageIsOneScreen:
         fn = js[js.index("export function renderMapLegendCounts()"):]
         fn = fn[:fn.index("\n}\n")]
         assert "PLANTS.length" in fn and "DCS.length" in fn and "MARKETS.length" in fn
-        # And the Leaflet legend uses the same attribute.
-        assert 'data-legend-count="${kind}"' in js
+        # And the rows it fills are emitted by `twin-legend.js`, which is the
+        # one place node identity and the legend are defined. `map.js` used to
+        # write the scenario map's own three-row key with its own `legendCount`
+        # helper; both legends compose the shared one now, so the marker moved
+        # there with it.
+        legend = _without_comments(_asset("js", "twin-legend.js"))
+        assert 'data-legend-count="${kind}"' in legend
+        # Both maps read that one legend.
+        assert "twinLegendHtml(" in js and "scenarioLegendHtml(" in js
 
     def test_the_counts_are_refreshed_when_the_network_changes(self):
         js = _without_comments(_asset("js", "map.js"))

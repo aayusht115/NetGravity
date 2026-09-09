@@ -183,9 +183,51 @@ def trim(text: str, limit: int) -> str:
     return (window[:space] if space > 0 else window).rstrip(" ,;:-") + "\u2026"
 
 
+#: The identifiers this system addresses its own records by. None of them
+#: means anything to a reader, and every one of them has appeared in prose:
+#: the recommendation on a scenario card read "Proceed with a detailed
+#: implementation review of Key probe SCN_084df97a" — the scenario's name,
+#: which is right, followed by its primary key, which is noise a senior reader
+#: has to decide whether to worry about.
+#:
+#: They reach the prose honestly. The reasoning payload carries them because
+#: the grounding and provenance layers need them, the model is shown the
+#: payload, and a model shown an identifier beside a name will sometimes cite
+#: both. Forbidding it in the prompt helps and cannot be relied on; this is
+#: the guarantee.
+_INTERNAL_ID = re.compile(
+    r"""
+    \s*
+    \(?                                     # sometimes parenthesised
+    \b(?:
+        SCN|INS|ACT|PRJ|EXE                 # scenario, insight, action, …
+      | snap|tws|scn|req|exec|prop|wf       # snapshot, twin state, request, …
+    )_[A-Za-z0-9_]{4,}
+    \)?
+    """,
+    re.VERBOSE,
+)
+
+
+def strip_internal_ids(text: str) -> str:
+    """
+    Remove record identifiers from a sentence, leaving the sentence.
+
+    Deliberately not a redaction marker. A reader losing "SCN_084df97a" loses
+    nothing, and "[ID REMOVED]" would be a second unreadable token in place of
+    the first — unlike an ungrounded FIGURE, whose absence changes what the
+    sentence claims and must therefore be visible.
+    """
+    out = _INTERNAL_ID.sub("", text or "")
+    # The id often trails a name — "Key probe SCN_084df97a." — so removing it
+    # can leave a space before the full stop.
+    return re.sub(r"\s+([.,;:!?])", r"\1", out).strip()
+
+
 def clean(text: str, limit: int = 400) -> str:
     """Everything a reader-facing string goes through, in one call."""
-    return trim(plain_voice(strip_redactions(text or "")), limit)
+    return trim(
+        strip_internal_ids(plain_voice(strip_redactions(text or ""))), limit)
 
 
 #: How a figure is rendered. Money is handed over as an AMOUNT rather than a

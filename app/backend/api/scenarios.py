@@ -28,7 +28,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify, make_response, request
 
 from app.backend.services.errors import (
     ApplicationError,
@@ -256,6 +256,209 @@ def _site_row(facility_id: str, meta: Dict[str, Dict[str, Any]],
                            and isinstance(scenario.get("capacity"), (int, float))
                            else None),
     }
+
+
+# ---------------------------------------------------------------------------
+# What to DO about a scenario
+# ---------------------------------------------------------------------------
+#: Every action this application can recommend, and what pressing it opens.
+#: The key is the contract with the client — a screen maps it to a form, the
+#: document prints its label — so a new action is added here and nowhere else.
+_ACTION_KEYS = (
+    "REOPEN_FACILITY", "ADD_CAPACITY", "OPEN_NEW_FACILITY",
+    "SCOPE_DEMAND_GROWTH", "REQUEST_DATA",
+    #: Not an intervention — the STATEMENT that none is indicated, with the
+    #: finding behind it. Carried in the same list because "nothing needs
+    #: doing" is an answer to "what should I do", and a screen that renders an
+    #: empty space there has answered nothing. A consumer draws this as a
+    #: sentence rather than a control.
+    "NO_ACTION",
+)
+
+
+def _fmt_units(value: Any) -> str:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return "an unrecorded quantity"
+    return f"{value:,.0f} units"
+
+
+def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    What a reader should DO about this scenario, in priority order.
+
+    DERIVED HERE, NOT ON THE SCREEN. This list used to be built in the browser
+    from the same block, and the drawer, the card and anything else that wanted
+    it would each have had their own copy. One definition means the sentence a
+    leader reads on the card is the sentence in the document they forward.
+
+    Every entry is a NETWORK INTERVENTION — add capacity, reopen a site, build
+    one, scope the growth, get the missing input. Reading the result is not an
+    action: "review the proposed changes" told a reader to look at the screen
+    they were already looking at, and it was the first thing offered on every
+    scenario whatever the solve found. It is a way into the detail, which the
+    screen offers separately, and it is not a recommendation.
+
+    Each is gated on a FINDING in this scenario's own solved result, so a plan
+    that stranded no demand is never told to add capacity and a plan with room
+    everywhere is never told to build. An empty list is a real answer and the
+    caller must say so rather than filling the space.
+    """
+    cap = record.get("capacity_response") or {}
+    kpis = record.get("scenario_kpis") or {}
+    request = record.get("request") or {}
+
+    def kpi(name: str) -> Optional[float]:
+        row = kpis.get(name)
+        value = row.get("value") if isinstance(row, dict) else row
+        return value if isinstance(value, (int, float)) else None
+
+    unserved = kpi("unserved_demand")
+    at_ceiling = list(cap.get("at_ceiling") or [])
+    idle = list(cap.get("idle") or [])
+    regions = list(cap.get("regions_without_room") or [])
+    actions: List[Dict[str, Any]] = []
+
+    # Reopening beats building: the capacity exists and is already paid for.
+    if idle and (unserved is None or unserved > 0):
+        site = idle[0]
+        actions.append({
+            "key": "REOPEN_FACILITY",
+            "label": f"Reopen {site.get('name') or site.get('id')}",
+            "reason": (
+                f"This plan leaves {_fmt_units(site.get('capacity'))} of capacity "
+                f"closed at {site.get('name') or site.get('id')}"
+                + (f" in {site['region']}" if site.get("region") else "")
+                + ". Capacity that already exists is cheaper to use than "
+                  "capacity that has to be built."),
+            "target": {"facility_id": site.get("id"), "name": site.get("name"),
+                       "region": site.get("region")},
+        })
+
+    if at_ceiling:
+        site = at_ceiling[0]
+        util = site.get("util_pct")
+        at = f"{util:,.0f}% of its capacity" if isinstance(util, (int, float)) \
+            else "its ceiling"
+        carrying = ""
+        if isinstance(site.get("added_units"), (int, float)) and site["added_units"] > 0:
+            carrying = (f", carrying {_fmt_units(site['added_units'])} more than "
+                        f"it does today")
+        actions.append({
+            "key": "ADD_CAPACITY",
+            "label": f"Increase capacity at {site.get('name') or site.get('id')}",
+            "reason": (
+                f"{site.get('name') or site.get('id')} runs at {at} in this "
+                f"plan{carrying}. It is the constraint: nothing more can move "
+                f"through this network until it has room."),
+            "target": {"facility_id": site.get("id"), "name": site.get("name"),
+                       "region": site.get("region")},
+        })
+    elif isinstance(unserved, (int, float)) and unserved > 0:
+        actions.append({
+            "key": "ADD_CAPACITY",
+            "label": "Increase capacity where the plan runs out",
+            "reason": (
+                f"This plan leaves {_fmt_units(unserved)} of demand unserved "
+                f"while no single site reaches its ceiling, so the shortfall is "
+                f"spread across the network rather than sitting at one site."),
+            "target": {},
+        })
+    elif (str(record.get("capacity_risk") or "").upper() == "HIGH"
+          and (cap.get("working_harder") or [])):
+        # HIGH RISK WITH NOTHING YET AT ITS CEILING.
+        #
+        # The gap this closes: the card reported "capacity risk: High" beside
+        # a site running at 92.6% and recommended nothing about capacity,
+        # because the ceiling test had not tripped. A reader is then told the
+        # network is at risk and given no way to act on it — which is the
+        # worst combination of the two, and the reason the previous
+        # browser-side list had a branch here.
+        site = cap["working_harder"][0]
+        util = site.get("util_pct")
+        at = (f"{util:,.0f}% of its capacity" if isinstance(util, (int, float))
+              else "close to its ceiling")
+        actions.append({
+            "key": "ADD_CAPACITY",
+            "label": f"Increase capacity at {site.get('name') or site.get('id')}",
+            "reason": (
+                f"Capacity risk is high in this plan. Nothing has reached its "
+                f"ceiling yet, but {site.get('name') or site.get('id')} is "
+                f"running at {at} and is the first site that will. Adding "
+                f"capacity there is what buys the network room before it "
+                f"starts stranding demand."),
+            "target": {"facility_id": site.get("id"), "name": site.get("name"),
+                       "region": site.get("region")},
+        })
+
+    # A new site only where a region has sites at their ceiling, nothing closed
+    # to reopen, and no headroom left. Anything weaker recommends building
+    # where a reopening would have done.
+    if regions:
+        region = regions[0].get("region")
+        actions.append({
+            "key": "OPEN_NEW_FACILITY",
+            "label": f"Set up a new facility in {region}",
+            "reason": (
+                f"Every site in {region} is at its ceiling in this plan and "
+                f"none is closed, so demand growing there has nowhere to go. "
+                f"This is the only condition under which building is the "
+                f"cheapest answer rather than the first one."),
+            "target": {"region": region},
+        })
+
+    # Growth stated for the whole network, on an upload that names regions.
+    scoped = request.get("demand_region") or request.get("demand_product_category")
+    if request.get("action") == "CHANGE_DEMAND" and not scoped:
+        actions.append({
+            "key": "SCOPE_DEMAND_GROWTH",
+            "label": "Re-run this growth for the region it is happening in",
+            "reason": (
+                "This scenario grew every demand row in the network. Loading "
+                "every warehouse with growth that is happening in one region "
+                "overstates the case for expanding the ones that are not."),
+            "target": {},
+        })
+
+    explanation = record.get("explanation") or {}
+    missing = list(explanation.get("missing_information") or [])
+    if missing:
+        actions.append({
+            "key": "REQUEST_DATA",
+            "label": "Obtain the inputs this analysis did not have",
+            "reason": (
+                f"{len(missing)} input this scenario needed was not in the "
+                f"upload, so part of the answer rests on less evidence than "
+                f"the rest of it."),
+            "target": {},
+        })
+
+    if not actions:
+        # WHY nothing is recommended, from the same figures the actions are
+        # gated on. "No recommended actions" is a blank; this is a finding.
+        if isinstance(unserved, (int, float)) and unserved <= 0 and not at_ceiling:
+            reason = (
+                "This plan serves all of the demand and no site reaches its "
+                "capacity ceiling, so nothing in the network is constraining "
+                "it. There is no capacity change to recommend.")
+        elif not cap:
+            reason = (
+                "This scenario was solved before the per-site capacity "
+                "account was recorded, so which sites it fills is not known "
+                "for it. Re-run the scenario to see what it asks of each "
+                "site.")
+        else:
+            reason = (
+                "Nothing in this plan meets the threshold for a recommended "
+                "change: no site is at its ceiling, no capacity is sitting "
+                "closed, and no region has run out of room.")
+        actions.append({"key": "NO_ACTION",
+                        "label": "No network change is indicated",
+                        "reason": reason, "target": {}})
+
+    for index, action in enumerate(actions, start=1):
+        action["priority"] = index
+        assert action["key"] in _ACTION_KEYS, action["key"]
+    return actions
 
 
 def _capacity_response(engine: Any, snapshot_id: str,
@@ -898,6 +1101,325 @@ def _is_structural(record: Dict[str, Any]) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# "What did we change, what did it do, and how do you know?" — as a document
+# ---------------------------------------------------------------------------
+#: The cost lines a plan is made of, in the order a reader adds them up.
+_COST_COMPONENTS = (
+    ("transport_cost", "Transport"),
+    # `facility_cost`, which is what the KPI registry calls it. Asking for
+    # `fixed_cost` matched nothing, so the largest single line in this
+    # network's cost — ₹95,000 a period, more than half the total — was
+    # missing from the table while the components below it were listed.
+    ("facility_cost", "Fixed facility"),
+    ("handling_cost", "Handling"),
+    ("inventory_cost", "Inventory"),
+    ("opening_cost", "Opening"),
+    ("closure_cost", "Closure"),
+    ("business_network_cost", "Total network cost"),
+)
+
+#: The service and utilisation figures, with the label a reader recognises.
+_OUTCOME_METRICS = (
+    ("demand_fill_rate", "Demand met"),
+    ("unserved_demand", "Demand left unserved"),
+    ("pct_demand_in_sla", "Demand within its lead time"),
+    ("avg_utilization_pct", "Average site utilisation"),
+    ("max_utilization_pct", "Busiest site"),
+    ("n_facilities_open", "Sites open"),
+    ("total_carbon_kg", "Transport emissions"),
+)
+
+
+def _kpi_display(block: Dict[str, Any], key: str) -> str:
+    """
+    One KPI, formatted the way the screens format it.
+
+    Reads `display_value` when the KPI layer supplied one — which is the rule
+    everywhere else in this product: the engine that computed a figure decided
+    how it reads, and a second opinion about that here is how a document and
+    the screen it came from disagree about one number.
+
+    THE ROW'S OWN `unit` DECIDES THE REST, not the metric name. A stored KPI
+    carries `unit: "INR"` or `unit: "fraction"` beside its value, and that is
+    the only place the currency of THIS network is recorded on the record —
+    the reasoning payload's currency is not in scope here. Formatting money
+    without it printed "167,050.33 per period" in a document that is
+    forwarded to people who cannot know from context whether that is rupees
+    or dollars.
+    """
+    row = block.get(key)
+    unit = ""
+    if isinstance(row, dict):
+        shown = row.get("display_value")
+        if shown:
+            return str(shown)
+        value = row.get("value")
+        unit = str(row.get("unit") or "")
+    else:
+        value = row
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return "Not available"
+
+    from netgravity.orchestrator.reasoning.evidence import (
+        _CURRENCY_SYMBOLS, _display, format_money)
+
+    code = unit.strip().upper()
+    # A three-letter alphabetic unit that is not one of the measures this
+    # product records IS an ISO currency code — `format_money` renders an
+    # unlisted one as "AED 1,234.00" rather than dropping it, so a network in
+    # a currency this build has no symbol for still says which one it is.
+    _NOT_CURRENCY = {"PCT", "KGS", "DAY", "QTY", "PPM", "KMS", "TON"}
+    if code in _CURRENCY_SYMBOLS or (
+            len(code) == 3 and code.isalpha() and code not in _NOT_CURRENCY):
+        return format_money(value, code)
+    if unit.strip().lower() in ("fraction", "ratio"):
+        # A fill rate stored as 1.0 is "100.0%" to a reader. "1.000" is the
+        # storage format and reads as a scale nobody defined.
+        return f"{value * 100:,.1f}%"
+    return _display(value, key)[0]
+
+
+def _delta_display(scenario: Dict[str, Any], baseline: Dict[str, Any],
+                   key: str) -> str:
+    """The change between the two plans, as a percentage of the baseline."""
+    def raw(block):
+        row = block.get(key)
+        value = row.get("value") if isinstance(row, dict) else row
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+    after, before = raw(scenario), raw(baseline)
+    if after is None or before is None:
+        return "not comparable"
+    if after == before:
+        # Reached before the zero check, so a line that is zero on both sides
+        # reads "unchanged" rather than "no baseline to compare against" — a
+        # component neither plan incurs is not a missing comparison.
+        return "unchanged"
+    if before == 0:
+        return "nothing in the baseline to compare against"
+    return f"{(after - before) / abs(before) * 100.0:+,.1f}%"
+
+
+def _scenario_derivation(record: Dict[str, Any], project_name: str,
+                         actions: List[Dict[str, Any]]) -> Any:
+    """
+    One scenario, as a `DerivationReport`.
+
+    The third caller of `netgravity.reporting`, and deliberately the same
+    shape as the insight and the forecast: a reader asking "how was this
+    reached?" is asking one question, and three documents answering it
+    differently would make the answer look like a property of which screen it
+    was pressed from.
+
+    NOTHING IS SOLVED HERE. Every figure is one the MILP already produced and
+    this project already stored, printed through the same display rule the
+    screens use.
+    """
+    from datetime import datetime, timezone
+
+    from netgravity.reporting import DerivationReport, DerivationStep, Figure
+
+    scenario_kpis = record.get("scenario_kpis") or {}
+    baseline_kpis = record.get("baseline_kpis") or {}
+    request_block = record.get("request") or {}
+    explanation = record.get("explanation") or {}
+    card = explanation.get("card") or {}
+    cap = record.get("capacity_response") or {}
+    name = record.get("name") or record.get("id") or "Scenario"
+
+    steps: List[Any] = []
+
+    # ── 1. what was changed ──────────────────────────────────────────
+    change_figures = []
+    action = str(request_block.get("action") or "").replace("_", " ").title()
+    if action:
+        change_figures.append(Figure("Change requested", action, "Input",
+                                     "scenario builder"))
+    if request_block.get("facility_ids"):
+        change_figures.append(Figure(
+            "Sites named", ", ".join(str(f) for f in request_block["facility_ids"]),
+            "Input", "scenario builder"))
+    if request_block.get("capacity_delta_units") is not None:
+        delta = request_block["capacity_delta_units"]
+        change_figures.append(Figure(
+            "Capacity adjustment",
+            f"{delta:+,.0f} units per period", "Input", "scenario builder"))
+    if request_block.get("demand_multiplier") is not None:
+        change_figures.append(Figure(
+            "Demand", f"x{request_block['demand_multiplier']} on every demand row",
+            "Input", "scenario builder"))
+    if request_block.get("transport_cost_multiplier") is not None:
+        change_figures.append(Figure(
+            "Freight rates", f"x{request_block['transport_cost_multiplier']}",
+            "Input", "scenario builder"))
+    if request_block.get("sla_days_delta") is not None:
+        change_figures.append(Figure(
+            "Delivery promise", f"{request_block['sla_days_delta']:+} days",
+            "Input", "scenario builder"))
+    for override in (record.get("overrides") or []):
+        change_figures.append(Figure("Applied to the network as", str(override),
+                                     "Input", "scenario builder"))
+    steps.append(DerivationStep(
+        title="What was changed",
+        detail=("The intervention exactly as it was submitted, and how the "
+                "builder applied it to the network. Everything below follows "
+                "from re-solving the network with these changes in place and "
+                "nothing else altered."),
+        figures=tuple(change_figures) or (
+            Figure("Change requested", "Not recorded", "Input", ""),)))
+
+    # ── 2. what it cost ──────────────────────────────────────────────
+    cost_figures = []
+    for key, label in _COST_COMPONENTS:
+        after = _kpi_display(scenario_kpis, key)
+        if after == "Not available":
+            continue
+        before = _kpi_display(baseline_kpis, key)
+        cost_figures.append(Figure(
+            label, f"{after}   (was {before}, {_delta_display(scenario_kpis, baseline_kpis, key)})",
+            "Measured", "MILP"))
+    if cost_figures:
+        steps.append(DerivationStep(
+            title="What the plan costs, component by component",
+            detail=("Each line is the solved plan's own cost for this "
+                    "scenario, with the same line from the baseline solve "
+                    "beside it. The shortage penalty the solver uses to decide "
+                    "which demand to strand is excluded — nobody pays it — so "
+                    "unserved demand is reported below as a quantity rather "
+                    "than as money."),
+            figures=tuple(cost_figures)))
+
+    # ── 3. what it does to service ───────────────────────────────────
+    outcome_figures = []
+    for key, label in _OUTCOME_METRICS:
+        after = _kpi_display(scenario_kpis, key)
+        if after == "Not available":
+            continue
+        before = _kpi_display(baseline_kpis, key)
+        outcome_figures.append(Figure(
+            label, f"{after}   (was {before})", "Measured", "MILP"))
+    if outcome_figures:
+        steps.append(DerivationStep(
+            title="What it does to service and utilisation",
+            detail=("Cost is not the only thing a network change moves. These "
+                    "are the figures a cost saving has to be weighed against, "
+                    "each from the same solve."),
+            figures=tuple(outcome_figures)))
+
+    # ── 4. what it asks of the sites ─────────────────────────────────
+    site_figures = []
+    for row in (cap.get("at_ceiling") or [])[:8]:
+        util = row.get("util_pct")
+        site_figures.append(Figure(
+            str(row.get("name") or row.get("id")),
+            (f"{util:,.1f}% of capacity" if isinstance(util, (int, float))
+             else "at its ceiling"),
+            "Full in this plan", str(row.get("region") or "")))
+    for row in (cap.get("working_harder") or [])[:8]:
+        util = row.get("util_pct")
+        site_figures.append(Figure(
+            str(row.get("name") or row.get("id")),
+            (f"{util:,.1f}% of capacity" if isinstance(util, (int, float))
+             else "carrying more"),
+            "Working harder", str(row.get("region") or "")))
+    for row in (cap.get("idle") or [])[:8]:
+        site_figures.append(Figure(
+            str(row.get("name") or row.get("id")),
+            _fmt_units(row.get("capacity")) + " left closed",
+            "Not used by this plan", str(row.get("region") or "")))
+    if site_figures:
+        steps.append(DerivationStep(
+            title="What this asks of each site",
+            detail=("Which sites the plan fills, which are carrying more than "
+                    "they do today, and what capacity it chose to leave "
+                    "closed. This is the part that differs between raising "
+                    "demand by 5% and raising it by 50%, and it is where every "
+                    "recommendation below comes from."),
+            figures=tuple(site_figures)))
+
+    # ── 5. what to do about it ───────────────────────────────────────
+    if actions:
+        steps.append(DerivationStep(
+            title="What is recommended, and why",
+            detail=("Each recommendation is gated on a finding in this "
+                    "scenario's own solved result — not on a general rule "
+                    "about networks. Where nothing meets the threshold, that "
+                    "is stated rather than filled in."),
+            figures=tuple(
+                Figure(str(a.get("label") or ""), str(a.get("reason") or ""),
+                       ("Statement" if a.get("key") == "NO_ACTION"
+                        else "Recommendation"),
+                       "solved result")
+                for a in actions)))
+
+    # ── the conclusion ───────────────────────────────────────────────
+    cost_now = _kpi_display(scenario_kpis, "business_network_cost")
+    cost_change = _delta_display(scenario_kpis, baseline_kpis,
+                                 "business_network_cost")
+    feasible = record.get("feasible")
+    if feasible is False:
+        conclusion = (f"{name} has no feasible plan: the network cannot meet "
+                      f"the constraints this scenario imposes")
+    else:
+        conclusion = (f"{name} costs {cost_now} per period, {cost_change} "
+                      f"against the network as it runs today")
+
+    limitations = []
+    for item in (explanation.get("missing_information") or []):
+        text = item.get("reason") if isinstance(item, dict) else str(item)
+        if text:
+            limitations.append(str(text))
+    if record.get("reference_note"):
+        limitations.append(str(record["reference_note"]))
+    if not cap:
+        limitations.append(
+            "This scenario carries no per-site capacity account, so which "
+            "sites it fills is not established here.")
+    limitations.append(
+        "A scenario is an evaluation, not a decision. Opening or closing a "
+        "site is classified as a human decision by governance whatever the "
+        "economics say, and nothing in this document approves anything.")
+
+    provenance_block = record.get("provenance") or {}
+    provenance = (
+        f"Source: {provenance_block.get('engine') or 'netgravity MILP'}, "
+        f"read through {provenance_block.get('authoritative_source') or 'the KPI layer'}. "
+        f"Snapshot {record.get('snapshot_id') or 'unknown'}; "
+        f"execution {record.get('execution_id') or 'unknown'}.")
+    grounding = (explanation.get("grounding") or {}).get("warnings") or []
+    if grounding:
+        provenance += " Validation warnings: " + "; ".join(str(g) for g in grounding) + "."
+
+    return DerivationReport(
+        kind="Scenario analysis",
+        subject=f"{name}{f' — {project_name}' if project_name else ''}",
+        conclusion=conclusion,
+        summary=(str(card.get("headline") or "").strip()
+                 or "This document states what this scenario changed, what "
+                    "the solver did with it, and what follows from the result."),
+        method=(
+            "A scenario is evaluated by solving the network twice. The "
+            "baseline solve optimises the network exactly as uploaded. The "
+            "scenario solve applies the change listed below and re-optimises "
+            "with the same freedom — the same objective, the same "
+            "constraints, the same sites available to open or close. Every "
+            "figure in this document is the difference between those two "
+            "solved plans, read through the authoritative KPI layer. No "
+            "language model takes part in producing any figure here."),
+        steps=steps,
+        recommended_action=(
+            "; ".join(str(a.get("label")) for a in actions
+                      if a.get("key") != "NO_ACTION")
+            or (actions[0].get("reason") if actions else "")),
+        assumptions=[str(d) for d in (card.get("details") or [])],
+        limitations=limitations,
+        provenance=provenance,
+        generated_at="Generated "
+                     + datetime.now(timezone.utc).strftime("%d %B %Y, %H:%M UTC"),
+    )
+
+
 def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
                               url_prefix: str = "/api/scenarios"):
     bp = Blueprint("scenarios", __name__, url_prefix=url_prefix)
@@ -1011,6 +1533,20 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
         return project_id, snapshot_id
 
     # ------------------------------------------------------------------
+    def _gateway() -> Any:
+        """
+        The gateway every explanation on this blueprint shares.
+
+        `explanation_gateway()` rather than a fresh `LLMGateway()`: the budget
+        is cumulative and SHARED across every holder of the token — 100
+        requests a day for the whole product — so two clients each believing
+        they have the full allowance is how a shared limit gets exceeded
+        rather than respected.
+        """
+        from netgravity.orchestrator.explanation_llm import explanation_gateway
+
+        return explanation_gateway()
+
     @bp.route("", methods=["GET"])
     @require_auth
     def list_scenarios():
@@ -1087,10 +1623,19 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
         warning = _service_warning(best_row, recommended)
         figures = _comparison_figures(best_row, recommended)
 
+        # WHAT TO DO, per scenario, derived here from each solved record.
+        #
+        # Sent on the comparison rather than only on `/simulate` so a scenario
+        # solved before this existed still gets its actions — and so the list
+        # is recomputed against the record as it now stands, rather than
+        # replayed from whatever was true when it was first saved.
+        actions = {r.get("id"): _recommended_actions(r) for r in selected}
+
         return jsonify({
             "project_id": project_id,
             "baseline_kpis": baseline,
             "ranked": rows,
+            "recommended_actions": actions,
             "recommended_scenario_id": verdict["recommended_scenario_id"],
             "verdict": verdict["verdict"],
             "caveats": caveats,
@@ -1470,6 +2015,11 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             },
         }
 
+        # What to DO about it, from the solved result. Written onto the record
+        # AFTER it is complete, because it reads the capacity response and the
+        # explanation that were just built.
+        record["recommended_actions"] = _recommended_actions(record)
+
         with _lock:
             _store.setdefault(project_id, []).append(record)
 
@@ -1520,6 +2070,73 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
         logger.info("scenario.deleted project_id=%s scenario_id=%s",
                     project_id, scenario_id)
         return jsonify({"deleted": scenario_id, "remaining": len(remaining)}), 200
+
+    @bp.route("/<scenario_id>/document", methods=["GET"])
+    @require_auth
+    @rate_limit("scenario.document", limit=30, window_seconds=60)
+    def scenario_document(scenario_id: str):
+        """
+        One scenario, as the document a decision gets taken from.
+
+        WHY THIS EXISTS. The recommendation card answers "what should I do?"
+        in a paragraph. The question that follows it, in the room where the
+        decision is actually made, is "what exactly did you change, what did
+        it move, and how do you know?" — and that is four tables and a method
+        note. It has to survive being forwarded to somebody who will never
+        open this application.
+
+        NOTHING IS SOLVED HERE. Every figure is one the MILP already produced
+        and this project already stored, printed through the same display rule
+        the screens use, so the file and the screen cannot disagree.
+
+        The writer is `netgravity.reporting`, the same one the insight and the
+        forecast documents use.
+        """
+        from netgravity.reporting import build_derivation_docx, narrate
+
+        project_id, _ = _project_scope()
+        _load_scenarios()
+        with _lock:
+            record = next((r for r in _store.get(project_id, [])
+                           if r.get("id") == scenario_id), None)
+        if record is None:
+            raise NotFoundError(
+                f"Scenario '{scenario_id}' is not in this project, so there "
+                f"is nothing to document.")
+
+        # Recomputed from the record as it now stands rather than replayed
+        # from whatever was saved with it, so the document and the card state
+        # the same recommendations.
+        actions = _recommended_actions(record)
+
+        project_name = ""
+        try:
+            project = project_registry.get(project_id,
+                                           user_id=g.current_user.user_id)
+            project_name = str(getattr(project, "name", "") or "")
+        except Exception:  # noqa: BLE001 — the title reads fine without it
+            project_name = ""
+
+        report = _scenario_derivation(record, project_name, actions)
+
+        # The model writes the joining-up and cannot add a figure: every
+        # number it quotes is checked against the figures already in the
+        # report, and any sentence quoting one that is not there is dropped.
+        narration = narrate(report, _gateway(), purpose="scenario_document")
+        report.narrative = list(narration.paragraphs)
+        report.narrative_note = (
+            narration.note
+            if (narration.paragraphs or narration.source == "rejected") else "")
+
+        document = build_derivation_docx(report)
+        out = make_response(document)
+        out.headers["Content-Type"] = (
+            "application/vnd.openxmlformats-officedocument"
+            ".wordprocessingml.document")
+        out.headers["Content-Disposition"] = (
+            f'attachment; filename="{report.filename()}"')
+        out.headers["Cache-Control"] = "no-store"
+        return out
 
     @bp.errorhandler(ApplicationError)
     def _scenario_error(exc: ApplicationError):

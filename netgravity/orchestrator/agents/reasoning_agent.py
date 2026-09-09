@@ -399,6 +399,21 @@ class ReasoningAgent:
     #: budget it needs to answer.
     _EVIDENCE_LIST_ROWS = 8
 
+    #: Blocks whose rows are cut harder than the rest, and how many are kept.
+    #:
+    #: Measured on a scenario run: the payload was 11,807 characters and `rei`
+    #: alone was 5,704 of them — one row per facility, each carrying a full
+    #: exposure decomposition. The model bills its deliberation to the same
+    #: 2,000-token budget it writes with, so half a prompt of resilience rows
+    #: is paid for out of the words the reader gets, and the reply was
+    #: truncated mid-JSON often enough that the scenario card was routinely
+    #: written by the template on a build with a working gateway.
+    #:
+    #: The KIND of evidence is kept — the block is still there, still says how
+    #: many rows exist, and the briefing can still cite the most exposed site.
+    #: What goes is the tail nothing cites.
+    _NARROW_LIST_ROWS = {"rei": 3, "facilities": 5, "warehouse": 5}
+
     #: Characters of evidence the prompt carries. Measured: the demo network's
     #: payload is ~12k and answers; the Canadian network's was ~40k and
     #: returned nothing twice. The bound is structural (see
@@ -424,19 +439,19 @@ class ReasoningAgent:
 
         The deterministic template reads the ORIGINAL payload and is unaffected.
         """
-        def trim_value(value: Any) -> Any:
+        def trim_value(value: Any, limit: int) -> Any:
             if isinstance(value, dict):
-                return {k: trim_value(v) for k, v in value.items()}
+                return {k: trim_value(v, limit) for k, v in value.items()}
             if isinstance(value, list):
-                if len(value) <= cls._EVIDENCE_LIST_ROWS:
-                    return [trim_value(v) for v in value]
-                kept = [trim_value(v) for v in value[: cls._EVIDENCE_LIST_ROWS]]
+                if len(value) <= limit:
+                    return [trim_value(v, limit) for v in value]
+                kept = [trim_value(v, limit) for v in value[:limit]]
                 # Stated, not silently dropped: a narrative that says "three
                 # sites" about a network of twenty is worse than one that knows
                 # it was shown eight rows of twenty.
                 kept.append(
-                    f"...{len(value) - cls._EVIDENCE_LIST_ROWS} more rows not "
-                    f"shown here; {len(value)} in total")
+                    f"...{len(value) - limit} more rows not shown here; "
+                    f"{len(value)} in total")
                 return kept
             return value
 
@@ -451,7 +466,8 @@ class ReasoningAgent:
                 elif value is seen_state[1] or value == seen_state[1]:
                     bounded[key] = f"same as '{seen_state[0]}' above"
                     continue
-            bounded[key] = trim_value(value)
+            bounded[key] = trim_value(
+                value, cls._NARROW_LIST_ROWS.get(key, cls._EVIDENCE_LIST_ROWS))
 
         return json.dumps(bounded, default=str, sort_keys=True,
                           separators=(",", ":"))[: cls._EVIDENCE_CHARS]
@@ -1043,7 +1059,9 @@ class ReasoningAgent:
         return out
 
     @staticmethod
-    def _warehouse_insights(warehouse: Dict[str, Any], refs_for) -> List[KPIInsight]:
+    def _warehouse_insights(warehouse: Dict[str, Any], refs_for,
+                            state: Optional[Dict[str, Any]] = None,
+                            ) -> List[KPIInsight]:
         """
         What the horizon average was hiding, and where the spend sits.
 
@@ -1157,7 +1175,8 @@ class ReasoningAgent:
                     headline=(f"{name} carries {share * 100:.1f}% of what the "
                               f"facilities cost"),
                     narrative=(
-                        f"I see {name} accounting for {cost:,.2f} of facility "
+                        f"I see {name} accounting for "
+                        f"{_money(cost, state or {})} of facility "
                         f"cost, which is {share * 100:.2f}% of what every site in "
                         f"this plan costs together. That is fixed, opening, "
                         f"handling and holding cost at the site — it does not "
@@ -1697,11 +1716,12 @@ class ReasoningAgent:
                 pct = f" ({delta_pct:+.2f}%)" if delta_pct is not None else ""
                 parts.append(
                     f"I see the scenario {direction} business cost by "
-                    f"{abs(delta):,.2f}{pct}; this is the incremental impact versus "
-                    "the baseline, not the full cost repeated."
+                    f"{_money(abs(delta), state)}{pct}; this is the incremental "
+                    "impact versus the baseline, not the full cost repeated."
                 )
                 evidence.append(f"business_cost_delta = {delta:,.2f}")
-                drivers.append(f"Cost {direction} of {abs(delta):,.2f} versus baseline")
+                drivers.append(f"Cost {direction} of {_money(abs(delta), state)} "
+                               f"versus baseline")
                 # FIRST, on a run that has one.
                 #
                 # `card_from_briefing` leads with `kpi_insights[0]`, and on a
@@ -1723,9 +1743,10 @@ class ReasoningAgent:
                     # defect already fixed on the Cost headline above.
                     headline=(f"This change {direction} what the network costs"),
                     narrative=(
-                        f"I see an incremental change of {abs(delta):,.2f}{pct}. "
-                        "This tells me the price of the tested network choice before "
-                        "a planner weighs the operational benefit."
+                        f"I see an incremental change of "
+                        f"{_money(abs(delta), state)}{pct}. This tells me the "
+                        "price of the tested network choice before a planner "
+                        "weighs the operational benefit."
                     ),
                     metric_refs=refs_for("business_cost_delta"),
                     comparison_refs=refs_for("business_cost_delta_pct"),
@@ -1764,7 +1785,8 @@ class ReasoningAgent:
             # on different bases, and the peak reading is the correction to the
             # average rather than a replacement for it — so a reader meets the
             # average first and then what it hid.
-            insights.extend(self._warehouse_insights(warehouse_block, refs_for))
+            insights.extend(self._warehouse_insights(
+                warehouse_block, refs_for, state))
             insights.extend(self._cost_structure_insights(state, refs_for))
             insights.extend(self._footprint_insights(state, refs_for))
             insights.extend(self._carbon_insights(state, refs_for))

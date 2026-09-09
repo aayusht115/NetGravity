@@ -626,7 +626,108 @@ def extract_json(text: str) -> Optional[Dict[str, Any]]:
     `extract_json_value`.
     """
     parsed = extract_json_value(text)
-    return parsed if isinstance(parsed, dict) else None
+    if isinstance(parsed, dict):
+        return parsed
+    # Salvage is attempted even when something non-dict came back. Best-effort
+    # extraction over a reply cut off mid-object can find a COMPLETE INNER
+    # array and hand it back as the value — `["x","y"]` out of
+    # `{"summary":"A","key_drivers":["x","y"],"risks":["z` — and returning None
+    # on that would discard the object that was actually there. A genuine
+    # top-level array still yields None below, since it contains no "{".
+    #
+    # A REPLY THAT RAN OUT OF BUDGET MID-OBJECT.
+    #
+    # The backing model bills its internal reasoning to the same 2,000-token
+    # output allowance it writes with, so a long deliberation leaves the JSON
+    # cut off part-way — `{"summary":"…","key_drivers":["…` with no closing
+    # bracket. Every field that HAD arrived was then thrown away and the whole
+    # reasoning layer degraded to its template, which is how a scenario card
+    # came to be labelled "Rule-based" on a build with a working gateway.
+    #
+    # The fields are emitted in the order the prompt asks for them, most
+    # important first, so what survives a truncation is the summary and the
+    # drivers — exactly the part a reader sees. Recovering them is strictly
+    # better than discarding a call that has already been paid for.
+    return _salvage_truncated_object(text)
+
+
+def _salvage_truncated_object(text: str) -> Optional[Dict[str, Any]]:
+    """
+    The complete key/value pairs from an object that was cut off mid-write.
+
+    Closes the structure at the last point it was syntactically whole: drops
+    the partial trailing value, closes any open array, and closes the object.
+    Returns None when nothing complete arrived, so a caller cannot mistake an
+    empty salvage for an answer.
+    """
+    candidate = (text or "").strip()
+    fence = re.search(r"```(?:json)?\s*(.+?)(?:```|$)", candidate, re.DOTALL)
+    if fence:
+        candidate = fence.group(1).strip()
+    start = candidate.find("{")
+    if start < 0:
+        return None
+    candidate = candidate[start:]
+
+    # Walk the text tracking structure, remembering the last index at which a
+    # complete member had just ended. Everything after that is a fragment.
+    depth_obj = depth_arr = 0
+    in_string = escaped = False
+    cut = -1
+    for index, char in enumerate(candidate):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "{":
+            depth_obj += 1
+        elif char == "}":
+            depth_obj -= 1
+        elif char == "[":
+            depth_arr += 1
+        elif char == "]":
+            depth_arr -= 1
+        # A comma at the top level of the object ends a complete member; a
+        # comma inside one array ends a complete element.
+        if char == "," and not in_string and depth_obj == 1 and depth_arr <= 1:
+            cut = index
+    if cut < 0:
+        return None
+
+    repaired = candidate[:cut] + ("]" * max(depth_arr_at(candidate, cut), 0)) + "}"
+    try:
+        parsed = json.loads(repaired)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) and parsed else None
+
+
+def depth_arr_at(text: str, index: int) -> int:
+    """Open array depth at `index`, ignoring brackets inside strings."""
+    depth = 0
+    in_string = escaped = False
+    for char in text[:index]:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == "[":
+            depth += 1
+        elif char == "]":
+            depth -= 1
+    return depth
 
     candidate = text.strip()
 

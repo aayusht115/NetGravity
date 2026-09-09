@@ -21,7 +21,7 @@
 import { PLANTS, DCS, MARKETS, LANES, formatNumber, getUtilColor, getUtilLabel,
          perPeriodLabel } from './data.js';
 import { flowBands, bandForFlow, facilityLabel, facilityShortLabel,
-         NODE_STYLE } from './twin-legend.js';
+         glyphSize, NODE_STYLE } from './twin-legend.js';
 import { WORLD_COUNTRIES, countriesContaining, networkWindow,
          clipRingToBounds, ringIntersects, loadAdmin1,
          admin1IfLoaded } from './world-basemap.js';
@@ -826,6 +826,8 @@ function setupNetworkNodes() {
 /** The layer the label divs live in, and one entry per labelled node. */
 let labelLayerEl = null;
 let nodeLabels = [];
+//: One glyph badge per node, projected onto it every frame.
+let nodeGlyphs = [];
 
 function buildNodeLabels() {
   if (!containerEl) return;
@@ -840,6 +842,35 @@ function buildNodeLabels() {
   }
   labelLayerEl.innerHTML = '';
   nodeLabels = [];
+  nodeGlyphs = [];
+
+  // THE SAME MARK AS THE MAP AND THE KEY, on every node.
+  //
+  // The 3D scene said what a node was by its SHAPE — a hexagonal pedestal for
+  // a plant, a drum for a distribution centre — and the 2D map said it with
+  // an emoji. Both are legible; neither transfers. A reader who has learnt
+  // the key on one view arrives at the other and has to learn it again, and
+  // the legend beside the 3D scene printed the emoji, which appeared nowhere
+  // in the scene it was keying.
+  //
+  // Drawn as a DOM badge on the existing projected overlay rather than as a
+  // Three.js sprite: it is the same glyph string the other two views use, at
+  // the same size, laid out by the same text engine — a texture baked from a
+  // font would be a second rendering of it, free to differ.
+  nodeMeshes.forEach((node) => {
+    const style = NODE_STYLE[node.type];
+    if (!style) return;
+    const el = document.createElement('span');
+    el.className = 'twin3d-node-glyph';
+    el.textContent = style.glyph;
+    el.style.width = `${style.radius * 2}px`;
+    el.style.height = `${style.radius * 2}px`;
+    el.style.fontSize = `${glyphSize(style.radius)}px`;
+    el.style.background = `${style.color}26`;
+    el.style.borderColor = `${style.color}80`;
+    labelLayerEl.appendChild(el);
+    nodeGlyphs.push({ el, anchor: node.pos3D.clone().add(new THREE.Vector3(0, 2.4, 0)) });
+  });
 
   nodeMeshes.filter(n => n.type !== 'market').forEach((node) => {
     const text = facilityShortLabel(node.data);
@@ -851,7 +882,9 @@ function buildNodeLabels() {
     el.title = facilityLabel(node.data);
     labelLayerEl.appendChild(el);
     // Raised to sit above the node's own geometry rather than inside it.
-    nodeLabels.push({ el, anchor: node.pos3D.clone().add(new THREE.Vector3(0, 4.6, 0)) });
+    // Raised clear of the glyph badge, which now occupies the space directly
+    // over the node.
+    nodeLabels.push({ el, anchor: node.pos3D.clone().add(new THREE.Vector3(0, 5.6, 0)) });
   });
 }
 
@@ -877,9 +910,27 @@ function buildNodeLabels() {
  * and never forces a layout inside the render loop.
  */
 function updateNodeLabels() {
-  if (!nodeLabels.length || !camera || !containerEl) return;
+  if (!camera || !containerEl) return;
   const rect = containerEl.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
+
+  // THE BADGES FIRST, and never culled.
+  //
+  // A name pill is a convenience and can be dropped when it would collide;
+  // the glyph IS the node's identity, and hiding it would hide what the node
+  // is. It is centred on the node and small enough that two of them
+  // overlapping still read as two nodes, which two overlapping name pills do
+  // not.
+  nodeGlyphs.forEach((glyph) => {
+    const p = glyph.anchor.clone().project(camera);
+    if (p.z > 1) { glyph.el.style.display = 'none'; return; }
+    glyph.el.style.display = '';
+    glyph.el.style.transform =
+      `translate(-50%,-50%) translate(${(p.x * 0.5 + 0.5) * rect.width}px, `
+      + `${(-(p.y * 0.5) + 0.5) * rect.height}px)`;
+  });
+
+  if (!nodeLabels.length) return;
 
   const placed = [];
   const candidates = [];
