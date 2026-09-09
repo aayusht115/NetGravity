@@ -1148,10 +1148,23 @@ async function downloadDerivation(button) {
   const original = label ? label.textContent : '';
   button.disabled = true;
   if (label) label.textContent = 'Preparing\u2026';
+  // A document takes a solve and, where the gateway is configured, a
+  // text-generation call — which the gateway allows itself a minute for. A
+  // button that says the same thing for that long reads as a hung one, so
+  // the wait names its slow half rather than growing silent.
+  const stage = setTimeout(() => {
+    if (label && button.disabled) label.textContent = 'Writing the explanation\u2026';
+  }, 5000);
 
   try {
     const mod = await import('./integration/services/insight-service.js');
-    const { blob, filename } = await mod.insightService.downloadDerivation(record.id);
+    // The record's own scope, so a facility finding asks for the facility
+    // briefing rather than the network one it is not in.
+    const { blob, filename } = await mod.insightService.downloadDerivation(
+      record.id, {
+        scope: record.scope || (insdFlow.facilityId ? 'FACILITY' : 'NETWORK'),
+        entityId: record.entity_id || insdFlow.facilityId || null,
+      });
     // An object URL and a synthetic click: the only way to name a file the
     // browser saves from a fetch. Revoked immediately after — the blob is
     // held in memory until it is.
@@ -1173,6 +1186,7 @@ async function downloadDerivation(button) {
       button.classList.remove('is-failed');
     }, 4000);
   } finally {
+    clearTimeout(stage);
     button.disabled = false;
   }
 }

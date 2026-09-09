@@ -4593,6 +4593,20 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 /* Each one opens the scenario builder filled in. None of them runs anything:
    a forecast is a projection, and testing the network against it is a
    decision a person makes. */
+/* "How did it reach that number?", as a file.
+
+   Borrows `.insd-download` wholesale rather than restyling it: this is the
+   same control, doing the same thing, and a reader who has pressed one on the
+   deep dive should not have to work out that this is the other. Only the
+   spacing differs, because it sits inside a card rather than at the end of a
+   page (Nielsen #4 — consistency). */
+.fc-attn-download {
+  margin-top: 14px;
+  font-size: 12px;
+}
+
+.fc-attn-download span:first-of-type { text-align: left; }
+
 .fc-attn-actions {
   display: flex;
   flex-direction: column;

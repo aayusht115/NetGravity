@@ -39,10 +39,13 @@ from netgravity.reporting.derivation import (
     Figure,
     build_derivation_docx,
 )
+from netgravity.reporting.narration import Narration, narrate
 
 __all__ = [
     "DerivationReport",
     "DerivationStep",
     "Figure",
+    "Narration",
     "build_derivation_docx",
+    "narrate",
 ]

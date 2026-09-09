@@ -78,6 +78,19 @@ class DerivationReport:
     limitations: List[str] = field(default_factory=list)
     #: "Source: … (state_id)". One line, written by the caller.
     provenance: str = ""
+    #: An explanation of the working in plain English, and one line saying who
+    #: wrote it. Built by `netgravity.reporting.narration`, which verifies
+    #: every figure in it against the figures below before it gets here — see
+    #: that module for why a model is allowed to write this at all.
+    #:
+    #: Optional in the strongest sense: a report with none is a complete
+    #: report, and that is what one looks like whenever the gateway is
+    #: unconfigured, over budget, or returned something that failed the check.
+    narrative: List[str] = field(default_factory=list)
+    #: Who wrote `narrative`, in a sentence a reader can act on. Printed even
+    #: when the narrative itself is empty, because "this was withheld and why"
+    #: is a fact the reader of a derivation is entitled to.
+    narrative_note: str = ""
     #: Free-form label for the kind of thing this describes — "Insight",
     #: "Demand forecast". Printed above the title.
     kind: str = "Analysis"
@@ -163,6 +176,26 @@ def build_derivation_docx(report: DerivationReport) -> bytes:
     if report.method:
         _heading(doc, "How this was reached")
         _para(doc, report.method, size=10)
+
+    # ── The same thing, joined up ────────────────────────────────────
+    #
+    # ABOVE the working rather than after it, because this is the part a
+    # reader reads: the tables are what they come back to when they want to
+    # check it. The attribution line sits immediately under the passage, not
+    # in a footnote, so nobody can quote the paragraph without the sentence
+    # saying where it came from.
+    # A heading over nothing is a claim, and the wrong one: it suggests the
+    # working could not be explained. When the gateway is simply absent the
+    # section does not exist — the document is complete without it. It DOES
+    # appear when a passage was written and withheld, because that is a fact
+    # about this document the reader is entitled to.
+    if report.narrative or report.narrative_note:
+        _heading(doc, "The working, in plain terms")
+        for paragraph in report.narrative:
+            _para(doc, paragraph, size=10.5, space_after=8)
+        if report.narrative_note:
+            _para(doc, report.narrative_note, size=8.5, colour=_MUTED,
+                  italic=True, space_after=4)
 
     # ── The working ──────────────────────────────────────────────────
     for index, step in enumerate(report.steps, start=1):

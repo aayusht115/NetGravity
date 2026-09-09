@@ -101,7 +101,7 @@ _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
 #:      entry is keyed on the network's `data_version`, which does not move
 #:      when the wording does, so without this every project that had already
 #:      loaded its insights would keep the old labels for ever.
-_PAYLOAD_VERSION = 7
+_PAYLOAD_VERSION = 8
 
 
 #: Theme -> the per-facility field that theme is ABOUT. A chart for a finding
@@ -498,6 +498,15 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
         # write the prose, and dropped. A chart needs the rows.
         "entities": _resolve_entities(insight, pack),
         "rank": index + 1,
+        # THE SCOPE THIS FINDING WAS COMPUTED IN, carried so a client can ask
+        # for the same briefing back.
+        #
+        # Without it the deep dive's document download assumed NETWORK, and a
+        # facility-scoped finding — which the deep dive opens exactly as
+        # readily — answered 404 for an id the reader was looking at. A record
+        # that cannot say where it came from makes every consumer guess.
+        "scope": scope,
+        "entity_id": entity_id,
     }
 
 
@@ -548,14 +557,24 @@ def _method_note(record: Dict[str, Any]) -> str:
     )
 
 
-def _derivation_for(record: Dict[str, Any], briefing: Any, result: Any,
-                    state: Any) -> Any:
+def _derivation_for(record: Dict[str, Any], analysis: Dict[str, Any]) -> Any:
     """
     One serialised insight, as a `DerivationReport`.
 
     Reads the SAME record the browser renders, so the document and the screen
     cannot disagree: if the deep dive shows 97.20%, so does the table in the
     file, because both print the identical `display_value` string.
+
+    `analysis` is the whole serialised briefing — the identical JSON object
+    `GET /api/insights` returned — rather than the live briefing, result and
+    twin state this used to take. That is not a tidying: the list response is
+    CACHED per network version and this route recomputed, so the two could
+    disagree about what findings exist. They did. A reader who opened a
+    finding and pressed Download got 404 "not a finding on this network's
+    current analysis" about the finding on their screen, because the fresh
+    reasoning pass had produced a slightly different headline and the id is a
+    digest of the headline. Reading both from one cached payload makes the
+    disagreement unrepresentable rather than unlikely.
     """
     from datetime import datetime, timezone
 
@@ -607,27 +626,29 @@ def _derivation_for(record: Dict[str, Any], briefing: Any, result: Any,
         ))
 
     limitations = []
-    if briefing.limitation:
-        limitations.append(briefing.limitation)
-    completeness = getattr(briefing.evidence_completeness, "value",
-                           str(briefing.evidence_completeness))
+    limitation = str(analysis.get("limitation") or "").strip()
+    if limitation:
+        limitations.append(limitation)
+    completeness = str(analysis.get("evidence_completeness") or "")
     if completeness and completeness != "COMPLETE":
         limitations.append(
             f"Evidence for this run is {completeness}: some analyses did not "
             "produce a value, so those quantities are unknown rather than "
             "zero.")
 
-    grounding = result.grounding_status
+    grounding_block = analysis.get("grounding") or {}
+    grounding = str(grounding_block.get("status") or "UNKNOWN")
+    warnings = [str(w) for w in (grounding_block.get("warnings") or [])]
     provenance = (
         f"Source: NetGravity reasoning over the solved network state "
-        f"{state.state_id}. Numeric grounding: {grounding}."
+        f"{analysis.get('state_id') or 'unknown'}. "
+        f"Numeric grounding: {grounding}."
     )
     if grounding not in ("GROUNDED", "NO_CLAIMS"):
         provenance += (" Not every figure quoted in the prose was verified "
                        "against the deterministic results.")
-    if result.validation_warnings:
-        provenance += (" Validation warnings: "
-                       + "; ".join(result.validation_warnings) + ".")
+    if warnings:
+        provenance += " Validation warnings: " + "; ".join(warnings) + "."
 
     return DerivationReport(
         kind="Insight",
@@ -639,7 +660,7 @@ def _derivation_for(record: Dict[str, Any], briefing: Any, result: Any,
         method=_method_note(record),
         steps=steps,
         recommended_action=record.get("recommended_action") or "",
-        assumptions=list(briefing.key_drivers or []),
+        assumptions=[str(d) for d in (analysis.get("key_drivers") or [])],
         limitations=limitations,
         provenance=provenance,
         generated_at="Generated "
@@ -668,6 +689,22 @@ def _format_entity_value(entity: Dict[str, Any]) -> str:
 def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                               url_prefix: str = "/api/insights"):
     bp = Blueprint("insights", __name__, url_prefix=url_prefix)
+
+    def _gateway() -> Any:
+        """
+        The gateway the reasoning agent already holds.
+
+        Not a second `LLMGateway()`. The budget is cumulative and SHARED
+        across every holder of the token — 100 requests a day for the whole
+        product — and a second client keeps its own counters, so two objects
+        each believing they have the full allowance is how the limit gets
+        exceeded rather than respected. It also carries the per-execution
+        state `begin_execution` sets.
+        """
+        if orchestrator is None:
+            return None
+        agent = (orchestrator.services or {}).get("reasoning_agent")
+        return getattr(agent, "gateway", None)
 
     def _resolve_state(project_id: str, user_id: str) -> Any:
         """
@@ -963,39 +1000,71 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
         insights: the demand forecast is asked the same question ("which
         series, which method, what history") and will build the same shape.
         """
-        from netgravity.reporting import (
-            DerivationReport, DerivationStep, Figure, build_derivation_docx)
+        from netgravity.reporting import build_derivation_docx, narrate
 
         project_id = str(request.args.get("project_id") or "").strip()
         if not project_id:
             raise ValidationError("A project_id is required.")
-        user_id = g.current_user.user_id
-        project_registry.get(project_id, user_id=user_id)
 
-        scope_arg = (request.args.get("scope") or "NETWORK").upper()
-        scope = (ReasoningScope.FACILITY if scope_arg == "FACILITY"
-                 else ReasoningScope.NETWORK)
+        scope_arg = str(request.args.get("scope") or "NETWORK").strip().upper()
+        if scope_arg not in _ALLOWED_SCOPES:
+            raise ValidationError(
+                f"scope must be one of {', '.join(sorted(_ALLOWED_SCOPES))}.")
         entity_id = str(request.args.get("entity_id") or "").strip() or None
+        if scope_arg in {"FACILITY", "LANE"} and not entity_id:
+            raise ValidationError(f"scope={scope_arg} requires an entity_id.")
+        scope = ReasoningScope(scope_arg)
 
-        _, state = _resolve_state(project_id, user_id)
-        try:
-            result, pack = _briefing_for(state, scope, entity_id, "", False)
-        except ValueError as exc:
-            raise NotFoundError(str(exc)) from exc
+        # THE SAME CALL THE LIST ROUTE MAKES, cache and all.
+        #
+        # This route used to resolve the twin state and run its own reasoning
+        # pass. `GET /api/insights` does not: it is cached per network version,
+        # because a briefing is derived data about one version of one network.
+        # So the list a reader is looking at and the list this route searched
+        # were two different computations, and they diverged the moment a
+        # hydration published a fresher state — the reasoning pass wrote a
+        # slightly different headline, the id is a digest of the headline, and
+        # the download 404'd on the finding filling the screen.
+        #
+        # Going through `_briefing_analysis` means the record this document is
+        # built from IS the record the browser rendered, byte for byte.
+        analysis = _briefing_analysis(project_id, scope_arg, scope, entity_id,
+                                      "", False)
 
-        briefing = result.briefing
-        serialised = [
-            _serialise_insight(item, i, scope=scope_arg, entity_id=entity_id,
-                               pack=pack)
-            for i, item in enumerate(briefing.kpi_insights)
-        ]
-        record = next((r for r in serialised if r["id"] == insight_id), None)
+        record = next((r for r in analysis.get("insights") or []
+                       if r.get("id") == insight_id), None)
         if record is None:
             raise NotFoundError(
                 f"'{insight_id}' is not a finding on this network's current "
-                f"analysis.")
+                f"analysis. Reload the page to pick up the current findings.")
 
-        report = _derivation_for(record, briefing, result, state)
+        report = _derivation_for(record, analysis)
+
+        # THE PART A MODEL IS ALLOWED TO WRITE.
+        #
+        # The tables above are the engine's and are complete; what they do not
+        # do is join up. A reader who was not in the room gets a correct
+        # derivation and still has to work out why three figures add to one
+        # conclusion, which is exactly the "black box" complaint a table of
+        # numbers does not answer.
+        #
+        # `narrate` verifies every figure it writes against the figures in the
+        # report and drops any sentence quoting one that is not there, so the
+        # worst case is a shorter passage rather than a fabricated number under
+        # a letterhead. It raises nothing: a gateway that is unconfigured, over
+        # budget or unreachable produces a document without this section, never
+        # a failed download.
+        narration = narrate(report, _gateway(), purpose="insight_document")
+        report.narrative = list(narration.paragraphs)
+        # The note is printed only when there is something for it to explain:
+        # a passage that was written, or one that was written and withheld. An
+        # unconfigured gateway is not a fact about this analysis, and a line
+        # about a missing service in a document about a network reads as a
+        # caveat on the network.
+        report.narrative_note = (
+            narration.note
+            if (narration.paragraphs or narration.source == "rejected") else "")
+
         payload = build_derivation_docx(report)
 
         response = make_response(payload)

@@ -269,12 +269,24 @@ function renderForecastSummary() {
 
   const mase = meta.accuracy && typeof meta.accuracy.mase === 'number'
     ? meta.accuracy.mase : null;
-  set('fc-model', meta.engine || 'Not reported');
+  // A forecast that arrived with the upload was not produced here, and every
+  // field on this card that describes a model has to say so. Reporting an
+  // engine name, a horizon "modelled" and an accuracy for numbers nothing was
+  // fitted to would attribute the upload's own projection to this build.
+  const supplied = meta.source === 'uploaded';
+  set('fc-model', supplied
+    ? 'Supplied with this upload — not recalculated'
+    : (meta.engine || 'Not reported'));
   set('fc-horizon', `${FORECAST.months.length} periods`);
   // MASE < 1 means the model beats a naive seasonal forecast; the comparison
   // is stated because the bare number means nothing to most readers.
-  set('fc-accuracy', mase === null ? 'Not reported'
-    : `${mase.toFixed(2)} (${mase < 1 ? 'better' : 'worse'} than naive)`);
+  //
+  // "Not applicable" rather than "Not reported" when nothing was fitted: a
+  // measurement that could not exist is a different fact from one that was not
+  // taken, and this row is read as a quality claim either way.
+  set('fc-accuracy', supplied ? 'Not applicable — no model was fitted'
+    : (mase === null ? 'Not reported'
+       : `${mase.toFixed(2)} (${mase < 1 ? 'better' : 'worse'} than naive)`));
   // The series ACTUALLY plotted, which changes when the picker changes.
   // `meta.shown` is written once at hydration, so the title kept naming the
   // default series after the user selected a different one.
@@ -286,14 +298,28 @@ function renderForecastSummary() {
   set('fc-series-count', `${meta.series} market-product pair(s)`);
   // The chart's title IS the series picker (see #fc-series-select), so there
   // is no separate title string to write; the picker names the series.
-  set('fc-chart-tag', meta.status === 'OK' ? 'Observed + forecast' : meta.status);
+  set('fc-chart-tag', supplied ? 'Supplied forecast'
+    : (meta.status === 'OK' ? 'Observed + forecast' : meta.status));
+  // The band is named only when there is one to name. A supplied forecast
+  // without stated bounds is drawn as a line, and promising a p10–p90 band
+  // beside it would describe a shape that is not on the chart.
+  const banded = FORECAST.upper.length && FORECAST.lower.length;
   set('fc-chart-subtitle',
     `${DEMAND_HISTORY.months.length} observed periods + `
-    + `${FORECAST.months.length}-period forecast · p10–p90 band`);
-  set('fc-method-prov',
-    'Produced by netgravity.forecasting, routed through the orchestrator '
-    + 'capability "forecast.demand". No language model is involved in the '
-    + 'figures on this chart.');
+    + `${FORECAST.months.length}-period forecast`
+    + (banded ? ' · p10–p90 band' : ' · no confidence band was supplied')
+    + (meta.uncovered
+      ? ` · ${meta.uncovered} market-product pair(s) in this network are not in `
+        + 'the upload and have no forecast' : ''));
+  set('fc-method-prov', supplied
+    ? 'Supplied with this upload and shown exactly as received. No forecasting '
+      + 'engine ran against these figures: no ETS or quantile model, no '
+      + 'intermittent-demand model, no structural-break detection, no '
+      + 'rolling-origin backtest, and no external signal was applied. The '
+      + 'periods on the axis are the ones the upload states.'
+    : 'Produced by netgravity.forecasting, routed through the orchestrator '
+      + 'capability "forecast.demand". No language model is involved in the '
+      + 'figures on this chart.');
   renderForecastSeriesSelect();
   renderForecastAxisNote();
   renderForecastCapacityKey();
@@ -332,6 +358,90 @@ function renderForecastPage() {
   renderDataIntelligence();
   wireForecastPage();
   requestAnimationFrame(() => sizePageToWindow('.fc-main', '--fc-main-top'));
+}
+
+/**
+ * "How did it reach that number?", as a file.
+ *
+ * ONLY WHERE THERE IS A DERIVATION TO GIVE. A forecast supplied with the
+ * upload was not calculated here, so there is no calculation to explain and
+ * this build cannot account for how the supplier arrived at it. Offering the
+ * button anyway would promise a derivation that cannot exist — the same
+ * failure as the twin's hover card, which described a control it did not have
+ * (Nielsen #1: the system's state is what the screen shows, and a control is a
+ * statement that something can be done).
+ *
+ * The uploaded case is not left silent: the provenance line under this card
+ * already says the figures were supplied and not recalculated, which is the
+ * answer to the question the button would have been pressed to ask.
+ */
+function forecastDownloadHtml() {
+  const meta = window.__ngForecastMeta || {};
+  if (meta.source === 'uploaded') return '';
+  if (!FORECAST.months.length) return '';
+  return `
+    <button type="button" class="insd-download fc-attn-download"
+            id="fc-download-doc">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+           stroke-width="1.9" aria-hidden="true">
+        <path d="M10 3v9m0 0 3.5-3.5M10 12 6.5 8.5M4 15.5h12"/>
+      </svg>
+      <span>Download how this forecast was calculated</span>
+      <span class="insd-download-ext">DOCX</span>
+    </button>`;
+}
+
+/**
+ * Fetch the forecast's derivation and hand it to the browser to save.
+ *
+ * The same contract as the deep dive's download, deliberately: the button
+ * says what it is doing throughout, and a failure says so ON the button
+ * rather than in a console nobody has open.
+ */
+async function downloadForecastDerivation(button) {
+  if (!button || button.disabled) return;
+  const label = button.querySelector('span');
+  const original = label ? label.textContent : '';
+  button.disabled = true;
+  if (label) label.textContent = 'Preparing\u2026';
+  // A document takes a solve and, where the gateway is configured, a
+  // text-generation call — which the gateway allows itself a minute for. A
+  // button that says the same thing for that long reads as a hung one, so
+  // the wait names its slow half rather than growing silent.
+  const stage = setTimeout(() => {
+    if (label && button.disabled) label.textContent = 'Writing the explanation\u2026';
+  }, 5000);
+
+  try {
+    const mod = await import('./integration/services/forecast-service.js');
+    const { blob, filename } = await mod.forecastService.downloadDerivation({
+      // Off `FORECAST`, which the series picker rewrites — not off the
+      // hydration-time meta, which names the series the screen opened on.
+      marketId: FORECAST.marketId || null,
+      productId: FORECAST.productId || null,
+      horizon: FORECAST.months.length || null,
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'forecast-derivation.docx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (label) label.textContent = original;
+  } catch (err) {
+    if (label) label.textContent = 'Could not build the document';
+    button.classList.add('is-failed');
+    button.title = err && err.message ? err.message : '';
+    setTimeout(() => {
+      if (label) label.textContent = original;
+      button.classList.remove('is-failed');
+    }, 4000);
+  } finally {
+    clearTimeout(stage);
+    button.disabled = false;
+  }
 }
 
 /**
@@ -438,12 +548,19 @@ function renderForecastAttention(listId = 'fc-attn-body') {
             <span class="fc-attn-action-detail">${escapeInsightText(a.detail)}</span>
           </button>`).join('')}
       </div>` : ''}
+    ${forecastDownloadHtml()}
     <div class="text-xs text-muted" style="margin-top:10px;line-height:1.5">
-      ${card && card.source === 'llm'
-        ? 'Written by the model from the forecaster\'s own output.'
-        : 'Written by the deterministic template from the forecaster\'s own output.'}
-      Every figure here is the forecasting engine's.
+      ${(window.__ngForecastMeta || {}).source === 'uploaded'
+        ? 'Every figure here is summed from the forecast supplied with this '
+          + 'upload. Nothing was modelled, adjusted or recalculated.'
+        : `${card && card.source === 'llm'
+            ? 'Written by the model from the forecaster\'s own output.'
+            : 'Written by the deterministic template from the forecaster\'s own output.'}
+           Every figure here is the forecasting engine's.`}
     </div>`;
+
+  document.getElementById('fc-download-doc')?.addEventListener('click',
+    (e) => downloadForecastDerivation(e.currentTarget));
 
   list.querySelectorAll('[data-fc-action]').forEach((btn) => {
     const item = actions[Number(btn.dataset.fcAction)];
@@ -552,7 +669,16 @@ function renderForecastAxisNote() {
   }
   note.hidden = false;
   if (histEl) histEl.style.flexGrow = String(hist);
-  if (foreEl) foreEl.style.flexGrow = String(fore);
+  if (foreEl) {
+    foreEl.style.flexGrow = String(fore);
+    // Name the right-hand half for what it actually is. "Forecast" alone reads
+    // as this build's forecast on a chart where it is not.
+    const label = foreEl.lastChild;
+    if (label && label.nodeType === 3) {
+      label.textContent = (window.__ngForecastMeta || {}).source === 'uploaded'
+        ? 'Forecast (supplied)' : 'Forecast';
+    }
+  }
 }
 
 /**

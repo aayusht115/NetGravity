@@ -96,7 +96,11 @@ function reshapeForecastSeries(series, names) {
       values: hist.map((p) => Number(p.quantity ?? p)),
     },
     forecast: {
-      labels: pts.map((p) => `+${p.period}`),
+      // The upload's own calendar label when the response carries one, and
+      // the engine's horizon offset otherwise. An uploaded forecast states
+      // "2026-01"; rendering that as "+1" throws away the one thing that makes
+      // it readable next to the history it continues.
+      labels: pts.map((p, i) => p.timestamp || `+${p.period ?? i + 1}`),
       values: pts.map((p) => Math.round(p.mean)),
       // p90/p10 are the engine's own quantiles. Absent when it produced none —
       // never widened or invented to make a nicer-looking band.
@@ -724,6 +728,12 @@ export async function hydrateFromBackend(projectId = null, onStage = null) {
         shown: chosen.seriesLabel,
         engine: chosen.engine,
         accuracy: chosen.accuracy || null,
+        // Whether these numbers were produced here or arrived with the upload.
+        // The summary card must not describe an uploaded forecast as the
+        // output of an engine that never ran.
+        source: fc.forecast_source || 'model',
+        recalculated: fc.provenance ? fc.provenance.recalculated !== false : true,
+        uncovered: fc.n_series_uncovered || 0,
         // The orchestrator's id for the run that produced this forecast, so
         // the loading screen can read its trace.
         executionId: fc.execution_id || null,

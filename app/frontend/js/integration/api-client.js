@@ -139,7 +139,17 @@ class ApiClient {
    * loses the error body on a 4xx (the reader gets a blank tab instead of a
    * reason), and a popup blocker eats it.
    */
-  async download(endpoint, params = {}) {
+  /**
+   * Fetch a file, with the server's own filename.
+   *
+   * `options.timeout` because the default request budget is 30 seconds and a
+   * document is not a request: building one runs a solve and, where the
+   * gateway is configured, a text-generation call the gateway itself allows
+   * 60 seconds for. Inheriting REQUEST_TIMEOUT_MS aborted the fetch while the
+   * server was still writing the file, and the reader saw "Could not build
+   * the document" for a document that was built.
+   */
+  async download(endpoint, params = {}, options = {}) {
     const query = new URLSearchParams(
       Object.entries(params).filter(([, v]) => v !== undefined && v !== null),
     ).toString();
@@ -150,7 +160,8 @@ class ApiClient {
     headers.set('X-Request-ID', this._generateRequestId());
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS);
+    const budget = options.timeout || CONFIG.REQUEST_TIMEOUT_MS;
+    const timeout = setTimeout(() => controller.abort(), budget);
     try {
       const response = await fetch(url, {
         method: 'GET', headers, credentials: 'include', signal: controller.signal,

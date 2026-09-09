@@ -74,7 +74,27 @@ def briefing_bundle():
                                         entity_id=None, pack=pack)
         for i, item in enumerate(result.briefing.kpi_insights)
     ]
-    return result, records, state
+
+    # THE SHAPE THE ENDPOINT SERVES, because that is what the document is now
+    # built from. `_derivation_for` used to take the live briefing, result and
+    # twin state; it takes the serialised payload instead, so the document and
+    # the screen read one object and cannot disagree about what findings exist
+    # (see the route's own comment for the 404 this fixed).
+    analysis = {
+        "state_id": state.state_id,
+        "insights": records,
+        "key_drivers": list(result.briefing.key_drivers or []),
+        "limitation": result.briefing.limitation or "",
+        "evidence_completeness": getattr(
+            result.briefing.evidence_completeness, "value",
+            str(result.briefing.evidence_completeness)),
+        "grounding": {
+            "status": result.grounding_status,
+            "warnings": list(result.validation_warnings),
+            "source": result.source,
+        },
+    }
+    return result, records, state, analysis
 
 
 def _docx_text(data: bytes) -> str:
@@ -139,9 +159,9 @@ class TestAFindingBecomesADocument:
         would be a second engine whose output carries a letterhead and gets
         forwarded.
         """
-        result, records, state = briefing_bundle
+        _result, records, _state, analysis = briefing_bundle
         record = next(r for r in records if r["theme"] == "Capacity")
-        report = insights_api._derivation_for(record, result.briefing, result, state)
+        report = insights_api._derivation_for(record, analysis)
         text = _docx_text(build_derivation_docx(report))
 
         cited = [e for e in record["evidence"]
@@ -160,9 +180,9 @@ class TestAFindingBecomesADocument:
         reader is asked for first and the part a bar chart cannot be pasted
         into a deck as.
         """
-        result, records, state = briefing_bundle
+        _result, records, _state, analysis = briefing_bundle
         record = next(r for r in records if r["entities"])
-        report = insights_api._derivation_for(record, result.briefing, result, state)
+        report = insights_api._derivation_for(record, analysis)
         text = _docx_text(build_derivation_docx(report))
         for entity in record["entities"][:3]:
             assert str(entity["label"]) in text, entity
@@ -173,9 +193,8 @@ class TestAFindingBecomesADocument:
         verified against the deterministic results — more so in a file that
         will be read by people who never saw the screen's own caveat.
         """
-        result, records, state = briefing_bundle
-        report = insights_api._derivation_for(records[0], result.briefing,
-                                              result, state)
+        _result, records, state, analysis = briefing_bundle
+        report = insights_api._derivation_for(records[0], analysis)
         text = _docx_text(build_derivation_docx(report))
         assert "Numeric grounding" in text
         assert state.state_id in text
@@ -186,9 +205,8 @@ class TestAFindingBecomesADocument:
         the steps and the figures were shown and nothing said where either
         came from, or whether a language model had a hand in them.
         """
-        result, records, state = briefing_bundle
-        report = insights_api._derivation_for(records[0], result.briefing,
-                                              result, state)
+        _result, records, _state, analysis = briefing_bundle
+        report = insights_api._derivation_for(records[0], analysis)
         assert "deterministic" in report.method
         assert "checked back against the computed results" in report.method
 
@@ -245,7 +263,7 @@ class TestNothingOnScreenIsAStorageKey:
         card, once with its unit and once without. On a USD network it was a
         bare quantity in no unit at all.
         """
-        _result, records, _state = briefing_bundle
+        _result, records, _state, _analysis = briefing_bundle
         cost = next(r for r in records if r["theme"] == "Cost")
         assert "₹" in cost["narrative"], cost["narrative"]
 
@@ -254,10 +272,74 @@ class TestNothingOnScreenIsAStorageKey:
         The sweep the specific cases above are examples of: nothing a reader
         sees may be a three-decimal proportion or a Title-Cased storage key.
         """
-        _result, records, _state = briefing_bundle
+        _result, records, _state, _analysis = briefing_bundle
         for record in records:
             assert "1.000" not in record["narrative"], record["narrative"]
             for row in record["evidence"]:
                 assert not row["label"].startswith("N "), row
                 assert "Pct" not in row["label"], row
                 assert "Kg" not in row["label"], row
+
+
+class TestTheDocumentAndTheScreenCannotDisagree:
+    """
+    The bug this closes. `GET /api/insights` is CACHED per network version —
+    a briefing is derived data about one version of one network, and
+    recomputing it per dashboard load would pay for a reasoning pass and, on a
+    fresh process, a solve. The document route was not cached: it resolved the
+    twin state and ran its own reasoning pass.
+
+    So the list a reader was looking at and the list the download searched
+    were two different computations. They agreed until a hydration published a
+    fresher state, at which point the reasoning pass wrote a slightly
+    different headline — and the insight id is a digest of the headline. The
+    reader opened a finding, pressed Download, and was told "'INS_NETWORK_…'
+    is not a finding on this network's current analysis" about the finding
+    filling their screen.
+    """
+
+    def test_a_record_carries_the_scope_it_was_computed_in(self, briefing_bundle):
+        """
+        Without it the client had to assume, and it assumed NETWORK — so a
+        facility-scoped finding, which the deep dive opens exactly as readily,
+        could never be downloaded at all.
+        """
+        _result, records, _state, _analysis = briefing_bundle
+        assert all(r["scope"] == "NETWORK" for r in records), records[0]
+        assert all("entity_id" in r for r in records)
+
+    def test_the_route_reads_the_cached_briefing_rather_than_its_own(self):
+        import inspect
+
+        source = inspect.getsource(insights_api.create_insights_blueprint)
+        body = source[source.index("def insight_document"):]
+        body = body[:body.index("@bp.errorhandler")]
+        assert "_briefing_analysis(" in body, body
+        # And no second reasoning pass, which is what made them diverge.
+        assert "_briefing_for(" not in body, body
+        assert "_resolve_state(" not in body, body
+
+    def test_it_accepts_the_scope_the_record_states(self):
+        import inspect
+
+        source = inspect.getsource(insights_api.create_insights_blueprint)
+        body = source[source.index("def insight_document"):]
+        body = body[:body.index("@bp.errorhandler")]
+        assert 'request.args.get("scope")' in body
+        assert 'request.args.get("entity_id")' in body
+
+    def test_the_client_sends_the_records_own_scope(self):
+        from pathlib import Path
+
+        root = Path(insights_api.__file__).resolve().parents[3] / "app" / "frontend"
+        service = (root / "js" / "integration" / "services"
+                   / "insight-service.js").read_text(encoding="utf-8")
+        block = service[service.index("async downloadDerivation("):]
+        block = block[:block.index("\n  },")]
+        assert "options.scope" in block, block
+        assert "entity_id" in block, block
+
+        detail = (root / "js" / "insight-detail.js").read_text(encoding="utf-8")
+        call = detail[detail.index("insightService.downloadDerivation("):]
+        call = call[:call.index("});")]
+        assert "record.scope" in call, call

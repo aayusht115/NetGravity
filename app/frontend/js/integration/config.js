@@ -33,6 +33,17 @@ export const CONFIG = {
    * outlast it, so the scenario path also RECOVERS from an abort rather than
    * calling it a failure — see `findScenarioCreatedSince`.
    */
+  /**
+   * A .docx, which is not a request.
+   *
+   * Building one resolves the analysis (a solve, where the process has not
+   * done one yet) and then asks the text gateway to explain it — and the
+   * gateway allows itself 60 seconds of processing, with the orchestrator's
+   * own client waiting 90. A budget below that aborts work that was going to
+   * succeed, and the reader is told the document could not be built.
+   */
+  DOCUMENT_TIMEOUT_MS: 150000,
+
   SOLVE_TIMEOUT_MS: 600000,
 
   /**

@@ -834,6 +834,14 @@ export function setForecastSeries({ history, forecast, capacityLine = null,
   // The human-readable name of the plotted series, when the caller supplies
   // one. The chart title said "M002/P001" — an internal key.
   FORECAST.seriesName = arguments[0]?.label || '';
+  // WHICH SERIES THIS IS, so anything acting on the chart acts on the series
+  // in front of the reader. `window.__ngForecastMeta` is written once at
+  // hydration and names the series the screen OPENED on, which stops being
+  // true the moment the picker is used — the same mistake the chart title
+  // already made once. Anything addressing the plotted series by name reads
+  // these, which are rewritten on every selection.
+  FORECAST.marketId = arguments[0]?.marketId || '';
+  FORECAST.productId = arguments[0]?.productId || '';
 
   // Growth rate and the capacity-breach fields describe the demo network and
   // have no counterpart here unless the engine produced one.
