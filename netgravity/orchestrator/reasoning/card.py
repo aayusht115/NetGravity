@@ -297,7 +297,8 @@ class ExplanationCard:
 
 def card_from_briefing(briefing: Any, *, figures: Optional[List[Figure]] = None,
                        details: Optional[List[str]] = None,
-                       source: str = "template") -> ExplanationCard:
+                       source: str = "template",
+                       limits: Optional[Dict[str, int]] = None) -> ExplanationCard:
     """
     Reduce an `ExecutiveBriefing` to one card.
 
@@ -310,20 +311,30 @@ def card_from_briefing(briefing: Any, *, figures: Optional[List[Figure]] = None,
     if briefing is None:
         return ExplanationCard(source=source)
 
+    # HOW MUCH ROOM THIS CARD HAS.
+    #
+    # A briefing that sits in a KPI tile has to be short; one that opens as an
+    # overlay over its own chart has a paragraph's worth of space, and cutting
+    # it at 260 characters ended the explanation mid-sentence on an ellipsis —
+    # hiding the comparison that made the finding worth reading. Callers that
+    # have the room say so; everyone else keeps the tight defaults.
+    caps = {"opening": 200, "headline": 140, "meaning": 260, "warning": 220}
+    caps.update(limits or {})
+
     insights = list(getattr(briefing, "kpi_insights", []) or [])
-    opening = clean(getattr(briefing, "opening", "") or "", 200)
+    opening = clean(getattr(briefing, "opening", "") or "", caps["opening"])
 
     lead = insights[0] if insights else None
-    headline = clean(getattr(lead, "headline", "") or opening, 140)
+    headline = clean(getattr(lead, "headline", "") or opening, caps["headline"])
     # A placeholder heading is worse than none: "What these results show" over
     # the conclusion pushes the conclusion into the body and leads the card
     # with a label. Where the lead insight has no headline of its own, the
     # first sentence of its narrative is the conclusion and becomes one.
     if not headline:
         headline = clean(first_sentence(getattr(lead, "narrative", "")
-                                        or opening), 140)
+                                        or opening), caps["headline"])
     meaning = clean(getattr(lead, "narrative", "") or
-                    getattr(briefing, "context", "") or "", 260)
+                    getattr(briefing, "context", "") or "", caps["meaning"])
 
     # DUPLICATION GUARD. The model has been observed returning the same
     # paragraph as both `opening` and `insights[0].narrative`, and the screen
@@ -336,7 +347,7 @@ def card_from_briefing(briefing: Any, *, figures: Optional[List[Figure]] = None,
     # truncated headline is a reason to show the body, not to drop it.
     truncated = headline.endswith("\u2026")
     if meaning and headline and not truncated and _same_text(meaning, headline):
-        meaning = clean(getattr(briefing, "context", "") or "", 260)
+        meaning = clean(getattr(briefing, "context", "") or "", caps["meaning"])
 
     # The most important thing not to miss. A RISK-severity insight beats the
     # briefing's own limitation, which is usually about the data rather than
@@ -344,10 +355,10 @@ def card_from_briefing(briefing: Any, *, figures: Optional[List[Figure]] = None,
     warning = ""
     for insight in insights[1:]:
         if str(getattr(getattr(insight, "severity", None), "value", "")) == "RISK":
-            warning = clean(getattr(insight, "narrative", ""), 220)
+            warning = clean(getattr(insight, "narrative", ""), caps["warning"])
             break
     if not warning:
-        warning = clean(getattr(briefing, "limitation", "") or "", 220)
+        warning = clean(getattr(briefing, "limitation", "") or "", caps["warning"])
 
     extra = [clean(getattr(i, "narrative", ""), 300) for i in insights[1:]]
     extra += [clean(d, 200) for d in (getattr(briefing, "key_drivers", []) or [])]

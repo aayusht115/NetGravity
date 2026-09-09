@@ -152,6 +152,20 @@ class WarehouseHealthKPI(BaseModel):
 
     periods_observed: int = 1
     bottleneck_periods_count: int = 0
+
+    #: THE SERIES ITSELF, period -> units and period -> per cent.
+    #:
+    #: Only figures DERIVED from these used to survive — the peak, which
+    #: period it fell in, how many were tight. The series was computed and
+    #: then dropped, so the facility screen had nothing real to plot and drew
+    #: a curve of its own instead: one base figure multiplied by a fixed ramp,
+    #: with a three-month projection at a growth rate nothing measured.
+    #:
+    #: Empty on a single-period solve BY DESIGN — one period's series would
+    #: restate the average — and a screen must draw nothing rather than
+    #: interpolate between two points it does not have.
+    throughput_by_period: Dict[str, float] = Field(default_factory=dict)
+    utilization_by_period: Dict[str, float] = Field(default_factory=dict)
     is_bottleneck: bool = False
 
     #: Capacity left in the worst period. Negative where the plan runs the site
@@ -493,6 +507,8 @@ def compute_warehouse_health(
             inventory_status=inv_status,
             periods_observed=observed,
             bottleneck_periods_count=bottlenecks,
+            throughput_by_period=by_period,
+            utilization_by_period=util_by_period,
             is_bottleneck=peak_util >= OVER_UTILISED_PCT,
             headroom_units_peak=round(rated - peak_tp, 4),
             fixed_cost=float(getattr(fac, "fixed_cost", 0.0) or 0.0),

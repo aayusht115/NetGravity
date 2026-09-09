@@ -89,4 +89,28 @@ export const kpiService = {
   async getThresholds() {
     return apiClient.get('/api/kpis/thresholds');
   },
+
+  /**
+   * What ONE chart on the KPI screen means.
+   *
+   * Sent only when a reader presses Explain — never on render. The backend
+   * keeps one record per chart per analysis, so re-opening the same
+   * explanation costs nothing there; `kpi-explain.js` keeps its own copy so
+   * re-opening costs nothing HERE either, not even a round trip.
+   *
+   * `facilityIds` are the sites the chart actually drew, after the screen's
+   * filters. Without them the briefing would describe the whole network while
+   * the reader looks at three sites of it.
+   */
+  async explainChart(chart, { facilityIds = null, facilityId = null,
+                              projectId = null } = {}) {
+    const body = { chart, project_id: projectId || getActiveProjectId() };
+    if (facilityIds) body.facility_ids = facilityIds;
+    if (facilityId) body.facility_id = facilityId;
+    // The solve timeout, not the default: the first explanation of a network
+    // version can be the request that triggers its analysis.
+    return apiClient.post(
+      `/api/kpis/explain?project_id=${encodeURIComponent(body.project_id)}`,
+      body, solveOptions);
+  },
 };

@@ -146,33 +146,73 @@ class TestOneIconInEveryView:
         assert "glyphSize(style.radius)" in fn
 
 
-class TestTheScenarioKeyFitsItsMap:
-    def test_it_is_bounded_by_the_map_it_sits_in(self, style_css):
-        """
-        `max-height: 100%` was dropped: a Leaflet control sits in a chain of
-        auto-height ancestors, so the percentage resolved against nothing. The
-        key stayed 456px in a 360px panel and `overflow: hidden` cut its top
-        off — the first group's heading with it.
-        """
-        rule = _rule(style_css, ".tw-legend-scenario {")
-        assert "var(--scn-map-h" in rule
-        assert "overflow-y: auto" in rule
-        assert "max-height: calc(100% - 24px)" not in rule
+class TestTheScenarioKeySitsBelowItsMap:
+    """
+    It used to be a Leaflet control anchored bottom-right, which is the corner
+    a national network's southern sites occupy. It was also taller than the
+    panel at the short end of `clamp(360px, 46vh, 520px)`, so it had to be
+    bounded and scrolled — and a key you scroll to read has stopped being one.
+    """
 
-    def test_the_map_publishes_its_own_height(self, style_css):
-        """One clamp, read by the panel and by the key inside it."""
+    def test_the_scenario_map_mounts_no_legend_control(self):
+        """
+        The compact branch returns before `L.control` is reached. If it fell
+        through, the map would carry BOTH keys.
+        """
+        js = _asset("js", "map.js")
+        fn = js[js.index("function addLegend(map, isCompact = false) {"):]
+        fn = fn[:fn.index("\n/** Every legend control")]
+        compact = fn[:fn.index("const legend = L.control(")]
+        assert "scenarioLegendHost()" in compact
+        assert "return;" in compact
+
+    def test_the_key_has_a_host_under_the_map_in_the_markup(self):
+        html = _asset("index.html")
+        wrap = html.index('id="scenario-map-wrap"')
+        host = html.index('id="scenario-map-legend"')
+        assert host > wrap, "the key must follow the map it explains"
+        # Inside the same card, not adrift at the foot of the page.
+        card = html.rindex('class="scn-visual-context-card"', 0, wrap)
+        assert host - card < 2000
+
+    def test_it_redraws_as_a_scenario_key_not_a_twin_key(self):
+        """
+        `refreshTwinMapLegend` runs on every network refresh. Rewriting the
+        host with `twinLegendHtml` would strip the three rows that are true
+        only on a scenario map.
+        """
+        js = _asset("js", "map.js")
+        fn = js[js.index("export function refreshTwinMapLegend() {"):]
+        fn = fn[:fn.index("\n}")]
+        assert "scenarioLegendHtml(perPeriodLabel())" in fn
+        assert "scenarioLegendHost()" in fn
+
+    def test_the_groups_run_across_the_strip_not_down_it(self, style_css):
+        """Four stacked groups is the shape that was too tall for the map."""
+        rule = _rule(style_css, ".tw-legend-below {")
+        assert "display: flex" in rule
+        assert "max-width: none" in rule
+        group = _rule(style_css, ".tw-legend-below .tw-legend-group {")
+        assert "flex: 1 1" in group
+
+    def test_it_is_not_bounded_or_scrolled_any_more(self, style_css):
+        """
+        Nothing constrains it to the map's height now, because it is no longer
+        inside the map.
+        """
+        rule = _rule(style_css, ".tw-legend-below {")
+        assert "max-height" not in rule
+        assert "overflow-y: auto" not in rule
+
+    def test_the_map_still_publishes_one_height(self, style_css):
         rule = _rule(style_css, ".scn-map-wrap {")
         assert "--scn-map-h: clamp(360px, 46vh, 520px)" in rule
         assert "height: var(--scn-map-h)" in rule
 
-    def test_a_wheel_over_the_key_does_not_zoom_the_map(self, style_css):
-        rule = _rule(style_css, ".tw-legend-scenario {")
-        assert "overscroll-behavior: contain" in rule
-
     def test_the_key_still_states_every_encoding_the_map_draws(self):
         """
-        Bounded, not shortened. A key that omits an encoding the map is
-        drawing is the problem it was built to fix.
+        Moved, not shortened. A key that omits an encoding the map is drawing
+        is the problem it was built to fix.
         """
         legend = _asset("js", "twin-legend.js")
         fn = legend[legend.index("export function scenarioLegendHtml("):]
@@ -328,3 +368,111 @@ class TestTheCardSaysTheAnswerBeforeItScrolls:
         fn = fn[:fn.index("\n}\n")]
         assert "comparison.recommended_actions" in fn
         assert "at_ceiling" not in fn
+
+
+class TestTheDrawerTablesFit:
+    """
+    Four columns in the 460px content column of a 520px drawer, at the shared
+    table's 14px cell padding: 112px of the width was padding, and the figures
+    were squeezed into what was left.
+
+    The Shift column then wrapped BETWEEN the arrow and the number — "↑" on
+    one line and "2,100" on the next, in the one column whose job is to say
+    how much moved — and rows came out at different heights depending on
+    whether their corridor name wrapped, so a column of figures stopped
+    scanning as a column.
+    """
+
+    def test_a_figure_never_wraps_away_from_its_sign(self, style_css):
+        rule = _rule(style_css, "#scenario-drawer .scn-drawer-table .num {")
+        assert "white-space: nowrap" in rule
+        assert "text-align: right" in rule
+
+    def test_the_arrow_is_bound_to_its_figure_in_the_markup(self):
+        """
+        CSS alone is not enough: the template put a newline between the arrow
+        and the number, which is a break opportunity wherever the cell is
+        allowed to wrap. The non-breaking space removes it at the source.
+        """
+        import re
+        js = _asset("js", "scenarios.js")
+        # Every arrow that leads a figure is bound to it.
+        assert js.count("'↑'}&nbsp;${") + js.count("'↓'}&nbsp;${") >= 5
+        # And no TABLE CELL separates them by anything a line may break at.
+        # Prose elsewhere may wrap; a column of figures may not.
+        cells = re.findall(r"<td[^>]*>.*?</td>", js, re.S)
+        loose = [c for c in cells if re.search(r"'[↑↓]'\}\s+\$\{", c)]
+        assert not loose, f"{len(loose)} table cell(s) can break an arrow off its figure"
+
+    def test_the_drawer_buys_the_width_back_from_padding(self, style_css):
+        rule = _rule(style_css, "#scenario-drawer .scn-drawer-table th,")
+        assert "padding: 8px 9px" in rule
+
+    def test_only_the_corridor_may_wrap_and_never_inside_a_name(self, style_css):
+        """
+        A corridor is the one cell with a natural break in it — after the
+        arrow. Breaking inside "PLANT_NORTH" would not be a wrap, it would be
+        a different identifier on each line.
+        """
+        rule = _rule(style_css, "#scenario-drawer .scn-drawer-table .scn-corridor-cell {")
+        assert "word-break: normal" in rule
+        assert "break-all" not in rule
+
+    def test_both_drawer_tables_opt_in(self):
+        """The rules are scoped to the class, so a table without it keeps the
+        shared padding and the defect."""
+        js = _asset("js", "scenarios.js")
+        assert js.count('class="scn-data-table scn-drawer-table"') == 2
+
+
+class TestAnAxisLabelIsReadable:
+    def test_it_wraps_on_words_rather_than_cutting_one_short(self):
+        """
+        A flat seven-character cut drew "Norther…" and "Souther…" — one letter
+        short of words that had room, which reads as a misspelling rather than
+        an abbreviation, and hid whether a bar was a plant or a DC.
+        """
+        js = _asset("js", "charts.js")
+        fn = js[js.index("function wrapLabel(name, perLine = AXIS_LINE_CHARS) {"):]
+        fn = fn[:fn.index("\n}")]
+        assert "split(/" in fn, "it must break on whitespace"
+        # A single over-long word is the only thing cut mid-word.
+        assert "word.length > perLine" in fn
+
+    def test_the_width_grows_until_the_labels_are_distinct(self):
+        """
+        Two sites whose names agree for the first two lines would draw two
+        identical labels. Width is spent only where it buys a distinction.
+        """
+        js = _asset("js", "charts.js")
+        fn = js[js.index("export function axisFacilityLabels(names) {"):]
+        fn = fn[:fn.index("\n}")]
+        assert "new Set" in fn
+        assert "perLine += " in fn
+
+    def test_every_facility_axis_uses_it(self):
+        """Three charts label a facility axis. One rule for all of them."""
+        js = _asset("js", "charts.js")
+        assert js.count("axisFacilityLabels(") == 4   # 1 definition + 3 uses
+        # The old per-name cut is no longer applied to an axis directly.
+        assert "labels: rows.map((r) => shortFacilityLabel(" not in js
+
+
+class TestTheFacilityDetailRenders:
+    def test_it_calls_an_escaper_that_exists(self):
+        """
+        `esc(stockReason)` was called in `app.js`, which defines no `esc`. It
+        threw a ReferenceError on any site whose stock the solve did not
+        report — which aborted the whole facility render mid-string, so the
+        detail below it was simply never drawn. Nothing logged a failure; the
+        page just ended early.
+        """
+        js = _asset("js", "app.js")
+        import re
+        bare = re.findall(r"[^A-Za-z_.]esc\(", js)
+        assert not bare, f"{len(bare)} call(s) to an undefined esc()"
+        assert "escAttr(stockReason)" in js
+
+    def test_the_escaper_it_uses_is_defined_in_that_file(self):
+        js = _asset("js", "app.js")
+        assert "function escAttr(value) {" in js

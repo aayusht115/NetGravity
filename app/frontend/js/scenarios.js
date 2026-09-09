@@ -1866,11 +1866,9 @@ export function openScenarioDrawer(scenarioId) {
     return `
       <tr>
         <td>${label}</td>
-        <td style="text-align:right">${before === null || before === undefined ? '—' : formatCurrency(before)}</td>
-        <td style="text-align:right;font-weight:700">${formatCurrency(after)}</td>
-        <td style="text-align:right;color:${(delta ?? 0) <= 0 ? 'var(--green)' : 'var(--red)'}">
-          ${delta === null ? '—' : `${delta < 0 ? '↓' : '↑'} ${formatCurrency(Math.abs(delta))}`}
-        </td>
+        <td class="num">${before === null || before === undefined ? '—' : formatCurrency(before)}</td>
+        <td class="num" style="font-weight:700">${formatCurrency(after)}</td>
+        <td class="num" style="color:${(delta ?? 0) <= 0 ? 'var(--green)' : 'var(--red)'}">${delta === null ? '—' : `${delta < 0 ? '↓' : '↑'}&nbsp;${formatCurrency(Math.abs(delta))}`}</td>
       </tr>`;
   };
 
@@ -1932,17 +1930,15 @@ export function openScenarioDrawer(scenarioId) {
           + 'the baseline. This change moved nothing — which is itself the '
           + 'answer.</div>'}
       ${moved.length ? `
-        <table class="scn-data-table" style="font-size:12px;margin-top:10px;width:100%">
-          <thead><tr><th>Corridor</th><th style="text-align:right">Baseline</th><th style="text-align:right">Scenario</th><th style="text-align:right">Shift</th></tr></thead>
+        <table class="scn-data-table scn-drawer-table" style="font-size:12px;margin-top:10px;width:100%">
+          <thead><tr><th>Corridor</th><th class="num">Baseline</th><th class="num">Scenario</th><th class="num">Shift</th></tr></thead>
           <tbody>
             ${moved.map((m) => `
               <tr>
-                <td>${m.lane.replace('->', ' → ')}</td>
-                <td style="text-align:right">${formatNumber(Math.round(m.before))}</td>
-                <td style="text-align:right;font-weight:700">${formatNumber(Math.round(m.after))}</td>
-                <td style="text-align:right;color:${m.shift > 0 ? 'var(--primary)' : 'var(--text-2)'}">
-                  ${m.shift > 0 ? '↑' : '↓'} ${formatNumber(Math.round(Math.abs(m.shift)))}
-                </td>
+                <td class="scn-corridor-cell">${m.lane.replace('->', ' → ')}</td>
+                <td class="num">${formatNumber(Math.round(m.before))}</td>
+                <td class="num" style="font-weight:700">${formatNumber(Math.round(m.after))}</td>
+                <td class="num" style="color:${m.shift > 0 ? 'var(--primary)' : 'var(--text-2)'}">${m.shift > 0 ? '↑' : '↓'}&nbsp;${formatNumber(Math.round(Math.abs(m.shift)))}</td>
               </tr>`).join('')}
           </tbody>
         </table>` : ''}
@@ -1964,8 +1960,8 @@ export function openScenarioDrawer(scenarioId) {
     <!-- Cost decomposition, both sides -->
     <div class="scn-section-box">
       <h4 style="font-size:13px;font-weight:700;color:var(--text-1);margin-bottom:8px">Cost, component by component</h4>
-      <table class="scn-data-table" style="font-size:12px;width:100%">
-        <thead><tr><th>Component</th><th style="text-align:right">Baseline</th><th style="text-align:right">Scenario</th><th style="text-align:right">Change</th></tr></thead>
+      <table class="scn-data-table scn-drawer-table" style="font-size:12px;width:100%">
+        <thead><tr><th>Component</th><th class="num">Baseline</th><th class="num">Scenario</th><th class="num">Change</th></tr></thead>
         <tbody>
           ${costRow('Transport', 'transportCost')}
           ${costRow('Fixed facility', 'fixedCost')}
@@ -1975,9 +1971,9 @@ export function openScenarioDrawer(scenarioId) {
           ${costRow('Closure', 'closureCost')}
           <tr style="font-weight:800;background:var(--bg-subtle)">
             <td>Total network cost</td>
-            <td style="text-align:right">${formatCurrency(baseline ? baseline.totalCost : null)}</td>
-            <td style="text-align:right">${formatCurrency(scn.totalCost)}</td>
-            <td style="text-align:right">${typeof scn.costChange === 'number' ? `${scn.costChange < 0 ? '↓' : '↑'} ${Math.abs(scn.costChange).toFixed(1)}%` : '—'}</td>
+            <td class="num">${formatCurrency(baseline ? baseline.totalCost : null)}</td>
+            <td class="num">${formatCurrency(scn.totalCost)}</td>
+            <td class="num">${typeof scn.costChange === 'number' ? `${scn.costChange < 0 ? '↓' : '↑'}&nbsp;${Math.abs(scn.costChange).toFixed(1)}%` : '—'}</td>
           </tr>
         </tbody>
       </table>
@@ -2135,7 +2131,7 @@ export function openMetricDrilldown(metricKey, scenarioId) {
           <td>${facilityName(id)}${closed ? ' <span class="tag tag-danger" style="font-size:9px">closed</span>' : ''}</td>
           <td style="text-align:right">${b.utilPct == null ? '—' : `${b.utilPct.toFixed(1)}%`}</td>
           <td style="text-align:right;font-weight:700;color:${utilColour(a.utilPct)}">${a.utilPct == null ? '—' : `${a.utilPct.toFixed(1)}%`}</td>
-          <td style="text-align:right">${shift === null ? '—' : `${shift > 0 ? '↑' : '↓'} ${Math.abs(shift).toFixed(1)} pts`}</td>
+          <td class="num">${shift === null ? '—' : `${shift > 0 ? '↑' : '↓'}&nbsp;${Math.abs(shift).toFixed(1)} pts`}</td>
         </tr>`;
     }).join('');
 
@@ -2189,9 +2185,7 @@ export function openMetricDrilldown(metricKey, scenarioId) {
           <td>${label}</td>
           <td style="text-align:center">${formatCurrency(b)}</td>
           <td style="text-align:center">${formatCurrency(a)}</td>
-          <td style="text-align:center;font-weight:700;color:${(delta ?? 0) <= 0 ? 'var(--green)' : 'var(--red)'}">
-            ${delta === null ? '—' : `${delta < 0 ? '↓' : '↑'} ${Math.abs(delta).toFixed(1)}%`}
-          </td>
+          <td style="text-align:center;font-weight:700;color:${(delta ?? 0) <= 0 ? 'var(--green)' : 'var(--red)'}">${delta === null ? '—' : `${delta < 0 ? '↓' : '↑'}&nbsp;${Math.abs(delta).toFixed(1)}%`}</td>
         </tr>`;
     };
     detailHtml = `

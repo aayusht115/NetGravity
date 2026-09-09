@@ -912,27 +912,34 @@ class TestTheScreen:
                      "dash-facility-type", "dash-facility-dot"):
             assert kept in panel, kept
 
-    def test_there_is_exactly_one_export_button(self):
+    def test_there_is_exactly_one_export_control(self):
         """
-        Two buttons made the reader work out which half each file covered
-        before they could trust either. One button, one file, both halves.
+        One button, one format. The PDF is the view as it looks with the
+        filters that produced it named on it, which is the thing a reader
+        circulates; a second format behind a menu was one more click in front
+        of the only one anybody asked for.
         """
         html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
         panel = html[html.index('id="tab-facility-dashboard"'):]
         panel = panel[:panel.index("</section>")]
-        assert panel.count("<button") == panel.count('id="btn-export-kpi"') == 1
+        assert panel.count('id="btn-export-pdf"') == 1
+        # The CSV path is gone, not hidden.
+        assert "exportFacilityReport" not in panel
+        assert "btn-export-csv" not in panel
         assert "btn-export-warehouse" not in panel
 
-    def test_the_one_export_carries_both_halves(self):
-        """The network table is appended to the facility report, so a reader
-        who exports the KPI dashboard gets every metric that was on it."""
-        app_js = _asset("app.js")
-        block = app_js[app_js.index("export function exportFacilityReport()"):]
-        block = block[:block.index("\n}")]
-        assert "warehouseHealthCsvLines()" in block
-        # ...and the file is no longer named after one site, which it no
-        # longer only describes.
-        assert "NetGravity_KPI_Dashboard_" in app_js
+
+    def test_the_csv_export_is_gone_not_hidden(self):
+        """
+        One export, one format. The CSV writer, the delegated action that
+        reached it and the row serialiser it called are all deleted rather
+        than left unreachable — dead code that still passes review is how a
+        second, drifting definition of "the current view" survives.
+        """
+        for asset in ("app.js", "actions.js", "warehouse.js"):
+            js = _asset(asset)
+            assert "exportFacilityReport" not in js, asset
+            assert "warehouseHealthCsvLines" not in js, asset
 
     def test_the_two_removed_cards_are_off_the_screen(self):
         """
@@ -958,14 +965,29 @@ class TestTheScreen:
         # staying behind as a function nothing calls.
         assert "renderWarehouseGapChart" not in _asset("charts.js")
 
-    def test_the_kpi_route_renders_both_bands(self):
+    def test_the_kpi_route_lands_on_the_whole_network(self):
+        """
+        A reader arriving from the Overview arrives with a network-level
+        question, so the screen opens on the network — never on whichever site
+        a previous visit happened to leave selected.
+
+        `renderKpiView()` clears the drill-down and draws the roll-up; the
+        facility detail is rendered by the view controller when, and only
+        when, a site is actually selected.
+        """
         app_js = _asset("app.js")
         # The ROUTING branch, not the top-bar title branch a few hundred lines
         # above it that shares the same condition.
         block = app_js[app_js.index("state.activeTab = 'facility-dashboard';"):]
         block = block[:block.index("scrollPageToTop();")]
-        assert "renderFacilityDashboard()" in block
+        assert "renderKpiView()" in block
         assert "renderWarehouseDashboard()" in block
+
+        # And the landing state really is the roll-up, not a remembered site.
+        view = _asset("kpi-view.js")
+        entry = view[view.index("export function renderKpiView()"):]
+        entry = entry[:entry.index("\n}")]
+        assert "view.entityId = null" in entry
 
     def test_a_new_network_drops_the_cached_report(self):
         """
@@ -1029,25 +1051,6 @@ class TestTheScreen:
         assert "Distribution facilities" in block
         assert "Warehouses" not in block
 
-    def test_the_export_keeps_absence_out_of_the_spreadsheet(self):
-        """An absent stock reading exports empty, not 0 — or a spreadsheet
-        averages a zero nobody measured."""
-        js = _asset("warehouse.js")
-        block = js[js.index("export function warehouseHealthCsvLines()"):]
-        block = block[:block.index("\nexport function clearWarehouseState")]
-        assert "v === null || v === undefined ? ''" in block
-
-    def test_an_unread_network_exports_a_line_saying_so(self):
-        """A report whose network section is silently missing reads as a
-        network with no sites in it."""
-        js = _asset("warehouse.js")
-        block = js[js.index("export function warehouseHealthCsvLines()"):]
-        block = block[:block.index("\nexport function clearWarehouseState")]
-        assert "No facility network analysis has been read" in block
-
-# ---------------------------------------------------------------------------
-# The endpoint
-# ---------------------------------------------------------------------------
 
 DEMO_PROJECT = "pr-demo-case16"
 
@@ -1246,9 +1249,11 @@ class TestTheAddedCuts:
         chart."""
         import re
 
-        js = _asset("warehouse.js")
+        # Defined in charts.js now, and imported by warehouse.js — one copy,
+        # so a state cannot be drawn in two colours on one screen.
+        js = _asset("charts.js")
         css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
-        block = js[js.index("const BAND_COLOUR = {"):]
+        block = js[js.index("export const BAND_COLOUR = {"):]
         block = block[:block.index("};")]
         # The semantic tokens, resolved to their hex so a canvas can use them —
         # `var(--red)` means nothing to Chart.js, so the two can drift and this
@@ -1346,3 +1351,1283 @@ class TestTheAddedCuts:
         panel = panel[:panel.index("</section>")]
         assert 'id="wh-stock-wrap"' in panel
         assert 'id="wh-stock-absent"' in panel
+
+
+class TestTheThreeTiers:
+    """
+    WHICH POPULATION THE SCREEN IS REPORTING ON.
+
+    The KPI screen used to be one continuous scroll: the whole facility
+    network, then every network chart, then every site in a table, and only
+    then the one site the top bar had selected. Selecting Atlanta at the top
+    left the reader scrolling past four network charts and a nine-row table to
+    reach Atlanta's own numbers, and nothing on the way down said which of
+    those figures were about Atlanta and which were about the network.
+
+    Three tiers now:
+
+      * Tier 0  the scorecard — the whole network, always, captioned as that;
+      * Tier 1  the lens — storage sites, production sites, or the corridors;
+      * Tier 2  region and status narrow it, and a facility drills into one
+                site IN PLACE of the roll-up.
+    """
+
+    def _panel(self) -> str:
+        html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
+        panel = html[html.index('id="tab-facility-dashboard"'):]
+        return panel[:panel.index("</section>")]
+
+    def test_the_three_tiers_are_on_the_screen_in_order(self):
+        panel = self._panel()
+        for element in ("kpi-domain-bar", "kpi-network-strip", "wh-summary-grid",
+                        "kpi-filter-bar", "kpi-breadcrumb", "kpi-rollup",
+                        "kpi-entity", "kpi-lanes"):
+            assert element in panel, element
+        # The LENS comes first, because it decides which scorecard is shown;
+        # the scorecard then describes it, and the filters narrow it.
+        assert panel.index("kpi-domain-bar") < panel.index("kpi-network-strip")
+        assert panel.index("wh-summary-grid") < panel.index("kpi-filter-bar")
+
+    def test_the_screen_lands_on_the_network_lens(self):
+        """A reader arriving from the Overview arrives with a network-level
+        question, and the four figures they just read are the four this tab
+        shows."""
+        panel = self._panel()
+        bar = panel[panel.index('id="kpi-domain-bar"'):]
+        bar = bar[:bar.index("</div>")]
+        assert bar.index('data-domain="network"') < bar.index('data-domain="dc"')
+        assert 'class="kpi-domain-tab active" data-domain="network"' in bar
+        for js in ("kpi-view.js", "warehouse.js"):
+            assert "domain: 'network'" in _asset(js), js
+
+    def test_the_scorecard_describes_whatever_is_selected(self):
+        """
+        Tier 0 is NOT fixed.
+
+        Held constant, it announced "Distribution facilities 8 of 9" above a
+        screen showing three plants — a contradiction between the top of the
+        screen and the rest of it, which is the failure this screen was rebuilt
+        to remove. It now follows the scope, and re-counts on every filter.
+        """
+        js = _asset("warehouse.js")
+        block = js[js.index("function renderSummary()"):js.index("function renderAttention")]
+        assert "visibleRows()" in block
+        # Counted over the rows on screen, never read back off the report's
+        # whole-network counters.
+        for fixed in ("r.n_warehouses_open", "r.n_bottlenecks", "r.n_underused",
+                      "r.avg_peak_utilization_pct"):
+            assert fixed not in block, fixed
+        # ...and it names the population it just counted.
+        assert "Production sites" in block
+
+    def test_the_network_lens_reuses_the_overviews_own_renderer(self):
+        """
+        One source, so the two screens cannot report different numbers for one
+        network. A second copy of this arithmetic here is exactly how they
+        would come to disagree.
+        """
+        view = _asset("kpi-view.js")
+        assert "hooks.renderNetworkScorecard('kpi-network-strip-row')" in view
+        app_js = _asset("app.js")
+        assert "renderNetworkScorecard: (rowId) => renderHomeKpiStrip(rowId)" in app_js
+
+    def test_the_caption_is_written_after_the_filter_is_applied(self):
+        """
+        Computing it first labelled the Plants tab "every facility", because it
+        was still reading the lens the reader had just left.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("export function applyView()"):]
+        block = block[:block.index("renderControls()")]
+        assert block.index("setWarehouseFilter(") < block.index("kpi-scorecard-note")
+
+    def test_every_section_below_the_lens_reads_the_same_population(self):
+        """
+        The half-filtered screen — a donut still drawn over nine sites beside a
+        table showing three — is the failure that makes a reader stop trusting
+        every other number on the page. Every section below the scorecard
+        reads one filtered list.
+        """
+        js = _asset("warehouse.js")
+        for renderer in ("function renderAttention()", "function renderMix()",
+                         "function renderStock()", "function renderHealthTable()"):
+            start = js.index(renderer)
+            block = js[start:js.index("\n}", start)]
+            assert "visibleRows()" in block, renderer
+        # The charts and the headroom cut read it too.
+        charts = js[js.index("function renderCharts()"):js.index("function renderMix()")]
+        assert "visibleRows()" in charts
+        head = js[js.index("function renderHeadroom()"):js.index("function renderStock()")]
+        assert "visibleRows()" in head
+
+    def test_no_chart_carries_a_corner_metric_pill(self):
+        """
+        The pills went. Each restated a number already on the chart, in its
+        legend, in the scorecard or in the table below it — and the one beside
+        the AI button made that button's placement look like an afterthought.
+
+        A pill that disagreed with the chart under it was also the original
+        defect here: "3 at or above 90%" above a chart drawing one of them.
+        Removing them removes the class of bug, not just the instance.
+        """
+        panel = self._panel()
+        for pill in ("wh-util-tag", "wh-spend-tag", "wh-mix-tag", "wh-headroom-tag",
+                     "wh-stock-tag", "wh-health-count", "kpi-lane-cost-tag",
+                     "kpi-lane-mode-tag", "kpi-lane-count", "dash-util-tag",
+                     "dash-total-cost-tag", "dash-lane-count-tag"):
+            assert pill not in panel, pill
+        # And nothing is left writing to them.
+        js = _asset("warehouse.js")
+        assert "wh-util-tag" not in js
+        assert "wh-spend-tag" not in js
+
+    def test_the_cost_donut_is_built_from_the_rows_on_screen(self):
+        """
+        It used to read the backend's ranked cost drivers, which are capped at
+        TOP_N — so on a network of more than ten facilities the donut drew ten
+        slices while any total beside it summed all of them. A chart whose
+        parts cannot add up to its own whole.
+
+        Built from the visible rows instead, each carrying its own cost, so
+        the slices ARE the population.
+        """
+        js = _asset("warehouse.js")
+        block = js[js.index("function renderCharts()"):js.index("function renderMix()")]
+        # Not USED — the name still appears in the comment explaining why.
+        assert "r.top_facilities_driving_cost" not in block
+        assert "const drivers = shown" in block
+        assert "total_facility_cost: Number(k.total_facility_cost)" in block
+        assert "r.n_bottlenecks" not in block
+
+    def test_the_donut_folds_its_tail_into_other_rather_than_dropping_it(self):
+        """Beyond about eight the slices are too thin to read — but dropping
+        them leaves a doughnut that does not sum to its own total."""
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderWarehouseSpendChart("):]
+        block = block[:block.index("\n}")]
+        assert "MAX_SLICES" in block
+        assert "Other (" in block
+
+    def test_a_donut_writes_its_shares_on_the_slices(self):
+        """A legend of names makes the reader match colours back and forth to
+        find out how something is split."""
+        charts = _asset("charts.js")
+        assert "const doughnutSliceShare = {" in charts
+        # OPT-IN: a registered plugin runs on every chart in the app, and this
+        # one would have started writing percentages onto doughnuts nobody
+        # asked to change.
+        block = charts[charts.index("const doughnutSliceShare = {"):]
+        block = block[:block.index("\n};")]
+        assert "opts.enabled !== true" in block
+        # Every doughnut on this screen, not two of them.
+        assert charts.count("ngDoughnutShare: { enabled: true }") == 3
+
+    def test_switching_lens_returns_to_that_lens_whole_population(self):
+        """
+        A selected site is never carried across: the same name on another lens
+        is a different site or no site at all. Region and Status describe a
+        facility and mean nothing to a corridor.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("function setDomain(domain)"):]
+        block = block[:block.index("\n}")]
+        for cleared in ("view.entityId = null", "view.region = 'all'",
+                        "view.status = 'all'", "view.mode = 'all'"):
+            assert cleared in block, cleared
+
+    def test_narrowing_cannot_strand_the_reader_inside_a_removed_site(self):
+        """
+        A filter that removes the site being viewed drops back to the roll-up
+        rather than showing a detail page for a row that is no longer in the
+        population above it.
+
+        Checked at APPLY now: the controls stage, so the moment a narrowing
+        becomes real is the moment it is committed, not the moment a select
+        changes.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("el('kpi-filters-apply')?.addEventListener"):]
+        block = block[:block.index("\n  });")]
+        assert "warehouseFacets().entities.some" in block
+        assert "view.entityId = null" in block
+
+    def test_the_drill_down_replaces_the_rollup_rather_than_sitting_below_it(self):
+        """
+        The whole point. Selecting a site swaps the roll-up for that site's
+        detail in the same place; it does not leave the reader scrolling past
+        four network charts and a nine-row table to reach it.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("export function applyView()"):]
+        block = block[:block.index("\n}")]
+        assert "rollup.style.display = (isLane || onEntity) ? 'none' : ''" in block
+        assert "entity.style.display = onEntity ? '' : 'none'" in block
+        assert "lanes.style.display = isLane ? '' : 'none'" in block
+
+    def test_every_row_of_the_health_table_opens_that_site(self):
+        js = _asset("warehouse.js")
+        assert 'class="wh-health-row" data-facility-id=' in js
+        view = _asset("kpi-view.js")
+        assert "#table-wh-health tbody" in view
+        assert "selectEntity(row.dataset.facilityId)" in view
+
+    def test_the_corridor_lens_ranks_on_spend_and_says_when_it_cannot(self):
+        """
+        A list headed "highest-cost" ranked on a rate the volume could reverse
+        is worse than no list. Where no corridor carries a solved flow there is
+        no spend to rank, so the card ranks by the rate AND says so.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("function renderLaneView()"):]
+        block = block[:block.index("\n}")]
+        assert "laneSpend" in block
+        assert "by rate — no solved transport cost" in block
+
+    def test_an_absent_corridor_reading_is_not_exported_or_drawn_as_zero(self):
+        """
+        A corridor the solve routed nothing down is not one that costs zero.
+
+        `figure()` rejects null and empty before converting, because
+        `Number(null)` is 0 and a finite check therefore passed for a reading
+        nobody made.
+        """
+        view = _asset("kpi-view.js")
+        spend = view[view.index("function laneSpend(lane)"):]
+        spend = spend[:spend.index("\n}")]
+        assert "figure(lane.transportCost)" in spend
+        # The browser no longer multiplies a rate by a volume to get money.
+        assert "rate * flow" not in spend
+
+    def test_the_screen_states_what_is_on_it(self):
+        """A filtered screen that does not say it is filtered is a screen
+        reporting a subset as the whole."""
+        panel = self._panel()
+        assert 'id="kpi-showing"' in panel
+        view = _asset("kpi-view.js")
+        block = view[view.index("function renderShowing()"):]
+        block = block[:block.index("\nfunction renderBreadcrumb")]
+        assert "Showing:" in block
+        # The roll-up says how many of how many, not just how many.
+        assert "of ${facets.domainCount} sites" in block
+
+    def test_the_controls_offer_only_what_the_network_contains(self):
+        """A filter leading only to an empty screen is a control that lies
+        about what is there."""
+        js = _asset("warehouse.js")
+        block = js[js.index("export function warehouseFacets()"):]
+        block = block[:block.index("\n}")]
+        assert "new Set(inDomain.map" in block
+        assert "inDomain.some((k) => k.health_band === band)" in block
+
+    def test_the_two_lenses_together_show_every_facility(self):
+        """
+        A role the storage set does not name is a production or supply site and
+        belongs to the Plants lens. Anything else would let a facility the
+        solve reported fall off both tabs.
+        """
+        js = _asset("warehouse.js")
+        block = js[js.index("function visibleRows()"):]
+        block = block[:block.index("\n}")]
+        assert "view.domain === 'dc' && !storage" in block
+        assert "view.domain === 'plant' && storage" in block
+
+    def test_a_project_switch_drops_the_filters_with_the_report(self):
+        """A region filter carried into a project that has no such region
+        would open the new network on an empty screen."""
+        js = _asset("warehouse.js")
+        block = js[js.index("export function clearWarehouseState()"):]
+        block = block[:block.index("\n}")]
+        for reset in ("view.domain = 'dc'", "view.region = 'all'", "view.status = 'all'"):
+            assert reset in block, reset
+
+    def test_the_view_controller_computes_no_kpi(self):
+        """
+        Every facility figure on this screen is the backend's own record. The
+        controller decides WHICH records are on screen and says so in words.
+        """
+        view = _asset("kpi-view.js")
+        for banned in ("utilization_pct *", "/ periods", "avg_utilization_pct +"):
+            assert banned not in view, banned
+
+
+class TestTheCorrectionsAfterReview:
+    """
+    What the review of Phase 1 found on the live screen, held as tests.
+
+    Each of these was a real reading a user took off the page and reported —
+    not a hypothetical. They are grouped because they share one cause: a figure
+    or a label that described something other than what the reader was
+    looking at.
+    """
+
+    def _panel(self) -> str:
+        html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
+        panel = html[html.index('id="tab-facility-dashboard"'):]
+        return panel[:panel.index("</section>")]
+
+    def test_the_network_service_level_is_off_the_facility_cards(self):
+        """
+        It showed the NETWORK's demand-served figure on a card headed by a
+        facility's name, among six cards that are all about that one site.
+        Captioning it "Network-wide" did not fix that: a reader scanning six
+        cards about Atlanta reads the fifth as Atlanta's too.
+
+        Service level is a property of demand, not of a building, and this
+        model does not decompose it per site.
+        """
+        app_js = _asset("app.js")
+        block = app_js[app_js.index("const metricsGrid = document.getElementById('dash-metrics-grid')"):]
+        block = block[:block.index("// Connected Lanes calculation")]
+        assert "Demand Served Within SLA" not in block
+        assert "kpis?.sla?.value" not in block
+
+    def test_a_solved_quantity_is_not_printed_to_three_decimals(self):
+        """
+        A solver returns continuous quantities, so throughput arrived as
+        10982.667 and was printed as "10,982.667 units/month" — three decimals
+        of a unit nobody can ship, on a screen a planner scans.
+        """
+        data_js = _asset("data.js")
+        block = data_js[data_js.index("export function formatNumber(value)"):]
+        block = block[:block.index("\n}")]
+        assert "maximumFractionDigits: 0" in block
+
+    def test_one_utilisation_is_written_to_one_precision(self):
+        """A DC's stored percentage carried the solver's full precision and
+        printed "34.32%" beside a plant's "82.7%": two precisions for one
+        metric on one screen."""
+        app_js = _asset("app.js")
+        block = app_js[app_js.index("const isDC = isDCFacility(state.selectedFacility);"):]
+        block = block[:block.index("const utilColor")]
+        assert "toFixed(1)" in block
+        # Both branches go through the same rounding, not just the plant one.
+        assert "const utilRaw" in block
+
+    def test_a_donut_puts_its_values_on_the_legend(self):
+        """
+        A doughnut answers "how is this split", and a legend of bare names
+        makes the reader hover each slice in turn to find out.
+
+        The SHARE is on the slice; the legend carries the name and the value.
+        Printing the percentage in both made the legend the longest thing in
+        the card.
+        """
+        charts = _asset("charts.js")
+        mixed = charts[charts.index("export function renderWarehouseStatusMixChart("):]
+        mixed = mixed[:mixed.index("\n}")]
+        assert "generateLabels:" in mixed
+        # The spend legend moved OUT of the canvas: a drawn legend cannot
+        # ellipsise to the room it has, so it clipped the amount instead.
+        spend = charts[charts.index("export function renderWarehouseSpendChart("):]
+        spend = spend[:spend.index("\n}")]
+        assert "renderHtmlLegend(" in spend
+        assert "formatCurrency(sl.value)" in spend
+        mix = charts[charts.index("export function renderWarehouseStatusMixChart("):]
+        mix = mix[:mix.index("\n}")]
+        assert "${label} — ${value}" in mix
+
+    def test_a_card_states_an_absence_in_words(self):
+        """
+        A dash carrying its reason on hover is not enough on a card: most
+        readers never hover, and an em dash where a number should be reads as
+        "nothing" or, worse, as zero.
+        """
+        js = _asset("warehouse.js")
+        assert "function absentLabel(" in js
+        summary = js[js.index("function renderSummary()"):js.index("function renderAttention")]
+        assert "absentLabel(" in summary
+
+    def test_the_drill_down_lands_at_the_top_and_stays_there(self):
+        """
+        A smooth scroll animates while `renderFacilityDashboard()` is still
+        drawing charts on a 60ms timer; each chart that lands changes the page
+        height under the running animation, and the scroll finished wherever
+        the shifting content left it — halfway down Atlanta's charts, with the
+        breadcrumb off-screen.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("function scrollViewToTop()"):]
+        block = block[:block.index("\n}")]
+        # Instant, not animated, so a height change cannot strand it...
+        assert "behavior" not in block
+        assert "scrollTop = 0" in block
+        # ...and again once the chart timers have run.
+        assert "setTimeout(" in block
+
+
+class TestTheCorridorLens:
+    """
+    The corridor lens is a different population from the two facility lenses,
+    and everything on it has to say so.
+    """
+
+    def _panel(self) -> str:
+        html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
+        panel = html[html.index('id="tab-facility-dashboard"'):]
+        return panel[:panel.index("</section>")]
+
+    def test_it_has_a_scorecard_of_its_own(self):
+        """
+        It had none. The facility grid was left visible carrying whatever the
+        previous lens had rendered, so switching from Plants to Freight showed
+        "Production sites 2 of 2" above a corridor table, with the caption
+        blanked so nothing even labelled it.
+        """
+        assert 'id="kpi-lane-summary"' in self._panel()
+        view = _asset("kpi-view.js")
+        assert "function renderLaneSummary()" in view
+        # Counted over the corridors on screen, not over every corridor.
+        block = view[view.index("function renderLaneSummary()"):]
+        block = block[:block.index("\nfunction renderLaneView")]
+        assert "visibleLanes()" in block
+
+    def test_exactly_one_scorecard_is_shown_at_a_time(self):
+        """
+        Each is tied to the lens it belongs to, rather than to "not the network
+        one" — which is how the facility grid came to be left on the corridor
+        lens.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("export function applyView()"):]
+        block = block[:block.index("renderControls()")]
+        assert "strip.style.display = isNetwork ? '' : 'none'" in block
+        assert "cards.style.display = (!isNetwork && !isLane) ? '' : 'none'" in block
+        assert "laneCards.style.display = isLane ? '' : 'none'" in block
+
+    def test_a_corridor_reading_the_solve_did_not_make_is_not_zero(self):
+        """A rate per unit with no volume behind it is not a spend of zero."""
+        view = _asset("kpi-view.js")
+        block = view[view.index("function renderLaneSummary()"):]
+        block = block[:block.index("\nfunction renderLaneView")]
+        assert "Not solved" in block
+
+    def test_each_control_means_one_thing(self):
+        """
+        The Status slot used to be relabelled "Mode" on this lens — one select
+        meaning two different things depending on a tab, which a reader has to
+        check before they can trust it.
+        """
+        panel = self._panel()
+        for control in ("kpi-filter-origin", "kpi-filter-dest", "kpi-filter-mode",
+                        "kpi-filter-status", "kpi-filter-region", "kpi-filter-entity"):
+            assert f'id="{control}"' in panel, control
+        view = _asset("kpi-view.js")
+        # No renaming of a control's label at runtime any more.
+        assert "label.textContent = 'Mode'" not in view
+
+    def test_each_lens_shows_only_the_dimensions_that_describe_it(self):
+        """A corridor has no health band and a facility has no origin."""
+        view = _asset("kpi-view.js")
+        block = view[view.index("function renderControls() {"):]
+        block = block[:block.index("/** What is on screen")]
+        lane = block[block.index("if (isLane) {"):block.index("const facets = warehouseFacets();")]
+        assert "show('kpi-filter-entity-wrap', false)" in lane
+        assert "show('kpi-filter-status-wrap', false)" in lane
+        assert "show('kpi-filter-origin-wrap', true)" in lane
+        facility = block[block.index("const facets = warehouseFacets();"):]
+        assert "show('kpi-filter-origin-wrap', false)" in facility
+        assert "show('kpi-filter-mode-wrap', false)" in facility
+
+    def test_origin_and_destination_are_dependent(self):
+        """
+        A control must not offer a value that leads to an empty screen.
+        Picking an origin narrows the destinations to the ones that origin
+        actually serves.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("function laneFacets()"):]
+        block = block[:block.index("\n}")]
+        assert "view.destination === 'all'" in block
+        assert "view.origin === 'all'" in block
+
+    def test_a_narrowing_clears_a_pair_that_can_no_longer_exist(self):
+        """Choosing an origin can leave the destination naming a corridor the
+        narrowed set no longer contains, so the panel re-offers only what is
+        reachable before the reader commits."""
+        view = _asset("kpi-view.js")
+        start = view.index("el('kpi-filter-origin')?.addEventListener")
+        block = view[start:view.index("\n  });", start)]
+        assert "staged.destination = 'all'" in block
+        assert "renderControls()" in block
+
+    def test_there_is_no_single_lane_or_period_control(self):
+        """
+        Origin and destination together already narrow to one corridor and
+        degrade gracefully on the way; a single-lane control would leave three
+        panels saying less than the table row the reader came from.
+
+        And a flow row carries no per-period breakdown, so a period control
+        would show the same figures whichever period was chosen — the dead
+        control this product refuses to ship.
+        """
+        panel = self._panel()
+        assert 'id="kpi-filter-lane"' not in panel
+        assert 'id="kpi-filter-lane-period"' not in panel
+        view = _asset("kpi-view.js")
+        assert "view.period" not in view
+
+
+class TestTheBriefingStatesAFinding:
+
+    def test_the_prompt_forbids_a_roster_as_the_conclusion(self):
+        """
+        "Name the real things" is satisfied, literally and uselessly, by
+        listing every site in the payload. A live call on a network where every
+        site read the same returned six facility names as the conclusion AND as
+        the paragraph under it.
+        """
+        src = (REPO_ROOT / "netgravity" / "orchestrator" / "agents"
+               / "reasoning_agent.py").read_text(encoding="utf-8")
+        block = src[src.index('"RULES: no figures'):]
+        block = block[:block.index('"Reply with ONLY this JSON')]
+        assert "State a finding, not a roster" in block
+        # A headline is capped at 140 characters, so a sentence that inlines
+        # every name is truncated into nonsense.
+        assert "name at most" in block
+        assert "no facility" in block
+
+    def test_the_rule_is_short_enough_to_be_followed(self):
+        """
+        The instruction block has a hard budget, and it is not stylistic: past
+        roughly 900 characters this model spends its whole output allowance
+        deliberating and returns nothing parseable — the exact intermittent
+        failure that makes explanations fall back to templates.
+
+        The first version of this rule was 390 characters of prose and pushed
+        the block to 1186. It says the same thing in a quarter of the space.
+        """
+        src = (REPO_ROOT / "netgravity" / "orchestrator" / "agents"
+               / "reasoning_agent.py").read_text(encoding="utf-8")
+        block = src[src.index('"RULES: no figures'):]
+        block = block[:block.index('"Reply with ONLY this JSON')]
+        # The rendered instruction, not the source with its quotes and breaks.
+        rendered = "".join(line.strip().strip('"') for line in block.splitlines()
+                           if line.strip().startswith('"'))
+        assert len(rendered) < 800, len(rendered)
+
+
+class TestOneFigureMeansOneThing:
+    """
+    The corrections that changed what a number SAYS, rather than how it looks.
+    """
+
+    def _panel(self) -> str:
+        html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
+        panel = html[html.index('id="tab-facility-dashboard"'):]
+        return panel[:panel.index("</section>")]
+
+    def test_there_is_one_facility_cost_and_every_screen_reads_it(self):
+        """
+        The detail card read `kpis.totalCost`, which the per-facility endpoint
+        never produces — it returns utilisation, throughput, capacity and
+        is_open, and no cost at all. So the card was blank on every real
+        network while the table beside it showed a figure.
+
+        Not two definitions disagreeing: one real metric, and one card reading
+        a field nobody fills. Both now read the warehouse report's
+        `total_facility_cost`.
+        """
+        app_js = _asset("app.js")
+        imports = app_js[app_js.index("import { renderWarehouseDashboard"):]
+        imports = imports[:imports.index("';") + 2]
+        assert "warehouseRow" in imports
+        assert "from './warehouse.js'" in imports
+        block = app_js[app_js.index("const whRow = warehouseRow(state.selectedFacility)"):]
+        block = block[:block.index("// 6 Executive Metric Cards")]
+        assert "total_facility_cost" in block
+        # The old, never-populated field is gone from the card.
+        grid = app_js[app_js.index("const metricsGrid = document.getElementById('dash-metrics-grid')"):]
+        grid = grid[:grid.index("// Connected Lanes calculation")]
+        assert "kpis?.totalCost" not in grid
+        # And it names what the figure covers, so it cannot be read as
+        # everything the site costs.
+        assert "transport excluded" in grid
+
+    def test_a_reported_zero_is_not_a_missing_stock_reading(self):
+        """
+        The backend keeps them apart: no inventory decisions comes back as
+        INSUFFICIENT_EVIDENCE with a reason saying it is "not a reading of zero
+        stock", while 0.0 is a measured level. The caption flattened that — it
+        said "12 of 12 sites hold stock" when what it had counted was sites
+        that REPORTED, including any holding nothing.
+        """
+        js = _asset("warehouse.js")
+        block = js[js.index("function renderStock()"):js.index("function renderHealthTable()")]
+        assert "Number(k.peak_inventory_units) > 0" in block
+        assert "hold stock" in block
+        assert "report none" in block
+
+    def test_a_corridor_with_no_solved_flow_is_named_not_counted_as_zero(self):
+        view = _asset("kpi-view.js")
+        block = view[view.index("function renderLaneSummary()"):]
+        block = block[:block.index("\nfunction renderLaneView")]
+        # Spend counts corridors carrying a solved transport cost; volume
+        # counts those carrying a solved volume. Each says what it left out.
+        assert "report none" in block
+        assert "report no volume" in block
+
+
+class TestTheExport:
+
+    def _panel(self) -> str:
+        html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
+        panel = html[html.index('id="tab-facility-dashboard"'):]
+        return panel[:panel.index("</section>")]
+
+    def test_the_export_is_wired(self):
+        """
+        It was not. A block replacement in this module removed the listener
+        along with the menu it belonged to, so the control rendered and did
+        nothing — which is worse than a missing button, because the reader
+        keeps pressing it.
+        """
+        panel = self._panel()
+        assert 'id="btn-export-pdf"' in panel
+        view = _asset("kpi-view.js")
+        assert "el('btn-export-pdf')?.addEventListener" in view
+        assert "exportKpiViewAsPdf()" in view
+
+    def test_the_pdf_is_the_page_itself(self):
+        """
+        The requirement is "exactly the visuals displayed". The thing that IS
+        exactly those visuals is the page — a client-side renderer would
+        re-draw every chart and could drift from what the reader is looking at,
+        which is the class of bug this screen has been spent removing.
+        """
+        view = _asset("kpi-view.js")
+        assert "export function exportKpiViewAsPdf()" in view
+        block = view[view.index("export function exportKpiViewAsPdf()"):]
+        block = block[:block.index("\n}")]
+        assert "window.print()" in block
+        # An open explanation floats OVER a chart, so printing with it open
+        # would hide the visual it describes.
+        assert "closeKpiExplainPanels()" in block
+
+    def test_the_printed_copy_states_what_produced_it(self):
+        """A PDF that does not name the project, the horizon and the filters
+        behind its numbers cannot be checked later."""
+        panel = self._panel()
+        assert 'id="kpi-print-head"' in panel
+        assert "Netgravity" in panel
+        view = _asset("kpi-view.js")
+        block = view[view.index("function renderPrintHeader()"):]
+        block = block[:block.index("\n}")]
+        for field in ("Project", "View", "Horizon", "Showing", "Exported"):
+            assert f"'{field}'" in block, field
+
+    def test_the_application_chrome_does_not_print(self):
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index("@media print {"):]
+        for chrome in (".sidebar", ".app-global-topbar", ".kpi-export",
+                       ".kpi-explain-btn", ".facility-toolbar"):
+            assert chrome in block, chrome
+        # Only the KPI screen prints, whatever else is mounted.
+        assert ".tab-panel#tab-facility-dashboard { display: block !important; }" in block
+
+    def test_the_page_is_constrained_to_the_paper(self):
+        """The app lays out against a viewport wider than A4 landscape, so
+        without this the right-hand card of every row was sliced down its
+        edge."""
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index("@media print {"):]
+        assert "max-width: 100% !important" in block
+        assert "@page { size: A4 landscape" in block
+
+
+class TestTheCorridorTableIsUsable:
+
+    def _panel(self) -> str:
+        html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
+        panel = html[html.index('id="tab-facility-dashboard"'):]
+        return panel[:panel.index("</section>")]
+
+    def test_a_search_finds_rows_without_changing_the_cards(self):
+        """
+        FIND, not filter. The selects above scope the whole lens; this narrows
+        only the table's rows, which is what a reader wants when they know the
+        corridor they are after and do not want to change what the cards above
+        them are reporting.
+        """
+        assert 'id="kpi-lane-search"' in self._panel()
+        view = _asset("kpi-view.js")
+        block = view[view.index("function renderLaneView() {"):]
+        block = block[:block.index("// ─── The controls")]
+        # The cards read `lanes`; only the table reads the searched subset.
+        assert "const found = term" in block
+        assert "found.map((l)" in block
+
+    def test_typing_does_not_take_the_cursor_out_of_the_box(self):
+        """Re-running the whole view would rebuild the controls, and the input
+        being typed into with them."""
+        view = _asset("kpi-view.js")
+        start = view.index("el('kpi-lane-search')?.addEventListener")
+        block = view[start:view.index("\n  });", start)]
+        assert "renderLaneView()" in block
+        assert "applyView()" not in block
+
+    def test_it_searches_the_things_a_reader_knows(self):
+        view = _asset("kpi-view.js")
+        block = view[view.index("const found = term"):]
+        block = block[:block.index(";")]
+        # Origin and destination arrive together in the corridor's name.
+        assert "laneName(l)" in block
+        assert "l.mode" in block
+
+    def test_a_search_that_matches_nothing_says_so(self):
+        """Distinct from "your filters match nothing" — the reader mistyped a
+        name, they did not narrow the lens."""
+        view = _asset("kpi-view.js")
+        assert "No corridor matches that search." in view
+        assert "No corridor matches the current filters." in view
+
+    def test_clearing_the_lens_clears_the_search_with_it(self):
+        view = _asset("kpi-view.js")
+        block = view[view.index("el('kpi-filter-reset')?.addEventListener"):]
+        block = block[:block.index("\n  });")]
+        assert "view.laneSearch = ''" in block
+
+    def test_the_column_headers_stay_put(self):
+        """A corridor table runs to fifty rows, and a reader scrolled into the
+        middle of it was reading unlabelled numbers."""
+        assert "table-wrap-sticky" in self._panel()
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".table-wrap-sticky thead th {"):]
+        block = block[:block.index("}")]
+        assert "position: sticky" in block
+
+    def test_the_search_and_the_scroll_cap_do_not_reach_the_pdf(self):
+        """A control nobody can use, and a table cut off at 460 pixels."""
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        tail = css[css.rindex("@media print {"):]
+        assert ".kpi-table-search { display: none !important; }" in tail
+        assert "max-height: none" in tail
+
+
+class TestAbsenceIsSaidInWords:
+    """
+    An em dash where a number should be reads as "nothing" or, worse, as zero,
+    and a reader has no way to tell which.
+    """
+
+    def test_the_facility_cards_name_what_is_missing(self):
+        app_js = _asset("app.js")
+        block = app_js[app_js.index("const absent = (reason = 'Not reported')"):]
+        block = block[:block.index("// Connected Lanes calculation")]
+        assert "wh-absent-label" in block
+        # No bare em dash left standing in for a figure on these cards.
+        assert "? '—' :" not in block
+        assert "<strong>—</strong>" not in block
+
+    def test_the_corridor_table_names_what_is_missing(self):
+        view = _asset("kpi-view.js")
+        block = view[view.index("const ABSENT ="):]
+        block = block[:block.index("\n")]
+        assert "Not reported" in block
+        assert "&mdash;" not in block
+
+    def test_the_dense_health_table_may_still_use_a_dash(self):
+        """
+        Eleven numeric columns. A column of "Not reported" would be unreadable,
+        and the heading above each cell already names what is absent — so this
+        is the one place a dash still earns its keep, and it carries its reason
+        on hover.
+        """
+        js = _asset("warehouse.js")
+        block = js[js.index("function absent(reason) {"):]
+        block = block[:block.index("\n}")]
+        assert "&mdash;" in block
+        assert "title=" in block
+
+
+class TestAMissingFlowIsNotAZeroFlow:
+    """
+    `Number(null)` is 0, not NaN.
+
+    So `Number.isFinite(Number(lane.flow))` was TRUE for a corridor the solve
+    never routed anything down, and every missing volume silently became a zero
+    volume: the spend card counted those corridors as "calculated" and
+    multiplied a real rate by a flow nobody reported to get zero, and the
+    volume card averaged them in. A corridor with no reported flow does not
+    cost nothing — it is not known to cost anything.
+    """
+
+    def test_absence_is_read_as_absence_not_as_zero(self):
+        view = _asset("kpi-view.js")
+        block = view[view.index("function figure(value) {"):]
+        block = block[:block.index("\n}")]
+        # null and undefined are rejected BEFORE the numeric conversion.
+        assert "value === null || value === undefined" in block
+
+    def test_spend_is_the_solvers_own_transport_cost(self):
+        """
+        IT WAS A MULTIPLICATION IN THE BROWSER, and of two different bases.
+
+        `rate × lane.flow` used the PER-PERIOD volume, so the corridor-spend
+        card reported a per-period amount on a screen whose every other cost
+        is a horizon total — about a twelfth of the transport spend, leaving a
+        gap under the network cost that no line on the page accounted for.
+
+        `transport_cost` is the engine's own charge for that corridor across
+        the horizon. Reading it reconciles the screen and keeps §9: the
+        frontend calculates no authoritative KPI.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("function laneSpend(lane) {"):]
+        block = block[:block.index("\n}")]
+        assert "figure(lane.transportCost)" in block
+        # No arithmetic on money here, and not the per-period volume either.
+        assert "rate * flow" not in block
+        assert "lane.flow" not in block
+
+    def test_the_lane_cards_count_only_what_was_reported(self):
+        view = _asset("kpi-view.js")
+        block = view[view.index("function renderLaneSummary()"):]
+        block = block[:block.index("\nfunction renderLaneView")]
+        # Volume and mode share read absence the same way spend does.
+        assert "figure(l.flow)" in block
+        assert "Number(l.flow)" not in block
+        # ...and the cards say how many were left out.
+        assert "report none" in block
+        assert "report no volume" in block
+
+class TestTheFilterPanel:
+    """
+    Three loose selects read as a form, and each one re-solved the screen the
+    moment it changed — so narrowing by region and then by status redrew
+    everything twice, and the reader watched the page move under a decision
+    they had not finished making.
+    """
+
+    def _panel(self) -> str:
+        html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
+        panel = html[html.index('id="tab-facility-dashboard"'):]
+        return panel[:panel.index("</section>")]
+
+    def test_the_controls_live_in_one_elevated_panel(self):
+        panel = self._panel()
+        for part in ("kpi-filters-trigger", "kpi-filters-panel",
+                     "kpi-filters-apply", "kpi-filter-reset"):
+            assert part in panel, part
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".kpi-filters-panel {"):]
+        block = block[:block.index("}")]
+        assert "box-shadow: var(--shadow-lg)" in block
+
+    def test_nothing_moves_until_apply(self):
+        """The whole point: set three things, see the consequence once."""
+        view = _asset("kpi-view.js")
+        for control in ("kpi-filter-entity", "kpi-filter-region", "kpi-filter-status"):
+            start = view.index(f"el('{control}')?.addEventListener")
+            block = view[start:view.index("\n  });", start)]
+            assert "staged." in block, control
+            # A staging control must not redraw the screen behind the panel.
+            assert "applyView()" not in block, control
+        commit = view[view.index("el('kpi-filters-apply')?.addEventListener"):]
+        commit = commit[:commit.index("\n  });")]
+        assert "applyView()" in commit
+
+    def test_the_panel_opens_on_what_is_actually_on_screen(self):
+        """An abandoned edit must not leak into the next one."""
+        view = _asset("kpi-view.js")
+        block = view[view.index("const openPanel = (open) =>"):]
+        block = block[:block.index("\n  };")]
+        assert "stageFromView()" in block
+
+    def test_clicking_away_abandons_rather_than_half_applies(self):
+        view = _asset("kpi-view.js")
+        assert "if (!el('kpi-filters')?.contains(e.target)) openPanel(false);" in view
+
+    def test_the_closed_control_says_what_is_active(self):
+        """A filtered screen has to say it is filtered with the panel shut."""
+        view = _asset("kpi-view.js")
+        assert "function renderFilterTrigger()" in view
+        block = view[view.index("function renderFilterTrigger()"):]
+        block = block[:block.index("\n}")]
+        assert "activeFilterCount()" in block
+        # It names the selections, not just a count.
+        assert "endpointName(view.origin)" in block
+        assert "view.region" in block
+
+    def test_reset_clears_both_the_edit_and_the_view(self):
+        """There is no half-reset state to be surprised by."""
+        view = _asset("kpi-view.js")
+        block = view[view.index("el('kpi-filter-reset')?.addEventListener"):]
+        block = block[:block.index("\n  });")]
+        assert "stageFromView()" in block
+        assert "view.region = 'all'" in block
+        assert "applyView()" in block
+
+    def test_the_panel_does_not_print(self):
+        """A control nobody can click, on paper. The header carries the
+        selections instead."""
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        rule = ".kpi-filters-panel, .kpi-filters-trigger { display: none !important; }"
+        assert rule in css
+        # There is more than one print block in this sheet, so the check is
+        # that the rule sits inside one — not inside the last one.
+        assert css.index("@media print {") < css.index(rule)
+
+
+class TestTheAiButtonInvitesWithoutNagging:
+
+    def test_the_reflection_repeats_but_does_not_loop(self):
+        """
+        A single sweep on arrival is missed by anyone reading the scorecard at
+        the time; a control that animates continuously is what makes a
+        dashboard tiring.
+        """
+        js = _asset("kpi-explain.js")
+        assert "SHIMMER_INTERVAL_MS" in js
+        block = js[js.index("export function startKpiExplainShimmer()"):]
+        block = block[:block.index("\n}")]
+        assert "setInterval" in block
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        anim = css[css.index(".kpi-explain-btn.is-shimmering::after {"):]
+        anim = anim[:anim.index("}")]
+        assert "infinite" not in anim
+
+    def test_it_rests_while_the_tab_is_hidden(self):
+        js = _asset("kpi-explain.js")
+        assert "document.hidden" in js
+
+    def test_it_stops_for_good_once_used(self):
+        js = _asset("kpi-explain.js")
+        block = js[js.index("function stopShimmer() {"):]
+        block = block[:block.index("\n}")]
+        assert "clearInterval" in block
+        assert "shimmerDone = true" in block
+
+    def test_the_button_is_readable_against_the_card(self):
+        """It was primary-on-primary-light with a transparent border, which at
+        12px did not register as a control at all."""
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".kpi-explain-btn {"):]
+        block = block[:block.index("}")]
+        assert "border: 1px solid var(--purple-200)" in block
+        assert "font-weight: 700" in block
+
+
+class TestTheScorecardIsNotMistakenForTheSite:
+
+    def test_a_drill_down_names_the_scorecard_as_the_lens_summary(self):
+        """
+        It does not narrow to one facility, so above a screen headed
+        "Bengaluru — one facility" it read "4 of 5 open" and "49.0%", which a
+        reader takes for Bengaluru's own.
+        """
+        view = _asset("kpi-view.js")
+        block = view[view.index("const note = el('kpi-scorecard-note');"):]
+        block = block[:block.index("\n  }")]
+        assert "network summary" in block
+        assert "not this facility's own figures" in block
+        assert "Distribution-centre" in block
+
+
+class TestTheScreenSpeaksOneColourLanguage:
+    """
+    TWO vocabularies, and they must not be confused with each other:
+
+      STATUS   red, amber, green, blue, grey — each names a health band and
+               nothing else;
+      IDENTITY purples and teals, for telling one FACILITY from another, with
+               no meaning beyond "not the same site as the last one".
+
+    They were mixed. The spend doughnut ran through the status hues to colour
+    facilities, so a site could be drawn in the exact red the doughnut beside
+    it used for "over capacity"; and the utilisation chart drew everything
+    under the threshold in purple, so an under-used site was blue in the table,
+    blue in the doughnut and purple in the bar chart above them.
+    """
+
+    def _palettes(self):
+        import re
+        charts = _asset("charts.js")
+        band = charts[charts.index("export const BAND_COLOUR = {"):]
+        band = band[:band.index("};")]
+        ident = charts[charts.index("export const IDENTITY_PALETTE = ["):]
+        ident = ident[:ident.index("];")]
+        hexes = lambda t: {h.lower() for h in re.findall(r"#[0-9a-fA-F]{6}", t)}
+        return hexes(band), hexes(ident)
+
+    def test_status_and_identity_share_no_colour(self):
+        """A reader who has learned that red means trouble cannot be shown a
+        red that means "the third facility"."""
+        status, identity = self._palettes()
+        assert status, "no status palette found"
+        assert identity, "no identity palette found"
+        assert not (status & identity), sorted(status & identity)
+
+    def test_the_status_colours_are_defined_once(self):
+        """A second copy is how one state comes to be drawn in two colours."""
+        charts = _asset("charts.js")
+        warehouse = _asset("warehouse.js")
+        assert "export const BAND_COLOUR" in charts
+        # warehouse.js imports them rather than restating them.
+        assert "BAND_COLOUR } from './charts.js'" in warehouse
+        assert "const BAND_COLOUR = {" not in warehouse
+
+    def test_the_utilisation_bars_are_coloured_by_state(self):
+        """Not by threshold arithmetic of their own — the row already carries
+        the band every other part of this screen reads."""
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderWarehouseUtilisationChart("):]
+        block = block[:block.index("\n}")]
+        assert "BAND_COLOUR[r.health_band]" in block
+        # The old hard-coded ladder is gone.
+        assert "v >= thresholdPct ? '#d97706'" not in block
+
+    def test_the_spend_doughnut_uses_identity_colours(self):
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderWarehouseSpendChart("):]
+        block = block[:block.index("\n}")]
+        assert "const palette = IDENTITY_PALETTE;" in block
+
+    def test_a_multi_coloured_series_gets_a_neutral_legend_swatch(self):
+        """
+        Chart.js takes the first bar's colour for the legend dot, so a red dot
+        appeared beside "Peak period" — saying the series is red, when red
+        means "over capacity" here and most of the bars are not.
+        """
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderWarehouseUtilisationChart("):]
+        block = block[:block.index("\n}")]
+        assert "generateLabels:" in block
+        assert "#5a5a72" in block
+
+
+class TestTheFacilityCostBreakdownIsReal:
+    """
+    This chart used to be invented. It read:
+
+        const transportCost = isDC ? 580000 : 720000;
+        const holdingCost   = 140000;
+        const surchargeCost = 45000;
+        const fixedCost     = (facility.fixedCost || 100) * 100000 / 12;
+
+    — five hard-coded figures and two magic multipliers, drawn as a doughnut
+    labelled with the site's name, in the same currency as every solved number
+    beside it. A reader had no way to tell it apart. It also decided the site's
+    role from the spelling of its id, which this product settled long ago.
+    """
+
+    def test_no_cost_is_conjured_from_a_constant(self):
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderFacilityCostBreakdownChart("):]
+        block = block[:block.index("\nexport function renderFacilityLaneFlowsChart")]
+        for invented in ("580000", "720000", "140000", "45000", "* 30", "/ 12"):
+            assert invented not in block, invented
+        assert "startsWith('DC_')" not in block
+
+    def test_it_reads_the_components_the_engine_reports(self):
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderFacilityCostBreakdownChart("):]
+        block = block[:block.index("\nexport function renderFacilityLaneFlowsChart")]
+        for field in ("fixed_cost", "opening_cost", "handling_cost", "holding_cost"):
+            assert field in block, field
+        # Which are the same four that sum to the card above it.
+        app_js = _asset("app.js")
+        assert "renderFacilityCostBreakdownChart('chart-dash-costs', whRow)" in app_js
+
+    def test_transport_is_not_implied(self):
+        """The model does not attribute it to a site, and the old subtitle
+        named it first."""
+        html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
+        panel = html[html.index('id="tab-facility-dashboard"'):]
+        panel = panel[:panel.index("</section>")]
+        assert "Transport, Handling, Storage, Holding & Accessorials" not in panel
+        assert "Facility Cost Breakdown" in panel
+
+    def test_a_site_with_no_reported_cost_draws_nothing(self):
+        """A ring of zeroes reads as "this site costs nothing"."""
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderFacilityCostBreakdownChart("):]
+        block = block[:block.index("\nexport function renderFacilityLaneFlowsChart")]
+        assert "parts.length === 0" in block
+        assert "reported no facility cost" in block
+
+    def test_its_slices_are_identity_colours(self):
+        """A cost component is not a health band."""
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderFacilityCostBreakdownChart("):]
+        block = block[:block.index("\nexport function renderFacilityLaneFlowsChart")]
+        assert "IDENTITY_PALETTE" in block
+        for status_hue in ("#dc2626", "#16a34a", "#2563eb", "#f59e0b"):
+            assert status_hue not in block, status_hue
+
+
+class TestTheCorridorDetailStatesAbsence:
+
+    def test_a_flow_with_no_reading_carries_no_unit(self):
+        """"— units/month" reads as a measurement of nothing per month."""
+        app_js = _asset("app.js")
+        block = app_js[app_js.index("const tableBody = document.querySelector('#table-dash-lanes tbody')"):]
+        block = block[:block.index("\n  }")]
+        assert "absent('Not reported')" in block
+        assert "${formatNumber(l.flow)} ${perPeriodLabel()}</td>" not in block
+
+    def test_the_flow_total_counts_only_what_was_reported(self):
+        """`l.flow || 0` folded an absent reading into a total presented as
+        the site's whole throughput."""
+        app_js = _asset("app.js")
+        assert "sum + (l.flow || 0)" not in app_js
+        assert "const reportedFlows = connectedLanes" in app_js
+
+
+class TestTheFilterPanelCanActuallyHide:
+
+    def test_an_author_display_does_not_defeat_the_hidden_attribute(self):
+        """
+        `.kpi-filters-panel { display: flex }` BEATS the browser's own
+        `[hidden] { display: none }`, so the panel was permanently visible
+        however the attribute was set — through Apply, through clicking away,
+        through a reload.
+        """
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        assert "[hidden] { display: none !important; }" in css
+
+    def test_the_controls_sit_side_by_side(self):
+        """A column of six was taller than the charts it was filtering, and
+        the Apply button fell below the fold."""
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".kpi-filters-panel {"):]
+        block = block[:block.index("}")]
+        assert "flex-wrap: wrap" in block
+        assert "flex-direction: column" not in block
+        # An absolutely positioned wrapping flex container shrink-wraps to its
+        # widest item, not the sum — which stacked them anyway.
+        assert "width: max-content" in block
+
+
+class TestTheOverlayLeavesTheChartReadable:
+
+    def test_it_is_a_column_in_the_corner_not_a_full_width_band(self):
+        """It spanned the card and sat over the plot area, so a reader had the
+        explanation or the picture but never both — and the sentence is about
+        the picture."""
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        block = css[css.index(".kpi-ai-overlay {"):]
+        block = block[:block.index("}")]
+        assert "right: 14px" in block
+        # A SHARE of the card, not a fixed width: 320px is a corner on a wide
+        # card and most of a narrow one, and on the facility detail it covered
+        # the plot it was describing.
+        assert "width: clamp(220px, 44%, 300px)" in block
+        assert "left: 16px; right: 16px" not in block
+
+
+class TestTheLegendGivesBackWhatItTruncated:
+
+    def test_hovering_a_legend_row_reveals_the_full_name(self):
+        """
+        A canvas `onHover` that set the canvas title did not work: the browser
+        decides a tooltip from the title at the moment hover BEGINS, so a title
+        written during mousemove is never shown. A DOM row carries its own
+        title and needs nothing re-implemented.
+        """
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderHtmlLegend("):]
+        block = block[:block.index("\n}")]
+        assert 'title="${' in block
+        assert "ng-legend-name" in block
+        # The value is reserved and never truncates; the name gives way.
+        css = (REPO_ROOT / "app" / "frontend" / "css" / "style.css").read_text(encoding="utf-8")
+        name = css[css.index(".ng-legend-name {"):]
+        name = name[:name.index("}")]
+        assert "text-overflow: ellipsis" in name
+        value = css[css.index(".ng-legend-value {"):]
+        value = value[:value.index("}")]
+        assert "flex: 0 0 auto" in value
+
+    def test_no_two_slices_share_a_colour(self):
+        """
+        A ninth slice wrapped the palette and came back the same purple as the
+        first, so the largest facility and "everything else" looked like one
+        thing. The remainder is not an identity and takes a neutral instead.
+        """
+        charts = _asset("charts.js")
+        assert "export const OTHER_SLICE_COLOUR" in charts
+        block = charts[charts.index("export function renderWarehouseSpendChart("):]
+        block = block[:block.index("\n}")]
+        assert "sl.isOther" in block and "OTHER_SLICE_COLOUR" in block
+        # Eight identity colours for at most eight real slices.
+        pal = charts[charts.index("export const IDENTITY_PALETTE = ["):]
+        pal = pal[:pal.index("];")]
+        import re
+        hexes = re.findall(r"#[0-9a-fA-F]{6}", pal)
+        assert len(hexes) == len(set(h.lower() for h in hexes)) == 8
+
+
+class TestTheThroughputChartPlotsTheSolve:
+    """
+    The chart said one thing and the explanation beside it said another: a card
+    stating an average of about 4,004 units, over a chart whose axis started at
+    8,800. The AI was reading the solve; the picture was fiction.
+
+    It read:
+
+        const months     = ['Sep 25', 'Oct 25', … 'Nov 26 (F)'];   // fixed
+        const historical = [baseTput * 0.88, baseTput * 0.90, …];  // a ramp
+        const isAtRisk   = facility.id === 'DC_DELHI' || … ;       // two ids
+        const growth     = isAtRisk ? 1.05 : 1.015;                // a guess
+
+    — fifteen hard-coded month labels whatever horizon was solved, a "12-month
+    history" that was one number times a fixed curve, and a "3-month
+    projection" compounding a rate nothing had measured.
+    """
+
+    def test_no_series_is_conjured_from_a_base_figure(self):
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderFacilityThroughputChart("):]
+        block = block[:block.index("\n/**")]
+        for invented in ("* 0.88", "* 0.90", "growthMultiplier", "1.015",
+                         "'Sep 25'", "(F)"):
+            assert invented not in block, invented
+        assert "DC_DELHI" not in block
+
+    def test_it_plots_the_period_series_the_engine_reports(self):
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderFacilityThroughputChart("):]
+        block = block[:block.index("\n/**")]
+        assert "row.throughput_by_period" in block
+        assert "rated_capacity_per_period" in block
+        app_js = _asset("app.js")
+        # The SAME record the explanation and the table read.
+        assert "renderFacilityThroughputChart('chart-dash-throughput', whRow)" in app_js
+
+    def test_the_series_actually_reaches_the_frontend(self):
+        """
+        Only figures DERIVED from it used to survive onto the contract — the
+        peak, its period, how many were tight — so the screen had nothing real
+        to plot even though the solve had computed it.
+        """
+        src = (REPO_ROOT / "netgravity" / "orchestrator" / "metrics"
+               / "warehouse_deep_dive.py").read_text(encoding="utf-8")
+        model = src[src.index("class WarehouseHealthKPI(BaseModel):"):]
+        model = model[:model.index("model_config")]
+        assert "throughput_by_period: Dict[str, float]" in model
+        assert "utilization_by_period: Dict[str, float]" in model
+        # ...and is populated from the dicts the computation already had.
+        assert "throughput_by_period=by_period," in src
+        assert "utilization_by_period=util_by_period," in src
+
+    def test_one_period_draws_nothing_rather_than_a_line(self):
+        """One period is not a horizon, and two points invented between them
+        is the defect this replaced."""
+        charts = _asset("charts.js")
+        block = charts[charts.index("export function renderFacilityThroughputChart("):]
+        block = block[:block.index("\n/**")]
+        assert "periods.length < 2" in block
+        assert "single period" in block
+
+    def test_the_card_no_longer_promises_a_projection(self):
+        """The solve does not produce one."""
+        import re
+        html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
+        panel = html[html.index('id="tab-facility-dashboard"'):]
+        panel = panel[:panel.index("</section>")]
+        # What a READER sees: the source comment explaining this fix names the
+        # old promise, and asserting over the raw markup catches that instead.
+        visible = re.sub(r"<!--.*?-->", " ", panel, flags=re.S)
+        assert "3-Month Projection" not in visible
+        assert "Solved throughput each period" in visible
+

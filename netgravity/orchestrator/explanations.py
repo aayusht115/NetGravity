@@ -39,8 +39,14 @@ KIND_OPTIMIZED = "optimized"      # the solved network against its reference
 KIND_SCENARIO = "scenario"        # one what-if against its own reference
 KIND_COMPARISON = "comparison"    # a named set of scenarios, ranked
 KIND_FORECAST = "forecast"        # one forecast run
+#: One CHART on the KPI screen, asked for by a reader who pressed Explain on
+#: it. Suffixed with the chart's own name and fingerprinted on the rows that
+#: were actually drawn, so two charts of one analysis are two records and
+#: re-opening either spends nothing.
+KIND_KPI_CHART = "kpi_chart"
 
-KINDS = (KIND_OPTIMIZED, KIND_SCENARIO, KIND_COMPARISON, KIND_FORECAST)
+KINDS = (KIND_OPTIMIZED, KIND_SCENARIO, KIND_COMPARISON, KIND_FORECAST,
+         KIND_KPI_CHART)
 
 
 def _now() -> str:
@@ -130,11 +136,47 @@ class ExplanationStore:
     def __init__(self, storage: StorageBackend):
         self.storage = storage
 
+    @staticmethod
+    def _safe_segment(value: str, *, drop: bool) -> str:
+        """
+        One path segment, from a string that may not be one.
+
+        `drop` removes anything unsafe; otherwise it is replaced by `_`, which
+        keeps a compound kind readable on disk ("kpi_chart_peak_vs_average"
+        rather than "kpi_chartpeak_vs_average").
+        """
+        if drop:
+            return "".join(c for c in value if c.isalnum() or c in "_-")
+        return "".join(c if (c.isalnum() or c in "_-") else "_" for c in value)
+
     def _key(self, subject_id: str, kind: str) -> str:
-        safe = "".join(c for c in subject_id if c.isalnum() or c in "_-")
+        safe = self._safe_segment(subject_id, drop=True)
         if not safe:
             raise ValueError(f"invalid subject id: {subject_id!r}")
-        return f"{PREFIX}/{kind}/{safe}.json"
+        # THE KIND IS A DIRECTORY NAME, and it was the one part of this key
+        # taken on trust.
+        #
+        # Every kind was a bare word until a chart's became
+        # `kpi_chart:peak_vs_average` — and a colon cannot appear in a Windows
+        # path at all, so `put` raised `NotADirectoryError`, the service
+        # swallowed it as a non-fatal write failure, and the record was never
+        # written. Nothing failed visibly: the explanation was produced and
+        # returned, `get` reported a clean miss on the next view, and the
+        # screen spent a model request every single time it was opened —
+        # against a budget shared by the whole product.
+        #
+        # Sanitised here rather than at the one call site, because the next
+        # compound kind would arrive with the same defect and the same
+        # silence. A no-op for every kind that already existed, so nothing in
+        # the store is orphaned by this.
+        safe_kind = self._safe_segment(str(kind or ""), drop=False)
+        # It must still IDENTIFY something. A kind of "///" substitutes to
+        # "___", which is a perfectly valid directory and the same one "???"
+        # would produce — two unrelated kinds sharing one file, each
+        # overwriting the other's explanation.
+        if not any(c.isalnum() for c in safe_kind):
+            raise ValueError(f"invalid kind: {kind!r}")
+        return f"{PREFIX}/{safe_kind}/{safe}.json"
 
     def get(self, subject_id: str, kind: str,
             result_fingerprint: str) -> Optional[SavedExplanation]:

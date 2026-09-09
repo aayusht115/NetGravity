@@ -63,7 +63,6 @@ const ACTIONS = {
   closeFacilityPanel: () => {
     document.getElementById('facility-panel-overlay')?.classList.remove('active');
   },
-  exportFacilityReport: () => callGlobal('exportFacilityReport'),
 
   /**
    * The assistant's "Explore in Digital Twin" button.

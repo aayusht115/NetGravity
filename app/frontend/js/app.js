@@ -31,7 +31,7 @@ import {
 } from './charts.js';
 import { initScenarios } from './scenarios.js';
 import { renderWarehouseDashboard, clearWarehouseState,
-         warehouseHealthCsvLines } from './warehouse.js';
+         warehouseRow, recordWarehouseDrawn } from './warehouse.js';
 import { mountAgentLoading } from './agent-loading.js';
 import {
   beginAnalysisLoading, endAnalysisLoading, reportAnalysisStage,
@@ -55,6 +55,8 @@ import { loadIdentity, getCurrentUser } from './identity.js';
 import { kpiService } from './integration/services/kpi-service.js';
 import { twinService } from './integration/services/twin-service.js';
 import { mapNetworkKPIsToCards } from './integration/mappers/kpi-mapper.js';
+import { initKpiView, renderKpiView, currentKpiView } from './kpi-view.js';
+import { clearKpiExplainCache } from './kpi-explain.js';
 import { mapTwinStateToFrontend } from './integration/mappers/twin-mapper.js';
 
 // ─── State ──────────────────────────────────────────────────
@@ -115,7 +117,6 @@ if (typeof window !== 'undefined') {
   // the loaded network rather than from the spelling of its id.
   window.__ngFacilityRole = facilityRole;
 }
-
 // ─── Boot ───────────────────────────────────────────────────
 function bootApp() {
   try { initProjects(); } catch (e) { console.error('initProjects error:', e); }
@@ -131,6 +132,34 @@ function bootApp() {
   // means every entry point that raises a loading state finds it there.
   try { mountAgentLoading(); } catch (e) { console.error('agent loading mount:', e); }
   try { initHomeSelectors(); } catch (e) { console.error('initHomeSelectors error:', e); }
+  // The KPI screen's tabs, filters and drill-down. The two hooks are the
+  // things it cannot do itself: set the application's selected facility, and
+  // draw that facility's detail — both of which live here.
+  try {
+    initKpiView({
+      selectEntity: (facilityId) => {
+        state.selectedFacility = facilityId;
+        const sel = document.getElementById('sel-facility');
+        if (sel && [...sel.options].some((o) => o.value === facilityId)) {
+          sel.value = facilityId;
+        }
+      },
+      renderEntity: () => renderFacilityDashboard(),
+      // The KPI screen's Network lens shows the Overview's four figures, and
+      // shows them by calling the Overview's OWN renderer. One source, so the
+      // two screens cannot report different numbers for one network — a
+      // second copy of this arithmetic here is exactly how they would.
+      renderNetworkScorecard: (rowId) => renderHomeKpiStrip(rowId),
+      // The network's inventory cost, from the same authoritative baseline the
+      // scorecard above it reads — so the gap the KPI screen names and the
+      // total it is measured against come from one source.
+      networkInventoryCost: () => {
+        const base = getOptimizedBaseCase() || {};
+        const v = (base.baseline || {}).inventoryCost;
+        return (typeof v === 'number' && Number.isFinite(v)) ? v : null;
+      },
+    });
+  } catch (e) { console.error('initKpiView error:', e); }
   try { renderHome(); } catch (e) { console.error('renderHome error:', e); }
   try { renderTwinTables(); } catch (e) { console.error('renderTwinTables error:', e); }
   try { initScenarios(); } catch (e) { console.error('initScenarios error:', e); }
@@ -897,6 +926,10 @@ window.addEventListener('networkDataLoaded', (e) => {
   // report cached against the id alone would survive its own network.
   try {
     clearWarehouseState();
+    // The saved chart briefings go with it. They are about the network that
+    // produced them, and a paragraph about the previous upload sitting under
+    // a chart of the new one is worse than having none.
+    clearKpiExplainCache();
     if (state.activeTab === 'facility-dashboard') renderWarehouseDashboard();
   } catch (err) { }
   try { initHomeSelectors(); } catch (err) { }
@@ -966,6 +999,36 @@ function updateTopBarLayout(tab) {
     topScope.style.display = scopeApplies ? 'flex' : 'none';
   }
 
+  // The KPI screen owns its own Facility control, inside the filter bar that
+  // states what the whole screen is showing. The global picker cannot be left
+  // beside it: it lists distribution centres only, so drilling into a PLANT
+  // left it naming a different site than the one on screen — a reader seeing
+  // "Delhi" above Bengaluru's numbers with nothing to say which was wrong,
+  // which is the exact failure the breadcrumb exists to prevent.
+  //
+  // AND NEITHER CAN PERIOD STAY, for the reason Scenario Planning hides both.
+  //
+  // This screen reports the whole solved horizon: "12 periods, 2025-09 to
+  // 2026-08", with peak figures taken from the busiest single period of it.
+  // Nothing on it is scoped to one month — not the scorecard, not the four
+  // charts, not the health table, and not the facility drill-down either. The
+  // control was there and moving it changed nothing, including when a period
+  // OUTSIDE the modelled horizon was picked; the label it used to feed
+  // (`dash-period-label`) is not in the markup any more.
+  //
+  // So it goes, on the rule stated above: hiding a dead control is more
+  // honest than showing one. It is untouched on the Digital Twin, the
+  // Forecast and the Overview, which do scope by period. If the KPI cards are
+  // ever given per-period figures, deleting this branch brings it back.
+  const topFacility = document.getElementById('home-top-facility')?.closest('.topbar-control-group');
+  if (topFacility) {
+    topFacility.style.display = (tab === 'facility-dashboard') ? 'none' : '';
+  }
+  const topPeriod = document.getElementById('home-top-period')?.closest('.topbar-control-group');
+  if (topPeriod) {
+    topPeriod.style.display = (tab === 'facility-dashboard') ? 'none' : '';
+  }
+
   // Home carries its own page head ("Overview · Your network health…"), so it
   // does not need the generic title row. Every other page does.
   const subTopbar = document.getElementById('app-sub-topbar');
@@ -983,7 +1046,10 @@ function updateTopBarLayout(tab) {
       mainTitle.innerHTML = 'Insights';
       subTitle.textContent = '· AI-generated observations from your network';
     } else if (tab === 'facility-dashboard') {
-      mainTitle.innerHTML = 'Facility KPIs & Analytics';
+      // "Facility KPIs" named one of four lenses. The screen opens on the
+      // whole network and carries corridors as well as sites, so a title
+      // naming only facilities described a quarter of it.
+      mainTitle.innerHTML = 'Network KPIs &amp; Analytics';
       subTitle.textContent = '· Telemetry & cost breakdown';
     } else if (tab === 'forecast') {
       mainTitle.innerHTML = 'Demand Forecast';
@@ -1072,7 +1138,11 @@ export function navigateToTab(tab) {
   if (tab === 'facility-dashboard') {
     document.getElementById('tab-facility-dashboard')?.classList.add('active');
     state.activeTab = 'facility-dashboard';
-    renderFacilityDashboard();
+    // Always the whole network first. A reader arriving from the Overview
+    // arrives with a network-level question, so the screen opens on the
+    // network rather than on whichever site a previous visit left selected —
+    // `renderKpiView()` clears the drill-down and draws the roll-up.
+    renderKpiView();
     // Not awaited, and deliberately so: the facility band is already hydrated
     // and renders immediately, while the warehouse band fetches a report the
     // backend has already computed and cached per network version. Blocking
@@ -2208,9 +2278,16 @@ export function renderFacilityDashboard() {
   const period = PERIODS.find(p => p.id === state.selectedPeriod);
   // Role comes from the loaded network, not from the id's spelling.
   const isDC = isDCFacility(state.selectedFacility);
-  const utilPct = isDC ? fac.utilPct
+  // ONE DECIMAL, both branches. A DC's stored `utilPct` carried the solver's
+  // full precision and printed "34.32%" beside a plant's "82.7%" — two
+  // precisions for one metric on one screen, which reads as two different
+  // kinds of measurement rather than one rounded two ways.
+  const utilRaw = isDC ? fac.utilPct
     : (fac.throughput != null && fac.capacity
-        ? ((fac.throughput / fac.capacity) * 100).toFixed(1) : null);
+        ? (fac.throughput / fac.capacity) * 100 : null);
+  const utilPct = (utilRaw === null || utilRaw === undefined
+                   || Number.isNaN(Number(utilRaw)))
+    ? null : Number(utilRaw).toFixed(1);
   const utilColor = getUtilColor(utilPct);
   // Peak-period utilisation, from the solver. Null unless a multi-period solve
   // reported one that is genuinely above the average — on a single-period solve
@@ -2264,7 +2341,38 @@ export function renderFacilityDashboard() {
   const carbonUnits = laneFlow.length ? laneFlow.reduce((a, b) => a + b, 0) : 0;
   const carbonPerUnit = (carbonTotal !== null && carbonUnits > 0)
     ? carbonTotal / carbonUnits : null;
-  const dash = (v) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : v;
+  // A FIGURE THE SOLVE DID NOT PRODUCE, IN WORDS.
+  //
+  // An em dash where a number should be reads as "nothing" or, worse, as
+  // zero, and the reader has no way to tell which. These cards each carry one
+  // figure, so there is room to say it — the dense health table is the one
+  // place a dash still earns its keep.
+  const absent = (reason = 'Not reported') =>
+    `<span class="wh-absent wh-absent-label">${reason}</span>`;
+  const dash = (v) => (v === null || v === undefined || Number.isNaN(v)) ? absent() : v;
+
+  // The authoritative facility cost, from the same warehouse report row the
+  // health table and the spend donut read.
+  const whRow = warehouseRow(state.selectedFacility);
+  const rawFacilityCost = whRow ? Number(whRow.total_facility_cost) : NaN;
+  const facilityCost = Number.isFinite(rawFacilityCost) ? rawFacilityCost : null;
+
+  // THE STOCK THIS SITE HOLDS, from that same row.
+  //
+  // `null` and `0` are different answers and stay different: the engine
+  // reports no inventory decisions as absence WITH a reason, and a solved
+  // zero as zero. `Number(null)` is 0, so each is tested before it is read.
+  const stockFigure = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const out = Number(value);
+    return Number.isFinite(out) ? out : null;
+  };
+  const stockAvg = whRow ? stockFigure(whRow.avg_inventory_units) : null;
+  const stockPeak = whRow ? stockFigure(whRow.peak_inventory_units) : null;
+  // The engine's own words for why there is nothing, rather than a second,
+  // vaguer copy of them written here.
+  const stockReason = (whRow && whRow.inventory_status && whRow.inventory_status.reason)
+    || 'Not reported by this solve';
 
   // 6 Executive Metric Cards
   const metricsGrid = document.getElementById('dash-metrics-grid');
@@ -2289,40 +2397,76 @@ export function renderFacilityDashboard() {
         </div>`}
       </div>
 
+      <!-- THE SERVICE-LEVEL CARD IS GONE FROM HERE, DELIBERATELY.
+
+           It showed the NETWORK's demand-served figure on a card headed by a
+           facility's name, in a grid where every other card is about that one
+           site. Captioning it "Network-wide" did not fix that: a reader
+           scanning six cards about Atlanta reads the fifth as Atlanta's too.
+
+           Service level is a property of demand, not of a building, and this
+           model does not decompose it per site — so this is not a figure
+           waiting to be built, it is one that does not exist at this level.
+           It belongs to the Network lens's scorecard at the top of the
+           screen, where it describes the thing it is actually about. -->
+
       <div class="dash-metric-card">
-        <div class="dash-metric-title">Demand Served Within SLA</div>
-        <div class="dash-metric-val" style="color:var(--green)">${dash(kpis?.sla?.value)}%</div>
+        <div class="dash-metric-title">Facility Cost</div>
+        <!-- ONE FACILITY-COST METRIC, and this is it.
+             This card read kpis.totalCost, which the per-facility endpoint
+             never produces — it returns utilisation, throughput, capacity and
+             is_open, and no cost at all — so it was blank on every real
+             network while the table beside it showed a figure. Not two
+             definitions disagreeing: one real metric, and one card reading a
+             field nobody fills.
+             It now reads the SAME total_facility_cost the health table and
+             the spend donut read, so the three cannot disagree, and it names
+             what that figure covers rather than leaving the reader to assume
+             it is everything.
+             (No backticks in this comment: it sits inside a template literal,
+             and one would end the template. See warehouse.js's header.) -->
+        <div class="dash-metric-val" style="color:var(--primary)">${
+          facilityCost === null ? '<span class="wh-absent wh-absent-label">Not reported</span>'
+                                : formatCurrency(facilityCost)}</div>
         <div class="dash-metric-sub">
-          <span>Target: <strong>≥95.0%</strong></span>
-          <!-- Was "↑ 1.8% vs last period". There is no last period: a solve is
-               one point in time and this build stores no prior run. -->
-          <span class="text-muted">Network-wide · no prior solve to compare</span>
+          <span>Handling: <strong>${fac.handlingCost == null
+            ? 'Not reported' : formatCurrencyExact(fac.handlingCost) + '/unit'}</strong></span>
+          <span class="text-muted">Fixed, opening, handling and holding — transport excluded</span>
         </div>
       </div>
 
       <div class="dash-metric-card">
-        <div class="dash-metric-title">Total Operating Cost</div>
-        <div class="dash-metric-val" style="color:var(--primary)">${formatCurrency(kpis?.totalCost?.value ?? null)}</div>
+        <div class="dash-metric-title">Stock Held on Site</div>
+        <!-- IT READS THE ROW THE TABLE READS.
+             This card was headed "Inventory Supply Coverage" and showed
+             kpis.inventoryDays — a field FACILITY_KPIS seeds as null and
+             nothing ever fills — over two hardcoded "Not reported" strings.
+             So Columbus Regional DC read "Not reported" three times while the
+             health table two panels away reported 415 average and 2,117 peak
+             units for that same site: one screen, two answers to "does this
+             site hold stock".
+             Days of coverage is NOT computed here and is not implied. It
+             needs a demand rate and a period length in days, and the solve
+             states neither — so the card reports the quantity the solve did
+             produce, and the coverage line says what is missing rather than
+             printing a number nobody measured.
+             A measured 0 stays 0: a site holding none is not a site nobody
+             measured, and the engine's own inventory_status keeps them
+             apart. -->
+        <div class="dash-metric-val">${stockPeak === null ? absent('Not reported')
+          : `${formatNumber(stockPeak)} <span style="font-size:16px;color:var(--text-3);font-weight:600">units</span>`}</div>
         <div class="dash-metric-sub">
-          <span>Handling: <strong>${fac.handlingCost == null ? '—' : formatCurrencyExact(fac.handlingCost) + '/unit'}</strong></span>
-          <!-- Was "↓ 3.2% vs budget". No budget is loaded anywhere in this build. -->
-          <span class="text-muted">Not attributed per facility</span>
-        </div>
-      </div>
-
-      <div class="dash-metric-card">
-        <div class="dash-metric-title">Inventory Supply Coverage</div>
-        <div class="dash-metric-val">${dash(kpis?.inventoryDays?.value)} <span style="font-size:16px;color:var(--text-3);font-weight:600">days</span></div>
-        <div class="dash-metric-sub">
-          <!-- Were "₹3.4L avg" and "140%", neither computed anywhere. -->
-          <span>Holding value: <strong>—</strong></span>
-          <span>Safety buffer: <strong>—</strong></span>
+          <span>Average held: <strong>${stockAvg === null
+            ? absent('Not reported') : formatNumber(stockAvg)}</strong></span>
+          <span class="text-muted">${stockPeak === null
+            ? escAttr(stockReason)
+            : 'Peak across the horizon · days of coverage not reported by this solve'}</span>
         </div>
       </div>
 
       <div class="dash-metric-card">
         <div class="dash-metric-title">Average Transit Lead Time</div>
-        <div class="dash-metric-val">${avgLead === null ? '—' : avgLead.toFixed(1)} <span style="font-size:16px;color:var(--text-3);font-weight:600">days</span></div>
+        <div class="dash-metric-val">${avgLead === null ? absent('Not reported') : `${avgLead.toFixed(1)} <span style="font-size:16px;color:var(--text-3);font-weight:600">days</span>`}</div>
         <div class="dash-metric-sub">
           <!-- From the transit times on this facility's own lanes. The card
                read a fixed "1.2 days · Fastest 0.3d · Slowest 3.5d" for every
@@ -2336,24 +2480,19 @@ export function renderFacilityDashboard() {
 
       <div class="dash-metric-card">
         <div class="dash-metric-title">Carbon on Connected Corridors</div>
-        <div class="dash-metric-val">${carbonPerUnit === null ? '—' : carbonPerUnit.toFixed(2)} <span style="font-size:16px;color:var(--text-3);font-weight:600">kg CO₂e/u</span></div>
+        <div class="dash-metric-val">${carbonPerUnit === null ? absent('Not reported') : `${carbonPerUnit.toFixed(2)} <span style="font-size:16px;color:var(--text-3);font-weight:600">kg CO₂e/u</span>`}</div>
         <div class="dash-metric-sub">
           <!-- Summed from the solver's per-lane carbon for the lanes attached
                to this facility, and labelled as that rather than as the
                facility's own footprint. Was a fixed "0.42 kg CO2e/u,
                14.8t CO2e/mo, down 2.1% YoY". -->
-          <span>Total: <strong>${carbonTotal === null ? '—' : formatNumber(Math.round(carbonTotal)) + ' kg'}</strong></span>
+          <span>Total: <strong>${carbonTotal === null ? absent('Not reported') : formatNumber(Math.round(carbonTotal)) + ' kg'}</strong></span>
           <span class="text-muted">${carbonTotal === null ? 'no solved flow' : 'inbound + outbound lanes'}</span>
         </div>
       </div>
     `;
   }
 
-  // Tags on Charts
-  const utilTag = document.getElementById('dash-util-tag');
-  if (utilTag) utilTag.textContent = `${utilPct}% Utilisation`;
-  const costTag = document.getElementById('dash-total-cost-tag');
-  if (costTag) costTag.textContent = kpis ? `${formatCurrency(kpis.totalCost.value)} / period` : '— / period';
 
   // Connected Lanes calculation
   const connectedLanes = LANES.filter(l => l.from === state.selectedFacility || l.to === state.selectedFacility).map(l => {
@@ -2367,24 +2506,48 @@ export function renderFacilityDashboard() {
     };
   });
 
-  const laneCountTag = document.getElementById('dash-lane-count-tag');
-  if (laneCountTag) laneCountTag.textContent = `${connectedLanes.length} Active Corridors`;
 
   // Render the 3 Charts
   setTimeout(() => {
-    renderFacilityThroughputChart('chart-dash-throughput', fac);
-    renderFacilityCostBreakdownChart('chart-dash-costs', fac);
+    // The solved per-period series for THIS site — the same record the
+    // explanation beside it reads, so the picture and the sentence cannot
+    // state different throughputs.
+    //
+    // RECORDED ON THE LINE THAT DRAWS IT, like the three network charts. The
+    // chart returns whether it had a series to plot, and "explain this chart"
+    // reads that — so a site the solve gave no per-period figures for is a
+    // chart with nothing on it to explain, rather than a selected facility
+    // that gets explained anyway.
+    recordWarehouseDrawn('throughput_horizon',
+      renderFacilityThroughputChart('chart-dash-throughput', whRow)
+        ? [state.selectedFacility] : []);
+    // The engine's own components for THIS site — the same four that sum to
+    // the Facility Cost card above. It used to be handed the facility and
+    // invent five figures from constants.
+    renderFacilityCostBreakdownChart('chart-dash-costs', whRow);
     renderFacilityLaneFlowsChart('chart-dash-lanes', connectedLanes, state.selectedFacility);
   }, 60);
 
   // Corridor Summary Narrative
-  const totalFlow = connectedLanes.reduce((sum, l) => sum + (l.flow || 0), 0);
+  // Only corridors that reported a volume. `l.flow || 0` counted an absent
+  // reading as zero and folded it into a total presented as the site's whole
+  // throughput.
+  const reportedFlows = connectedLanes
+    .map((l) => (l.flow === null || l.flow === undefined ? null : Number(l.flow)))
+    .filter((v) => v !== null && Number.isFinite(v));
+  const totalFlow = reportedFlows.reduce((sum, v) => sum + v, 0);
   const avgCost = connectedLanes.length > 0 ? (connectedLanes.reduce((sum, l) => sum + (l.cost || 0), 0) / connectedLanes.length).toFixed(1) : 0;
   const summaryEl = document.getElementById('dash-corridor-summary');
   if (summaryEl) {
     summaryEl.innerHTML = `
       <div style="font-weight:700;color:var(--text-1);margin-bottom:6px">Corridor Network Health</div>
-      <div>• <strong>${connectedLanes.length} active transportation corridors</strong> handle a collective flow of <strong>${formatNumber(totalFlow)} ${perPeriodLabel()}</strong>.</div>
+      <div>• <strong>${connectedLanes.length} active transportation corridors</strong>${
+        reportedFlows.length
+          ? ` handle a collective flow of <strong>${formatNumber(totalFlow)} ${perPeriodLabel()}</strong>`
+            + (reportedFlows.length < connectedLanes.length
+                ? `, across the ${reportedFlows.length} that report a volume`
+                : '')
+          : ', none of which reports a solved volume'}.</div>
       <div class="mt-xs">• Weighted average transportation rate across all active arcs is <strong>${formatCurrencyExact(avgCost)} / unit</strong>.</div>
       <!-- Was "on-time transit confidence of 98.2%", a figure nothing in this
            build measures. Replaced with a fact the corridor set does carry. -->
@@ -2401,11 +2564,17 @@ export function renderFacilityDashboard() {
       <tr>
         <td><strong>${l.peerName}</strong></td>
         <td><span class="tag ${l.direction === 'Inbound' ? 'tag-primary' : 'tag-muted'}">${l.direction}</span></td>
-        <td class="num">${formatNumber(l.flow)} ${perPeriodLabel()}</td>
-        <td class="num">${formatNumber(l.distance)} km</td>
-        <td class="num font-bold">${l.cost == null ? '—' : formatCurrencyExact(l.cost)}</td>
-        <td class="num">${l.leadTime} days</td>
-        <td><span class="tag tag-success">${l.mode}</span></td>
+        <td class="num">${l.flow === null || l.flow === undefined
+          ? absent('Not reported')
+          : `${formatNumber(l.flow)} ${perPeriodLabel()}`}</td>
+        <td class="num">${l.distance == null
+          ? absent('Not reported') : `${formatNumber(l.distance)} km`}</td>
+        <td class="num font-bold">${l.cost == null
+          ? absent('Not reported') : formatCurrencyExact(l.cost)}</td>
+        <td class="num">${l.leadTime == null
+          ? absent('Not reported') : `${l.leadTime} days`}</td>
+        <td>${l.mode ? `<span class="tag tag-muted">${l.mode}</span>`
+          : absent('Not reported')}</td>
       </tr>
     `).join('');
   }
@@ -4370,140 +4539,4 @@ function showNotification(message) {
     notif.style.transition = 'opacity .3s';
     setTimeout(() => notif.remove(), 300);
   }, 4000);
-}
-
-// ─── KPI Export Report ───────────────────────────────────────
-/** One CSV field: quoted, with embedded quotes doubled, never "undefined". */
-function csvCell(value) {
-  if (value === null || value === undefined || value === '') return '"Not available"';
-  return '"' + String(value).split('"').join('""') + '"';
-}
-
-/**
- * Read one exported figure out of a facility KPI record.
- *
- * The record's fields are OBJECTS — `{ value, unit, delta }` — and the export
- * interpolated them straight into a string, so "On-Time Service SLA" left the
- * building as the literal text `[object Object]`. Three other rows named keys
- * (`cost`, `invDays`, `fillRate`) that no record has ever carried, so they
- * exported "Not available" on a fully solved network.
- */
-function kpiField(kpis, key) {
-  const entry = kpis && kpis[key];
-  if (entry === null || entry === undefined) return null;
-  const value = (typeof entry === 'object') ? entry.value : entry;
-  return (value === null || value === undefined || Number.isNaN(Number(value)))
-    ? null : value;
-}
-
-export function exportFacilityReport() {
-  const facId = state.selectedFacility;
-  const fac = getFacilityById(facId) || DCS[0] || PLANTS[0];
-  if (!fac) { showNotification('No facility is loaded to export.'); return; }
-  const kpis = getKpisForFacility(facId, state.selectedPeriod) || {};
-  const insights = getInsightsForFacility(facId);
-
-  const util = kpiField(kpis, 'util');
-  const sla = kpiField(kpis, 'sla');
-  const cost = kpiField(kpis, 'totalCost');
-  const invDays = kpiField(kpis, 'inventoryDays');
-  const throughput = kpiField(kpis, 'throughput') ?? fac.throughput;
-  const capacity = kpiField(kpis, 'capacity') ?? fac.capacity;
-  const perPeriod = perPeriodLabel();
-  const ccy = getActiveCurrency();
-
-  // Location from what the network actually carries. `fac.city`, `fac.state`
-  // and `fac.region` are not fields on a loaded facility, so this row exported
-  // "undefined, undefined (undefined Region)" for every facility of every
-  // project — including the ones whose coordinates were on screen beside it.
-  const coords = (typeof fac.lat === 'number' && typeof fac.lng === 'number')
-    ? `${fac.lat.toFixed(4)}, ${fac.lng.toFixed(4)}` : null;
-  const location = [fac.name, NETWORK_GEOGRAPHY.region].filter(Boolean).join(' — ');
-
-  const lines = [
-    '=== NetGravity Facility Performance Report ===',
-    'Generated,' + csvCell(new Date().toISOString()),
-    'Facility,' + csvCell(fac.name),
-    'Facility ID,' + csvCell(fac.id),
-    'Facility Type,' + csvCell(isPlantFacility(fac.id) ? 'Manufacturing Plant' : 'Distribution Centre'),
-    'Location,' + csvCell(location),
-    'Coordinates,' + csvCell(coords),
-    'Currency,' + csvCell(ccy),
-    'Planning horizon,' + csvCell(horizonLabel() || `${SOLVE_HORIZON.periodsModelled} period`),
-    'Period shown,' + csvCell(state.selectedPeriod || 'as uploaded'),
-    '',
-    '=== Operational Telemetry ===',
-    // An exported figure is evidence a reader may act on, so a metric the
-    // engine did not produce is exported as "Not available" — never as a
-    // plausible-looking number, and never with a status ("Target Met",
-    // "Healthy") asserted over a value that does not exist. Peak utilisation
-    // has no forecast behind it at all, so it is always reported as absent.
-    `Capacity (units/${perPeriod}),` + csvCell(capacity),
-    `Throughput (units/${perPeriod}),` + csvCell(throughput),
-    'Utilisation %,' + csvCell(util === null ? null : Number(util).toFixed(2)),
-    'Projected Peak Utilisation,' + csvCell(null) + ',"no demand forecast for this facility"',
-    '',
-    '=== Core Performance KPIs ===',
-    'Metric,Value,Unit,Status',
-    'Demand served within SLA,' + csvCell(sla) + ',' + csvCell('%')
-      + ',' + csvCell(sla === null ? null : 'Reported'),
-    'Operating cost,' + csvCell(cost) + ',' + csvCell(ccy)
-      + ',' + csvCell(cost === null ? null : 'Reported'),
-    'Inventory days of supply,' + csvCell(invDays) + ',' + csvCell('days')
-      + ',' + csvCell(invDays === null ? null : 'Reported'),
-    '',
-    '=== Findings ===',
-    'Insight ID,Severity,Summary',
-  ];
-
-  if (insights && insights.length > 0) {
-    insights.forEach(function (ins) {
-      lines.push([
-        csvCell(ins.id),
-        // The insight's own severity, or absence. It was defaulted to
-        // "Critical", which asserts a severity the engine never assigned.
-        csvCell(ins.impact || ins.severity),
-        csvCell(ins.title || ins.headline || ins.desc),
-      ].join(','));
-    });
-  } else {
-    // No insight has been generated for this network. Exporting two invented
-    // ones about the prototype's demo footprint would put fabricated findings
-    // into a file the user may circulate as analysis.
-    lines.push(csvCell('') + ',' + csvCell('No insight')
-      + ',' + csvCell('No insight has been generated for this network yet.'));
-  }
-
-  // The other half of the same screen. One button on the panel, so one file:
-  // the reader who exports the KPI dashboard gets every metric that was on it,
-  // not the half that happened to sit under the button they pressed.
-  lines.push('');
-  lines.push(...warehouseHealthCsvLines());
-
-  // A Blob with an explicit filename, not a `data:` URL. Chrome ignores the
-  // `download` attribute's name on long data: URLs and saves the report under a
-  // generated temporary name, which is how an export meant to be circulated
-  // arrived as an unidentifiable file.
-  const stamp = new Date().toISOString().slice(0, 10);
-  const blob = new Blob(['﻿' + lines.join('\r\n')],
-                        { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  // Named for the screen, not for one facility. The file now carries every
-  // site in the network as well as the selected one, and a filename naming a
-  // single site would have a reader circulate it as that site's report.
-  link.download = `NetGravity_KPI_Dashboard_${stamp}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-
-  showNotification('Exported the KPI dashboard \u2014 the facility network '
-                   + 'and ' + fac.name + '.');
-}
-
-// Expose export on window
-if (typeof window !== 'undefined') {
-  window.exportFacilityReport = exportFacilityReport;
 }

@@ -1195,7 +1195,18 @@ export function formatNumber(value) {
   // 14,35,985, which is right for an Indian reader and unreadable to anyone
   // else. It was hardcoded on every screen.
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
-  return Number(value).toLocaleString(numberLocale());
+  // WHOLE UNITS. A solver returns continuous quantities, so a facility's
+  // throughput arrived as 10982.667 and was printed as "10,982.667
+  // units/month" — three decimal places of a unit nobody can ship, on a
+  // screen a planner scans. The precision is real and it is meaningless: it
+  // is an artefact of a continuous relaxation, not a measured third decimal.
+  //
+  // Callers that genuinely need decimals (a rate per unit, a lead time in
+  // days) already format them themselves with toFixed, and currency has its
+  // own formatter.
+  return Number(value).toLocaleString(numberLocale(), {
+    maximumFractionDigits: 0,
+  });
 }
 
 // Single owner for the utilization risk bands used everywhere in the app

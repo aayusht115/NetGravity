@@ -716,31 +716,205 @@
             <!-- What these figures are OF. A peak reading means nothing
                  without the horizon it is the peak of. -->
             <div class="text-xs" id="wh-basis" style="color:var(--text-2);min-width:0">&mdash;</div>
-            <button class="btn btn-secondary btn-export-kpi" id="btn-export-kpi" data-action="exportFacilityReport"
-                    title="Export every metric on this screen — the whole network and the selected facility — to CSV"
+            <!-- ONE EXPORT. The PDF is the view as it looks, with the
+                 filters that produced it named on it — which is the thing a
+                 reader circulates. A second format behind a menu was one more
+                 click in front of the only one anybody asked for. -->
+            <button class="btn btn-secondary btn-export-kpi" id="btn-export-pdf" type="button"
+                    title="Export the current view as a PDF"
                     style="display:inline-flex;align-items:center;gap:6px;padding:7px 16px;font-size:12.5px;font-weight:600;border-radius:8px;background:#ffffff;border:1px solid #e5e7eb;color:#374151;cursor:pointer;flex-shrink:0">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
               </svg>
-              <span>Export KPI Report (CSV)</span>
+              <span>Export PDF</span>
             </button>
           </div>
 
-          <!-- 1. The roll-up -->
-          <div class="grid-4 mb-lg" id="wh-summary-grid"></div>
+          <!-- WHAT THIS PAGE IS, for the copy that leaves the building.
+               Screen-hidden and print-only: a PDF that does not name the
+               project, the horizon and the filters behind its numbers is a
+               page of figures nobody can check later. -->
+          <div class="kpi-print-head" id="kpi-print-head" aria-hidden="true">
+            <div class="kpi-print-brand">
+              <svg width="26" height="26" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+                <path d="M10 38 24 10l14 28" stroke="#9218EA" stroke-width="3" stroke-linejoin="round"/>
+                <circle cx="24" cy="10" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+                <circle cx="10" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+                <circle cx="38" cy="38" r="5" fill="#fff" stroke="#9218EA" stroke-width="3"/>
+              </svg>
+              <div>
+                <div class="kpi-print-title">Netgravity <span>by Kearney</span></div>
+                <div class="kpi-print-sub">Network KPIs &amp; Analytics</div>
+              </div>
+            </div>
+            <dl class="kpi-print-meta" id="kpi-print-meta"></dl>
+          </div>
+
+          <!-- TIER 1 — WHICH LENS, and therefore WHICH SCORECARD.
+
+               The whole network, storage sites, production sites, or the
+               corridors between them. Network is first and is where the screen
+               lands: a reader arriving from the Overview arrives with a
+               network-level question, and the four figures they just read are
+               the four this tab shows.
+
+               Switching lens always returns to that lens's whole population;
+               it never carries a selected site across, because "Atlanta" on
+               the Plants tab would be a different site or no site at all. -->
+          <div class="kpi-domain-bar" id="kpi-domain-bar" role="tablist">
+            <button class="kpi-domain-tab active" data-domain="network" role="tab">Network</button>
+            <button class="kpi-domain-tab" data-domain="dc" role="tab">Distribution Centres</button>
+            <button class="kpi-domain-tab" data-domain="plant" role="tab">Plants</button>
+            <button class="kpi-domain-tab" data-domain="lane" role="tab">Freight &amp; Lanes</button>
+          </div>
+
+          <!-- TIER 0 — THE SCORECARD, WHICH DESCRIBES WHATEVER IS SELECTED.
+
+               It is NOT fixed. A row of network totals held constant above a
+               screen filtered to three southern sites answers a question the
+               reader has stopped asking — and the first card read
+               "Distribution facilities 8 of 9" while the Plants tab was open,
+               which is the contradiction this screen was rebuilt to remove.
+
+               So there is one row and it follows the scope:
+
+                 * Network  the four figures the Overview states, rendered by
+                            Overview's OWN renderer against the authoritative
+                            KPI layer, so the two screens cannot disagree;
+                 * a lens   that population counted and measured, narrowing
+                            again with every filter applied to it.
+          -->
+          <div id="kpi-network-strip" class="home2-kpi-strip">
+            <div class="home2-kpi-strip-row" id="kpi-network-strip-row"></div>
+          </div>
+          <div class="grid-4" id="wh-summary-grid"></div>
+          <!-- The corridor lens's own three. It had NONE, and the facility
+               grid above was left on screen carrying whatever the previous
+               lens had rendered — plant counts above a corridor table, with
+               no caption to say so. -->
+          <div class="grid-3" id="kpi-lane-summary"></div>
+          <div class="text-xs kpi-scorecard-note" id="kpi-scorecard-note"></div>
+          <!-- WHERE THE REST OF THE MONEY IS.
+               The network cost has four parts and the solve knows three of
+               them per site. Inventory it decides for the network as a whole,
+               so adding up every facility comes up short by that amount — and
+               a reader who does the sum concludes the page is broken. Naming
+               the gap costs one line; spreading it across sites on an
+               allocation nobody solved for would put an invented number
+               beside solved ones. -->
+          <div class="text-xs kpi-cost-note" id="kpi-cost-attribution" hidden></div>
+
+          <!-- TIER 2 — HOW FAR IN. Region and Status narrow the population;
+               Facility drills into one site. Every control writes to one view
+               state, and one render reads it, so no card can be left showing a
+               wider population than the one beside it. -->
+          <!-- ONE CONTROL, ONE THING.
+
+               The Status slot used to be relabelled "Mode" on the corridor
+               lens — one select that meant two different things depending on
+               a tab, which is a control a reader has to check before they can
+               trust. Each dimension now has its own, and each lens shows only
+               the ones that describe it: a corridor has no health band and a
+               facility has no origin. -->
+          <div class="kpi-filter-bar" id="kpi-filter-bar">
+            <!-- ONE ELEVATED PANEL, APPLIED TOGETHER.
+
+                 Three bare selects in a row read as a form, and each one
+                 re-solved the screen the moment it changed — so narrowing by
+                 region and then by status redrew everything twice, and the
+                 reader watched the page move under a decision they had not
+                 finished making. Choices are staged in the panel and committed
+                 by one purple Apply.
+
+                 The trigger carries whatever is active, so a filtered screen
+                 says it is filtered with the panel shut. -->
+            <div class="kpi-filters" id="kpi-filters">
+              <button type="button" class="kpi-filters-trigger" id="kpi-filters-trigger"
+                      aria-haspopup="dialog" aria-expanded="false">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                  <path d="M3 5h18M7 12h10M11 19h2"/>
+                </svg>
+                <span id="kpi-filters-label">Filters</span>
+                <span class="kpi-filters-count" id="kpi-filters-count" hidden></span>
+              </button>
+
+              <div class="kpi-filters-panel" id="kpi-filters-panel" hidden role="dialog"
+                   aria-label="Filter this view">
+                <label class="kpi-filter" id="kpi-filter-entity-wrap"><span>Facility</span>
+                  <select class="control-select" id="kpi-filter-entity"></select></label>
+                <label class="kpi-filter" id="kpi-filter-region-wrap"><span>Region</span>
+                  <select class="control-select" id="kpi-filter-region"></select></label>
+                <label class="kpi-filter" id="kpi-filter-status-wrap"><span>Status</span>
+                  <select class="control-select" id="kpi-filter-status"></select></label>
+                <label class="kpi-filter" id="kpi-filter-origin-wrap"><span>Origin</span>
+                  <select class="control-select" id="kpi-filter-origin"></select></label>
+                <label class="kpi-filter" id="kpi-filter-dest-wrap"><span>Destination</span>
+                  <select class="control-select" id="kpi-filter-dest"></select></label>
+                <label class="kpi-filter" id="kpi-filter-mode-wrap"><span>Mode</span>
+                  <select class="control-select" id="kpi-filter-mode"></select></label>
+                <div class="kpi-filters-actions">
+                  <button type="button" class="kpi-filter-reset" id="kpi-filter-reset">Reset filters</button>
+                  <button type="button" class="kpi-filters-apply" id="kpi-filters-apply">Apply</button>
+                </div>
+              </div>
+            </div>
+            <div class="kpi-showing" id="kpi-showing">&mdash;</div>
+          </div>
+
+          <!-- Where the reader is, and the way back out. Hidden until a site
+               is actually selected: a breadcrumb on the roll-up would name a
+               level nobody has entered. -->
+          <div class="kpi-breadcrumb" id="kpi-breadcrumb" style="display:none">
+            <button class="kpi-crumb-back" id="kpi-crumb-back" type="button">&larr; Back to all</button>
+            <span class="kpi-crumb-trail" id="kpi-crumb-trail"></span>
+          </div>
+
+          <!-- ONE EXPLANATION, ANCHORED OVER THE CHART IT IS ABOUT.
+
+               It is moved into the selected chart card and positioned over
+               it, rather than inserted into the page flow. That is what keeps
+               the promise the grid needs: an OVERLAY takes no space, so the
+               chart card's height and its neighbour's position are identical
+               whether or not anything has been explained.
+
+               One element, moved — never a copy per chart. Two briefings open
+               at once leaves the reader working out which one belongs to the
+               thing they just clicked.
+
+               It carries a headline and two or three sentences and nothing
+               else: no evidence list, no "why it matters", no next step, no
+               calculation note. The numbers are IN the sentences, checked
+               against the deterministic results before they get here. -->
+          <div class="kpi-ai-overlay" id="kpi-explain-card" hidden>
+            <div class="kpi-ai-head">
+              <span class="kpi-ai-label">&#10022; Netgravity AI</span>
+              <button class="kpi-ai-close" id="kpi-explain-close" type="button"
+                      aria-label="Close explanation">&times;</button>
+            </div>
+            <div class="kpi-ai-body" id="kpi-explain-body"></div>
+          </div>
+
+          <!-- ── ROLL-UP: the whole population of the current lens ── -->
+          <div id="kpi-rollup">
 
           <!-- 2. Named, with the reason -->
           <div id="wh-attention" class="mb-lg"></div>
 
-          <!-- 3. The picture -->
+          <!-- CAPACITY FIRST, then cost, then the detail.
+               The screen answers "can this network carry its demand" before
+               "what is it spending" — a reader who opens the KPI page opens it
+               because something is tight, and the two charts that say whether
+               anything is tight now sit together at the top instead of one
+               here and one in the row below. -->
+          <div class="kpi-section-head">Capacity</div>
           <div class="grid-2 mb-lg">
             <div class="card">
               <div class="card-header">
                 <div>
                   <div class="card-title">Peak vs Average Utilisation</div>
-                  <div class="card-subtitle">Every open site, against the 90% threshold</div>
+                  <div class="card-subtitle" id="wh-util-subtitle">Every open site, against the 90% threshold</div>
                 </div>
-                <span class="tag tag-muted" id="wh-util-tag">&mdash;</span>
               </div>
               <div class="chart-wrap" style="height:300px">
                 <canvas id="chart-wh-utilisation"></canvas>
@@ -750,40 +924,51 @@
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title">Where the Facility Spend Sits</div>
-                  <div class="card-subtitle">Fixed, opening, handling and holding — transport excluded</div>
+                  <div class="card-title">Capacity and What It Carries</div>
+                  <!-- Headroom in UNITS, which is the reading the per-cent
+                       chart beside it ranks the wrong way round: 95% of 200
+                       units is 10 spare, 80% of 40,000 is 8,000. -->
+                  <div class="card-subtitle">How much of each site's rated capacity is used, in units</div>
                 </div>
-                <span class="tag tag-primary" id="wh-spend-tag">&mdash;</span>
               </div>
               <div class="chart-wrap" style="height:300px">
-                <canvas id="chart-wh-spend"></canvas>
+                <canvas id="chart-wh-headroom"></canvas>
               </div>
             </div>
           </div>
 
-          <!-- 3b. The same network, three more ways.
-
-               Every figure here is already in the table below. They are drawn
-               because a table answers "what is THIS site" and a chart answers
-               "what is this NETWORK", and no row can do the second:
-
-                 * the mix says how many sites are in trouble against how many
-                   are fine, before any name is read;
-                 * headroom in units says where the next volume can actually
-                   go — 95% of 200 units is 10 spare, 80% of 40,000 is 8,000,
-                   and the per-cent chart above ranks those the wrong way
-                   round for that question;
-                 * stock says whether a site holds for a season or holds a
-                   constant buffer, which is the gap between its two bars.
-          -->
+          <div class="kpi-section-head">Cost and operations</div>
           <div class="grid-3 mb-lg">
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title">Network Status Mix</div>
+                  <div class="card-title">Where the Facility Spend Sits</div>
+                  <!-- It said "and holding", but holding is decided for the
+                       network rather than per site, so the slices almost never
+                       contain any — a subtitle promising a component the chart
+                       does not show. -->
+                  <div class="card-subtitle">Fixed, opening and handling per site — transport and inventory are network-level</div>
+                </div>
+              </div>
+              <!-- Canvas and legend side by side. The legend is DOM so a long
+                   name ellipsises to the room it has and the AMOUNT beside it
+                   never clips — a drawn legend cut the digits instead. -->
+              <div class="ng-chart-with-legend" style="height:260px">
+                <div class="chart-wrap"><canvas id="chart-wh-spend"></canvas></div>
+                <ul class="ng-legend" id="legend-wh-spend"></ul>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-header">
+                <div>
+                  <!-- Named for the lens: on the Plants tab this is a mix of
+                       plants, and calling it the network's would be a third
+                       thing on screen describing a population it is not
+                       about. -->
+                  <div class="card-title" id="wh-mix-title">Network Status Mix</div>
                   <div class="card-subtitle">How many sites sit in each state</div>
                 </div>
-                <span class="tag tag-muted" id="wh-mix-tag">&mdash;</span>
               </div>
               <div class="chart-wrap" style="height:260px">
                 <canvas id="chart-wh-mix"></canvas>
@@ -793,23 +978,9 @@
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title">Capacity and What It Carries</div>
-                  <div class="card-subtitle">How much of each site's rated capacity is used, in units</div>
-                </div>
-                <span class="tag tag-muted" id="wh-headroom-tag">&mdash;</span>
-              </div>
-              <div class="chart-wrap" style="height:260px">
-                <canvas id="chart-wh-headroom"></canvas>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card-header">
-                <div>
                   <div class="card-title">Stock Held</div>
-                  <div class="card-subtitle">Average against peak, per site</div>
+                  <div class="card-subtitle" id="wh-stock-subtitle">Average against peak, per site</div>
                 </div>
-                <span class="tag tag-muted" id="wh-stock-tag">&mdash;</span>
               </div>
               <!-- A model that carries no inventory decisions has no stock to
                    draw. The note REPLACES the canvas and states the reason —
@@ -822,6 +993,7 @@
             </div>
           </div>
 
+          <div class="kpi-section-head">Detail</div>
           <!-- 5. Every site -->
           <div class="card mb-lg">
             <div class="card-header">
@@ -829,7 +1001,6 @@
                 <div class="card-title">Facility Health</div>
                 <div class="card-subtitle">Sorted by what needs attention first</div>
               </div>
-              <span class="tag tag-muted" id="wh-health-count">&mdash;</span>
             </div>
             <div class="table-wrap">
               <table class="ng-table" id="table-wh-health">
@@ -852,6 +1023,78 @@
               </table>
             </div>
           </div>
+
+          </div><!-- /#kpi-rollup -->
+
+          <!-- ── FREIGHT & LANES: the corridors, network-wide ──
+               A different population from the two facility lenses, so it gets
+               its own container rather than a filtered facility table. Built
+               by `renderLaneView()` in kpi-view.js from the same LANES the
+               map and the corridor tables already read. -->
+          <div id="kpi-lanes" style="display:none">
+            <div class="grid-2 mb-lg">
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Highest-Cost Corridors</div>
+                    <!-- The BASIS is stated by the tag beside this, not here:
+                         it is spend where the solve produced a flow to spend
+                         on, and the rate where it did not. A fixed subtitle
+                         naming one of them would be wrong half the time. -->
+                    <div class="card-subtitle">What each corridor costs the plan</div>
+                  </div>
+                </div>
+                <div id="kpi-lane-top"></div>
+              </div>
+
+              <div class="card">
+                <div class="card-header">
+                  <div>
+                    <div class="card-title">Transport Mode Split</div>
+                    <div class="card-subtitle">Corridors by the mode each one is carried on</div>
+                  </div>
+                </div>
+                <div id="kpi-lane-modes"></div>
+              </div>
+            </div>
+
+            <div class="card mb-lg">
+              <div class="card-header">
+                <div>
+                  <div class="card-title">Corridor Telemetry</div>
+                  <div class="card-subtitle" id="kpi-lane-table-sub">Every corridor in the current view</div>
+                </div>
+                <!-- FIND, not filter. The selects above scope the whole lens;
+                     this only narrows the rows of this table, which is what a
+                     reader wants when they know the corridor they are looking
+                     for and do not want to change what the cards above them
+                     are reporting. -->
+                <label class="kpi-table-search">
+                  <span class="sr-only">Search corridors</span>
+                  <input type="search" id="kpi-lane-search" autocomplete="off"
+                         placeholder="Search origin, destination or mode">
+                </label>
+              </div>
+              <div class="table-wrap table-wrap-sticky">
+                <table class="ng-table" id="table-kpi-lanes">
+                  <thead>
+                    <tr>
+                      <th>Corridor</th>
+                      <th class="num">Flow</th>
+                      <th class="num">Distance</th>
+                      <th class="num">Cost / unit</th>
+                      <th class="num">Transit time</th>
+                      <th>Mode</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div><!-- /#kpi-lanes -->
+
+          <!-- ── ONE SITE: everything below is scoped to the selection ── -->
+          <div id="kpi-entity" style="display:none">
 
           <!-- Which facility the cards below are about. -->
           <!--
@@ -885,10 +1128,12 @@
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title">Throughput vs Capacity Horizon</div>
-                  <div class="card-subtitle">12-Month History + 3-Month Projection · Capacity Ceiling</div>
+                  <div class="card-title">Throughput vs Capacity</div>
+                  <!-- No projection. The solve produces none, and the card
+                       used to promise "3-Month Projection" over a curve it
+                       had compounded itself. -->
+                  <div class="card-subtitle">Solved throughput each period, against rated capacity</div>
                 </div>
-                <span class="tag tag-muted" id="dash-util-tag">&mdash;</span>
               </div>
               <div class="chart-wrap" style="height:280px">
                 <canvas id="chart-dash-throughput"></canvas>
@@ -898,10 +1143,13 @@
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title">Operational Cost Breakdown</div>
-                  <div class="card-subtitle">Transport, Handling, Storage, Holding & Accessorials</div>
+                  <div class="card-title">Facility Cost Breakdown</div>
+                  <!-- The four components the engine reports for a site, which
+                       sum to the Facility Cost card above. Transport is NOT
+                       among them: the model does not attribute it to a site,
+                       and the old subtitle named it first. -->
+                  <div class="card-subtitle">Fixed, opening, handling and holding — transport excluded</div>
                 </div>
-                <span class="tag tag-primary" id="dash-total-cost-tag">₹11.8L / period</span>
               </div>
               <div class="chart-wrap" style="height:280px">
                 <canvas id="chart-dash-costs"></canvas>
@@ -916,7 +1164,6 @@
                 <div class="card-title">Connected Corridor Flows & Cost per Unit</div>
                 <div class="card-subtitle">Inbound supply from plants & Outbound dispatches to demand markets</div>
               </div>
-              <span class="tag tag-muted" id="dash-lane-count-tag">4 Active Arcs</span>
             </div>
             <div class="grid-2-1" style="gap:var(--space-lg);align-items:center">
               <div class="chart-wrap" style="height:220px">
@@ -949,6 +1196,8 @@
               </table>
             </div>
           </div>
+
+          </div><!-- /#kpi-entity -->
 
         </section>
 
@@ -1321,6 +1570,14 @@
                 <div class="scn-map-wrap" id="scenario-map-wrap">
                   <div id="scenario-leaflet-map" style="width:100%;height:100%"></div>
                 </div>
+                <!-- The key sits BELOW the map, not over it. As a Leaflet
+                     control it covered the bottom-right corner of a panel the
+                     reader is trying to read a network out of, and the corner
+                     it covered is where a national network's southern sites
+                     sit. Below the map it is a four-column strip: the same
+                     rows, the same chips, roughly a fifth of the height, and
+                     nothing hidden underneath it. Filled by `addLegend`. -->
+                <div class="tw-legend tw-legend-below" id="scenario-map-legend"></div>
               </div>
             </div>
 

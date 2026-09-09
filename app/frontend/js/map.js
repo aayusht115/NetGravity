@@ -1092,34 +1092,52 @@ export function renderMapLegendCounts() {
   });
 }
 
+/**
+ * The scenario key's host BELOW the map, or null on any page without one.
+ *
+ * The scenario key is not a Leaflet control. Over the map it covered the
+ * bottom-right corner of the panel — which on a national network is where the
+ * southern sites are — and it had to be bounded and scrolled to fit inside a
+ * `clamp(360px, 46vh, 520px)` box, so a reader at a short viewport was
+ * scrolling a key to read it. Below the map it lays its four groups out as
+ * columns, occupies about a fifth of the height, and hides nothing.
+ */
+function scenarioLegendHost() {
+  if (typeof document === 'undefined') return null;
+  return document.getElementById('scenario-map-legend');
+}
+
 function addLegend(map, isCompact = false) {
+  if (isCompact) {
+    // THE SAME KEY THE TWIN USES, plus the three encodings only a scenario
+    // map has. This branch used to render three rows — plant, DC, market —
+    // on the grounds that the scenario map was a thumbnail. It is the
+    // full-width panel at the foot of the page, and it was drawing a purple
+    // dashed corridor for a moved lane, a grey one for an unmoved one and a
+    // utilisation band on every DC, with a key that explained none of them.
+    //
+    // Rendered into the page rather than mounted on the map — see
+    // `scenarioLegendHost`. No control is registered for this map, so
+    // `refreshTwinMapLegend` reaches it through the host instead.
+    const host = scenarioLegendHost();
+    if (host) host.innerHTML = scenarioLegendHtml(perPeriodLabel());
+    setTimeout(renderMapLegendCounts, 0);
+    return;
+  }
   const legend = L.control({ position: 'bottomright' });
   legend.onAdd = function () {
+    // The Digital Twin's own map, and the only map this mounts a control on.
+    // Built from `twinLegendHtml` so it says exactly what the 3D twin's
+    // legend says — the two used to be written out separately in two files
+    // and had already drifted, the 2D one keying the DC ring at
+    // >95/85-95/<85 in one set of colours and the 3D one at the same bands
+    // in another.
     const div = L.DomUtil.create('div');
-    if (isCompact) {
-      // THE SAME KEY THE TWIN USES, plus the three encodings only a scenario
-      // map has. This branch used to render three rows — plant, DC, market —
-      // on the grounds that the scenario map was a thumbnail. It is the
-      // full-width panel at the foot of the page, and it was drawing a purple
-      // dashed corridor for a moved lane, a grey one for an unmoved one and a
-      // utilisation band on every DC, with a key that explained none of them.
-      div.className = 'tw-legend tw-legend-2d tw-legend-scenario';
-      div.innerHTML = scenarioLegendHtml(perPeriodLabel());
-      L.DomEvent.disableClickPropagation(div);
-      L.DomEvent.disableScrollPropagation(div);
-    } else {
-      // The Digital Twin's own map, and the only place this branch renders.
-      // Built from `twinLegendHtml` so it says exactly what the 3D twin's
-      // legend says — the two used to be written out separately in two files
-      // and had already drifted, the 2D one keying the DC ring at
-      // >95/85-95/<85 in one set of colours and the 3D one at the same bands
-      // in another.
-      div.className = 'tw-legend tw-legend-2d';
-      div.innerHTML = twinLegendHtml(perPeriodLabel());
-      // A legend is a thing you read, not a thing you pan the map with.
-      L.DomEvent.disableClickPropagation(div);
-      L.DomEvent.disableScrollPropagation(div);
-    }
+    div.className = 'tw-legend tw-legend-2d';
+    div.innerHTML = twinLegendHtml(perPeriodLabel());
+    // A legend is a thing you read, not a thing you pan the map with.
+    L.DomEvent.disableClickPropagation(div);
+    L.DomEvent.disableScrollPropagation(div);
     return div;
   };
   legend.addTo(map);
@@ -1148,12 +1166,13 @@ function legendKeyFor(map) {
 export function refreshTwinMapLegend() {
   if (typeof document === 'undefined') return;
   document.querySelectorAll('.tw-legend-2d').forEach((el) => {
-    // Each legend redraws as what it IS. Rewriting every `.tw-legend-2d` with
-    // `twinLegendHtml` would strip the scenario map's own three rows on the
-    // first refresh after a network loaded — which is every refresh.
-    el.innerHTML = el.classList.contains('tw-legend-scenario')
-      ? scenarioLegendHtml(perPeriodLabel())
-      : twinLegendHtml(perPeriodLabel());
+    el.innerHTML = twinLegendHtml(perPeriodLabel());
   });
+  // The scenario key is not a map control and is not matched by the selector
+  // above. It redraws as what it IS: rewriting it with `twinLegendHtml` would
+  // strip its own three scenario rows on the first refresh after a network
+  // loaded — which is every refresh.
+  const host = scenarioLegendHost();
+  if (host) host.innerHTML = scenarioLegendHtml(perPeriodLabel());
   renderMapLegendCounts();
 }
