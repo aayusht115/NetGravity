@@ -832,6 +832,15 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         city_col = _pick(cl, "city", "location", "town")
         sla_col = _pick(cl, "service_sla_days", "sla_days", "sla", "service_level_days")
         demand_col = _pick(cl, *DEMAND_COLS)
+        # The required fill rate for this market. `DemandRecord.service_level`
+        # has always existed and defaults to 0.95, and the service module
+        # scores the plan against it — but this path never read the column, so
+        # every market on every upload was scored against 0.95 whether or not
+        # the workbook stated its own target. Deliberately NOT matched against
+        # the "service_level_days" spelling above: that is an SLA in days and
+        # is already claimed by `sla_col`.
+        svc_col = _pick(cl, "service_level", "csl", "service_level_pct",
+                        "service_level_target", "target_fill_rate", "fill_rate")
 
         for idx, row in df.iterrows():
             m_id = _text(row, id_col)
@@ -854,6 +863,11 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 # from that history below, never defaulted.
                 "demand": _num(row, demand_col),
                 "slaDays": _num(row, sla_col),
+                # None when the sheet does not state one, so the record keeps
+                # its documented default rather than being given a target the
+                # client never set. The completeness gate reads the same
+                # absence and asks for it.
+                "serviceLevel": _num(row, svc_col),
                 "priority": None,
                 "region": region,
                 "coordsExact": exact,
@@ -882,6 +896,12 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         dest_type_col = _pick(cl, "destination_type", "dest_type", "to_type")
         active_col = _pick(cl, "active", "is_active", "status")
         cap_col = _pick(cl, "capacity_units", "lane_capacity", "max_units")
+        # The client’s own emission factor for this corridor.
+        # `CarbonModule.get_emission_factor()` takes it in preference to the
+        # GLEC table it otherwise uses for the lane’s mode, so this is the one
+        # carbon input an upload can actually change.
+        ef_col = _pick(cl, "emission_factor_override", "emission_factor",
+                       "carbon_factor", "co2_factor", "kg_co2_per_tonne_km")
 
         for _, row in df.iterrows():
             f_id, t_id = _text(row, from_col), _text(row, to_col)
@@ -921,6 +941,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 "cost": _num(row, rate_col),
                 "leadTime": _num(row, lead_col),
                 "capacity": _num(row, cap_col),
+                "emissionFactor": _num(row, ef_col),
                 # Flow is a solver OUTPUT, not an input.
                 "flow": None,
                 # The uploaded mode, or None. This was the literal "ROAD" for
@@ -968,17 +989,31 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
     #: formatting slip; it was the wrong unit on an authoritative figure.
     currency: Optional[str] = None
     currency_basis: str = ""
+    #: Every fuel surcharge the rates table stated, one entry per priced row.
+    surcharges: List[float] = []
     for _, df in sheets("lane_rates"):
         cl = {str(c).strip().lower(): c for c in df.columns}
         lane_col = _pick(cl, *LANE_ID_COLS)
         prod_col = _pick(cl, *PRODUCT_ID_COLS)
         rate_col = _pick(cl, *RATE_COLS)
         currency_col = _pick(cl, *CURRENCY_COLS)
+        surcharge_col = _pick(cl, "fuel_surcharge_pct", "fuel_surcharge",
+                              "surcharge_pct", "surcharge")
         for _, row in df.iterrows():
             lid, rate = _text(row, lane_col), _num(row, rate_col)
             if not lid or rate is None:
                 continue
             rates_by_lane.setdefault(lid, {})[_text(row, prod_col) or "*"] = rate
+            # Recorded because it is what the completeness gate’s "Contract
+            # Rate Card / Surcharge Details" field asks about. It is not
+            # applied to any rate here: `CostEngine` carries one
+            # network-level `fuel_surcharge_pct`, and quietly folding a
+            # per-row percentage into a lane rate would change the optimal
+            # answer on an assumption nobody made.
+            if surcharge_col is not None:
+                pct = _num(row, surcharge_col)
+                if pct is not None:
+                    surcharges.append(pct)
             if currency_col is not None:
                 ccy = _text(row, currency_col).upper()
                 if ccy:
@@ -1027,6 +1062,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 "labelled with a unit the data does not support."
             )
 
+    rate_card_priced = 0
     if rates_by_lane:
         priced = 0
         for lane in lanes:
@@ -1037,6 +1073,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
             if lane.get("cost") is None:
                 lane["cost"] = sum(per_product.values()) / len(per_product)
             priced += 1
+        rate_card_priced = priced
         notes.append(
             f"Freight rates joined from a separate rates table for {priced} of "
             f"{len(lanes)} lane(s), keyed by lane id."
@@ -1300,6 +1337,18 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         #: The money unit, from the upload. None when nothing states one.
         "currency": currency,
         "currencyBasis": currency_basis,
+        #: What the upload carried by way of a contract rate card, which is
+        #: the thing the completeness gate’s "Contract Rate Card / Surcharge
+        #: Details" field asks about. It used to look for `contracts` or
+        #: `laneRates` on this structure — two keys nothing has ever written
+        #: — so that request fired on every upload ever made, including the
+        #: ones whose workbook carried a full rates sheet with a surcharge
+        #: column. `pricedLanes` is how many lanes took a rate from it, and
+        #: `statesSurcharge` whether the sheet quoted one at all.
+        "rateCard": {
+            "pricedLanes": rate_card_priced,
+            "statesSurcharge": bool(surcharges),
+        },
         #: Where the network is, inferred from its own coordinates.
         "geography": geography,
         #: Cross-sheet foreign keys that point at nothing. Reported before

@@ -20,6 +20,8 @@
 /* global THREE */
 import { PLANTS, DCS, MARKETS, LANES, formatNumber, getUtilColor, getUtilLabel,
          perPeriodLabel } from './data.js';
+import { flowBands, bandForFlow, facilityLabel, facilityShortLabel,
+         NODE_STYLE } from './twin-legend.js';
 import { WORLD_COUNTRIES, countriesContaining, networkWindow,
          clipRingToBounds, ringIntersects, loadAdmin1,
          admin1IfLoaded } from './world-basemap.js';
@@ -118,7 +120,9 @@ const THEME_COLORS = {
   border:      0xb9c8db,
   borderActive: 0x91a6c0,
   graticule:   0xdfe8f2,
-  plant:       0x5b21b6, // Kearney Purple (deep)
+  // The hue the legend keys and the 2D map draws, from the one place both
+  // read it. This was an independent literal a shade off each of them.
+  plant:       NODE_STYLE.plant.hex3d,
   plantGlow:   0x8b5cf6,
   dcHealthy:   0x047857, // Emerald (deep)
   dcWarning:   0xb45309, // Amber (deep)
@@ -127,7 +131,7 @@ const THEME_COLORS = {
   // proposed. Neither is "healthy" — see the band selection below.
   dcUnsolved:  0x94a3b8, // Slate 400
   dcCandidate: 0x6b2fa0, // Kearney Purple — the same hue the map uses
-  market:      0x075985, // Sky Blue (deep)
+  market:      NODE_STYLE.market.hex3d,
   marketGlow:  0x0ea5e9,
 
   flowActual:  0x334155, // Slate 700
@@ -389,6 +393,15 @@ export function resumeTwin3D() {
 }
 
 export function disposeTwin3D() {
+  cancelHudHide();
+  hudHovered = false;
+  hudFacilityId = null;
+  if (labelLayerEl) {
+    labelLayerEl.remove();
+    labelLayerEl = null;
+  }
+  nodeLabels = [];
+
   if (animationId) cancelAnimationFrame(animationId);
   animationId = null;
 }
@@ -784,6 +797,124 @@ function setupNetworkNodes() {
       pos3D: pos,
     });
   });
+
+  buildNodeLabels();
+}
+
+/* ─── Facility labels ─────────────────────────────────────────
+   The name of each site, on the site, with its id in it.
+
+   Every name on this view lived in a hover tooltip, so reading the map meant
+   pointing at one site at a time and remembering what the last one said —
+   and no view ever showed the id, which is the column the reader's own
+   workbook is keyed on and the one thing that does not repeat between two
+   sites both called "Central DC".
+
+   HTML rather than sprites. A canvas-textured `THREE.Sprite` per node is the
+   usual way, and it renders text at whatever resolution the texture was
+   baked at — soft on a retina display, softer again once the camera pulls
+   back. These are ordinary DOM elements positioned from the projected node
+   position each frame, so they are as sharp as the rest of the page and
+   inherit its font.
+
+   Markets are not labelled. A network with twenty of them would put twenty
+   more pills over the corridors to name the small spheres that are already
+   the least ambiguous thing in the scene, and the mockup labels the
+   facilities only.
+   ─────────────────────────────────────────────────────────── */
+
+/** The layer the label divs live in, and one entry per labelled node. */
+let labelLayerEl = null;
+let nodeLabels = [];
+
+function buildNodeLabels() {
+  if (!containerEl) return;
+
+  if (!labelLayerEl || labelLayerEl.parentElement !== containerEl) {
+    labelLayerEl = containerEl.querySelector('.twin3d-label-layer');
+    if (!labelLayerEl) {
+      labelLayerEl = document.createElement('div');
+      labelLayerEl.className = 'twin3d-label-layer';
+      containerEl.appendChild(labelLayerEl);
+    }
+  }
+  labelLayerEl.innerHTML = '';
+  nodeLabels = [];
+
+  nodeMeshes.filter(n => n.type !== 'market').forEach((node) => {
+    const text = facilityShortLabel(node.data);
+    if (!text) return;
+    const el = document.createElement('span');
+    el.className = 'twin3d-node-label';
+    el.textContent = text;
+    // The full identity on hover, for the sites whose name the pill trims.
+    el.title = facilityLabel(node.data);
+    labelLayerEl.appendChild(el);
+    // Raised to sit above the node's own geometry rather than inside it.
+    nodeLabels.push({ el, anchor: node.pos3D.clone().add(new THREE.Vector3(0, 4.6, 0)) });
+  });
+}
+
+/**
+ * Move every label onto its node for this frame, and hide the ones that
+ * would land on top of another.
+ *
+ * Two rules, and the second is the one that makes this readable at all:
+ *
+ *   * a label whose node is behind the camera projects to a mirrored point in
+ *     FRONT of it (`projectedZ > 1`) and would be drawn on the wrong side of
+ *     the world. Those are hidden rather than clamped;
+ *   * twenty-six pills over a footprint the size of southern Canada overlap
+ *     into a block of text, and a reader can pick nothing out of it. Nearer
+ *     labels are placed first and a label that would collide with one already
+ *     placed is dropped for this frame. It reappears as soon as the camera
+ *     moves enough to give it room, which is what makes zooming in the
+ *     obvious way to read a dense corner (Nielsen #3 — the reader is in
+ *     control of how much detail is on screen).
+ *
+ * Widths are measured once per label (`offsetWidth` on a pill whose text does
+ * not change) rather than every frame, so this stays a comparison of numbers
+ * and never forces a layout inside the render loop.
+ */
+function updateNodeLabels() {
+  if (!nodeLabels.length || !camera || !containerEl) return;
+  const rect = containerEl.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  const placed = [];
+  const candidates = [];
+
+  nodeLabels.forEach((label) => {
+    const p = label.anchor.clone().project(camera);
+    if (p.z > 1) { label.el.style.display = 'none'; return; }
+    candidates.push({
+      label,
+      x: (p.x * 0.5 + 0.5) * rect.width,
+      y: (-(p.y * 0.5) + 0.5) * rect.height,
+      z: p.z,
+    });
+  });
+
+  // Nearest first, so a label that survives a crowd is the one in front.
+  candidates.sort((a, b) => a.z - b.z);
+
+  candidates.forEach(({ label, x, y }) => {
+    const el = label.el;
+    if (!label.w) {
+      // Measured on the element as it is already laid out. A pill whose text
+      // never changes has one width, so this runs once per label.
+      label.w = el.offsetWidth || 90;
+      label.h = el.offsetHeight || 16;
+    }
+    // The pill is centred on x and sits above y.
+    const box = { l: x - label.w / 2, r: x + label.w / 2, t: y - label.h, b: y };
+    const clash = placed.some((q) =>
+      box.l < q.r + 2 && box.r > q.l - 2 && box.t < q.b + 2 && box.b > q.t - 2);
+    if (clash) { el.style.display = 'none'; return; }
+    placed.push(box);
+    el.style.display = '';
+    el.style.transform = `translate(-50%,-100%) translate(${x}px, ${y}px)`;
+  });
 }
 
 function createPlant3D(data, pos) {
@@ -1012,6 +1143,13 @@ function setupFlowArcs() {
   const flowData = LANES;
   const colorHex = THEME_COLORS.flowActual;
 
+  // The same bands the 2D map draws and the legend prints. The radius was
+  // `(lane.flow / 4000) * 0.4` here and the 2D weight was `flow / 1500`, so
+  // the two views drew the same corridor at weights differing by nearly a
+  // factor of three — and a reader switching between them saw the network's
+  // shape change. See `twin-legend.js`.
+  const bands = flowBands();
+
   flowData.forEach(lane => {
     const fromNode = findNode(lane.from);
     const toNode = findNode(lane.to);
@@ -1029,7 +1167,7 @@ function setupFlowArcs() {
     const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
 
     // 3D Flow Tube
-    const thickness = Math.max(0.12, Math.min(0.48, (lane.flow / 4000) * 0.4));
+    const thickness = bandForFlow(lane.flow, bands).radius3d;
     const tubeGeo = new THREE.TubeGeometry(curve, 24, thickness, 6, false);
     const tubeMat = new THREE.MeshStandardMaterial({
       color: colorHex,
@@ -1250,6 +1388,35 @@ function setupControls() {
  * first use and moved thereafter — never duplicated, or two of them would
  * fight over the same id.
  */
+/* Whether the pointer is on the card itself, and the timer that would
+   otherwise have hidden it. */
+let hudHovered = false;
+let hudHideTimer = null;
+/** The facility the card is currently describing. */
+let hudFacilityId = null;
+
+/**
+ * Hide the card, unless the pointer has landed on it.
+ *
+ * A SHORT DELAY, not an immediate hide. The card sits above the node, so
+ * every route from the node to the card crosses a few pixels of empty canvas
+ * — and the raycast misses there. The card was therefore torn away in the
+ * moment the reader reached for it, which is why "Click node to inspect full
+ * diagnostics" could not be clicked: it was gone before the pointer arrived.
+ */
+function scheduleHudHide() {
+  if (hudHideTimer) clearTimeout(hudHideTimer);
+  hudHideTimer = setTimeout(() => {
+    if (hudHovered) return;
+    if (hudTooltipEl) hudTooltipEl.classList.add('hidden');
+    hudFacilityId = null;
+  }, 220);
+}
+
+function cancelHudHide() {
+  if (hudHideTimer) { clearTimeout(hudHideTimer); hudHideTimer = null; }
+}
+
 function attachHudTooltip() {
   if (!containerEl) return;
   if (!hudTooltipEl || !hudTooltipEl.isConnected) {
@@ -1264,6 +1431,31 @@ function attachHudTooltip() {
     hudTooltipEl.classList.add('hidden');
     containerEl.appendChild(hudTooltipEl);
   }
+
+  // Bound once. `attachHudTooltip` runs on every rebuild and the element
+  // survives, so a second set of listeners would fire the handler twice.
+  if (hudTooltipEl.dataset.bound === '1') return;
+  hudTooltipEl.dataset.bound = '1';
+
+  hudTooltipEl.addEventListener('mouseenter', () => {
+    hudHovered = true;
+    cancelHudHide();
+  });
+  hudTooltipEl.addEventListener('mouseleave', () => {
+    hudHovered = false;
+    scheduleHudHide();
+  });
+  // Delegated, because the card's contents are rewritten on every hover.
+  hudTooltipEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-hud-open]');
+    if (!btn) return;
+    const id = btn.getAttribute('data-hud-open');
+    if (id && typeof window.openFacilityPanel === 'function') {
+      window.openFacilityPanel(id);
+      hudHovered = false;
+      hudTooltipEl.classList.add('hidden');
+    }
+  });
 }
 
 function setupInteraction() {
@@ -1318,6 +1510,7 @@ function updateHoverState() {
     }
 
     if (hoveredNode && hudTooltipEl) {
+      cancelHudHide();
       const screenPos = hoveredNode.pos3D.clone().add(new THREE.Vector3(0, 3.5, 0)).project(camera);
       const rect = containerEl.getBoundingClientRect();
       const x = (screenPos.x * 0.5 + 0.5) * rect.width;
@@ -1329,8 +1522,9 @@ function updateHoverState() {
     if (hoveredNode) {
       resetNodeHighlight(hoveredNode);
       hoveredNode = null;
-      if (hudTooltipEl) hudTooltipEl.classList.add('hidden');
       renderer.domElement.style.cursor = 'grab';
+      // Not hidden outright: the reader may be on their way to the card.
+      scheduleHudHide();
     }
   }
 }
@@ -1358,6 +1552,13 @@ function resetNodeHighlight(node) {
     fa.tube.material.opacity = 0.4;
     fa.tube.material.emissiveIntensity = 0.3;
   });
+}
+
+/** Text into the HUD's own markup. */
+function escapeHud(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
 }
 
 function renderHUDTooltip(data, type, x, y) {
@@ -1398,20 +1599,53 @@ function renderHUDTooltip(data, type, x, y) {
     `;
   }
 
+  // THE ID AND THE NAME ON SEPARATE LINES.
+  //
+  // `facilityLabel` returns "F006 · Brampton National Distribution Hub",
+  // which on a 220px card wrapped to three lines and pushed the badge onto a
+  // fourth. The id is a short, fixed-width thing and belongs above the name,
+  // not in front of it.
+  const id = String(data.id || '').trim();
+  const name = String(data.name || data.city || '').trim();
+
+  // A BUTTON, not a sentence describing one. "Click node to inspect full
+  // diagnostics →" was the only route into the panel from here, it looked
+  // like a control, and it was not one — the card had `pointer-events: none`,
+  // so the reader clicked it and nothing happened.
+  const footer = (type === 'market' || !id) ? '' : `
+    <button type="button" class="hud-btn" data-hud-open="${escapeHud(id)}">
+      <span>View full diagnostics</span>
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+    </button>`;
+
   hudTooltipEl.innerHTML = `
     <div class="hud-header">
-      <div class="hud-title">${data.name || data.city}</div>
+      <div class="hud-headtext">
+        ${id ? `<div class="hud-id">${escapeHud(id)}</div>` : ''}
+        <div class="hud-title">${escapeHud(name)}</div>
+      </div>
       ${typeBadge}
     </div>
     <div class="hud-body">
       ${metricLine}
     </div>
-    ${type === 'market' ? '' :
-      '<div class="hud-footer">Click node to inspect full diagnostics →</div>'}
+    ${footer}
   `;
 
-  hudTooltipEl.style.left = `${Math.min(containerEl.clientWidth - 230, Math.max(10, x - 100))}px`;
-  hudTooltipEl.style.top = `${Math.max(10, y - 110)}px`;
+  hudFacilityId = id || null;
+
+  // Kept inside the canvas on all four sides. The card is taller now that the
+  // footer is a button, and the old fixed -110px offset put it off the top of
+  // the view for any node in the upper third of the scene.
+  const w = hudTooltipEl.offsetWidth || 236;
+  const h = hudTooltipEl.offsetHeight || 150;
+  const left = Math.min(containerEl.clientWidth - w - 10, Math.max(10, x - w / 2));
+  // Above the node where there is room, below it where there is not.
+  const above = y - h - 18;
+  const top = above >= 10 ? above
+    : Math.min(containerEl.clientHeight - h - 10, y + 22);
+  hudTooltipEl.style.left = `${left}px`;
+  hudTooltipEl.style.top = `${Math.max(10, top)}px`;
   hudTooltipEl.classList.remove('hidden');
 }
 
@@ -1448,6 +1682,10 @@ function animate() {
   // motion that carries no meaning is just something to look away from — so
   // the only thing left moving is the flow along the corridors, which does
   // carry meaning: it shows which way goods travel.
+
+  // After controls have moved the camera and before the paint, so a label
+  // never trails the node it names by a frame.
+  updateNodeLabels();
 
   renderer.render(scene, camera);
 }

@@ -19,8 +19,10 @@ import {
   getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries, withCurrency,
   FORECAST_BRIEFING, recommendedNetworkChanges, DEMAND_SHORTFALL
 } from './data.js';
+// The twin's legend and the encoding it describes, shared with both views.
+import { twinLegendHtml, facilityLabel } from './twin-legend.js';
 import { initMap, invalidateMapSize, refreshAllMaps,
-         revealMap, renderMapLegendCounts } from './map.js';
+         revealMap, renderMapLegendCounts, refreshTwinMapLegend } from './map.js';
 import { initTwin3D, resizeTwin3D } from './twin3d.js';
 import { networkCountryLabel } from './world-basemap.js';
 import {
@@ -37,6 +39,10 @@ import {
 import { initAgent } from './agent.js';
 import { initLandingPage } from './landing.js';
 import { initInsightDetail } from './insight-detail.js';
+// The two presentation decisions the tiles here and the deep-dive page
+// both make about a finding. Shared so they cannot disagree — see the
+// module header.
+import { insightCta, insightDescription } from './insight-presentation.js';
 import { initAuth } from './auth.js';
 import { initProjects, loadProjects, openProjectById } from './projects.js';
 import { initIngestion } from './ingestion.js';
@@ -2547,6 +2553,12 @@ function attentionActionItems() {
 
 if (typeof window !== 'undefined') {
   window.markAttentionItemResolved = id => resolvedInsightIds.add(id);
+  // The unserved-demand breakdown, reachable from the deep-dive page as
+  // well as from the tile. The drawer lives here because the markets and
+  // the relaxation note it reads are this module's stores; exposing the
+  // opener is how insight-detail.js reaches it without app.js and it
+  // importing each other.
+  window.openDemandShortfallDetail = openDemandShortfallDetail;
 
   // A briefing that arrives after the first paint — the network one during
   // hydration, or a facility one fetched on selection — redraws the feed and
@@ -2720,9 +2732,21 @@ function renderTwinStats() {
 
   renderRecommendedChangeNote();
 
-  // "How many plants / DCs / markets" is answered on the legend itself, at
-  // the bottom-right corner of the map, rather than only by the three tables
-  // further down the page.
+  // BOTH LEGENDS, from one function, on every refresh.
+  //
+  // The 3D legend was written out in the markup and the 2D one in map.js, so
+  // there were two hand-maintained copies of the same key. They had drifted:
+  // the 2D one keyed the DC ring in #dc2626/#f59e0b/#22c55e and the 3D one
+  // keyed the identical bands in #b91c1c/#b45309/#047857, on a page whose
+  // two views the reader switches between with one button.
+  //
+  // The redraw is not decorative either. The flow bands are derived from the
+  // loaded lanes, and both legends are first built before any network exists
+  // — so without this they would carry the "no corridor states a volume"
+  // copy for the rest of the session.
+  const legend3d = document.getElementById('twin3d-legend');
+  if (legend3d) legend3d.innerHTML = twinLegendHtml(perPeriodLabel());
+  refreshTwinMapLegend();
   renderMapLegendCounts();
 
   [['map2d-node-count', nodeCount], ['twin3d-node-count', nodeCount],
@@ -2788,79 +2812,179 @@ function openStatusTag(node) {
     : '<span class="tag tag-muted">Not solved</span>';
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   THE TWIN'S OWN FIGURES, for the facility and period selected
+   ═══════════════════════════════════════════════════════════════
+   The page carried three tables — Plants, Distribution Centres, Demand
+   Markets — listing every node in the network with four columns each. They
+   ignored the Facility and Period controls at the top of the screen
+   completely: a reader who selected one DC got the same three full tables,
+   and nothing acknowledged the selection.
+
+   This answers the question those controls ask. Every figure is read from
+   `getKpisForFacility(id, period)` — the same accessor the KPI screen uses,
+   so the two screens cannot report different numbers for the same site — or
+   from the authoritative base case for the whole network. Nothing is
+   computed here (§9), and a figure the solve did not produce renders as a
+   dash with the solver's own reason on it, never as a zero.
+   ═══════════════════════════════════════════════════════════════ */
+
+/** One figure in the band. `value` is already formatted, or null for a dash. */
+function twinMetricHtml(label, value, sub, reason, tone = '') {
+  const has = value !== null && value !== undefined && value !== '';
+  const title = has ? '' : ` title="${escapeInsightText(reason
+    || 'This figure was not reported by the solve for this network.')}"`;
+  return `
+    <div class="tw-metric"${title}>
+      <div class="tw-metric-value${tone}">${has ? escapeInsightText(value) : '—'}</div>
+      <div class="tw-metric-label">${escapeInsightText(label)}</div>
+      ${sub ? `<div class="tw-metric-sub">${escapeInsightText(sub)}</div>` : ''}
+    </div>`;
+}
+
+/**
+ * How the selected period relates to what was solved.
+ *
+ * The control does not re-optimise anything: there is one solved plan over
+ * the demand the model was given. Some periods carry a solved reading of
+ * their own and the rest fall back to the horizon average, and showing those
+ * two identically is how a reader mistakes "not modelled" for a finding.
+ */
+function twinPeriodNote(periodId) {
+  if (!periodId) return '';
+  const solved = new Set(Object.values(SOLVE_HORIZON.periodLabels || {}));
+  if (!solved.size) return '';
+  return solved.has(periodId)
+    ? `${periodId} is one of the periods the model solved, and these are its own figures.`
+    : `${periodId} is outside the modelled horizon, so these are the horizon `
+      + `average rather than that period's own solved figures.`;
+}
+
+function renderTwinMetrics(containerId = 'twin-metrics') {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  const periodId = state.selectedPeriod || '';
+  const periodNote = twinPeriodNote(periodId);
+  const facility = getFacilityById(state.selectedFacility);
+
+  // ─── The whole network ────────────────────────────────────
+  // "All facilities" is a legitimate selection and the band answers it with
+  // the network's own solved figures, from the same authoritative base case
+  // the Overview reads. Not a sum computed here: a total this file added up
+  // would be a second, unverified KPI engine.
+  if (!facility) {
+    const base = getOptimizedBaseCase() || {};
+    const figures = base.baseline || {};
+    const reason = base.unavailableReason || '';
+    const num = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : null;
+    const cost = num(figures.totalCost);
+    const fill = num(figures.fillRate);
+    const util = num(figures.avgUtilization);
+    const co2 = num(figures.co2);
+
+    el.innerHTML = `
+      <div class="tw-metrics-head">
+        <div>
+          <h3 class="tw-metrics-title">Whole network</h3>
+          <p class="tw-metrics-scope">${escapeInsightText(
+            `${PLANTS.length + DCS.length} facilities · ${MARKETS.length} markets · `
+            + `${LANES.length} corridors${periodId ? ` · ${periodId}` : ''}`)}</p>
+        </div>
+        ${(PLANTS.length + DCS.length) ? `<span class="tw-metrics-hint">Select a
+          facility above to see its own figures</span>` : ''}
+      </div>
+      <div class="tw-metrics-row">
+        ${twinMetricHtml('Total network cost', cost === null ? null : formatCurrency(cost),
+                         'per period, from the solve', reason)}
+        ${twinMetricHtml('Demand fill rate', fill === null ? null : `${fill.toFixed(1)}%`,
+                         'of stated demand served', reason)}
+        ${twinMetricHtml('Average utilisation', util === null ? null : `${util.toFixed(1)}%`,
+                         'across open facilities', reason)}
+        ${twinMetricHtml('CO\u2082e from solved flow',
+                         co2 === null ? null : `${formatNumber(Math.round(co2))} kg`,
+                         'on the declared factors', reason)}
+      </div>
+      ${periodNote ? `<p class="tw-metrics-note">${escapeInsightText(periodNote)}</p>` : ''}`;
+    return;
+  }
+
+  // ─── One facility ─────────────────────────────────────────
+  const kpis = getKpisForFacility(facility.id, periodId);
+  const role = facilityRole(facility.id);
+  const roleLabel = role === 'PLANT' ? 'Plant'
+    : role === 'DC' ? 'Distribution Centre' : 'Facility';
+
+  const num = (v) => (typeof v === 'number' && Number.isFinite(v)) ? v : null;
+  // Utilisation is the DC's own solved figure. For a plant the engine reports
+  // throughput against capacity rather than a utilisation percentage, and
+  // dividing one by the other here would be this screen computing a KPI.
+  const util = num(kpis?.util?.value) ?? num(facility.utilPct);
+  const throughput = num(kpis?.throughput?.value) ?? num(facility.throughput);
+  const capacity = num(kpis?.capacity?.value) ?? num(facility.capacity);
+  const costPerUnit = num(kpis?.costPerUnit?.value) ?? num(facility.handlingCost);
+  const corridors = LANES.filter(
+    (l) => l.from === facility.id || l.to === facility.id).length;
+
+  const tone = util === null ? ''
+    : util >= 95 ? ' is-critical' : util >= 85 ? ' is-stress' : ' is-healthy';
+  const reason = 'This figure is a solver output, and no solve has reported it '
+    + 'for this facility yet.';
+
+  el.innerHTML = `
+    <div class="tw-metrics-head">
+      <div>
+        <h3 class="tw-metrics-title">${escapeInsightText(facilityLabel(facility))}</h3>
+        <p class="tw-metrics-scope">${escapeInsightText(
+          `${roleLabel}${facility.city ? ` · ${facility.city}` : ''}`
+          + `${periodId ? ` · ${periodId}` : ''}`)}</p>
+      </div>
+      <div class="tw-metrics-actions">
+        ${openStatusTag(facility)}
+        <button type="button" class="tw-metrics-cta"
+                data-facility-panel="${escapeInsightText(facility.id)}">
+          <span>View full diagnostics</span>
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="tw-metrics-row">
+      ${twinMetricHtml('Utilisation', util === null ? null : `${Number(util).toFixed(1)}%`,
+                       'of stated capacity', reason, tone)}
+      ${twinMetricHtml('Throughput', throughput === null ? null : formatNumber(throughput),
+                       perPeriodLabel(), reason)}
+      ${twinMetricHtml('Capacity', capacity === null ? null : formatNumber(capacity),
+                       perPeriodLabel() + ', from your upload',
+                       'Your upload states no capacity for this facility.')}
+      ${twinMetricHtml('Handling cost', costPerUnit === null ? null : formatCurrencyExact(costPerUnit),
+                       'per unit, from your upload',
+                       'Your upload states no handling cost for this facility.')}
+      ${twinMetricHtml('Corridors', String(corridors),
+                       corridors === 1 ? 'lane touches this site' : 'lanes touch this site')}
+    </div>
+    ${periodNote ? `<p class="tw-metrics-note">${escapeInsightText(periodNote)}</p>` : ''}`;
+
+  // The same panel the 3D scene and the 2D map open, opened the same way —
+  // so a fix to one is a fix to all three. This was the third door and it
+  // used to be a row in the Distribution Centres table.
+  el.querySelector('[data-facility-panel]')?.addEventListener('click', (e) => {
+    const id = e.currentTarget.dataset.facilityPanel;
+    if (typeof window.openFacilityPanel === 'function') window.openFacilityPanel(id);
+  });
+}
+
+/**
+ * Everything on the Digital Twin that is not the scene itself.
+ *
+ * Still called `renderTwinTables` because `window.renderTwinTables` is the
+ * name projects.js and the hydration path already call, and renaming it
+ * would be a change to four other files for no reader's benefit. What it
+ * draws is the stats overlay, the legend and the metrics band; the three
+ * asset tables it used to fill are gone.
+ */
 function renderTwinTables() {
   renderTwinStats();
-
-  // Plants
-  const plantBody = document.querySelector('#table-plants tbody');
-  if (plantBody) {
-    // Status is the SOLVER's open/closed decision, not a fixed green tag. This
-    // printed "Active" on every plant unconditionally — including the two the
-    // optimiser had closed in the very solve the throughput column beside it
-    // came from.
-    plantBody.innerHTML = PLANTS.map(p => `
-      <tr class="clickable-row" data-id="${p.id}">
-        <td>${p.name}</td>
-        <td class="num">${formatNumber(p.capacity)}</td>
-        <td class="num">${formatNumber(p.throughput)}</td>
-        <td>${openStatusTag(p)}</td>
-      </tr>
-    `).join('');
-  }
-
-  // DCs
-  const dcBody = document.querySelector('#table-dcs tbody');
-  if (dcBody) {
-    // Utilisation is a solver output. Until a solve produces one it is absent,
-    // and absent must render as "—" — interpolating it straight into the
-    // template printed the literal text "undefined%" for every DC whenever the
-    // network had no feasible solution.
-    dcBody.innerHTML = DCS.map(d => {
-      const hasUtil = typeof d.utilPct === 'number' && Number.isFinite(d.utilPct);
-      const color = hasUtil ? getUtilColor(d.utilPct) : 'var(--text-3)';
-      // `d.isOpen === false` is the solver's decision not to use this site. It
-      // runs at 0%, which the utilisation bands read as "Healthy" — a green
-      // tag saying a facility performs well on a facility that is not
-      // operating. Operating status and utilisation health are different
-      // facts and get different answers.
-      // A proposed site the optimiser declined is not "Not selected" in the
-      // sense an existing DC is — it does not exist yet. Same distinction the
-      // map and the facility panel now make.
-      const isCand = String(d.status || '').toUpperCase() === 'CANDIDATE';
-      const notTaken = d.isOpen === false || !hasUtil;
-      const label = (isCand && notTaken) ? 'Proposed — not opened'
-        : hasUtil ? getUtilLabel(d.utilPct, d.isOpen) : 'Not solved';
-      const tagClass = (isCand && notTaken) ? 'tag-info'
-        : hasUtil ? getUtilTagClass(d.utilPct, d.isOpen) : 'tag-muted';
-      return `
-        <tr class="clickable-row" data-id="${d.id}">
-          <td>${d.name}</td>
-          <td class="num">${formatNumber(d.capacity)}</td>
-          <td class="num"><span style="color:${color};font-weight:700">${hasUtil ? d.utilPct + '%' : '—'}</span></td>
-          <td><span class="tag ${tagClass}">${label}</span></td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  // Markets
-  const mktBody = document.querySelector('#table-markets tbody');
-  if (mktBody) {
-    mktBody.innerHTML = MARKETS.map(m => `
-      <tr>
-        <td>${m.name}</td>
-        <td class="num">${formatNumber(m.demand)}</td>
-        <td>${m.slaDays == null ? '—' : m.slaDays + 'd'}</td>
-        <td><span class="tag ${m.priority === 'High' ? 'tag-danger' : m.priority === 'Medium' ? 'tag-warning' : 'tag-muted'}">${m.priority || '—'}</span></td>
-      </tr>
-    `).join('');
-  }
-
-  // Clickable rows to open facility panel
-  document.querySelectorAll('.clickable-row').forEach(row => {
-    row.style.cursor = 'pointer';
-    row.addEventListener('click', () => openFacilityPanel(row.dataset.id));
-  });
+  renderTwinMetrics();
 }
 
 // ─── Facility Panel ─────────────────────────────────────────
@@ -3288,37 +3412,6 @@ const OV_TILE_SEVERITY = {
 };
 
 /**
- * Where a finding's recommended action actually leads.
- *
- * The ACTION is the engine's — one sentence, written by the Reasoning Agent
- * or supplied by `/api/insights` when the briefing wrote none. This map is
- * only the destination: which of this product's screens that sentence is
- * asking the reader to open. It is deliberately here rather than on the
- * server, because which screens exist is the client's knowledge, and a
- * backend naming a tab is a backend that breaks when a tab is renamed.
- *
- * Keyed by the engine's own `theme`, so a new theme falls to the default
- * rather than to a wrong screen.
- */
-const OV_TILE_CTA = {
-  'Service':              { label: 'Open scenario planner', tab: 'scenarios' },
-  'Capacity':             { label: 'Open KPIs', tab: 'facility-dashboard' },
-  'Utilisation':          { label: 'Open KPIs', tab: 'facility-dashboard' },
-  'Footprint':            { label: 'Open scenario planner', tab: 'scenarios' },
-  'Resilience':           { label: 'Open Digital Twin', tab: 'twin' },
-  'Cost':                 { label: 'Open KPIs', tab: 'facility-dashboard' },
-  'Cost structure':       { label: 'Open KPIs', tab: 'facility-dashboard' },
-  'Carbon':               { label: 'Open KPIs', tab: 'facility-dashboard' },
-  'Scenario impact':      { label: 'Open scenario planner', tab: 'scenarios' },
-  'Demand outlook':       { label: 'Open forecast', tab: 'forecast' },
-  'Where the growth is':  { label: 'Open forecast', tab: 'forecast' },
-  'External signals':     { label: 'Open forecast', tab: 'forecast' },
-  'History that changed': { label: 'Open forecast', tab: 'forecast' },
-};
-
-const OV_TILE_CTA_DEFAULT = { label: 'Open scenario planner', tab: 'scenarios' };
-
-/**
  * The finding's own figures, as label/value pairs a reader can check.
  *
  * "Why it matters, numerically" is not a sentence this file writes. It is the
@@ -3338,45 +3431,6 @@ function tileEvidenceRows(record, skipRef, limit = 2) {
 }
 
 /**
- * The finding explained, without saying the headline twice.
- *
- * The engine writes a narrative of two or three sentences and a headline that
- * is usually ONE OF THEM. Printing both put the same sentence on the tile
- * twice — "No open site reaches the 90% threshold, so capacity is not what
- * limits this plan" as the heading, and again as the first line under it.
- *
- * So the description is the narrative MINUS whatever the headline already
- * says: sentences are compared with punctuation and case removed, and one is
- * dropped when either string contains the other (the headline is often a
- * trimmed version of the sentence, not a copy of it).
- *
- * Everything left is kept in the engine's own order. If that removes the
- * whole narrative — a one-sentence finding whose headline is that sentence —
- * the tile shows no description rather than a restatement.
- */
-function insightDescription(record, headline) {
-  const narrative = String(record.narrative || '').trim();
-  if (!narrative) return '';
-
-  const norm = (t) => String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
-  const head = norm(headline);
-  if (!head) return narrative;
-
-  // Split on a terminator followed by whitespace, so "97.2%" and "1,435,985"
-  // are not sentence ends. Same rule as `toInsightRecord` in data.js and
-  // `first_sentence` in reasoning/card.py.
-  const sentences = narrative.match(/[\s\S]*?[.!?](?=\s|$)|[\s\S]+$/g) || [narrative];
-  const kept = sentences
-    .map((line) => line.trim())
-    .filter((line) => {
-      const n = norm(line);
-      if (!n) return false;
-      return !(n.includes(head) || head.includes(n));
-    });
-  return kept.join(' ').trim();
-}
-
-/**
  * One insight tile.
  *
  * Everything on it is read off the record. Nothing is computed here: §9 — a
@@ -3387,22 +3441,7 @@ function insightDescription(record, headline) {
 function insightTileHtml(item, isLead = false) {
   const rec = item.record || {};
   const sev = OV_TILE_SEVERITY[item.severity] || OV_TILE_SEVERITY.INFORMATION;
-  let cta = OV_TILE_CTA[item.theme] || OV_TILE_CTA_DEFAULT;
-
-  // THE ONE OVERRIDE, and it is not a special case so much as a better
-  // destination that only exists for one finding. When the engine relaxed
-  // the model it attached the demand it could not serve MARKET BY MARKET,
-  // with its own reason and the sites it opened to get that far. That
-  // breakdown is what a reader of an unserved-demand finding actually wants,
-  // and the scenario planner is not where it is. `openDemandShortfallDetail`
-  // opens the drawer that already exists for it.
-  //
-  // Guarded on the breakdown being there: without rows the drawer would say
-  // "no market breakdown travelled with this run", which is a worse answer
-  // than sending the reader to the planner.
-  const hasShortfall = item.theme === 'Service' && item.severity === 'RISK'
-    && (DEMAND_SHORTFALL.shortMarkets || []).length > 0;
-  if (hasShortfall) cta = { label: 'View affected demand', tab: '' };
+  const cta = insightCta(item.theme, item.severity);
 
   // The headline figure: the first metric the finding cites, with the engine's
   // own label under it. A finding that cites none simply has no figure line —
@@ -3587,7 +3626,7 @@ const OV_DATA_GROUPS = [
     id: 'required',
     tone: 'tone-required',
     title: 'Critical missing data',
-    blurb: 'The analysis ran without these. Some figures above are dashes because of them.',
+    blurb: 'The analysis is running without these. Its totals are computed from the records that do state them.',
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>`,
   },
   {
@@ -3598,6 +3637,37 @@ const OV_DATA_GROUPS = [
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 17.6h5.6M10 20.6h4"/><path d="M12 3.2a5.6 5.6 0 0 0-3.3 10.1v1.4h6.6v-1.4A5.6 5.6 0 0 0 12 3.2z"/></svg>`,
   },
 ];
+
+/**
+ * Whether this request has already gone out, and when.
+ *
+ * `lastSent` is the endpoint's own dispatch record for this action —
+ * `{sent_at, recipients, result}` — and the band never showed it. So a list
+ * of four requests looked identical whether one of them had been emailed an
+ * hour ago or never, and the mistake it invited is asking the same person
+ * for the same column twice.
+ *
+ * `stubbed` is reported as saved rather than sent, because no message left
+ * the machine: this build ships with no outbound credential, and a stub
+ * described as a send is the one outcome that makes the feature worse than
+ * not having it.
+ *
+ * Returns null when nothing has been sent, so the row carries no chip at all
+ * rather than one saying "not yet" — the absence of the chip is the state.
+ */
+function dataSentChip(item) {
+  const sent = (item.record || {}).lastSent;
+  if (!sent || !sent.sent_at) return null;
+  const at = new Date(sent.sent_at);
+  if (Number.isNaN(at.getTime())) return null;
+  const when = at.toDateString() === new Date().toDateString()
+    ? 'today'
+    : at.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  if (sent.result === 'failed') return { label: `Send failed ${when}`, tone: 'is-failed' };
+  if (sent.result === 'stubbed') return { label: `Saved ${when}`, tone: '' };
+  if (sent.result === 'partial') return { label: `Partly sent ${when}`, tone: 'is-failed' };
+  return { label: `Asked ${when}`, tone: 'is-sent' };
+}
 
 function dataStripCardHtml(group, items) {
   // The count belongs in the heading, not in a "+N more" link at the bottom:
@@ -3616,17 +3686,34 @@ function dataStripCardHtml(group, items) {
         </div>
       </div>
       <ul class="ov-data-list">
-        ${items.map((it) => `
+        ${items.map((it) => {
+          const sent = dataSentChip(it);
+          return `
           <li class="ov-data-item">
             <div class="ov-data-item-text">
               <span class="ov-data-item-title">${escapeInsightText(it.title)}</span>
+              ${sent ? `<span class="ov-data-item-sent ${sent.tone}">${escapeInsightText(sent.label)}</span>` : ''}
               ${it.subtitle ? `<span class="ov-data-item-sub">${escapeInsightText(it.subtitle)}</span>` : ''}
             </div>
-            <button type="button" class="ov-data-item-cta" data-action-id="${escapeInsightText(it.id)}">
-              <span>Request this data</span>
-              <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
-            </button>
-          </li>`).join('')}
+            <!-- BOTH WAYS TO ANSWER, on the row.
+                 There was one button, labelled "Request this data", and it
+                 opened a page offering two things: send the request, or
+                 upload the file yourself. Most of the time the person
+                 reading this HAS the workbook — they uploaded the last one
+                 — so the single most likely action was behind a button
+                 promising an email, and its label described only the other
+                 one. Nielsen #4: a control says what it does. -->
+            <div class="ov-data-item-actions">
+              <button type="button" class="ov-data-item-cta is-quiet"
+                      data-upload-for="${escapeInsightText(it.id)}">
+                <span>Upload it</span>
+              </button>
+              <button type="button" class="ov-data-item-cta" data-action-id="${escapeInsightText(it.id)}">
+                <span>${sent ? 'Ask again' : 'Ask for it'}</span>
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+              </button>
+            </div>
+          </li>`; }).join('')}
       </ul>
     </section>`;
 }
@@ -3664,13 +3751,25 @@ function renderHomeDataStrip(containerId = 'ov-data-strip') {
     optional.length ? dataStripCardHtml(OV_DATA_GROUPS[1], optional) : '',
   ].filter(Boolean).join('');
 
-  el.querySelectorAll('.ov-data-item-cta').forEach((btn) => {
+  el.querySelectorAll('[data-action-id]').forEach((btn) => {
     btn.addEventListener('click', () => {
       // The same page the feed opened: one destination for one request, with
       // the recipients, the draft the server composed, and the send.
       if (typeof window.showInsightDetail === 'function') {
         window.showInsightDetail('action', btn.dataset.actionId);
       }
+    });
+  });
+
+  // The workbook, straight from here. The same call the detail page's
+  // "Upload the data instead" makes — a reader who already has the column
+  // should not have to walk through a page about emailing someone for it.
+  el.querySelectorAll('[data-upload-for]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (typeof window.showUploadData !== 'function') return;
+      const project = typeof window.getCurrentProject === 'function'
+        ? window.getCurrentProject() : null;
+      window.showUploadData(project);
     });
   });
 }
@@ -3715,26 +3814,47 @@ function insightRowHtml(item) {
         : 'Request this field when you can. The result stands without it.')
     : (rec.recommendedAction || '').trim();
 
+  // The engine's own prose, minus whatever the headline already said. The row
+  // used to print `subtitle` — the narrative's FIRST SENTENCE — which on a
+  // finding whose headline is that sentence was the heading again, in grey.
+  const description = isAction
+    ? String(item.subtitle || '')
+    : insightDescription(rec, item.title);
+
+  // ONE figure, and the finding's own lead. A second one was tried here and
+  // taken out: the engine's description already carries it — "Average
+  // utilisation is 56.23% and the busiest site at 77.14%" — so the chip
+  // beside it said nothing new, and two right-aligned figures moved the
+  // primary one left on the rows that had two. The figure a reader scans the
+  // page for has to be in the same place on every row.
+  const figureHtml = lead ? `
+        <div class="insp-row-figure">
+          <span class="insp-row-figure-value">${escapeInsightText(lead.display_value)}</span>
+          <span class="insp-row-figure-label">${escapeInsightText(lead.label || '')}</span>
+        </div>` : '';
+
   return `
     <article class="insp-row ${tone}" data-kind="${item.kind}" data-id="${escapeInsightText(item.id)}"
              role="button" tabindex="0">
       <span class="insp-row-icon" aria-hidden="true">${icon}</span>
-      <div class="insp-row-text">
+
+      <div class="insp-row-main">
         <div class="insp-row-eyebrow">${escapeInsightText(item.label || item.category || '')}</div>
         <h3 class="insp-row-title">${escapeInsightText(item.title || '')}</h3>
-        ${item.subtitle ? `<p class="insp-row-sub">${escapeInsightText(item.subtitle)}</p>` : ''}
-        ${action ? `
-        <p class="insp-row-action">
-          <span class="insp-row-action-label">Recommended action</span>
-          ${escapeInsightText(action)}
-        </p>` : ''}
+        ${description ? `<p class="insp-row-sub">${escapeInsightText(description)}</p>` : ''}
       </div>
+
+      <!-- BESIDE the finding, not under it. Stacked, every row was 157px of
+           which about a third was empty tint to the right of a one-line
+           sentence in a box the width of the page. -->
+      ${action ? `
+      <div class="insp-row-action">
+        <div class="insp-row-action-label">Recommended action</div>
+        <p class="insp-row-action-text">${escapeInsightText(action)}</p>
+      </div>` : '<div class="insp-row-action is-empty"></div>'}
+
       <div class="insp-row-right">
-        ${lead ? `
-        <div class="insp-row-figure">
-          <span class="insp-row-figure-value">${escapeInsightText(lead.display_value)}</span>
-          <span class="insp-row-figure-label">${escapeInsightText(lead.label || '')}</span>
-        </div>` : ''}
+        ${figureHtml}
         <span class="insp-row-link">
           <span>${isAction ? 'Open this request' : 'View detailed finding'}</span>
           <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>

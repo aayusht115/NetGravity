@@ -1041,76 +1041,45 @@
             <div class="twin3d-hint">
               <span>🖱️ Drag to rotate · Scroll to zoom · Click node to inspect</span>
             </div>
-            <!-- Legend: node types, HOW MANY of each are on the map, and
-                 what the DC halo colour means. The counts are the answer to
-                 "how big is this network" — a question the map itself can
-                 only answer by counting dots, and one the reader should not
-                 have to hold in their head (Nielsen #6). Filled by
-                 renderTwinStats() from PLANTS / DCS / MARKETS. -->
-            <div class="twin3d-legend">
-              <div class="twin3d-legend-title">Network</div>
-              <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#5b21b6"></span>Plant<span class="twin3d-legend-count" data-legend-count="plant">0</span></div>
-              <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#94a3b8"></span>Distribution Centre<span class="twin3d-legend-count" data-legend-count="dc">0</span></div>
-              <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#075985"></span>Demand Market<span class="twin3d-legend-count" data-legend-count="market">0</span></div>
-              <div class="twin3d-legend-divider">
-                <div class="twin3d-legend-title">DC Color = Utilisation</div>
-                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b91c1c"></span>Critical (&gt;95%)</div>
-                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#b45309"></span>Stress (85–95%)</div>
-                <div class="twin3d-legend-row"><span class="twin3d-legend-dot" style="background:#047857"></span>Healthy (&lt;85%)</div>
-              </div>
-            </div>
+            <!-- The key to everything on this view: what the shapes are,
+                 what a corridor's thickness means, and what a DC's ring
+                 colour means. Three groups, each under a heading naming the
+                 question it answers, rather than a bare "Network" over three
+                 coloured dots — Nielsen #6, a key should be readable without
+                 already knowing what is keyed.
+
+                 Written by `twinLegendHtml()` in js/twin-legend.js, which is
+                 the same function the 2D map's legend is built from and the
+                 same module that decides the line weights it describes. The
+                 two legends used to be two hand-written blocks in two files
+                 and had already drifted from each other. -->
+            <div class="tw-legend tw-legend-3d" id="twin3d-legend"></div>
           </div>
 
-          <div class="grid-3 mt-lg">
-            <div class="card">
-              <div class="card-title mb-md">Plants</div>
-              <div class="card-table-scroll">
-                <table class="ng-table ng-table-compact" id="table-plants">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th class="num">Capacity</th>
-                      <th class="num">Throughput</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-            <div class="card">
-              <div class="card-title mb-md">Distribution Centres</div>
-              <div class="card-table-scroll">
-                <table class="ng-table ng-table-compact" id="table-dcs">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th class="num">Capacity</th>
-                      <th class="num">Utilisation</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-            <div class="card">
-              <div class="card-title mb-md">Demand Markets</div>
-              <div class="card-table-scroll">
-                <table class="ng-table ng-table-compact" id="table-markets">
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th class="num">Demand</th>
-                      <th>SLA</th>
-                      <th>Priority</th>
-                    </tr>
-                  </thead>
-                  <tbody></tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+          <!-- WHAT THE SELECTED FACILITY DOES, IN THE PERIOD SELECTED.
+               ═══════════════════════════════════════════════════════════
+               This replaces three tables — Plants, Distribution Centres and
+               Demand Markets — that listed every node in the network with
+               four columns each. Three problems with them, and the third is
+               the one that mattered:
+
+                 * they ignored the Facility and Period controls at the top
+                   of the screen entirely. A reader who selected one DC to
+                   look at got the same three full tables, and nothing on the
+                   page acknowledged the selection;
+                 * they restated the map. Every figure in them is in the
+                   node's own tooltip, and the KPI screen carries the same
+                   ones with their history and their corridors;
+                 * on a 21-DC network the middle table scrolled inside a card
+                   the height of four rows, so "the network's distribution
+                   centres" was a four-row window onto a list nobody could
+                   see the shape of.
+
+               What is here instead is the one thing the page could not
+               answer: the figures for the site the reader has selected, in
+               the period they have selected. Filled by renderTwinMetrics().
+               -->
+          <section class="tw-metrics" id="twin-metrics"></section>
         </section>
 
         <!-- ─────────────────── TAB: FORECAST -->

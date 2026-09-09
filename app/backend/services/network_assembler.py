@@ -539,13 +539,29 @@ def assemble_network_from_structure(
     markets_without_demand: List[str] = []
     markets_held_flat: List[str] = []
     sigma_pairs: set[Tuple[str, str]] = set()
+    service_levels_read: set[str] = set()
 
     def add_demand(mid: str, pid: str, qty: float, period: int,
-                   sla: float | None) -> None:
+                   sla: float | None, service_level: float | None = None) -> None:
         record = DemandRecord(
             market_id=mid, product_id=pid, quantity=qty, period=period)
         if sla is not None and sla > 0:
             record.sla_days = sla
+        # The market’s own required fill rate, where the sheet states one.
+        # `DemandRecord.service_level` has always existed and the service
+        # module scores against it, but nothing on this path ever set it, so
+        # every market on every upload was held to the schema default of 0.95
+        # — including the ones whose workbook named a different target.
+        #
+        # A percentage is accepted as a percentage. The field is a fraction
+        # and its validator rejects anything above 1.0, so a workbook saying
+        # 98 would have thrown; 98 means 98%, and there is no network whose
+        # required fill rate is 9800%.
+        if service_level is not None and service_level > 0:
+            csl = service_level / 100.0 if service_level > 1.0 else service_level
+            if csl <= 1.0:
+                record.service_level = csl
+                service_levels_read.add(mid)
         # Variability describes the market-product PAIR, so the same sigma
         # travels with every period's row for that pair. It is not a property
         # of one month.
@@ -560,6 +576,7 @@ def assemble_network_from_structure(
         if not mid:
             continue
         sla = _as_float(m.get("slaDays"))
+        csl = _as_float(m.get("serviceLevel"))
 
         # Every period this market appears in, at the quantity it recorded.
         # A pair absent from a period contributes no row for it, which is what
@@ -571,7 +588,7 @@ def assemble_network_from_structure(
             for (mkt, pid), qty in by_period[label].items():
                 if mkt != mid or qty is None or qty <= 0:
                     continue
-                add_demand(mid, pid, qty, period_index[label], sla)
+                add_demand(mid, pid, qty, period_index[label], sla, csl)
                 observed_rows += 1
 
         if observed_rows:
@@ -587,9 +604,16 @@ def assemble_network_from_structure(
             continue
         for label in (modelled_periods or [""]):
             add_demand(mid, product_ids[0], qty,
-                       period_index.get(label, 1), sla)
+                       period_index.get(label, 1), sla, csl)
         if modelled_periods and len(modelled_periods) > 1:
             markets_held_flat.append(mid)
+
+    if service_levels_read:
+        assumptions.append(
+            f"{len(service_levels_read)} market(s) state their own required "
+            f"fill rate, and are scored against it. Every other market is held "
+            f"to the model default of 95%."
+        )
 
     if modelled_periods and len(modelled_periods) > 1:
         assumptions.append(
@@ -673,6 +697,7 @@ def assemble_network_from_structure(
     unsupported_modes: Dict[str, int] = {}
     lanes_without_mode = 0
     lanes_without_distance = 0
+    lanes_with_own_ef = 0
     converted_from_miles = 0
 
     for lane in lanes_in:
@@ -737,7 +762,23 @@ def assemble_network_from_structure(
         cap = _as_float(lane.get("capacity"))
         if cap is not None and cap > 0:
             record.lane_capacity = cap
+        # The client’s own emission factor for this corridor.
+        # `CarbonModule.get_emission_factor()` has always preferred this to
+        # its GLEC mode table, and nothing on this path ever set it — so a
+        # network that supplied measured factors was still costed on the
+        # standard ones for its modes.
+        ef = _as_float(lane.get("emissionFactor"))
+        if ef is not None and ef > 0:
+            record.emission_factor_override = ef
+            lanes_with_own_ef += 1
         lanes.append(record)
+
+    if lanes_with_own_ef:
+        assumptions.append(
+            f"{lanes_with_own_ef} lane(s) carry their own emission factor from "
+            f"the upload, and their carbon is computed on it rather than on "
+            f"the standard factor for their transport mode."
+        )
 
     if lanes_skipped_unknown_node:
         assumptions.append(

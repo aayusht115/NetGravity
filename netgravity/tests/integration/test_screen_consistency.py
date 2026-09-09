@@ -176,11 +176,70 @@ class TestOneTopBarOnEveryScreen:
 
 class TestTheDigitalTwinPageIsOneScreen:
     def test_the_legend_states_how_many_of_each_node_there_are(self):
-        html = _asset("index.html")
-        legend = html[html.index('class="twin3d-legend"'):]
-        legend = legend[:legend.index("</div>\n          </div>")]
+        """
+        The legend is no longer written out in the markup: both views build it
+        from `twinLegendHtml()`, so the counts are asserted where they are now
+        written. See `test_one_legend_serves_both_views`.
+        """
+        js = _without_comments(_asset("js", "twin-legend.js"))
         for kind in ("plant", "dc", "market"):
-            assert 'data-legend-count="%s"' % kind in legend, kind
+            assert "facilityRow('%s'" % kind in js, kind
+        assert 'data-legend-count="${kind}"' in js, js
+
+    def test_one_legend_serves_both_views(self):
+        """
+        There were two: `.twin3d-legend` written out in index.html, and a
+        block of inline styles inside map.js's `addLegend`. Two hand-kept
+        copies of one key, on a page whose two views the reader switches
+        between with a single button — and they had already drifted, the 2D
+        one keying the DC ring in #dc2626/#f59e0b/#22c55e and the 3D one
+        keying the identical bands in #b91c1c/#b45309/#047857.
+        """
+        html = _asset("index.html")
+        assert 'id="twin3d-legend"' in html
+        assert 'class="twin3d-legend"' not in html, (
+            "the 3D legend is hand-written in the markup again")
+
+        js = _without_comments(_asset("js", "twin-legend.js"))
+        assert "export function twinLegendHtml" in js
+        for consumer in ("map.js", "app.js"):
+            assert "twinLegendHtml" in _without_comments(_asset("js", consumer)), consumer
+
+    def test_the_legend_keys_the_line_weight_it_actually_draws(self):
+        """
+        Both views sized a corridor by dividing its flow by a constant —
+        `flow/1500` in 2D and `flow/4000` in 3D — so the same corridor was
+        drawn at two different weights, and neither legend mentioned line
+        weight at all. One set of bands now decides both, and the legend
+        prints the same boundaries.
+        """
+        js = _without_comments(_asset("js", "twin-legend.js"))
+        assert "export function flowBands" in js
+        assert "weight2d" in js and "radius3d" in js
+
+        for consumer, field in (("map.js", "weight2d"), ("twin3d.js", "radius3d")):
+            text = _without_comments(_asset("js", consumer))
+            assert "bandForFlow" in text, consumer
+            assert field in text, (consumer, field)
+            assert "/ 1500" not in text, consumer
+            assert "/ 4000" not in text, consumer
+
+    def test_the_legend_claims_nothing_the_map_does_not_draw(self):
+        """
+        The mockup carries a "Constrained route" key as a red dashed line.
+        Nothing here knows which corridors are constrained: a lane reaches the
+        browser as {from, to, cost, distance, leadTime, flow, mode} and
+        carries neither its capacity nor a binding-constraint flag. A key for
+        it would describe a line the map never draws, and a reader who never
+        saw a red lane would conclude their network has none — a finding
+        nothing established.
+        """
+        js = _asset("js", "twin-legend.js")
+        body = _without_comments(js)
+        assert "Constrained" not in body, body
+        # And the reason is written down where the next person will look.
+        assert "Constrained route" in js, (
+            "the omission is deliberate and must say why")
 
     def test_both_maps_count_from_the_same_place(self):
         """
@@ -205,21 +264,61 @@ class TestTheDigitalTwinPageIsOneScreen:
         app_js = _without_comments(_asset("js", "app.js"))
         assert "renderMapLegendCounts();" in app_js
 
-    def test_the_three_boxes_below_the_map_are_one_height_and_scroll(self):
-        css = _without_comments(_asset("css", "style.css"))
-        scroller = _rule(css, "#tab-twin .grid-3 > .card > .card-table-scroll {")
-        assert "overflow: auto" in scroller
-        assert "height: clamp(" in scroller, (
-            "a stated height is what makes three boxes with 3, 9 and 12 rows "
-            "the same height"
-        )
-        card = _rule(css, "#tab-twin .grid-3 > .card {")
-        assert "display: flex" in card and "flex-direction: column" in card
+    def test_the_three_asset_tables_are_gone(self):
+        """
+        Plants, Distribution Centres and Demand Markets: three cards listing
+        every node in the network, each scrolling inside a stated height so
+        the row stayed level.
 
-    def test_the_table_headers_do_not_scroll_away(self):
-        css = _without_comments(_asset("css", "style.css"))
-        head = _rule(css, "#tab-twin .grid-3 .ng-table thead th {")
-        assert "position: sticky" in head
+        They ignored the Facility and Period controls at the top of the screen
+        completely — a reader who selected one DC got the same three full
+        tables — and every figure in them is already in the node's own tooltip
+        and on the KPI screen.
+        """
+        html = _asset("index.html")
+        twin = html[html.index('id="tab-twin"'):html.index('id="tab-forecast"')]
+        for gone in ('id="table-plants"', 'id="table-dcs"', 'id="table-markets"',
+                     'class="grid-3'):
+            assert gone not in twin, gone
+
+    def test_what_replaced_them_answers_the_controls_at_the_top(self):
+        """
+        One band, about the site the reader has selected, in the period they
+        have selected — which is the question those two controls ask and the
+        one the page could not previously answer.
+        """
+        html = _asset("index.html")
+        assert 'id="twin-metrics"' in html
+
+        js = _without_comments(_asset("js", "app.js"))
+        fn = js[js.index("function renderTwinMetrics("):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "state.selectedFacility" in fn, fn
+        assert "state.selectedPeriod" in fn, fn
+        # Read through the accessor the KPI screen uses, so the two screens
+        # cannot report different numbers for the same site.
+        assert "getKpisForFacility(facility.id, periodId)" in fn, fn
+        # And nothing is computed here (§9): the whole-network case reads the
+        # authoritative base case rather than summing the facilities.
+        assert "getOptimizedBaseCase()" in fn, fn
+
+    def test_the_band_is_redrawn_when_the_selection_moves(self):
+        js = _without_comments(_asset("js", "app.js"))
+        fn = js[js.index("function renderForSelection()"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "renderTwinTables()" in fn, fn
+        # `renderTwinTables` keeps its name — projects.js and the hydration
+        # path already call it — and draws the band.
+        block = js[js.index("function renderTwinTables()"):]
+        block = block[:block.index("\n}\n")]
+        assert "renderTwinMetrics()" in block, block
+
+    def test_a_figure_the_solve_did_not_report_is_a_dash_not_a_zero(self):
+        js = _without_comments(_asset("js", "app.js"))
+        fn = js[js.index("function twinMetricHtml("):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "'\u2014'" in fn or "—" in fn, fn
+        assert "title=" in fn, "a dash must carry the reason it is a dash"
 
     def test_the_map_card_has_a_stated_height(self):
         """
@@ -250,7 +349,7 @@ class TestTheDigitalTwinPageIsOneScreen:
         """It was 10px — two steps below the application's smallest body size,
         on the one thing on the map that explains the picture."""
         css = _without_comments(_asset("css", "style.css"))
-        legend = _rule(css, ".twin3d-legend {")
+        legend = _rule(css, ".tw-legend {")
         assert "font-size: 12px" in legend, legend
         assert "backdrop-filter" not in legend, (
             "a backdrop filter over a WebGL canvas is a blur snapshot per paint"
@@ -264,7 +363,7 @@ class TestTheDigitalTwinPageIsOneScreen:
         the blur was not visible in the first place.
         """
         css = _without_comments(_asset("css", "style.css"))
-        for sel in (".twin3d-stat {", ".twin3d-hint span {", ".twin3d-legend {"):
+        for sel in (".twin3d-stat {", ".twin3d-hint span {", ".tw-legend {"):
             assert "backdrop-filter" not in _rule(css, sel), sel
 
     def test_the_three_figures_are_in_one_corner_on_both_views(self):

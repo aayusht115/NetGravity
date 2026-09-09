@@ -24,15 +24,106 @@ _PERCENT_FIELDS = {
     "avg_utilization_pct", "max_utilization_pct", "pct_demand_in_sla",
 }
 _RATIO_FIELDS = {
-    "demand_fill_rate", "unserved_demand_rate", "rei", "max_rei",
+    "rei", "max_rei",
     "risk_factor", "max_risk_factor", "likelihood", "event_probability",
-    "share_of_total_units",
+}
+
+#: Ratios that are a SHARE OF A WHOLE, and read as percentages.
+#:
+#: "The demand fill rate is 1.000" is the storage format on screen. A fill
+#: rate, an unserved share and a share of total units are proportions, and no
+#: executive has ever discussed one as a three-decimal ratio.
+#:
+#: An index is not a proportion, so `rei` and `risk_factor` stay above: they
+#: are scores that happen to sit near 1, and rendering an REI of 1.02 as
+#: "102%" would assert a percentage of something that has no whole.
+#:
+#: Only the DISPLAY changes. `EvidenceMetric.value` keeps the ratio — it is
+#: what a chart plots — and the unit stays "ratio" so nothing groups these on
+#: an axis with figures already expressed out of 100.
+_SHARE_FIELDS = {
+    "demand_fill_rate", "unserved_demand_rate", "share_of_total_units",
+}
+#: Counts. "5.00 sites open" is arithmetic notation for a thing you can point
+#: at, and the caption beside it already says what is being counted.
+_COUNT_FIELDS = {
+    "n_facilities_open", "n_facilities_closed", "n_facilities",
+    "n_lanes", "n_markets", "n_products", "periods_modelled",
 }
 _UNIT_FIELDS = {
     "throughput_units", "capacity_units", "flow_units", "total_demand",
     "served_demand", "unserved_demand", "rerouted_volume", "units_delta",
     "baseline_units", "comparison_units",
 }
+
+
+#: What each metric is CALLED, where the storage key does not read as English.
+#:
+#: These strings are the caption under the headline figure on an Overview
+#: tile, the label on every Insights row, the left column of the evidence
+#: chain on the deep dive, and the first column of the table in the document
+#: that leaves the building. They were the key in Title Case, so a reader was
+#: shown "N Facilities Open", "Avg Utilization Pct" and "Pct Demand In Sla" —
+#: a variable name, an abbreviation nobody speaks, and an acronym that has
+#: been Title-Cased into a word.
+#:
+#: Anything absent falls back to the Title Case of its key, so this is a list
+#: of corrections rather than a registry to keep in step.
+_LABELS = {
+    # Cost
+    "business_network_cost":   "Total network cost",
+    "total_cost":              "Total cost",
+    "cost_per_period":         "Cost per period",
+    "facility_cost":           "Facility cost",
+    "transport_cost":          "Transport cost",
+    "handling_cost":           "Handling cost",
+    "inventory_cost":          "Inventory cost",
+    "shortage_cost":           "Shortage cost",
+    "carbon_cost":             "Carbon cost",
+    "opening_cost":            "Opening cost",
+    "closure_cost":            "Closure cost",
+    "business_cost_delta":     "Change in network cost",
+    "business_cost_delta_pct": "Change in network cost",
+    # Service
+    "demand_fill_rate":        "Demand met",
+    "unserved_demand_rate":    "Demand not met",
+    "unserved_demand":         "Demand not served",
+    "served_demand":           "Demand served",
+    "total_demand":            "Total demand",
+    "pct_demand_in_sla":       "Demand within its lead time",
+    "demand_within_sla":       "Demand within its lead time",
+    # Capacity
+    "avg_utilization_pct":     "Average utilisation",
+    "max_utilization_pct":     "Busiest site",
+    "min_utilization_pct":     "Least used site",
+    "utilization_pct":         "Utilisation",
+    "peak_utilization_pct":    "Peak utilisation",
+    "capacity_units":          "Capacity",
+    "throughput_units":        "Throughput",
+    "flow_units":              "Volume on this lane",
+    # Footprint
+    "n_facilities_open":       "Sites open",
+    "n_facilities_closed":     "Sites not used",
+    "n_facilities":            "Sites in the network",
+    # Carbon
+    "total_carbon_kg":         "Transport emissions",
+    "carbon_kg":               "Emissions",
+    # Policy thresholds
+    "utilization_over_pct":    "Utilisation threshold",
+    "utilization_under_pct":   "Under-use threshold",
+    # Resilience
+    "rei":                     "Resilience exposure index",
+    "max_rei":                 "Highest single-site exposure",
+    "share_of_total_units":    "Share of total volume",
+    "distance_km":             "Distance",
+    "lead_time_days":          "Lead time",
+    "rate_per_unit":           "Rate per unit",
+}
+
+
+def metric_label(key: str) -> str:
+    """The metric's name for a reader, or its key in Title Case."""
+    return _LABELS.get(key) or key.replace("_", " ").title()
 
 
 #: Symbols for the currencies a client is likely to price a network in. A code
@@ -99,8 +190,16 @@ def _display(value: Any, key: str, currency: Optional[str] = None) -> tuple[str,
         return format_money(float(value), currency), (currency or "currency")
     if key in _PERCENT_FIELDS or key.endswith("_pct"):
         return f"{value:,.2f}%", "percent"
+    if key in _SHARE_FIELDS:
+        # The unit stays "ratio" deliberately: the stored quantity is one, and
+        # `display_value` is the only thing a reader reads (`value` exists to
+        # be plotted). Calling it "percent" here would let a chart group it on
+        # an axis with figures that really are out of 100 and plot 1.0 there.
+        return f"{value * 100:,.1f}%", "ratio"
     if key in _RATIO_FIELDS:
         return f"{value:.3f}", "ratio"
+    if key in _COUNT_FIELDS:
+        return f"{value:,.0f}", "count"
     if key in _UNIT_FIELDS or key.endswith("_units"):
         return f"{value:,.0f} units", "units"
     if "carbon_kg" in key:
@@ -203,7 +302,7 @@ def build_evidence_pack(
         metric_scope = scope if entity_id else ReasoningScope.NETWORK
         metrics[ref] = EvidenceMetric(
             ref=ref,
-            label=key.replace("_", " ").title(),
+            label=metric_label(key),
             value=value,
             display_value=display,
             unit=unit,

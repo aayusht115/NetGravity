@@ -1765,23 +1765,48 @@ class TestClickingANodeOpensItsDiagnostics:
         assert "overlay.style.display = 'none'" in block
 
     def test_the_twin_and_the_map_go_through_the_same_door(self):
-        """One panel, opened the same way from the 3D scene, the 2D map and
-        the facility tables — so a fix to one is a fix to all three."""
+        """
+        One panel, opened the same way from the 3D scene, the 2D map and the
+        figures below them — so a fix to one is a fix to all three.
+
+        The third door used to be a row in the Distribution Centres table.
+        Those tables are gone (they ignored the Facility and Period controls
+        above them and restated the map), and the band that replaced them
+        carries the button instead: it already names one facility, and seeing
+        the rest of what is known about that site is the obvious next step
+        from five figures about it.
+        """
         assert "window.openFacilityPanel(data.id)" in _js("twin3d.js")
         assert "window.openFacilityPanel(node.id)" in _js("map.js")
-        assert "openFacilityPanel(row.dataset.id)" in _js("app.js")
+        app_js = _js("app.js")
+        assert "data-facility-panel" in app_js
+        assert "window.openFacilityPanel(id)" in app_js
 
-    def test_the_hint_is_only_shown_where_the_click_leads_somewhere(self):
+    def test_the_door_is_only_offered_where_it_leads_somewhere(self):
         """
         `openFacilityPanel` looks the id up in PLANTS and DCS and returns
         without doing anything when it is neither. On a demand market the
         footer promised a panel that could never appear — the same "clicking
         does nothing" this class exists about, on the nodes that genuinely
         have nothing to open.
+
+        That promise used to be a SENTENCE — "Click node to inspect full
+        diagnostics →" — which looked like a control, was positioned like one,
+        and was not one: the card carried `pointer-events: none`, so the
+        reader clicked it and nothing happened. It is a real button now, and
+        the suppression had to follow it there.
         """
         twin = _js("twin3d.js")
-        assert "Click node to inspect full diagnostics" in twin
-        block = twin[twin.index("hudTooltipEl.innerHTML = `"):]
-        block = block[:block.index("`;")]
-        assert "type === 'market' ? ''" in block
+        block = twin[twin.index("const footer ="):]
+        block = block[:block.index("hudTooltipEl.innerHTML")]
+        assert "data-hud-open" in block, block
+        assert "type === 'market'" in block, block
+        # Nor where there is no id, since the id is what would be looked up.
+        assert "!id" in block, block
+        # And the sentence is not back in what the card actually renders. It
+        # survives in this file only as a comment recording why the footer
+        # changed, so the check is scoped to the markup rather than the source.
+        markup = twin[twin.index("const footer ="):]
+        markup = markup[:markup.index("hudFacilityId =")]
+        assert "Click node to inspect" not in markup, markup
 

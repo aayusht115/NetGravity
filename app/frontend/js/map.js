@@ -24,6 +24,10 @@ import {
 import { WORLD_COUNTRIES, countriesContaining, networkWindow,
          loadAdmin1 } from './world-basemap.js';
 import { CONFIG } from './integration/config.js';
+// One definition of what a corridor's thickness means, shared with the 3D
+// twin and with the legend that describes it — see the module header.
+import { flowBands, bandForFlow, twinLegendHtml, facilityLabel,
+         facilityShortLabel, NODE_STYLE } from './twin-legend.js';
 
 // ─── State ──────────────────────────────────────────────────
 const maps = {}; // containerId → L.Map
@@ -31,6 +35,7 @@ const maps = {}; // containerId → L.Map
 //: basemap can be re-chosen when a network loads after the map was built.
 const baseLayers = {};
 const layerGroups = {}; // containerId → { nodes, flows }
+const mapOptions = {};  // containerId → { isCompact, showLabels }
 
 
 // ─── Basemap ────────────────────────────────────────────────
@@ -206,9 +211,12 @@ function addBaseLayer(map, containerId) {
 // utilisation-risk palette (used for the DC ring border) so a color never
 // carries two different meanings on the same map.
 const COLORS = {
-  plant: '#6B2FA0',
-  dc: '#2563eb',
-  market: '#0891b2',
+  // From the one place the legend reads them too, so a chip and the marker it
+  // keys are the same colour. They were two independent literals and had
+  // drifted apart.
+  plant: NODE_STYLE.plant.color,
+  dc: NODE_STYLE.dc.color,
+  market: NODE_STYLE.market.color,
   // One corridor colour, because there is one network on this map. The
   // `optimised`, `recommended`, `scenario` and `changed` entries were keyed by
   // a network state this map no longer has; the scenario map draws a changed
@@ -346,6 +354,15 @@ export function initMap(containerId, options = {}) {
   if (options.isCompact && !scrollWheelZoom) armCompactZoom(map, container);
 
   maps[containerId] = map;
+  // What this particular map is for. Read back by `createNodeMarker`, which
+  // is shared with the Scenario Planner's thumbnail: `showLabels` is what
+  // keeps the facility pills on the Digital Twin's full-size map and off a
+  // card a few hundred pixels wide beside a comparison table.
+  mapOptions[containerId] = {
+    isCompact: !!options.isCompact,
+    showLabels: options.showLabels !== undefined
+      ? !!options.showLabels : !options.isCompact,
+  };
   // Read-only handle for diagnostics: "where is the map looking" is otherwise
   // unanswerable from outside this module.
   if (typeof window !== 'undefined') {
@@ -384,7 +401,58 @@ export function initMap(containerId, options = {}) {
   // Add legend
   addLegend(map, options.isCompact);
 
+  // Labels that would sit on top of each other are dropped until there is
+  // room for them. Recomputed on view change only — a pan or a zoom is the
+  // only thing that can alter which pills collide.
+  if (mapOptions[containerId].showLabels) {
+    map.on('moveend zoomend', () => declutterMapLabels(containerId));
+    setTimeout(() => declutterMapLabels(containerId), 0);
+  }
+
   return map;
+}
+
+/**
+ * Hide the facility labels that would land on top of one another.
+ *
+ * On the Canadian network twenty-one distribution centres sit inside a few
+ * hundred kilometres of southern Ontario and Quebec, so at the zoom that
+ * frames the whole country their pills overlap into a block of text a reader
+ * can pick nothing out of.
+ *
+ * Placed in draw order, and a label that clashes with one already placed is
+ * hidden until the reader zooms in far enough to separate them — which makes
+ * zooming the obvious way to read a dense corner rather than something to
+ * discover (Nielsen #3). Nothing is removed from the DOM: the marker, its
+ * tooltip and its click target are untouched, so a hidden label costs the
+ * reader nothing but the pill.
+ */
+function declutterMapLabels(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const labels = [...container.querySelectorAll('.map-node-label')];
+  if (!labels.length) return;
+
+  // Shown first, so every box is measured at its natural size rather than at
+  // the zero it would report while hidden.
+  labels.forEach((el) => { el.style.visibility = ''; });
+
+  const placed = [];
+  labels.forEach((el) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width) return;
+    const clash = placed.some((q) =>
+      r.left < q.right + 2 && r.right > q.left - 2
+      && r.top < q.bottom + 2 && r.bottom > q.top - 2);
+    if (clash) {
+      // `visibility`, not `display`: a hidden label must keep taking part in
+      // the next pass's measurement, and a `display:none` element has no box
+      // to measure.
+      el.style.visibility = 'hidden';
+    } else {
+      placed.push(r);
+    }
+  });
 }
 
 /**
@@ -768,13 +836,23 @@ function renderNetwork(containerId) {
   // by scaling three named prototype lanes.
   const flowData = LANES;
 
+  // Banded once for the whole draw, not recomputed per lane.
+  //
+  // The weight was `flow / 1500` clamped to 1..8 — a constant that suits one
+  // network. Case-16's largest corridor carries about 4,500 units, so every
+  // lane on it landed under weight 3 and the map was a uniform grey web; a
+  // network moving half a million units clamped every lane to 8 and was a
+  // uniform thick one. In both the thickness was real and carried no
+  // information, and no legend said what it meant. See `twin-legend.js`.
+  const bands = flowBands();
+
   // Draw flows
   flowData.forEach((flow) => {
     const from = getCoords(flow.from);
     const to = getCoords(flow.to);
     if (!from || !to) return;
 
-    const thickness = Math.max(1, Math.min(8, flow.flow / 1500));
+    const thickness = bandForFlow(flow.flow, bands).weight2d;
 
     const line = L.polyline([from, to], {
       // One network, one corridor style. The colour, the opacity and the dash
@@ -823,11 +901,16 @@ function renderNetwork(containerId) {
   });
 
   renderMapLegendCounts();
+  // New markers, new pills: the previous pass's decisions were about
+  // elements that no longer exist.
+  setTimeout(() => declutterMapLabels(containerId), 0);
 }
 
 // ─── Create Node Marker ─────────────────────────────────────
 function createNodeMarker(node, type, containerId, overrideStats = null) {
-  const iconMap = { plant: '🏭', dc: '🏪', market: '📦' };
+  // The same glyphs the legend prints, from the same place.
+  const iconMap = { plant: NODE_STYLE.plant.glyph, dc: NODE_STYLE.dc.glyph,
+                    market: NODE_STYLE.market.glyph };
   const colorMap = { plant: COLORS.plant, dc: COLORS.dc, market: COLORS.market };
   const sizeMap = { plant: 16, dc: 14, market: 9 };
   const color = colorMap[type];
@@ -878,6 +961,28 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
       + 'font-size:8px;font-weight:800;padding:1px 4px;border-radius:6px;letter-spacing:.04em">NEW</span>'
     : '';
 
+  // THE NAME, ON THE MAP, WITH THE ID IN IT.
+  //
+  // Every facility name lived in a hover tooltip, so reading the map meant
+  // pointing at each site in turn and remembering what the last one said, and
+  // nothing on screen ever carried the id — the one column the reader's own
+  // workbook is keyed on, and the one thing that does not repeat across two
+  // sites both called "Central DC".
+  //
+  // Markets are deliberately unlabelled. A network with twenty of them would
+  // put twenty more pills on the map to name the small dots that are already
+  // the least ambiguous thing on it, and the mockup labels the facilities
+  // only. Their names stay one hover away, with the id now in them.
+  // Facilities only, and only on a map big enough to carry the pills.
+  const showLabel = type !== 'market' && mapOptions[containerId]?.showLabels !== false;
+  // The city, not the full name. Drawn in full, twenty-six pills reading
+  // "F025 · Regina Global Transportation Hub Candidate DC" cover the middle of
+  // the map — every one legible alone and none of them readable together. The
+  // full identity stays one hover away, in the tooltip below.
+  const labelText = showLabel ? facilityShortLabel(node) : '';
+  const labelHtml = labelText ? `<span class="map-node-label${
+    isClosed && !isCandidate ? ' is-closed' : ''}">${escapeHtml(labelText)}</span>` : '';
+
   const icon = L.divIcon({
     className: 'custom-marker',
     html: `<div style="
@@ -892,14 +997,14 @@ function createNodeMarker(node, type, containerId, overrideStats = null) {
       cursor:pointer;
       box-shadow: 0 1px 4px rgba(0,0,0,0.15);
       transition: transform .2s;
-    " onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">${glyph}${badge}</div>`,
+    " onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">${glyph}${badge}${labelHtml}</div>`,
     iconSize: [adjustedSize * 2, adjustedSize * 2],
     iconAnchor: [adjustedSize, adjustedSize],
   });
 
   const marker = L.marker([node.lat, node.lng], { icon });
 
-  let tooltipContent = `<div style="font-size:12px;line-height:1.4"><strong>${node.name}</strong>`;
+  let tooltipContent = `<div style="font-size:12px;line-height:1.4"><strong>${escapeHtml(facilityLabel(node))}</strong>`;
   if (isNew) tooltipContent += ' <span style="color:#6B2FA0;font-weight:700">(new in this scenario)</span>';
   if (isUnbuiltCandidate) tooltipContent += ' <span style="color:#6B2FA0;font-weight:700">(proposed site — not opened)</span>';
   else if (isCandidate) tooltipContent += ' <span style="color:#6B2FA0;font-weight:700">(proposed site — opened by the optimiser)</span>';
@@ -940,7 +1045,16 @@ function getCoords(id) {
 function getFacilityName(id) {
   const all = [...PLANTS, ...DCS, ...MARKETS];
   const node = all.find((n) => n.id === id);
-  return node ? node.name : id;
+  // The id belongs in a corridor's endpoints as much as on the node itself:
+  // "F001 → F006" is what the reader's lane sheet calls this row.
+  return node ? facilityLabel(node) : id;
+}
+
+/** Text into an attribute or a divIcon's HTML. */
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
 }
 
 // ─── Legend ──────────────────────────────────────────────────
@@ -980,33 +1094,57 @@ function addLegend(map, isCompact = false) {
   legend.onAdd = function () {
     const div = L.DomUtil.create('div');
     if (isCompact) {
+      // The scenario planner's small map. Unchanged: it is a thumbnail beside
+      // a comparison table, and the full key would cover a third of it.
       div.style.cssText =
         'background:rgba(255,255,255,0.94);padding:7px 10px;border-radius:8px;box-shadow:0 1px 6px rgba(0,0,0,.1);font-size:11.5px;line-height:1.7;font-family:Inter,sans-serif;border:1px solid #cbd5e1';
       div.innerHTML = `
-        <div style="display:flex;align-items:center">${iconChip(COLORS.plant, '🏭')}Plant${legendCount('plant')}</div>
-        <div style="display:flex;align-items:center">${iconChip(COLORS.dc, '🏪')}Distribution Centre${legendCount('dc')}</div>
-        <div style="display:flex;align-items:center">${iconChip(COLORS.market, '📦')}Market${legendCount('market')}</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.plant, NODE_STYLE.plant.glyph)}Plant${legendCount('plant')}</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.dc, NODE_STYLE.dc.glyph)}Distribution Centre${legendCount('dc')}</div>
+        <div style="display:flex;align-items:center">${iconChip(COLORS.market, NODE_STYLE.market.glyph)}Market${legendCount('market')}</div>
       `;
     } else {
-      div.style.cssText =
-        'background:white;padding:10px 14px;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.12);font-size:12px;line-height:1.75;font-family:Inter,sans-serif';
-      div.innerHTML = `
-        <div style="display:flex;align-items:center;margin-bottom:5px">${iconChip(COLORS.plant, '🏭')}Plant${legendCount('plant')}</div>
-        <div style="display:flex;align-items:center;margin-bottom:5px">${iconChip(COLORS.dc, '🏪')}Distribution Centre${legendCount('dc')}</div>
-        <div style="display:flex;align-items:center">${iconChip(COLORS.market, '📦')}Demand Market${legendCount('market')}</div>
-        <div style="margin-top:7px;padding-top:7px;border-top:1px solid #eee">
-          <div style="font-weight:700;font-size:10.5px;color:#64748b;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px">DC Ring = Utilisation</div>
-          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dc2626;margin-right:7px"></span>Critical (&gt;95%)</div>
-          <div style="display:flex;align-items:center;margin-bottom:3px"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:7px"></span>Stress (85–95%)</div>
-          <div style="display:flex;align-items:center"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:7px"></span>Healthy (&lt;85%)</div>
-        </div>
-      `;
+      // The Digital Twin's own map, and the only place this branch renders.
+      // Built from `twinLegendHtml` so it says exactly what the 3D twin's
+      // legend says — the two used to be written out separately in two files
+      // and had already drifted, the 2D one keying the DC ring at
+      // >95/85-95/<85 in one set of colours and the 3D one at the same bands
+      // in another.
+      div.className = 'tw-legend tw-legend-2d';
+      div.innerHTML = twinLegendHtml(perPeriodLabel());
+      // A legend is a thing you read, not a thing you pan the map with.
+      L.DomEvent.disableClickPropagation(div);
+      L.DomEvent.disableScrollPropagation(div);
     }
     return div;
   };
   legend.addTo(map);
+  legendControls[legendKeyFor(map)] = legend;
   // The legend is built once, at initMap — usually before any network has
   // loaded — so its counts start at 0 and are filled the moment there is
   // something to count.
   setTimeout(renderMapLegendCounts, 0);
+}
+
+/** Every legend control this module has mounted, by container id. */
+const legendControls = {};
+
+function legendKeyFor(map) {
+  return Object.keys(maps).find((id) => maps[id] === map) || 'unknown';
+}
+
+/**
+ * Redraw the twin map's legend against the network as it now stands.
+ *
+ * The flow bands come from the loaded lanes, so a legend built at `initMap`
+ * — before any network exists — carries the "no corridor states a volume"
+ * copy and would keep it for the rest of the session. `renderTwinStats()`
+ * calls this on every refresh.
+ */
+export function refreshTwinMapLegend() {
+  if (typeof document === 'undefined') return;
+  document.querySelectorAll('.tw-legend-2d').forEach((el) => {
+    el.innerHTML = twinLegendHtml(perPeriodLabel());
+  });
+  renderMapLegendCounts();
 }

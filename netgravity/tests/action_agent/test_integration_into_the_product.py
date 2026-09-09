@@ -162,8 +162,79 @@ class TestTheGateRunsOnThePathTheProductUses:
         """
         report = check_structure(build_network_from_dataframes(_workbook()))
         flagged = {m.canonical_key for m in report.missing_optional}
-        assert "carbon_emission_factor" in flagged, flagged
+        assert "emission_factor_override" in flagged, flagged
         assert "sla_days" not in flagged, flagged
+
+    def test_a_rate_card_the_upload_carried_is_not_requested_again(self):
+        """
+        The contract/surcharge request was unconditional.
+
+        `check_structure` asked whether the structure had `contracts` or
+        `laneRates` on it — two keys the extractor has never written — so
+        the answer was no on every upload this product has ever processed,
+        including one whose workbook carries a rates sheet, prices its lanes
+        from it and quotes a fuel surcharge on every row. Asking a client for
+        a rate card they have already sent costs more than the request: it
+        teaches them to ignore the next one.
+        """
+        tables = _workbook()
+        # The rate card itself: a separate rates table, keyed by lane, that
+        # quotes a surcharge — which is what the field asks about, and what
+        # the Canadian and US workbooks both carry.
+        tables["f.xlsx::Transportation_Rates"] = pd.DataFrame([
+            ("L001", "P001", 2.40, "CAD", 0.085),
+            ("L002", "P001", 1.80, "CAD", 0.085),
+            ("L003", "P001", 1.60, "CAD", 0.085),
+        ], columns=["Lane_ID", "Product_ID", "Rate_Per_Unit", "Currency",
+                    "Fuel_Surcharge_Pct"])
+
+        structure = build_network_from_dataframes(tables)
+        assert structure["rateCard"]["pricedLanes"] > 0, structure["rateCard"]
+        assert structure["rateCard"]["statesSurcharge"] is True
+
+        report = check_structure(structure)
+        flagged = {m.canonical_key for m in report.missing_optional}
+        assert "fuel_surcharge_pct" not in flagged, flagged
+
+        # And it is still asked for when the upload genuinely has no rate
+        # card — the fix is a real check, not a suppression.
+        bare = check_structure(build_network_from_dataframes(_workbook()))
+        assert "fuel_surcharge_pct" in {m.canonical_key for m in bare.missing_optional}
+
+    def test_what_the_gate_asks_for_is_read_when_it_arrives(self):
+        """
+        A request is only worth sending if answering it changes something.
+
+        Both remaining optional fields are now read on the path the request
+        came from: the market’s own fill-rate target reaches
+        `DemandRecord.service_level`, and the lane’s emission factor reaches
+        `LaneRecord.emission_factor_override`, which `CarbonModule` already
+        prefers to its own mode table. Neither was read before — the client
+        could have sent both and every figure would have been identical.
+        """
+        from app.backend.services.network_assembler import (
+            assemble_network_from_structure)
+        from netgravity.carbon.module import CarbonModule
+
+        tables = _workbook()
+        tables["f.xlsx::Markets"] = tables["f.xlsx::Markets"].assign(
+            Service_Level=97.5)
+        tables["f.xlsx::Lanes"] = tables["f.xlsx::Lanes"].assign(
+            Emission_Factor_Override=0.0311)
+
+        structure = build_network_from_dataframes(tables)
+        report = check_structure(structure)
+        flagged = {m.canonical_key for m in report.missing_optional}
+        assert "service_level" not in flagged, flagged
+        assert "emission_factor_override" not in flagged, flagged
+
+        network, _assumptions, _warnings = assemble_network_from_structure(structure)
+        # A percentage is read as a percentage: the field is a fraction, and
+        # no network requires a 9800% fill rate.
+        assert {round(d.service_level, 4) for d in network.demands} == {0.975}
+        lane = network.lanes[0]
+        assert lane.emission_factor_override == 0.0311
+        assert CarbonModule().get_emission_factor(lane) == 0.0311
 
 
 class TestNothingIsSentWithoutBeingAsked:

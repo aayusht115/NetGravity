@@ -1792,11 +1792,40 @@
 
 /* One finding, or one data request. The whole row opens it, because unlike a
    tile there is only one destination on it. */
+/* ═══════════════════════════════════════════════════════════════
+   ONE FINDING, ACROSS THE ROW
+   ═══════════════════════════════════════════════════════════════
+   This was a flex row of two columns — everything on the left, the figure and
+   the link on the right — with the recommended action STACKED under the
+   title inside the left column. Three consequences, measured on the six
+   findings a solved Case-16 network produces:
+
+     * every row was 157px tall and they were all identical, so the list read
+       as six of the same thing rather than six different findings;
+     * the action sat in a tinted box the full width of the left column —
+       about 1,180px — holding one sentence of roughly 700px. The rest was
+       empty tint, on every row;
+     * the figure and the link were pinned to the top right, leaving the
+       bottom right of each card blank.
+
+   Three columns now: the finding, what to do about it, and the figures it
+   turns on. Each takes the width its content needs, the row is as tall as
+   the tallest of the three rather than the sum of two of them, and nothing
+   is stretched across a width it cannot fill.
+   ═══════════════════════════════════════════════════════════════ */
+
 .insp-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 13px;
-  padding: 15px 18px;
+  display: grid;
+  /* STATED tracks, not `auto`.
+     Each row is its own grid, so an `auto` column sizes to that row's own
+     content: a row showing "₹150,627.70" and one showing "1.000" got
+     different widths, and the action boxes beside them started at different
+     x. A column of boxes with a ragged left edge is what "the alignment is
+     not correct" looks like. Fixed ends make every row identical. */
+  grid-template-columns: 20px minmax(0, 1fr) minmax(0, 0.82fr) 176px;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 16px;
   background: var(--bg-card, #ffffff);
   border: 1px solid var(--border-light, #f0f0f5);
   border-left: 3px solid var(--border, #e8e8ef);
@@ -1820,16 +1849,29 @@
 .insp-row.tone-opportunity { border-left-color: var(--green, #16a34a); }
 .insp-row.tone-information { border-left-color: var(--purple-300, #b893d6); }
 
-.insp-row-icon { display: flex; flex-shrink: 0; margin-top: 2px; }
+/* THE RISK IS TINTED, like the lead tile on the Overview.
+   A left border three pixels wide is the difference between "read this first"
+   and "read this eventually", and it is the same three pixels every other row
+   carries. The tint is the same `--red-bg` the Overview's lead tile uses, so
+   the finding looks the same on both screens. */
+.insp-row.tone-risk {
+  background: var(--red-bg, #fef2f2);
+  border-color: #f6cfcf;
+  border-left-color: var(--red, #dc2626);
+}
+
+.insp-row.tone-risk:hover { border-color: #eab8b8; }
+
+.insp-row-icon { display: flex; flex-shrink: 0; align-self: center; }
 .insp-row-icon svg { width: 18px; height: 18px; }
 .insp-row.tone-risk .insp-row-icon        { color: var(--red, #dc2626); }
 .insp-row.tone-opportunity .insp-row-icon { color: var(--green, #16a34a); }
 .insp-row.tone-information .insp-row-icon { color: var(--primary, #6B2FA0); }
 
-.insp-row-text { flex: 1 1 auto; min-width: 0; }
+.insp-row-main { min-width: 0; }
 
 .insp-row-eyebrow {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1837,80 +1879,113 @@
 }
 
 .insp-row-title {
-  margin: 3px 0 0;
-  font-size: 14px;
+  margin: 2px 0 0;
+  font-size: 13.5px;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1.38;
   color: var(--text-1, #1a1a2e);
 }
 
 .insp-row-sub {
   margin: 4px 0 0;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.5;
   color: var(--text-2, #5a5a72);
 }
 
+/* Its own column, so the tint ends where the sentence ends. */
 .insp-row-action {
-  margin: 9px 0 0;
-  padding: 8px 11px;
+  min-width: 0;
+  padding: 9px 12px;
   border-radius: 9px;
   background: var(--purple-50, #f5f0fa);
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-2, #5a5a72);
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
+/* A risk's action sits on a tinted card, so its own tint has to separate
+   from it rather than blend in. */
+.insp-row.tone-risk .insp-row-action {
+  background: rgba(255, 255, 255, 0.72);
+}
+
+/* A finding with no recommended step keeps the column, so the figures stay
+   in the same place on every row and the list reads as a table. */
+.insp-row-action.is-empty { background: transparent; }
+
 .insp-row-action-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--primary, #6B2FA0);
-  margin-bottom: 2px;
+  margin-bottom: 3px;
+}
+
+.insp-row-action-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2, #5a5a72);
 }
 
 .insp-row-right {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 8px;
-  flex-shrink: 0;
+  justify-content: center;
+  gap: 9px;
+  min-width: 0;
   text-align: right;
-  max-width: 220px;
 }
 
 .insp-row-figure { min-width: 0; }
 
 .insp-row-figure-value {
   display: block;
-  font-size: 19px;
+  font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.02em;
   line-height: 1.15;
   color: var(--text-1, #1a1a2e);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .insp-row-figure-label {
   display: block;
-  font-size: 11.5px;
+  font-size: 10.5px;
   color: var(--text-3, #8e8ea0);
   margin-top: 1px;
+  line-height: 1.3;
 }
 
 .insp-row-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--primary, #6B2FA0);
   white-space: nowrap;
 }
 
 .insp-row:hover .insp-row-link { text-decoration: underline; }
+
+/* Narrower windows: the action drops under the finding, and the figures keep
+   their own column beside both. */
+@media (max-width: 1320px) {
+  .insp-row {
+    grid-template-columns: 20px minmax(0, 1fr) 176px;
+  }
+  .insp-row-action {
+    grid-column: 2 / 3;
+    align-self: start;
+  }
+  .insp-row-right { grid-row: 1 / 3; grid-column: 3 / 4; align-self: center; }
+}
 
 .insp-empty {
   padding: 30px 22px;
@@ -1922,16 +1997,53 @@
   color: var(--text-2, #5a5a72);
 }
 
-/* Stacked, the right-hand column has nowhere to be right-aligned to. */
+/* One column on a phone-width window: the grid collapses and every part of
+   the finding takes the full width in reading order. */
 @media (max-width: 780px) {
-  .insp-row { flex-wrap: wrap; }
+  .insp-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  .insp-row-icon { display: none; }
+  .insp-row-action { grid-column: 1 / -1; }
   .insp-row-right {
-    align-items: flex-start;
-    text-align: left;
-    max-width: none;
-    width: 100%;
+    grid-row: auto;
+    grid-column: 1 / -1;
     flex-direction: row;
     justify-content: space-between;
     align-items: center;
+    width: 100%;
+    text-align: left;
   }
+}
+
+.ov-data-item-sent.is-sent {
+  background: var(--green-bg, #dcfce7);
+  color: var(--green, #15803d);
+}
+
+.ov-data-item-sent.is-failed {
+  background: var(--red-bg, #fee2e2);
+  color: var(--red, #dc2626);
+}
+
+/* Both ways to answer the request, side by side and on one rail. */
+.ov-data-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* The quieter of the two. Same size and the same hit area — it is quieter,
+   not smaller, because on most uploads it is the one that gets pressed. */
+.ov-data-item-cta.is-quiet {
+  border-color: rgba(0, 0, 0, 0.1);
+  background: transparent;
+  color: var(--text-2, #5a5a72);
+}
+
+.ov-data-item-cta.is-quiet:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--text-1, #1a1a2e);
 }

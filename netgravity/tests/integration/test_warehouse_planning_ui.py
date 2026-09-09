@@ -50,10 +50,19 @@ class TestAProposedSiteIsNotAClosedOne:
         # The wording for a real facility is unchanged.
         assert "Closed by solver" in block
 
-    def test_the_dc_table_makes_the_same_distinction(self, app_js):
-        block = app_js[app_js.index("function renderTwinTables()"):]
-        block = block[:block.index("window.openFacilityPanel")]
-        assert "Proposed — not opened" in block
+    def test_the_twins_own_figures_make_the_same_distinction(self, app_js):
+        """
+        This checked the Distribution Centres table on the Digital Twin, which
+        listed every DC with a Status column. That table is gone — it ignored
+        the Facility and Period controls above it and restated the map — and
+        the band that replaced it is about the ONE site the reader selected.
+        It still has to say whether that site is a warehouse the client runs
+        or a candidate the optimiser did not take, so it prints the same tag
+        from the same function.
+        """
+        block = app_js[app_js.index("function renderTwinMetrics("):]
+        block = block[:block.index(chr(10) + "}" + chr(10))]
+        assert "openStatusTag(facility)" in block, block
 
     def test_the_map_draws_an_outline_rather_than_a_stop_sign(self):
         js = _asset("map.js")

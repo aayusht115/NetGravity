@@ -502,8 +502,8 @@ class TestTheOverviewPageIsShapedLikeTheMockup:
         is what "No open site reaches the 90% threshold, so capacity is not
         what limits this plan" did - as the heading, and again under it.
         """
-        js = _without_comments(_asset("js", "app.js"))
-        fn = js[js.index("function insightDescription(record, headline)"):]
+        js = _without_comments(_asset("js", "insight-presentation.js"))
+        fn = js[js.index("export function insightDescription(record, headline)"):]
         fn = fn[:fn.index("\n}\n")]
         # Compared with punctuation and case removed, and in BOTH directions:
         # the headline is often a trimmed version of the sentence rather than
@@ -526,6 +526,55 @@ class TestTheOverviewPageIsShapedLikeTheMockup:
             assert gone not in fn, gone
         # The size of the job is stated up front instead.
         assert "ov-data-card-count" in fn, fn
+
+    def test_a_request_offers_the_upload_as_well_as_the_email(self):
+        """
+        There was one button per row, labelled "Request this data", and it
+        opened a page offering two things: send the request, or upload the
+        file yourself. Most of the time the person reading this HAS the
+        workbook - they uploaded the last one - so the likeliest action was
+        behind a button whose label described the other one. Nielsen #4.
+        """
+        js = _without_comments(_asset("js", "app.js"))
+        fn = js[js.index("function dataStripCardHtml(group, items)"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "data-upload-for" in fn, fn
+        assert "Upload it" in fn, fn
+        assert "Ask for it" in fn, fn
+        assert "Request this data" not in fn, (
+            "the single button that promised only an email is back")
+
+        # And the upload button calls the same thing the detail page's does,
+        # rather than routing through the page about emailing someone.
+        binder = js[js.index("function renderHomeDataStrip"):]
+        binder = binder[:binder.index("\n}\n")]
+        assert "window.showUploadData" in binder, binder
+
+    def test_a_request_already_sent_says_so_on_the_row(self):
+        """
+        `/api/actions` sends `last_sent` for every action and the band ignored
+        it, so four requests looked identical whether one had been emailed an
+        hour ago or never. The mistake that invites is asking the same person
+        for the same column twice.
+
+        Absence is the default state: a row with nothing sent carries no chip
+        at all rather than one reading "not yet".
+        """
+        js = _without_comments(_asset("js", "app.js"))
+        fn = js[js.index("function dataSentChip(item)"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "lastSent" in fn, fn
+        assert "if (!sent || !sent.sent_at) return null;" in fn, fn
+        # A stub is reported as saved, never as sent: no message left the
+        # machine, and a stub described as a send is the one outcome that
+        # makes this feature worse than not having it.
+        assert "'stubbed'" in fn and "Saved" in fn, fn
+        assert "'failed'" in fn and "'partial'" in fn, fn
+
+        card = js[js.index("function dataStripCardHtml(group, items)"):]
+        card = card[:card.index("\n}\n")]
+        assert "dataSentChip(it)" in card, card
+        assert "'Ask again' : 'Ask for it'" in card, card
 
     def test_the_bands_take_the_width_rather_than_sharing_it(self):
         """
@@ -818,12 +867,12 @@ class TestNothingOnTheOverviewClaimsMoreThanTheBuildDoes:
         it is the call to action on any finding the planner can act on, and
         the destination the tile map falls back to.
         """
-        js = _asset("js", "app.js")
+        js = _asset("js", "insight-presentation.js")
         assert "Open scenario planner" in js
-        cta = js[js.index("const OV_TILE_CTA = {"):]
+        cta = js[js.index("export const INSIGHT_CTA = {"):]
         cta = cta[:cta.index("\n};")]
         assert "tab: 'scenarios'" in cta, cta
-        default = js[js.index("const OV_TILE_CTA_DEFAULT ="):]
+        default = js[js.index("export const INSIGHT_CTA_DEFAULT ="):]
         default = default[:default.index("\n")]
         assert "scenarios" in default, default
 
@@ -932,3 +981,75 @@ class TestTheAffectedDemandIsShown:
         assert "action-drawer-overlay" in block
         assert "export function closeActionDrawer()" in js
 
+
+class TestTheInsightsListReadsAsAList:
+    """
+    Seven findings on one screen, each legible as a different finding.
+
+    Rendered against a real solved network the list was six rows of exactly
+    157px, and about a third of every one of them was empty: the recommended
+    action sat in a tinted box the width of the left column — some 1,180px —
+    holding one sentence of roughly 700px, and the figure and the link were
+    pinned to the top right leaving the bottom right blank.
+    """
+
+    def test_the_finding_the_action_and_the_figure_are_three_columns(self):
+        css = _without_comments(_asset("css", "home-overview.css"))
+        row = _rule(css, ".insp-row {")
+        assert "display: grid" in row, row
+        # STATED tracks. Each row is its own grid, so an `auto` end column
+        # sized to that row's own content — a row showing a currency total and
+        # one showing a percentage got different widths, and the action boxes
+        # beside them started at different x.
+        assert "grid-template-columns: 20px" in row, row
+        assert "auto" not in row.split("grid-template-columns:")[1].split(";")[0], row
+
+    def test_the_action_is_beside_the_finding_not_under_it(self):
+        js = _without_comments(_asset("js", "app.js"))
+        fn = js[js.index("function insightRowHtml(item)"):]
+        fn = fn[:fn.index("\n}\n")]
+        order = [fn.index(m) for m in
+                 ("insp-row-main", "insp-row-action", "insp-row-right")]
+        assert order == sorted(order), fn
+        # And a finding with no step keeps the column, so the figures stay in
+        # the same place on every row.
+        assert "insp-row-action is-empty" in fn, fn
+
+    def test_one_figure_per_row_so_the_column_is_a_column(self):
+        """
+        A second figure was tried here and taken out: the engine's own
+        description already carries it ("Average utilisation is 56.23% and the
+        busiest site at 77.14%"), and two right-aligned figures moved the
+        PRIMARY one left on the rows that had two — so the figure a reader
+        scans the page for was in a different place on every other row.
+        """
+        js = _without_comments(_asset("js", "app.js"))
+        fn = js[js.index("function insightRowHtml(item)"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "insp-row-figures" not in fn, fn
+        assert fn.count("insp-row-figure-value") == 1, fn
+
+    def test_a_risk_is_tinted_the_way_the_overview_tints_one(self):
+        """
+        A left border three pixels wide is the difference between "read this
+        first" and "read this eventually", and every other row carries the
+        same three pixels. The tint is the Overview lead tile's own
+        `--red-bg`, so the finding looks the same on both screens.
+        """
+        css = _without_comments(_asset("css", "home-overview.css"))
+        rule = _rule(css, ".insp-row.tone-risk {\n  background")
+        assert "--red-bg" in rule, rule
+        # Its action block has to separate from the tint rather than blend in.
+        action = _rule(css, ".insp-row.tone-risk .insp-row-action {")
+        assert "rgba(255, 255, 255" in action, action
+
+    def test_the_row_shows_the_description_not_the_headline_again(self):
+        """
+        The row printed `subtitle` — the narrative's FIRST SENTENCE — which on
+        a finding whose headline IS that sentence was the heading again, in
+        grey, directly under itself.
+        """
+        js = _without_comments(_asset("js", "app.js"))
+        fn = js[js.index("function insightRowHtml(item)"):]
+        fn = fn[:fn.index("\n}\n")]
+        assert "insightDescription(rec, item.title)" in fn, fn

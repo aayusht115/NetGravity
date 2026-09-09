@@ -112,6 +112,30 @@ def _period_span(state: dict) -> str:
 _SPEND_CONCENTRATION_SHARE = 0.40
 
 
+def _money(value: Any, state: Dict[str, Any]) -> str:
+    """
+    An amount, in the currency this network is priced in.
+
+    The template path printed `f"{value:,.2f}"`, so the prose read "business
+    network cost at 150,627.70" beside an evidence chip reading ₹150,627.70 —
+    the same figure twice on one card, once with its unit and once without.
+    On a network priced in USD it was worse: a bare quantity in no unit,
+    which a reader has no way to interpret and no reason to trust.
+
+    `format_money` is the evidence layer's own, so the sentence and the chip
+    beside it are formatted by one function. Where the upload named no
+    currency it prints the amount bare — the honest rendering of an unknown
+    unit, and the same thing every other surface does with it.
+    """
+    from netgravity.orchestrator.reasoning.evidence import format_money
+
+    currency = state.get("currency") if isinstance(state, dict) else None
+    try:
+        return format_money(float(value), currency)
+    except (TypeError, ValueError):
+        return str(value)
+
+
 def _sites(n: Any) -> str:
     """"site" or "sites", for a count that may arrive as a float."""
     try:
@@ -827,9 +851,16 @@ class ReasoningAgent:
                 comparison_refs=refs_for("total_demand"),
             ))
         elif isinstance(fill, (int, float)):
-            # Stated as the ratio the evidence pack holds, not converted to a
-            # percentage: a derived figure would not match the authoritative
-            # value the grounding check compares against.
+            # As a percentage, which is how a fill rate is discussed.
+            #
+            # This used to print the stored ratio — "a demand fill rate of
+            # 1.000" — on the reasoning that converting it would break the
+            # grounding check. It does not: `_equivalent_values` in the
+            # numeric validator exists for exactly this case and says so
+            # ("a fill rate stored as 0.968 may be written 96.8%"). The ratio
+            # was reaching the Insights page and the Overview tile as the
+            # headline figure of the service finding, where "1.000" is the
+            # storage format rather than an answer.
             out.append(KPIInsight(
                 theme="Service",
                 headline=("Every unit of stated demand is served by this "
@@ -837,7 +868,7 @@ class ReasoningAgent:
                           "Part of the stated demand is not served by "
                           "this plan"),
                 narrative=(
-                    f"I see a demand fill rate of {fill:.3f}. "
+                    f"I see a demand fill rate of {fill * 100:,.1f}%. "
                     + ("Every unit of stated demand is served by this plan, so "
                        "service is not what constrains it."
                        if fill >= 1.0 else
@@ -1169,7 +1200,7 @@ class ReasoningAgent:
             headline=f"{_lead_cap(label)} is the largest single component "
                      f"of what this network costs",
             narrative=(
-                f"I see {label} at {priced[largest]:,.2f}{span}, the largest "
+                f"I see {label} at {_money(priced[largest], state)}{span}, the largest "
                 f"single component of this network's cost. Any material saving has "
                 f"to come from a line of this size."
             ),
@@ -1646,15 +1677,16 @@ class ReasoningAgent:
                               "and the baseline every scenario is measured "
                               "against"),
                     narrative=(
-                        f"I see business network cost at {cost:,.2f}{span}. I use "
-                        "this as the decision baseline for comparing any scenario."
+                        f"I see business network cost at {_money(cost, state)}"
+                        f"{span}. I use this as the decision baseline for "
+                        "comparing any scenario."
                     ),
                     metric_refs=refs_for("business_network_cost"),
                 ))
                 parts.append(
-                    f"I see a business network cost of {cost:,.2f}{span}; this is "
-                    "the operating-cost view from the optimizer, separate from any "
-                    "mathematical shortage penalty."
+                    f"I see a business network cost of {_money(cost, state)}{span}; "
+                    "this is the operating-cost view from the optimizer, separate "
+                    "from any mathematical shortage penalty."
                 )
                 evidence.append(f"business_network_cost = {cost:,.2f}")
 

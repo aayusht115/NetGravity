@@ -126,6 +126,55 @@ class ApiClient {
     return 'req_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
   }
 
+  /**
+   * Fetch a FILE, with the same credentials every other call uses.
+   *
+   * `request()` reads the body as JSON or as text, so a .docx came back as a
+   * mangled string. This is the same transport — the session cookie, the
+   * request id, the timeout — returning the bytes and the name the server
+   * asked the browser to save them under.
+   *
+   * Deliberately not `window.open(url)`, which is the short way to do this
+   * and the wrong one: it cannot send the bearer token a harness uses, it
+   * loses the error body on a 4xx (the reader gets a blank tab instead of a
+   * reason), and a popup blocker eats it.
+   */
+  async download(endpoint, params = {}) {
+    const query = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null),
+    ).toString();
+    const url = this._buildUrl(endpoint) + (query ? `?${query}` : '');
+
+    const headers = new Headers();
+    if (this.token) headers.set('Authorization', `Bearer ${this.token}`);
+    headers.set('X-Request-ID', this._generateRequestId());
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, {
+        method: 'GET', headers, credentials: 'include', signal: controller.signal,
+      });
+      if (!response.ok) {
+        // The server's own reason, where it sent one, rather than "download
+        // failed".
+        let detail = null;
+        try { detail = await response.json(); } catch (e) { detail = null; }
+        throw ApplicationError.fromHttp(response.status, detail || {});
+      }
+      // `filename="…"` off the Content-Disposition the server set, so the
+      // file is named by whoever built it rather than by the URL.
+      const disposition = response.headers.get('content-disposition') || '';
+      const match = /filename="?([^"]+)"?/i.exec(disposition);
+      return {
+        blob: await response.blob(),
+        filename: match ? match[1] : 'download',
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async request(endpoint, options = {}) {
     const url = this._buildUrl(endpoint);
     const headers = new Headers(options.headers || {});

@@ -42,6 +42,22 @@ export const insightService = {
     }
   },
 
+  /**
+   * One finding, as a .docx a reader can take into a meeting.
+   *
+   * UNLIKE the other methods here this one THROWS. They return null because
+   * an insight feed is additive to a dashboard and a reasoning failure must
+   * not stop the KPIs rendering — but a download is something a person just
+   * asked for, and a button that silently does nothing is the worst possible
+   * answer to a click.
+   */
+  async downloadDerivation(insightId, projectId = null) {
+    return apiClient.download(`/api/insights/${encodeURIComponent(insightId)}/document`, {
+      project_id: projectId || getActiveProjectId(),
+      scope: 'NETWORK',
+    });
+  },
+
   /** Insights scoped to one facility. Same failure contract as above. */
   async getFacilityInsights(facilityId, projectId = null) {
     if (!facilityId) return null;

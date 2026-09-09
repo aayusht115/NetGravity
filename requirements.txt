@@ -32,6 +32,7 @@ requests>=2.31.0
 pandas>=2.0.0            # tabular validation
 openpyxl>=3.1.0          # client Excel workbooks
 pypdf>=4.0.0             # contract / rate-card PDFs
+python-docx>=1.1.0       # derivation reports (netgravity/reporting)
 pyyaml>=6.0              # external-signal guardrail policy
 python-dotenv>=1.0.0     # local .env loading
 

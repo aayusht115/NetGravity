@@ -44,7 +44,7 @@ import math
 import time
 from typing import Any, Dict, List, Optional
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify, make_response, request
 
 from app.backend.services.errors import (
     ApplicationError,
@@ -101,7 +101,7 @@ _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
 #:      entry is keyed on the network's `data_version`, which does not move
 #:      when the wording does, so without this every project that had already
 #:      loaded its insights would keep the old labels for ever.
-_PAYLOAD_VERSION = 5
+_PAYLOAD_VERSION = 7
 
 
 #: Theme -> the per-facility field that theme is ABOUT. A chart for a finding
@@ -501,6 +501,170 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
     }
 
 
+#: How each step of the working is introduced, keyed by the role the engine
+#: tagged its figures with. The screen prints the same three headings; this is
+#: the same distinction written out for a reader who is not looking at it.
+_STEP_ROLES = (
+    ("metric", "What was measured",
+     "The figures this finding reads, exactly as the solve computed them. "
+     "Nothing here is re-derived: each value is the one the named engine "
+     "produced for this run."),
+    ("comparison", "What it was compared against",
+     "The figures the measurement above was read against — a configured "
+     "policy threshold, a baseline, or the counterpart quantity that makes "
+     "the measurement mean something."),
+    ("driver", "What is behind it",
+     "The quantities moving the measurement. These are reported because the "
+     "engine cited them in reaching the conclusion, not because a correlation "
+     "was tested."),
+)
+
+_ROLE_LABEL = {"metric": "Measured", "comparison": "Compared against",
+               "driver": "Driver"}
+
+
+def _method_note(record: Dict[str, Any]) -> str:
+    """
+    How to read the working, in one paragraph.
+
+    The deep dive shows the steps and the figures and says nothing about how
+    they were arrived at, which is what makes a correct derivation still feel
+    like a black box: a reader can see 97.2% and see the conclusion and has
+    no account of the move between them.
+    """
+    theme = record.get("theme") or "this"
+    return (
+        f"This {theme.lower()} finding is produced in two stages. First the "
+        "deterministic layer solves the network and computes every KPI from "
+        "the solved plan — the optimiser's own flows, the facilities it "
+        "opened and the demand it served — and publishes them as a digital "
+        "twin state. No language model takes part in that stage, and no "
+        "figure below is estimated. Second, the reasoning layer reads that "
+        "state, selects the figures relevant to this theme, compares them "
+        "against the configured policy thresholds, and states the conclusion "
+        "in the section above. Every number it quotes is then checked back "
+        "against the computed results before the finding is published; the "
+        "outcome of that check is recorded under Provenance."
+    )
+
+
+def _derivation_for(record: Dict[str, Any], briefing: Any, result: Any,
+                    state: Any) -> Any:
+    """
+    One serialised insight, as a `DerivationReport`.
+
+    Reads the SAME record the browser renders, so the document and the screen
+    cannot disagree: if the deep dive shows 97.20%, so does the table in the
+    file, because both print the identical `display_value` string.
+    """
+    from datetime import datetime, timezone
+
+    from netgravity.reporting import DerivationReport, DerivationStep, Figure
+
+    evidence = [e for e in (record.get("evidence") or [])
+                if e.get("display_value")
+                and e["display_value"] != "Not available"]
+
+    steps = []
+    for role, title, detail in _STEP_ROLES:
+        rows = [e for e in evidence if (e.get("role") or "metric") == role]
+        if not rows:
+            continue
+        steps.append(DerivationStep(
+            title=title,
+            detail=detail,
+            figures=tuple(
+                Figure(label=e.get("label") or e.get("ref") or "",
+                       value=e.get("display_value") or "",
+                       role=_ROLE_LABEL.get(e.get("role") or "metric", "Measured"),
+                       source=e.get("source") or "")
+                for e in rows),
+        ))
+
+    # The entities the finding was computed OVER, where it has them. This is
+    # the part a screen can only show as a chart and a reader most often wants
+    # as a list they can sort — which site, at what figure.
+    entities = record.get("entities") or []
+    if entities:
+        # The metric's own readable name, not its storage key: the document
+        # said "Ranked by utilization pct" where the table beside it already
+        # said "Average utilisation".
+        from netgravity.orchestrator.reasoning.evidence import metric_label
+        metric = metric_label(entities[0].get("metric") or "").lower()
+        steps.append(DerivationStep(
+            title="Every record this was computed over",
+            detail=(f"Ranked by {metric or 'the metric this theme is about'}, "
+                    "as the solve reported it for each one. The conclusion is "
+                    "a statement about this population, not about the "
+                    "single figure above."),
+            figures=tuple(
+                Figure(label=str(e.get("label") or e.get("entity_id") or ""),
+                       value=_format_entity_value(e),
+                       role=("Not used by this plan" if e.get("is_open") is False
+                             else "In this plan"),
+                       source=str(e.get("role") or e.get("kind") or ""))
+                for e in entities),
+        ))
+
+    limitations = []
+    if briefing.limitation:
+        limitations.append(briefing.limitation)
+    completeness = getattr(briefing.evidence_completeness, "value",
+                           str(briefing.evidence_completeness))
+    if completeness and completeness != "COMPLETE":
+        limitations.append(
+            f"Evidence for this run is {completeness}: some analyses did not "
+            "produce a value, so those quantities are unknown rather than "
+            "zero.")
+
+    grounding = result.grounding_status
+    provenance = (
+        f"Source: NetGravity reasoning over the solved network state "
+        f"{state.state_id}. Numeric grounding: {grounding}."
+    )
+    if grounding not in ("GROUNDED", "NO_CLAIMS"):
+        provenance += (" Not every figure quoted in the prose was verified "
+                       "against the deterministic results.")
+    if result.validation_warnings:
+        provenance += (" Validation warnings: "
+                       + "; ".join(result.validation_warnings) + ".")
+
+    return DerivationReport(
+        kind="Insight",
+        subject=f"{record.get('theme') or 'Network'} · "
+                + ("whole network" if not record.get("entity_id")
+                   else str(record.get("entity_id"))),
+        conclusion=record.get("headline") or "",
+        summary=record.get("narrative") or "",
+        method=_method_note(record),
+        steps=steps,
+        recommended_action=record.get("recommended_action") or "",
+        assumptions=list(briefing.key_drivers or []),
+        limitations=limitations,
+        provenance=provenance,
+        generated_at="Generated "
+                     + datetime.now(timezone.utc).strftime("%d %B %Y, %H:%M UTC"),
+    )
+
+
+def _format_entity_value(entity: Dict[str, Any]) -> str:
+    """
+    One entity's figure, formatted the way the chart's axis formats it.
+
+    The entity rows carry raw numbers (they exist to be plotted), so unlike
+    every other figure in this document there is no `display_value` to copy.
+    The rule is the axis's own: a `_pct` metric reads as a percentage to two
+    places, anything else with thousands separators.
+    """
+    value = entity.get("value")
+    if not isinstance(value, (int, float)):
+        return "—"
+    metric = str(entity.get("metric") or "")
+    if metric.endswith("_pct"):
+        return f"{value:,.2f}%"
+    return f"{value:,.2f}"
+
+
 def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                               url_prefix: str = "/api/insights"):
     bp = Blueprint("insights", __name__, url_prefix=url_prefix)
@@ -773,6 +937,78 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
             return body
         return analysis_service.get(
             snapshot_id, snapshot.data_version, compute, variant=variant)
+
+    # ------------------------------------------------------------------
+    @bp.route("/<insight_id>/document", methods=["GET"])
+    @require_auth
+    @rate_limit("insights.document", limit=30, window_seconds=60)
+    def insight_document(insight_id: str):
+        """
+        One finding, as a document somebody can take into a meeting.
+
+        WHY THIS EXISTS. The deep-dive page shows the conclusion, the figures
+        it cites and the role each played. That is the right amount for a
+        screen and the wrong amount for the conversation that follows it: the
+        first question asked of a capacity finding in a steering committee is
+        which figures it rests on and what the model could not see, and the
+        answer has to survive being forwarded to somebody who will never open
+        this application.
+
+        NOTHING IS COMPUTED HERE. Every figure is the `display_value` the
+        evidence pack already carries, written out verbatim — the same rule
+        the screens follow. The document restates the run; it does not
+        re-derive it.
+
+        The writer itself is `netgravity.reporting`, which knows nothing about
+        insights: the demand forecast is asked the same question ("which
+        series, which method, what history") and will build the same shape.
+        """
+        from netgravity.reporting import (
+            DerivationReport, DerivationStep, Figure, build_derivation_docx)
+
+        project_id = str(request.args.get("project_id") or "").strip()
+        if not project_id:
+            raise ValidationError("A project_id is required.")
+        user_id = g.current_user.user_id
+        project_registry.get(project_id, user_id=user_id)
+
+        scope_arg = (request.args.get("scope") or "NETWORK").upper()
+        scope = (ReasoningScope.FACILITY if scope_arg == "FACILITY"
+                 else ReasoningScope.NETWORK)
+        entity_id = str(request.args.get("entity_id") or "").strip() or None
+
+        _, state = _resolve_state(project_id, user_id)
+        try:
+            result, pack = _briefing_for(state, scope, entity_id, "", False)
+        except ValueError as exc:
+            raise NotFoundError(str(exc)) from exc
+
+        briefing = result.briefing
+        serialised = [
+            _serialise_insight(item, i, scope=scope_arg, entity_id=entity_id,
+                               pack=pack)
+            for i, item in enumerate(briefing.kpi_insights)
+        ]
+        record = next((r for r in serialised if r["id"] == insight_id), None)
+        if record is None:
+            raise NotFoundError(
+                f"'{insight_id}' is not a finding on this network's current "
+                f"analysis.")
+
+        report = _derivation_for(record, briefing, result, state)
+        payload = build_derivation_docx(report)
+
+        response = make_response(payload)
+        response.headers["Content-Type"] = (
+            "application/vnd.openxmlformats-officedocument"
+            ".wordprocessingml.document")
+        # `attachment` because this is a file to keep, not a page to read. The
+        # filename is what the reader will look for in a downloads folder a
+        # week later, so it names the finding rather than the id.
+        response.headers["Content-Disposition"] = (
+            f'attachment; filename="{report.filename()}"')
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @bp.errorhandler(ApplicationError)
     def _insight_error(exc: ApplicationError):
