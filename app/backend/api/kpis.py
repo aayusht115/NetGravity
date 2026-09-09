@@ -40,6 +40,7 @@ from netgravity.orchestrator.core.orchestrator import Orchestrator
 from netgravity.orchestrator.metrics.registry import KPIRegistry
 from netgravity.orchestrator.metrics.warehouse_deep_dive import (
     DEFAULT_TARGET_UTILISATION_PCT,
+    OVER_UTILISED_PCT,
     TOP_N,
     GrowthAssumption,
     WarehouseDeepDiveReport,
@@ -89,6 +90,65 @@ _SAVINGS_BASIS = (
     "volume elsewhere, so these figures do not sum to the network saving. The "
     "network figure is stated separately."
 )
+
+def _chart_explanation(*, project_id: str, chart: str, scope_is_facility: bool,
+                       entity_id: Optional[str], result_parts: list,
+                       payload: Dict[str, Any], figures: list) -> Dict[str, Any]:
+    """
+    One chart's grounded card, produced once and then read from the store.
+
+    The same route every other explanation on this product takes — see
+    `orchestrator/explanation_service.py`. What is specific here is the KIND:
+    each chart is its own record, so the four explainable visuals of one
+    analysis are four independent questions and answering one never obliges
+    the reader to pay for the other three.
+
+    `figures` are CODE'S. The model writes the sentences and no numbers at
+    all, which is what makes it impossible for a card to state a figure the
+    chart beside it disagrees with.
+
+    Never raises: the chart is perfectly readable without a briefing, and an
+    advisory paragraph must not be able to take down a screen of results.
+    """
+    try:
+        from netgravity.ingestion.config import IngestionConfig
+        from netgravity.ingestion.storage import get_storage
+        from netgravity.orchestrator.explanation_llm import (
+            explanation_reasoning_agent,
+            explanations_llm_enabled,
+        )
+        from netgravity.orchestrator.explanation_service import ExplanationService
+        from netgravity.orchestrator.explanations import (
+            KIND_KPI_CHART,
+            ExplanationStore,
+        )
+        from netgravity.orchestrator.schemas.reasoning import ReasoningScope
+
+        service = ExplanationService(
+            # The SHARED connection, not a bare agent: a bare `ReasoningAgent()`
+            # has no gateway and returns templates however the credential is set.
+            explanation_reasoning_agent(),
+            ExplanationStore(get_storage(IngestionConfig())))
+        return service.explain(
+            subject_id=project_id,
+            kind=f"{KIND_KPI_CHART}:{chart}",
+            scope=(ReasoningScope.FACILITY if scope_is_facility
+                   else ReasoningScope.NETWORK),
+            result_parts=result_parts,
+            build_payload=lambda: payload,
+            entity_id=entity_id,
+            allow_llm=explanations_llm_enabled(),
+            figures=figures,
+            # This card opens as an overlay over its own chart, not as a tile,
+            # so it has a paragraph's worth of room. At the tile defaults the
+            # explanation was cut mid-sentence on an ellipsis, hiding the
+            # comparison that made the finding worth reading.
+            limits={"opening": 700, "headline": 150, "meaning": 700},
+        )
+    except Exception as exc:  # noqa: BLE001 — the chart still stands
+        logger.warning("kpi.chart_explanation_failed chart=%s: %s", chart, exc)
+        return {}
+
 
 def create_kpi_blueprint(orchestrator: Optional[Orchestrator] = None,
                          url_prefix: str = "/api/kpis"):
@@ -552,6 +612,121 @@ def create_kpi_blueprint(orchestrator: Optional[Orchestrator] = None,
 
         payload["warehouse"] = report.model_dump(mode="json")
         return jsonify(payload), 200
+
+    @bp.route("/explain", methods=["POST"])
+    @require_auth
+    @rate_limit("kpi.explain", limit=60, window_seconds=60)
+    def explain_kpi_chart():
+        """
+        What ONE chart on the KPI screen means, for a reader who asked.
+
+        Body:
+            ``chart``         which visual — see `kpi_chart_evidence.CHARTS`.
+            ``facility_ids``  the sites the chart actually drew, after the
+                              screen's filters. Required for the network
+                              charts.
+            ``facility_id``   the selected site, for the per-site chart.
+
+        WHY THE IDS COME FROM THE CLIENT. The screen's filters live on the
+        screen, and an explanation built over the whole network while the
+        reader is looking at three southern sites would describe sites that
+        are not in front of them — a confident answer about the wrong thing,
+        which is worse than no answer. The ids are used to SELECT from this
+        project's own solved rows, never as data: an id that is not in the
+        analysis is dropped rather than trusted.
+
+        ONE REQUEST PER CHART PER ANALYSIS, and only when asked. The
+        fingerprint carries the execution, the data version, the chart and
+        the exact rows drawn, so re-opening the same explanation — or opening
+        it again after switching tabs — spends nothing. Changing the filter
+        changes the rows, which is a different question and a different
+        record.
+
+        Never fails the screen: an explanation is advisory, so an empty card
+        comes back as 200 with a reason rather than an error over a chart
+        that is perfectly readable without one.
+        """
+        from netgravity.orchestrator.reasoning.kpi_chart_evidence import (
+            CHARTS,
+            CHART_THROUGHPUT_HORIZON,
+            NETWORK_CHARTS,
+            chart_payload,
+        )
+
+        body = request.get_json(silent=True) or {}
+        chart = str(body.get("chart") or "").strip()
+        if chart not in CHARTS:
+            raise ValidationError(
+                f"chart must be one of: {', '.join(CHARTS)}.")
+
+        project_id, snapshot_id, analysis = _scoped_analysis()
+        stored = analysis.get("warehouse") or {}
+        report = WarehouseDeepDiveReport(**stored) if stored else WarehouseDeepDiveReport()
+
+        facility_id = str(body.get("facility_id") or "").strip() or None
+        wanted = [str(f) for f in (body.get("facility_ids") or []) if f]
+
+        # Selection, not trust. The rows are this project's own solved
+        # records; the client only says which of them were on screen.
+        if chart == CHART_THROUGHPUT_HORIZON:
+            rows = [k for k in report.health_kpis if k.facility_id == facility_id]
+        elif wanted:
+            order = {fid: i for i, fid in enumerate(wanted)}
+            rows = sorted((k for k in report.health_kpis if k.facility_id in order),
+                          key=lambda k: order[k.facility_id])
+        else:
+            rows = list(report.health_kpis)
+
+        # WHICH rows this answer is about, resolved against the analysis. Sent
+        # back on every branch: a caller that has to check whether the field
+        # exists before trusting it cannot tell "no sites matched" from "the
+        # server ignored my filter".
+        drawn = [k.facility_id for k in rows]
+
+        multi_period = (report.periods_modelled or 1) > 1
+        payload, figures = chart_payload(
+            chart, rows,
+            threshold_pct=float(OVER_UTILISED_PCT),
+            multi_period=multi_period,
+            facility_id=facility_id,
+        )
+        if not payload:
+            # Nothing to explain, said plainly. Spending a model request to
+            # report an empty chart is the waste this whole path avoids.
+            return jsonify({
+                **_envelope(project_id, snapshot_id, analysis),
+                "chart": chart,
+                "facility_ids": drawn,
+                "card": {},
+                "source": "",
+                "cached": False,
+                "status": "NOTHING_TO_EXPLAIN",
+                "reason": (
+                    "This chart has no reading to explain for the sites "
+                    "currently shown."
+                ),
+            }), 200
+
+        content = _chart_explanation(
+            project_id=project_id,
+            chart=chart,
+            scope_is_facility=(chart not in NETWORK_CHARTS),
+            entity_id=facility_id,
+            result_parts=[analysis.get("execution_id", ""),
+                          analysis.get("data_version", ""),
+                          chart, facility_id or "", drawn],
+            payload=payload,
+            figures=figures,
+        )
+        return jsonify({
+            **_envelope(project_id, snapshot_id, analysis),
+            "chart": chart,
+            "facility_ids": drawn,
+            "card": content.get("card") or {},
+            "source": content.get("source", "template"),
+            "cached": bool(content.get("cached")),
+            "status": "OK" if content.get("card") else "UNAVAILABLE",
+        }), 200
 
     @bp.route("/evidence", methods=["GET"])
     @require_auth

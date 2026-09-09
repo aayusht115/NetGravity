@@ -2,7 +2,7 @@
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![MILP Core](https://img.shields.io/badge/Solver-PuLP%20%7C%20HiGHS%20%7C%20CBC-purple.svg)](https://github.com/coin-or/pulp)
-[![Tests](https://img.shields.io/badge/Automated%20Tests-1308%20Passing-brightgreen.svg)](netgravity/tests/)
+[![Tests](https://img.shields.io/badge/Automated%20Tests-3796%20Passing-brightgreen.svg)](netgravity/tests/)
 [![Architecture](https://img.shields.io/badge/Architecture-Deterministic%20MILP%20%2B%20Governed%20Orchestrator-orange.svg)](#3-system-architecture)
 
 > **NetGravity** is a decision-intelligence and network optimization platform for logistics networks. It joins mathematically rigorous Mixed-Integer Linear Programming with a governed AI control plane — and keeps a hard line between the two.
@@ -39,9 +39,10 @@ A fourth principle runs through everything: **missing is not zero.** When exposu
 | Orchestrator control plane (planning, dependencies, governance, audit) | Complete |
 | Orchestrator ↔ deterministic core integration | Complete — see [§6](#6-integration-phases) |
 | Conversational layer (chatbot → NLU → orchestrator) | Complete — see [§6](#6-integration-phases) |
-| Forecasting agent | **Not built** — requests are recognised and honestly declined |
-| Interactive web cockpit | Demonstration build on a synthetic Case-16 fixture |
-| Authentication / multi-process persistence | **Not built** — see [§9](#9-known-limitations) |
+| Forecasting agent | Complete — per-series forecasts, uncertainty ranges and grounded explanations |
+| Interactive web cockpit | Functional development build with upload, optimization, KPI, forecast and scenario flows |
+| KPI analytics workspace | Complete — network/DC/plant/freight lenses, scoped filters, drill-downs, PDF export and grounded chart explanations |
+| Authentication / persistence | Development implementation complete; production deployment hardening remains — see [§9](#9-known-limitations) |
 
 The mathematics is mature and evidenced. The **system** is not yet deployable — [§9](#9-known-limitations) states exactly what is missing and why passing tests does not settle the question.
 
@@ -268,6 +269,7 @@ R7   settlement of the candidate       → AUTO_ACTION    ◄─┘
 | **Phase 3** | Conversational layer: chatbot → NLU → structured intent → orchestrator | Complete — [`docs/phase3_conversational_layer.md`](docs/phase3_conversational_layer.md) |
 | **Phase 3.1** | Evaluate and harden the NLU boundary against measured results | Complete, incl. live `gpt-5-mini` evaluation — [`docs/phase3_1_llm_evaluation.md`](docs/phase3_1_llm_evaluation.md) |
 | **Phase 3.2** | Deterministic entity validation and conversational context | Complete — [`docs/phase3_2_entity_and_context.md`](docs/phase3_2_entity_and_context.md) |
+| **KPI screen rework** | Network scorecard, DC/plant/freight lenses, scoped filters, facility drill-downs, chart consistency, PDF export and on-demand AI explanations | Complete |
 
 Phase 2 added **no** new algorithms, agents, risk scores or optimization objectives. It connected what existed and proved the connections hold. The pre-implementation audit is preserved in [`docs/phase2_integration_gap_report.md`](docs/phase2_integration_gap_report.md).
 
@@ -337,13 +339,13 @@ NetGravity/
 
 ```bash
 python smoke_test.py                    # 7-check verification (~2s)
-pytest -m "not slow"                    # ~1,308 tests, ~220s
+pytest -m "not slow"                    # fast suite
 pytest                                  # includes large-scale benchmarks
 pytest netgravity/tests/integration/    # integration suites only
 python scripts/run_nlu_eval.py          # 159-case NLU evaluation, offline, free
 ```
 
-**1,308 passing, 1 skipped, 0 failing.**
+**3,796 passing, 0 failing.**
 
 | Suite | Tests |
 |---|---|
@@ -379,11 +381,11 @@ Stated plainly. **NetGravity is not production-ready**, and passing tests is not
 - Location → node mapping is string matching. Adequate when identifiers encode location; a real deployment needs a geographic mapping table.
 
 **Engineering / deployment**
-- **No authentication.** Capability-level authorization exists and works, but the actor is caller-asserted.
-- Persistence is single-process JSON files. Atomic writes make it crash-safe, not concurrent-writer-safe.
+- Development authentication is implemented. Production identity-provider configuration and deployment hardening remain environment-specific.
+- SQLite is the development persistence layer and has one writer. Multi-process production deployments require PostgreSQL via `NETGRAVITY_DATABASE_URL`.
 - No in-flight cache deduplication: simultaneous cold REI requests each compute a batch. Redundant work, not divergence.
 - Request idempotency returns a point-in-time view to a duplicate racing the original. Sequential retry is fully correct.
-- The web cockpit runs on a synthetic Case-16 fixture, not live data.
+- The web cockpit supports uploaded project data; bundled fixtures and the standalone preview remain demonstration aids.
 
 **Performance**
 - Parallel speed-up decays with size (1.98× at 7 facilities → 1.14× at 50). Beyond ~50 facilities a process pool or distributed workers is needed; the `max_workers` / `solve_fn` seams accept either.
@@ -412,7 +414,6 @@ Nine defect classes were found by measurement. The three that mattered: explicit
 - Lane, supplier and demand-surge REI (REI requires one uniform disruption assumption across compared entities).
 - Automatic mitigation and scenario generation.
 - Time-to-Recovery modelling. The MILP is multi-period as of Phase 10.9 — flow, demand, capacity and stock are indexed by period — but a TTR experiment also needs a disruption that BEGINS and ENDS within the horizon, and `DisruptionConfig` still expresses only "unavailable for the modelled period". `time_to_recovery_days` therefore still rejects any value rather than pretending. The formulation is no longer the obstacle; the disruption schema is.
-- **Forecasting.** There is no demand model and no projection engine. Forecast requests are recognised and declined, because any number produced would be invented rather than computed. Registering a real forecasting capability later needs no change to the conversational layer.
 
 ---
 

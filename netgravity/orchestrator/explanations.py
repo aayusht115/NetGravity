@@ -39,8 +39,14 @@ KIND_OPTIMIZED = "optimized"      # the solved network against its reference
 KIND_SCENARIO = "scenario"        # one what-if against its own reference
 KIND_COMPARISON = "comparison"    # a named set of scenarios, ranked
 KIND_FORECAST = "forecast"        # one forecast run
+#: One CHART on the KPI screen, asked for by a reader who pressed Explain on
+#: it. Suffixed with the chart's own name and fingerprinted on the rows that
+#: were actually drawn, so two charts of one analysis are two records and
+#: re-opening either spends nothing.
+KIND_KPI_CHART = "kpi_chart"
 
-KINDS = (KIND_OPTIMIZED, KIND_SCENARIO, KIND_COMPARISON, KIND_FORECAST)
+KINDS = (KIND_OPTIMIZED, KIND_SCENARIO, KIND_COMPARISON, KIND_FORECAST,
+         KIND_KPI_CHART)
 
 
 def _now() -> str:

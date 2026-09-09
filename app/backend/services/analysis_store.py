@@ -72,7 +72,14 @@ logger = logging.getLogger(__name__)
 #: `extra="forbid"`, so a v4 document rehydrated by the new code raises rather
 #: than degrading, and every previously analysed project served a 500 until
 #: this was bumped. Adding a field is not the only thing that needs this.
-_ANALYSIS_VERSION = 5
+#: 6 — `warehouse.health_kpis` gained `throughput_by_period` and
+#: `utilization_by_period`, the per-period series themselves. Every figure
+#: DERIVED from them was already in a v5 document — the peak, the period it
+#: fell in, how many were tight — so a stale document looks complete and is
+#: not: the facility screen's throughput chart reads the series, finds the
+#: field absent and draws nothing, on a network whose horizon was solved
+#: correctly. The same failure as entry 2, one field deeper.
+_ANALYSIS_VERSION = 6
 
 
 class AnalysisService:

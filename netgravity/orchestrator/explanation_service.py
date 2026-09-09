@@ -40,7 +40,8 @@ logger = logging.getLogger(__name__)
 
 
 def build_card(reasoning: Any, *, figures=None, details=None,
-               source: Optional[str] = None) -> Dict[str, Any]:
+               source: Optional[str] = None,
+               limits: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
     """
     The ONE card a screen renders: conclusion, meaning, warning, next step.
 
@@ -74,9 +75,10 @@ def build_card(reasoning: Any, *, figures=None, details=None,
 
     if briefing is not None:
         card = card_from_briefing(briefing, figures=figures, details=notes,
-                                  source=resolved_source)
+                                  source=resolved_source, limits=limits)
     else:
-        summary = clean(getattr(reasoning, "summary", "") or "", 260)
+        summary = clean(getattr(reasoning, "summary", "") or "",
+                        (limits or {}).get("meaning", 260))
         risks = [clean(r, 220) for r in (getattr(reasoning, "risks", []) or [])]
         card = ExplanationCard(
             headline=summary[:140],
@@ -193,6 +195,7 @@ class ExplanationService:
         extras: Optional[Dict[str, Any]] = None,
         figures: Optional[List[Any]] = None,
         details: Optional[List[str]] = None,
+        limits: Optional[Dict[str, int]] = None,
     ) -> Dict[str, Any]:
         """
         The explanation for one analysis.
@@ -268,7 +271,7 @@ class ExplanationService:
         # model can never state a number in the wrong one.
         content["card"] = build_card(
             reasoning, figures=figures, details=details,
-            source=content["source"])
+            source=content["source"], limits=limits)
 
         try:
             self.store.put(SavedExplanation(

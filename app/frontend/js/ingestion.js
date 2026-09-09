@@ -165,6 +165,10 @@ const flow = {
   //: the mapping-review screen — whose whole purpose is to show what was
   //: parsed — with nothing parsed: no columns, no rows, "Not read".
   parsing: 0,
+  // Used only by the generated offline preview. It lets that artifact exercise
+  // these real ingestion screens without calling a backend that cannot exist
+  // inside a single HTML file. Normal uploads always leave this false.
+  mockMode: false,
 };
 
 let uidCounter = 0;
@@ -384,6 +388,11 @@ function renderUploadData() {
             <p class="ing-subtitle">Upload your network data files. Netgravity's AI will automatically align and prepare your data for analysis.</p>
           </div>
         </div>
+
+        ${flow.mockMode ? `<div class="ing-card" style="border-color:var(--purple);background:var(--purple-soft,#f5f3ff)">
+          <div class="ing-card-title">Illustrative ingestion walkthrough</div>
+          <div class="ing-card-sub">A sample India network workbook is already attached. Continue to review its field mapping, resolve the flagged column if you wish, and watch the analysis loader complete.</div>
+        </div>` : ''}
 
         ${currentDatasetHtml()}
 
@@ -784,6 +793,10 @@ function startAiAnalysis() {
  * work starts immediately, behind the agent screen that reports it.
  */
 function finishIngestion() {
+  if (flow.mockMode) {
+    finishMockIngestion();
+    return;
+  }
   {
     hideIngestionPages();
 
@@ -877,6 +890,40 @@ function finishIngestion() {
         );
       });
   }
+}
+
+/**
+ * Run the real analysis loader for the offline preview, using timed mock stage
+ * completions rather than invented API responses. This branch is unreachable
+ * in the production flow unless `showMockIngestion()` is called explicitly by
+ * the standalone entry module.
+ */
+async function finishMockIngestion() {
+  hideIngestionPages();
+  if (typeof window.enterApp === 'function') window.enterApp({ hydrate: false });
+  beginAnalysisLoading((flow.project && flow.project.name) || 'India Network — Mock Preview', false);
+
+  const stages = [
+    ['structure', '12 nodes and 10 corridors read from the workbook'],
+    ['solve', 'Lowest-cost feasible network solved'],
+    ['insights', 'Three decision-ready insights prepared'],
+    ['scenarios', 'Two saved scenarios restored'],
+    ['forecast', 'Two sample demand series forecasted'],
+  ];
+  for (const [id, detail] of stages) {
+    reportAnalysisStage(id, 'start');
+    await new Promise(resolve => setTimeout(resolve, 650));
+    reportAnalysisStage(id, 'done', detail, `mock-${id}`);
+  }
+
+  if (typeof window.__ngSeedStandaloneMock === 'function') {
+    window.__ngSeedStandaloneMock();
+  }
+  endAnalysisLoading();
+  showNetworkNotice(
+    'Mock analysis complete. Every figure shown is illustrative UI preview data.',
+    'success',
+  );
 }
 
 /**
@@ -1948,6 +1995,7 @@ function bindPdfIngestion(file) {
    Entry points / navigation
    ═══════════════════════════════════════════════════════════════ */
 export function showUploadData(project) {
+  flow.mockMode = false;
   flow.project = project || null;
   flow.dataset = null;
   flow.files = [];
@@ -1979,6 +2027,150 @@ export function showUploadData(project) {
   // so the uploader is usable immediately; a project with no dataset simply
   // renders nothing extra.
   loadCurrentDataset();
+}
+
+/**
+ * Open a populated, fully interactive ingestion walkthrough for the generated
+ * standalone artifact. The production application never calls this entry
+ * point; it exists so a single offline HTML file can demonstrate upload,
+ * mapping review, data quality and the real analysis loader.
+ */
+export function showMockIngestion(project) {
+  flow.project = project || { id: 'mock-preview', name: 'India Network — Mock Preview' };
+  flow.dataset = null;
+  flow.mockMode = true;
+  flow.parseError = null;
+  flow.parseErrors = {};
+  flow.parsing = 0;
+  flow.queue = [];
+  flow.queueIndex = 0;
+  flow.pdfReview = {};
+  flow.extractedNetwork = null;
+  flow.projectId = 'mock-preview';
+
+  const file = {
+    id: 'mock-network-workbook',
+    name: 'India_Network_Planning_Mock.xlsx',
+    ext: 'xlsx',
+    kind: 'excel',
+    sizeBytes: 184320,
+    uploadedAt: 'Just now',
+    status: 'uploaded',
+  };
+  flow.files = [file];
+  flow.fileSummaries = {
+    [file.name]: {
+      name: file.name,
+      rows: 2840,
+      sheets: ['Facilities', 'Markets', 'Lanes', 'Demand_History', 'Products'],
+      columnsCount: 20,
+    },
+  };
+
+  const rows = [
+    ['Facility_ID', 'DC_BENGALURU', 'Facility ID', 'high', 'auto', 'Facilities', 'facilities'],
+    ['Facility_Name', 'Bengaluru Distribution Centre', 'Facility Name', 'high', 'auto', 'Facilities', 'facilities'],
+    ['Facility_Type', 'Distribution Centre', 'Facility Type', 'high', 'auto', 'Facilities', 'facilities'],
+    ['Status', 'Existing', 'Facility Status', 'high', 'auto', 'Facilities', 'facilities'],
+    ['Capacity_Units', '15000', 'Capacity', 'high', 'auto', 'Facilities', 'facilities'],
+    ['Opening_Cost_INR', '3600000', 'Opening Cost', 'high', 'auto', 'Facilities', 'facilities'],
+    ['Latitude', '12.9716', 'Latitude', 'high', 'auto', 'Facilities', 'facilities'],
+    ['Longitude', '77.5946', 'Longitude', 'high', 'auto', 'Facilities', 'facilities'],
+    ['Region', 'South', 'Region', 'high', 'auto', 'Facilities', 'facilities'],
+    ['Market_ID', 'MKT_CHENNAI', 'Market ID', 'high', 'auto', 'Markets', 'markets'],
+    ['Demand_Units', '10400', 'Demand', 'high', 'auto', 'Markets', 'markets'],
+    ['Service_Days', '2', 'SLA Days', 'medium', 'review', 'Markets', 'markets'],
+    ['Origin_ID', 'PLT_HYDERABAD', 'Origin Facility ID', 'high', 'auto', 'Lanes', 'lanes'],
+    ['Destination_ID', 'DC_BENGALURU', 'Destination ID', 'high', 'auto', 'Lanes', 'lanes'],
+    ['Rate_Per_Unit', '3.00', 'Transport Rate', 'high', 'auto', 'Lanes', 'lanes'],
+    ['Period', 'Jan-26', 'Period', 'high', 'auto', 'Demand_History', 'demand_history'],
+    ['Product_ID', 'P001', 'Product ID', 'high', 'auto', 'Products', 'products'],
+    ['Product_Category', 'Core', 'Product Category', 'high', 'auto', 'Products', 'products'],
+    ['Planner_Comment', 'Seasonal launch support', 'Not used by the model', 'low', 'ignored', 'Facilities', 'facilities'],
+    ['Row_Colour', 'Amber', 'Not used by the model', 'low', 'ignored', 'Markets', 'markets'],
+  ].map(([source, sample, mapped, confidence, status, sheet, sheetRole]) => ({
+    source, sample, mapped, confidence, status, sheet, sheetRole,
+  }));
+  flow.mapping = { [file.id]: rows };
+  flow.mapStats = {
+    [file.id]: { detected: 20, auto: 17, review: 1, ignored: 2 },
+  };
+  flow.schemaFields = [
+    'Facility ID', 'Facility Name', 'Facility Type', 'Facility Status',
+    'Capacity', 'Opening Cost', 'Latitude', 'Longitude', 'Region',
+    'Market ID', 'Demand', 'SLA Days', 'Origin Facility ID',
+    'Destination ID', 'Transport Rate', 'Period', 'Product ID',
+    'Product Category', 'Not used by the model',
+  ];
+
+  // If somebody uses the real file picker in the standalone artifact, parse
+  // it into the same illustrative preview instead of attempting an HTTP call
+  // to the production parser. Previously that added a second, unreadable file
+  // to the queue and the disabled Confirm button trapped the walkthrough on
+  // its mapping screen.
+  ingestionService.uploadAndParse = async (formData) => {
+    await new Promise(resolve => setTimeout(resolve, 450));
+    const selected = typeof formData?.getAll === 'function'
+      ? formData.getAll('files') : [];
+    const mapping = {};
+    const files = selected.map((selectedFile) => {
+      const name = selectedFile?.name || 'Uploaded_Network_Data.xlsx';
+      mapping[name] = rows.map(row => ({ ...row }));
+      return {
+        name,
+        rows: 2840,
+        sheets: ['Facilities', 'Markets', 'Lanes', 'Demand_History', 'Products'],
+        columnsCount: rows.length,
+      };
+    });
+    return {
+      structure: null,
+      schemaFields: flow.schemaFields.slice(),
+      files,
+      mapping,
+      mapStats: { detected: 20, auto: 17, review: 1, ignored: 2 },
+      dataQuality: {
+        totalRecords: 2840, validRecords: 2812, validPct: 99.0,
+        nullCellPct: 0.4, duplicateRows: 12, emptyRows: 0,
+        issues: DATA_QUALITY.issues.slice(),
+      },
+      parse_errors: [],
+    };
+  };
+  ingestionService.findParsedPreview = async () => null;
+
+  DATA_QUALITY.totalRecords = 2840;
+  DATA_QUALITY.validRecords = 2812;
+  DATA_QUALITY.validPct = 99.0;
+  DATA_QUALITY.nullCellPct = 0.4;
+  DATA_QUALITY.duplicateRows = 12;
+  DATA_QUALITY.emptyRows = 0;
+  DATA_QUALITY.issues = [
+    {
+      severity: 'warning', type: 'Duplicate demand rows',
+      table: 'Demand_History',
+      detail: '12 duplicate market-product-period rows should be reviewed before a real analysis.',
+    },
+    {
+      severity: 'warning', type: 'Missing optional opening cost',
+      column: 'Opening_Cost_INR',
+      detail: 'One proposed site has no opening cost. This mock keeps it visible as a data gap.',
+    },
+  ];
+
+  const shell = document.querySelector('.app-shell');
+  flow.cameFromApp = true;
+  if (typeof window.hideProjectPages === 'function') window.hideProjectPages();
+  const landing = document.getElementById('landing-page');
+  if (landing) { landing.classList.add('hidden'); landing.style.display = 'none'; }
+  if (shell) shell.style.display = 'none';
+  const fab = document.getElementById('floating-chatbot-fab');
+  if (fab) fab.style.display = 'none';
+
+  hideIngestionPages();
+  renderUploadData();
+  const page = document.getElementById('upload-data-page');
+  if (page) { page.classList.remove('hidden'); page.scrollTop = 0; }
 }
 
 /**

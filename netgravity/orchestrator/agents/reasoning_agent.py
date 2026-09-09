@@ -523,29 +523,67 @@ class ReasoningAgent:
             #   cost + service  a plan that costs less while stranding demand
             #                   is cheaper and not therefore better;
             #   once            the same finding as headline, paragraph and
-            #                   recommendation reads as three findings.
-            "RULES: no figures, amounts, percentages or currency symbols. "
+            #                   recommendation reads as three findings;
+            #   not a roster    "name the real things" is satisfied, literally
+            #                   and uselessly, by listing every site in the
+            #                   payload. A live call on a network where every
+            #                   site read the same returned six facility names
+            #                   as the conclusion AND as the paragraph under
+            #                   it — a card that names its subject twice and
+            #                   says nothing about it. A conclusion is a
+            #                   statement; the names belong inside it.
+            # ONE CHART is the exception to "no figures".
+            #
+            # The rest of this product applies the project's currency in one
+            # place afterwards, so a model-written amount would arrive in the
+            # wrong one. A chart explanation is read BESIDE the chart, where a
+            # sentence with no quantities in it ("utilisation is high at two
+            # sites") says less than the picture it sits under — so here the
+            # figures are the point, and every value the model may use is
+            # registered as a citable fact in `numeric_grounding._FACT_SPEC`
+            # before it is sent. Anything it writes that is not one of those
+            # is still removed by the validator afterwards.
+            + ("RULES: use ONLY figures from the results above. Write them as "
+               "a reader would — thousands separated, decimals rounded, "
+               "'approximately' when rounded — never a field name or a raw "
+               "key. No figure that is not there. Summary = the finding in one "
+               "sentence, then TWO more that do not repeat it: the key figures, "
+               "how they compare, what the pattern means to run. "
+               if payload.get("kpi_chart") else
+               "RULES: no figures, amounts, percentages or currency symbols. ")
+            + (
             "Third person, never 'I' or 'my'. Plain business English, no "
             "solver or model vocabulary. Name the real things the results "
             "contain and never a placeholder; do not remark on the kinds "
             "they do not contain. No urgency the results do not establish. "
             "If cost improves but service or capacity does not, say both. "
-            "Say each thing once.\n"
+            "Say each thing once. State a finding, not a roster: name at most "
+            "two, or say 'no facility'/'every site' when it holds for all.\n"
             "Reply with ONLY this JSON, every string short:\n"
+            # A CHART CARD ASKS FOR WHAT A CHART CARD SHOWS.
+            #
+            # It renders the summary and nothing else: the recommendation is
+            # forced empty (a chart describes, it does not prescribe), and the
+            # drivers and risks are not drawn at all. Asking for them anyway
+            # spent output budget on three fields headed for the bin — and
+            # this model answers by reasoning first, so a bigger object is
+            # paid for in thinking before a single character is emitted. The
+            # gateway's own diagnosis when it ran out was "shorten the prompt
+            # or ask for a smaller object"; this is the second.
+            + ('{"summary":"<the finding in 1 sentence, then 2 more that do '
+               'not repeat it>",'
+               '"evidence":["<figure copied from the results>"],'
+               '"confidence":"LOW|MEDIUM|HIGH"}\n'
+               if payload.get("kpi_chart") else
             '{"summary":"<conclusion in 1 sentence, then what it means in 1 '
             'more>",'
             '"recommendation":"<1 sentence, one next step>",'
             '"confidence":"LOW|MEDIUM|HIGH",'
             '"key_drivers":["<6 words>","<6 words>"],'
-            # No "evidence" field. It asked for "one figure quoted from the
-            # results" three lines under a rule forbidding figures — two
-            # instructions that cannot both be met, which a reasoning model
-            # spends its answer deliberating over. Grounding does not need it:
-            # `ground_narrative()` falls back to reading numbers out of the
-            # visible text, and under these rules there are none to read.
-            '"risks":["<the one thing not to miss, 12 words>"]}\n'
-            "Set confidence to LOW if key results are missing or the network "
-            "is infeasible; HIGH only when the results are complete.\n"
+            '"risks":["<the one thing not to miss, 12 words>"]}\n')
+            + "Set confidence to LOW if key results are missing or the network "
+              "is infeasible; HIGH only when the results are complete.\n"
+            )
         )
 
         response = self.gateway.generate(prompt, purpose="reasoning")
@@ -577,7 +615,17 @@ class ReasoningAgent:
         summary = str(parsed.get("summary", ""))[:2000]
         drivers = as_list("key_drivers")
         risks = as_list("risks")
-        recommendation = str(parsed.get("recommendation", ""))[:1000]
+        # A CHART EXPLANATION MAKES NO RECOMMENDATION, on this path either.
+        #
+        # The template path already returns none; without this the model's
+        # `recommendation` came straight through and a utilisation chart
+        # advised shifting volume between sites — an instruction needing
+        # closure economics and a second solve, printed under an observation
+        # that supports nothing of the kind. Dropped here rather than removed
+        # from the JSON contract, which is shared with the flows that do
+        # legitimately recommend.
+        recommendation = ("" if payload.get("kpi_chart")
+                          else str(parsed.get("recommendation", ""))[:1000])
 
         return ReasoningResult(
             summary=summary,
@@ -1585,6 +1633,17 @@ class ReasoningAgent:
         # nothing, in which case the branch below finds nothing and says
         # nothing — the same contract as the two blocks above.
         warehouse_block = payload.get("warehouse") or {}
+        # ONE chart on the KPI screen, asked about by a reader who pressed
+        # Explain on it. The chart writes its own deterministic reading beside
+        # the numbers it is about (see reasoning/kpi_chart_evidence.py) and
+        # this surfaces it; a branch per chart here would put four charts'
+        # wording in a file that knows nothing about any of them, and a fifth
+        # chart would then need a change in two places.
+        #
+        # Without this the template writer recognised none of the chart blocks
+        # and fell through to "I could not find a deterministic result to
+        # explain" — a button that promises a briefing and delivers an apology.
+        chart_block = payload.get("kpi_chart") or {}
 
         infeasible = self._is_infeasible(payload)
 
@@ -1875,6 +1934,21 @@ class ReasoningAgent:
                     f"{comparison_block['n_not_comparable']} compared scenario(s) "
                     f"produced no usable cost.")
 
+        if chart_block:
+            finding = str(chart_block.get("finding") or "").strip()
+            matters = str(chart_block.get("matters") or "").strip()
+            # The finding leads, because it is the answer to "what am I
+            # looking at"; everything after it explains that rather than
+            # restating it.
+            if finding:
+                parts.insert(0, finding)
+            # NOT also into `risks`. The card blanks a meaning that repeats its
+            # warning, and `limitation` becomes that warning — so writing this
+            # sentence into both slots deleted it from the one a reader looks
+            # at first.
+            if matters:
+                parts.append(matters)
+
         if not parts:
             parts.append("I could not find a deterministic result to explain for this request.")
 
@@ -1888,6 +1962,17 @@ class ReasoningAgent:
             # projection.
             else self._forecast_recommendation(forecast_block)
             if forecast_block
+            # A CHART EXPLANATION MAKES NO RECOMMENDATION AT ALL.
+            #
+            # It says what the chart shows. Telling a reader to close a site
+            # or test a scenario needs closure economics, contractual
+            # constraints and a second solve — none of which a utilisation
+            # chart has — so that belongs to the Overview and the Scenario
+            # Planner, which do. Falling through to the network recommendation
+            # also printed "I have no deterministic finding to base a
+            # recommendation on" directly beneath a stated finding.
+            else ""
+            if chart_block
             else self._recommendation(
                 infeasible=infeasible,
                 state=state,
