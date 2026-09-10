@@ -184,6 +184,16 @@ _SATURATED_PCT = 99.0
 #: and "healthy" on the next.
 _LOADED_PCT = 85.0
 
+#: Below this, an OPEN site is carrying its full fixed cost for a fraction of
+#: its capacity. The opposite finding to the two thresholds above, and the one
+#: this file had no name for — so every plan that was not short of room
+#: produced "No network change is indicated" whatever it was wasting.
+#:
+#: Mirrors `strategic_actions.IDLE_PCT`, which is what the Insights ladder uses
+#: for the same finding. One number, so a site the Insights page calls
+#: under-used is not called healthy here.
+_UNDER_USED_PCT = 30.0
+
 #: How many sites a capacity account names before it stops listing them. A
 #: recommendation that names twenty sites has recommended nothing.
 _CAPACITY_SITE_LIMIT = 5
@@ -307,6 +317,9 @@ def _scenario_for(key: str, target: Dict[str, Any]) -> Dict[str, Any]:
         return {"action": "OPEN_FACILITY", "open_mode": "NEW",
                 "region": region,
                 "name": f"New site in {region}".strip() if region else "New site"}
+    if key == "CONSOLIDATE":
+        return {"action": "CLOSE_FACILITY", "facility_id": facility_id,
+                "name": f"Consolidate {name}"}
     if key == "SCOPE_DEMAND_GROWTH":
         return {"action": "CHANGE_DEMAND", "name": "Growth, scoped to its region"}
     return {}
@@ -316,6 +329,100 @@ def _fmt_units(value: Any) -> str:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return "an unrecorded quantity"
     return f"{value:,.0f} units"
+
+
+def _capacity_account(record: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Which sites this plan fills, empties and leaves closed — for a record of
+    any age.
+
+    `_capacity_response` computes this at simulate time and writes it onto the
+    record, and every rung in `_recommended_actions` is gated on it. A scenario
+    stored before it existed carries no such block, so `cap` was `{}` and the
+    ladder could see nothing: measured on the demo project, all three saved
+    scenarios return `capacity_response: ABSENT`, one of them a +30% demand run
+    with a site sitting at 100% of capacity — and the card recommended nothing
+    about capacity, because the only rung that could still fire reads the
+    scenario REQUEST rather than the account.
+
+    `/compare` recomputes the recommendations against the stored record, which
+    was meant to cover exactly this. Recomputing a ladder over a block that is
+    not there recovers nothing.
+
+    So the account is rebuilt from what the record does carry:
+    `scenario_facilities` and `baseline_facilities` are the same authoritative
+    per-site figures `_capacity_response` reads, and the thresholds are the same
+    three constants.
+
+    TWO THINGS ARE NOT RECOVERED, deliberately:
+
+      * site NAMES live on the engine's facility metadata rather than on the
+        record, so the id is used. "Test consolidating DC_EAST" is worse than
+        the same sentence with the site's real name and far better than no
+        recommendation at all;
+      * `regions_without_room` stays empty. A region cannot be declared full
+        without knowing which sites are in it, and the record does not say. A
+        record of this age can therefore be recommended an expansion, a
+        reopening or a consolidation — never a new site somewhere the data
+        cannot place.
+    """
+    stored = record.get("capacity_response")
+    if isinstance(stored, dict) and stored:
+        return stored
+
+    scenario = record.get("scenario_facilities") or {}
+    baseline = record.get("baseline_facilities") or {}
+    at_ceiling: List[Dict[str, Any]] = []
+    working_harder: List[Dict[str, Any]] = []
+    under_used: List[Dict[str, Any]] = []
+    idle: List[Dict[str, Any]] = []
+
+    for facility_id, state in scenario.items():
+        if not isinstance(state, dict):
+            continue
+        capacity = state.get("capacity")
+        if state.get("isOpen") is False:
+            if isinstance(capacity, (int, float)) and capacity > 0:
+                idle.append({"id": facility_id, "name": facility_id,
+                             "util_pct": None, "region": None,
+                             "capacity": capacity})
+            continue
+
+        util = state.get("utilPct")
+        if not isinstance(util, (int, float)) or isinstance(util, bool):
+            continue
+        was = (baseline.get(facility_id) or {}).get("throughput")
+        now = state.get("throughput")
+        added = (round(now - was, 2)
+                 if isinstance(now, (int, float)) and isinstance(was, (int, float))
+                 else None)
+        row = {"id": facility_id, "name": facility_id, "util_pct": float(util),
+               "region": None, "capacity": capacity, "added_units": added}
+
+        if util >= _SATURATED_PCT:
+            at_ceiling.append(row)
+        elif util >= _LOADED_PCT and (added or 0) > 0:
+            working_harder.append(row)
+        elif util < _UNDER_USED_PCT:
+            under_used.append(row)
+
+    at_ceiling.sort(key=lambda r: -(r["added_units"] or 0))
+    working_harder.sort(key=lambda r: -(r["util_pct"] or 0))
+    under_used.sort(key=lambda r: (r["util_pct"] or 0))
+    idle.sort(key=lambda r: -(r["capacity"] or 0))
+
+    return {
+        "at_ceiling": at_ceiling, "at_ceiling_count": len(at_ceiling),
+        "working_harder": working_harder,
+        "working_harder_count": len(working_harder),
+        "under_used": under_used, "under_used_count": len(under_used),
+        "idle": idle, "idle_count": len(idle),
+        # Not recoverable from the record — see the note above.
+        "regions_without_room": [],
+        # Says this account was rebuilt rather than solved, so a consumer that
+        # cares can tell the difference.
+        "reconstructed": True,
+    }
 
 
 def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -339,7 +446,12 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
     everywhere is never told to build. An empty list is a real answer and the
     caller must say so rather than filling the space.
     """
-    cap = record.get("capacity_response") or {}
+    # Rebuilt from the record's own per-site figures when the solve wrote no
+    # account. EVERY RUNG BELOW IS GATED ON THIS BLOCK, so an absent one made
+    # the whole ladder blind — see `_capacity_account`. The derivation report
+    # deliberately does NOT do this: a document showing the working must print
+    # what the solve wrote, or say it is not there.
+    cap = _capacity_account(record)
     kpis = record.get("scenario_kpis") or {}
     request = record.get("request") or {}
 
@@ -454,6 +566,32 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
             "target": {"region": region},
         })
 
+    # THE OPPOSITE FINDING, and the only rung on this ladder that is not about
+    # running out of room.
+    #
+    # Gated on nothing being at its ceiling, exactly as the Insights ladder
+    # gates it: proposing to take capacity out of a network while another site
+    # has none left is the one reading of this finding that would be wrong.
+    # Every rung above answers a shortage, so reaching this one means the plan
+    # has no shortage to answer.
+    under_used = list(cap.get("under_used") or [])
+    if under_used and not at_ceiling:
+        site = under_used[0]
+        util = site.get("util_pct")
+        at = (f"{util:,.0f}% of its capacity" if isinstance(util, (int, float))
+              else "a fraction of its capacity")
+        actions.append({
+            "key": "CONSOLIDATE",
+            "label": f"Test consolidating {site.get('name') or site.get('id')}",
+            "reason": (
+                f"{site.get('name') or site.get('id')} stays open in this plan "
+                f"and runs at {at}, carrying its full fixed cost either way. "
+                f"Moving its volume onto the sites with room is worth pricing "
+                f"before any capacity is added anywhere."),
+            "target": {"facility_id": site.get("id"), "name": site.get("name"),
+                       "region": site.get("region")},
+        })
+
     # Growth stated for the whole network, on an upload that names regions.
     scoped = request.get("demand_region") or request.get("demand_product_category")
     if request.get("action") == "CHANGE_DEMAND" and not scoped:
@@ -551,6 +689,7 @@ def _capacity_response(engine: Any, snapshot_id: str,
 
     at_ceiling: List[Dict[str, Any]] = []
     working_harder: List[Dict[str, Any]] = []
+    under_used: List[Dict[str, Any]] = []
     idle: List[Dict[str, Any]] = []
     open_headroom = 0.0
     open_headroom_known = False
@@ -598,10 +737,19 @@ def _capacity_response(engine: Any, snapshot_id: str,
                 slot["at_ceiling"] += 1
         elif util >= _LOADED_PCT and (row["added_units"] or 0) > 0:
             working_harder.append(row)
+        elif util < _UNDER_USED_PCT:
+            # OPEN, PAID FOR, AND NEARLY EMPTY. Everything that was neither at
+            # its ceiling nor working harder used to fall off the end of this
+            # loop, so the one plan shape this card could say nothing about was
+            # the one with capacity going to waste in it.
+            under_used.append(row)
 
     # Busiest first: the site a planner has to deal with is the fullest one.
     at_ceiling.sort(key=lambda r: -(r["added_units"] or 0))
     working_harder.sort(key=lambda r: -(r["util_pct"] or 0))
+    # Emptiest first: the site with the least going through it is the one worth
+    # pricing a consolidation against.
+    under_used.sort(key=lambda r: (r["util_pct"] or 0))
     idle.sort(key=lambda r: -(r["capacity"] or 0))
 
     # A region qualifies as needing its own site only when it has a site the
@@ -624,6 +772,10 @@ def _capacity_response(engine: Any, snapshot_id: str,
         "at_ceiling_count": len(at_ceiling),
         "working_harder": working_harder[:_CAPACITY_SITE_LIMIT],
         "working_harder_count": len(working_harder),
+        # Open sites running below `_UNDER_USED_PCT`. The finding this card
+        # could not make.
+        "under_used": under_used[:_CAPACITY_SITE_LIMIT],
+        "under_used_count": len(under_used),
         "idle": idle[:_CAPACITY_SITE_LIMIT],
         "idle_count": len(idle),
         "idle_capacity_units": round(idle_capacity, 2) if idle else 0.0,

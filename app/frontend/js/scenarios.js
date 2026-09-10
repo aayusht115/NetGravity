@@ -947,6 +947,14 @@ function recommendedActions(scn, comparison) {
         return { ...base,
           run: () => openCreateToolboxWith('OPEN_FACILITY', {
             openMode: 'NEW', name: `New site in ${target.region || ''}`.trim() }) };
+      case 'CONSOLIDATE':
+        // The one rung that takes capacity OUT. It had no case here, so even
+        // once the server started emitting it the button would have opened
+        // nothing — `run` is undefined and the click handler skips it.
+        return { ...base,
+          run: () => openCreateToolboxWith('CLOSE_FACILITY',
+            target.facility_id ? { facilityId: target.facility_id,
+              name: `Consolidate ${target.name || target.facility_id}` } : {}) };
       case 'SCOPE_DEMAND_GROWTH':
         return { ...base, run: () => openCreateToolboxWith('CHANGE_DEMAND') };
       case 'REQUEST_DATA':

@@ -1207,3 +1207,230 @@ class TestTheVerdictNamesTheBindingConstraint:
 
     def test_an_unmeasured_shortfall_says_nothing(self):
         assert _capacity_verdict(None, 100.0, 0.0, 4) == ""
+
+
+# ---------------------------------------------------------------------------
+# The ladder could not see the plan it was recommending about
+# ---------------------------------------------------------------------------
+
+def _plain_record(facilities, baseline=None, **extra):
+    """A stored scenario with per-site figures and NO capacity account."""
+    record = {
+        "scenario_facilities": facilities,
+        "baseline_facilities": baseline or {},
+        "scenario_kpis": {"unserved_demand": {"value": 0.0}},
+        "request": {"action": "CHANGE_CAPACITY"},
+        "explanation": {},
+    }
+    record.update(extra)
+    return record
+
+
+class TestTheLadderCanSeeARecordOfAnyAge:
+    """
+    THE REASON THE RECOMMENDATION CARD HAD NO RECOMMENDATION ON IT.
+
+    Every rung in `_recommended_actions` is gated on `capacity_response` —
+    which sites are at their ceiling, which are working harder, what is closed.
+    `_capacity_response` computes that at simulate time and writes it onto the
+    record.
+
+    Every scenario stored before it existed has no such block. Measured on the
+    demo project: all three of its saved scenarios returned `capacity_response:
+    ABSENT`, so `cap` was `{}` and the ladder could see nothing. One of them is
+    a +30% demand run in which DC_WEST sits at 100% of capacity, and the card
+    recommended nothing about capacity at all — the only rung that still fired
+    reads the scenario REQUEST rather than the account.
+
+    `/compare` recomputes the recommendations against the stored record, which
+    was meant to cover exactly this. Recomputing a ladder over a block that is
+    not there recovers nothing.
+    """
+
+    #: The demo's "Demo demand +30%", as it is actually stored.
+    FULL_SITE = {
+        "DC_WEST": {"capacity": 3500.0, "isOpen": True,
+                    "throughput": 3500.0, "utilPct": 100.0},
+        "DC_EAST": {"capacity": 4000.0, "isOpen": True,
+                    "throughput": 2480.0, "utilPct": 62.0},
+        "DC_NORTH_NEW": {"capacity": 4500.0, "isOpen": False,
+                         "throughput": 0.0, "utilPct": 0.0},
+    }
+    WAS = {"DC_WEST": {"throughput": 2700.0}, "DC_EAST": {"throughput": 1900.0}}
+
+    def test_a_site_at_its_ceiling_is_recommended_relief(self):
+        from app.backend.api.scenarios import _recommended_actions
+
+        record = _plain_record(self.FULL_SITE, self.WAS,
+                               request={"action": "CHANGE_DEMAND",
+                                        "demand_multiplier": 1.3})
+        keys = [a["key"] for a in _recommended_actions(record)]
+        assert "ADD_CAPACITY" in keys, keys
+        # And the cheaper rung above it: capacity already built and switched
+        # off beats capacity that has to be added.
+        assert keys[0] == "REOPEN_FACILITY", keys
+
+    def test_the_rebuilt_account_reads_the_same_thresholds(self):
+        from app.backend.api.scenarios import (
+            _LOADED_PCT, _SATURATED_PCT, _UNDER_USED_PCT, _capacity_account,
+        )
+
+        account = _capacity_account(_plain_record(self.FULL_SITE, self.WAS))
+        assert [r["id"] for r in account["at_ceiling"]] == ["DC_WEST"]
+        assert [r["id"] for r in account["idle"]] == ["DC_NORTH_NEW"]
+        assert _UNDER_USED_PCT < _LOADED_PCT < _SATURATED_PCT
+
+    def test_a_closed_site_is_idle_capacity_not_an_under_used_one(self):
+        """
+        A site the plan did not open has `utilPct` 0, which is below every
+        threshold. Counting it as under-used would recommend consolidating a
+        facility that is already shut.
+        """
+        from app.backend.api.scenarios import _capacity_account
+
+        account = _capacity_account(_plain_record(self.FULL_SITE, self.WAS))
+        assert account["under_used"] == []
+        assert account["idle"][0]["capacity"] == 4500.0
+
+    def test_the_stored_account_wins_when_there_is_one(self):
+        """
+        A solve that DID write an account knows things this cannot recover —
+        regions, headroom totals, the verdict. It is never second-guessed.
+        """
+        from app.backend.api.scenarios import _capacity_account
+
+        stored = {"at_ceiling": [], "idle": [], "regions_without_room": [],
+                  "working_harder": [], "verdict": "the solve's own words"}
+        record = _plain_record(self.FULL_SITE, self.WAS,
+                               capacity_response=stored)
+        assert _capacity_account(record) is stored
+
+    def test_a_region_is_never_invented(self):
+        """
+        Regions live on the engine's facility metadata, not on the record. A
+        rebuilt account must not claim a region has run out of room, because it
+        cannot know which sites are in one — and that rung recommends BUILDING.
+        """
+        from app.backend.api.scenarios import (
+            _capacity_account, _recommended_actions,
+        )
+
+        record = _plain_record(self.FULL_SITE, self.WAS)
+        assert _capacity_account(record)["regions_without_room"] == []
+        keys = [a["key"] for a in _recommended_actions(record)]
+        assert "OPEN_NEW_FACILITY" not in keys, keys
+
+    def test_a_record_with_no_figures_at_all_still_answers(self):
+        from app.backend.api.scenarios import _recommended_actions
+
+        actions = _recommended_actions({})
+        assert [a["key"] for a in actions] == ["NO_ACTION"]
+        assert actions[0]["label"], "a blank is not an answer"
+
+    def test_the_derivation_report_is_not_given_a_rebuilt_account(self):
+        """
+        A document that shows the working must print what the SOLVE wrote, or
+        say it is not there. Reconstructing figures inside it would put numbers
+        in an audit trail that no solve produced.
+        """
+        import pathlib
+
+        source = (pathlib.Path(__file__).resolve().parents[3] / "app"
+                  / "backend" / "api" / "scenarios.py").read_text(
+                      encoding="utf-8")
+        block = source[source.index("def _scenario_derivation("):]
+        block = block[:block.index("\ndef ", 10)]
+        assert 'record.get("capacity_response") or {}' in block
+        assert "_capacity_account(" not in block
+
+
+class TestThePlannerCanRecommendTakingCapacityOut:
+    """
+    Its ladder had four rungs — reopen, expand, build, scope the growth — and
+    every one answers "the network has run out of room". On a plan that is not
+    short of room, none fired and the card fell through to "No network change
+    is indicated".
+
+    The opposite finding is a real recommendation, and the Insights ladder has
+    made it for as long as `strategic_actions.CONSOLIDATE` has existed. The
+    shared vocabulary both screens read already carried the key and the words
+    under its button. This screen emitted it never.
+    """
+
+    EMPTY_SITE = {
+        "DC_EAST": {"capacity": 4000.0, "isOpen": True,
+                    "throughput": 800.0, "utilPct": 20.0},
+        "DC_WEST": {"capacity": 3500.0, "isOpen": True,
+                    "throughput": 2700.0, "utilPct": 77.1},
+    }
+
+    def test_an_open_site_running_near_empty_is_recommended_consolidation(self):
+        from app.backend.api.scenarios import _recommended_actions
+
+        actions = _recommended_actions(_plain_record(self.EMPTY_SITE))
+        assert [a["key"] for a in actions] == ["CONSOLIDATE"], actions
+        assert "DC_EAST" in actions[0]["label"]
+
+    def test_it_opens_the_form_that_prices_it(self):
+        from netgravity.orchestrator.reasoning.strategic_actions import (
+            CTA_BY_ACTION,
+        )
+
+        from app.backend.api.scenarios import _recommended_actions
+
+        action = _recommended_actions(_plain_record(self.EMPTY_SITE))[0]
+        assert action["scenario"]["action"] == "CLOSE_FACILITY"
+        assert action["scenario"]["facility_id"] == "DC_EAST"
+        # The verb under the button comes from the shared map, so the same
+        # decision reads the same on the Insights feed.
+        assert action["cta"] == CTA_BY_ACTION["CONSOLIDATE"]
+
+    def test_it_is_suppressed_while_a_site_is_at_its_ceiling(self):
+        """
+        Proposing to take capacity OUT of a network while another site has none
+        left is the one reading of this finding that would be wrong. Same gate
+        the Insights ladder uses.
+        """
+        from app.backend.api.scenarios import _recommended_actions
+
+        both = dict(self.EMPTY_SITE)
+        both["DC_FULL"] = {"capacity": 1000.0, "isOpen": True,
+                           "throughput": 1000.0, "utilPct": 100.0}
+        keys = [a["key"] for a in _recommended_actions(_plain_record(both))]
+        assert "CONSOLIDATE" not in keys, keys
+        assert "ADD_CAPACITY" in keys, keys
+
+    def test_the_browser_knows_which_form_to_open(self):
+        """
+        `recommendedActions()` maps each key to a form. A key with no case
+        falls to `default`, which has no `run` — so the button renders and does
+        nothing when pressed.
+        """
+        js = _asset("scenarios.js")
+        block = js[js.index("function recommendedActions(scn, comparison)"):]
+        block = block[:block.index("\n}\n")]
+        assert "case 'CONSOLIDATE':" in block, block
+        assert "openCreateToolboxWith('CLOSE_FACILITY'" in block, block
+
+    def test_every_key_the_server_can_emit_has_a_case(self):
+        """
+        The two lists are a contract. A rung added on the server and not here
+        is a recommendation that cannot be acted on.
+        """
+        import pathlib
+        import re
+
+        source = (pathlib.Path(__file__).resolve().parents[3] / "app"
+                  / "backend" / "api" / "scenarios.py").read_text(
+                      encoding="utf-8")
+        fn = source[source.index("def _recommended_actions("):]
+        fn = fn[:fn.index("\ndef ", 10)]
+        emitted = set(re.findall(r'"key": "([A-Z_]+)"', fn))
+
+        js = _asset("scenarios.js")
+        block = js[js.index("function recommendedActions(scn, comparison)"):]
+        block = block[:block.index("\n}\n")]
+        handled = set(re.findall(r"case '([A-Z_]+)':", block))
+        # NO_ACTION is rendered as a statement rather than a control, so it
+        # deliberately has no case.
+        assert emitted - handled - {"NO_ACTION"} == set(), emitted - handled
