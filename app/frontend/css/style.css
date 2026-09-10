@@ -4157,8 +4157,8 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   max-height: calc(100vh - var(--fc-main-top, 150px) - var(--ng-fab-clearance, 84px));
 }
 
-.fc-main > .ov-alert      { grid-column: 1; grid-row: 1; }
-.fc-main > .ov-attn-card  { grid-column: 1; grid-row: 2; }
+/* The demand alert that took row 1 is gone; the attention card has the column. */
+.fc-main > .ov-attn-card  { grid-column: 1; grid-row: 1 / span 2; }
 .fc-main > .fc-chart-card { grid-column: 2; grid-row: 1 / span 2; }
 
 /* ─── the chart card ────────────────────────────────────── */
@@ -4508,7 +4508,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
     min-height: 0;
     max-height: none;
   }
-  .fc-main > .ov-alert,
   .fc-main > .ov-attn-card,
   .fc-main > .fc-chart-card { grid-column: 1; grid-row: auto; }
   .fc-chart-wrap { height: 340px; flex: 0 0 340px; }

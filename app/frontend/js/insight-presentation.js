@@ -134,3 +134,68 @@ export function insightDescription(record, headline) {
     });
   return kept.join(' ').trim();
 }
+
+/**
+ * The scenario a finding's recommendation is priced by.
+ *
+ * The server's own, when it sent one: `action.scenario` is derived from the
+ * solved rows (the capacity ladder, the cost levers, the candidate to reopen)
+ * and names the change, the site and — for a capacity test — a sized amount.
+ * Otherwise the scenario TYPE the finding's theme is about, so the builder at
+ * least opens on the right form rather than on whatever was chosen last.
+ */
+const SCENARIO_TYPE_BY_THEME = {
+  'Capacity':            { action: 'CHANGE_CAPACITY' },
+  'Utilisation':         { action: 'CHANGE_CAPACITY' },
+  'Service':             { action: 'OPEN_FACILITY', open_mode: 'NEW' },
+  'Resilience':          { action: 'OPEN_FACILITY', open_mode: 'NEW' },
+  'Footprint':           { action: 'OPEN_FACILITY', open_mode: 'EXISTING' },
+  'Carbon':              { action: 'CHANGE_TRANSPORT_COST' },
+  'Demand outlook':      { action: 'CHANGE_DEMAND' },
+  'Where the growth is': { action: 'CHANGE_DEMAND' },
+};
+
+export function recommendedScenario(record) {
+  const own = record && record.action && record.action.scenario;
+  if (own && Object.keys(own).length) return own;
+  return SCENARIO_TYPE_BY_THEME[(record && record.theme) || ''] || null;
+}
+
+/**
+ * The detail page's button, named for the change it opens.
+ *
+ * "Open scenario planner" said where it went and not what it would do there.
+ * Where the recommendation has a scenario behind it, the button names it —
+ * "Test the capacity increase in the scenario planner" — the same words the
+ * Insights page puts under the same recommendation.
+ */
+export function scenarioCta(record, cta) {
+  const action = record && record.action;
+  if (!cta || cta.tab !== 'scenarios' || !action || !action.cta
+      || !action.scenario || !Object.keys(action.scenario).length) {
+    return cta;
+  }
+  return { ...cta, label: `${action.cta} in the scenario planner` };
+}
+
+/**
+ * Open the planner with the recommended change already filled in.
+ *
+ * Nothing is submitted: the builder opens on the change, the site and the
+ * amount, and a person presses Run. The tab is shown first because the
+ * builder is drawn on it.
+ */
+export function openRecommendedScenario(record) {
+  const scn = recommendedScenario(record) || {};
+  if (typeof window.navigateToTab === 'function') window.navigateToTab('scenarios');
+  setTimeout(() => {
+    if (typeof window.openScenarioBuilderWith !== 'function') return;
+    window.openScenarioBuilderWith(scn.action || 'CHANGE_CAPACITY', {
+      facilityId: scn.facility_id || undefined,
+      openMode: scn.open_mode || undefined,
+      region: scn.region || undefined,
+      name: scn.name || undefined,
+      amount: typeof scn.amount === 'number' ? scn.amount : undefined,
+    });
+  }, 120);
+}

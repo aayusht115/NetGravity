@@ -102,7 +102,7 @@ import {
 // its description says once the headline is taken out, and which screen its
 // recommended action is asking the reader to open. Shared, because the tile
 // and this page disagreeing about either is the defect.
-import { insightCta, insightDescription } from './insight-presentation.js';
+import { insightCta, insightDescription, openRecommendedScenario, scenarioCta } from './insight-presentation.js';
 // The node identities the Digital Twin's legend and both of its maps use.
 import { NODE_STYLE } from './twin-legend.js';
 
@@ -1161,7 +1161,7 @@ function renderDeepDive() {
 
   const badge = SEVERITY_BADGE[record.severity] || SEVERITY_BADGE.INFORMATION;
   const plan = chartPlanFor(record);
-  const cta = insightCta(record.theme, record.severity);
+  const cta = scenarioCta(record, insightCta(record.theme, record.severity));
   const facility = insdFlow.facilityId
     ? getFacilityById(insdFlow.facilityId)
     : null;
@@ -1226,6 +1226,13 @@ function bindDeepDive(cta) {
       }
       return;
     }
+    // THE PLANNER, WITH THE RECOMMENDATION FILLED IN. This used to change the
+    // tab and nothing else, so a reader who pressed it on "Expand capacity at
+    // Calgary" arrived at an empty planner and had to re-enter the site.
+    if (cta.tab === 'scenarios') {
+      openRecommendedScenario(insdFlow.record);
+      return;
+    }
     if (typeof window.navigateToTab === 'function') window.navigateToTab(cta.tab);
   });
 
@@ -1233,7 +1240,7 @@ function bindDeepDive(cta) {
     (e) => downloadDerivation(e.currentTarget));
 
   document.getElementById('insd-run-scenario')?.addEventListener('click', () => {
-    if (typeof window.navigateToTab === 'function') window.navigateToTab('scenarios');
+    openRecommendedScenario(insdFlow.record);
   });
 
   document.getElementById('insd-open-twin')?.addEventListener('click', () => {
@@ -1764,7 +1771,7 @@ const INSD_ORIGINS = {
   'tab-insights': { tab: 'insights', label: 'Back to Insights', nav: 'nav-item-insights' },
   'tab-forecast': { tab: 'forecast', label: 'Back to Forecast', nav: 'nav-item-forecast' },
 };
-const INSD_ORIGIN_HOME = { tab: 'home', label: 'Back to Home', nav: 'nav-item-home' };
+const INSD_ORIGIN_HOME = { tab: 'home', label: 'Back to Executive view', nav: 'nav-item-home' };
 let insdOrigin = INSD_ORIGIN_HOME;
 
 export function showInsightDetail(kind, id) {
