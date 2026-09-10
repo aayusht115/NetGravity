@@ -731,7 +731,12 @@ class TestTheOverviewPageIsShapedLikeTheMockup:
         A control that moves nothing teaches a reader that scope on this
         product does not work, so it is gone rather than dead.
         """
-        js = _asset("app.js")
+        # `_asset` takes PATH PARTS, and app.js is under `js/`. Written as
+        # `_asset("app.js")` this read `app/frontend/app.js`, which does not
+        # exist — so the test raised FileNotFoundError rather than checking
+        # anything, and had done since it was written. Every other call in
+        # this file passes both parts.
+        js = _asset("js", "app.js")
         fn = js[js.index("function updateTopBarLayout(tab) {"):]
         fn = fn[:fn.index("\n/**")]
         block = fn[fn.index("const topScope"):]
@@ -1053,13 +1058,33 @@ class TestTheInsightsListReadsAsAList:
         action = _rule(css, ".insp-row.tone-risk .insp-row-action {")
         assert "rgba(255, 255, 255" in action, action
 
-    def test_the_row_shows_the_description_not_the_headline_again(self):
+    def test_the_row_never_prints_the_headline_twice(self):
         """
         The row printed `subtitle` — the narrative's FIRST SENTENCE — which on
         a finding whose headline IS that sentence was the heading again, in
-        grey, directly under itself.
+        grey, directly under itself. `insightDescription` was the fix: the
+        narrative minus whatever the headline already said.
+
+        THE ROW NOW CARRIES NO PROSE AT ALL. Trimming what a leadership
+        audience reads on a list took the paragraph off it entirely — a row is
+        a finding, its recommended action and a figure, and the narrative is on
+        the deep dive one click away. That satisfies this test's purpose more
+        strongly than the description did, so what is checked is the purpose:
+        no second copy of the heading, by any route.
+
+        `insightDescription` is still what the OVERVIEW TILE and the deep dive
+        use, and it is still tested there.
         """
         js = _without_comments(_asset("js", "app.js"))
         fn = js[js.index("function insightRowHtml(item)"):]
         fn = fn[:fn.index("\n}\n")]
-        assert "insightDescription(rec, item.title)" in fn, fn
+        assert "subtitle" not in fn, fn
+        assert "rec.narrative" not in fn, fn
+        # The title is rendered exactly once.
+        assert fn.count("item.title") == 1, fn
+
+        # And the two screens that DO carry prose still take the headline out
+        # of it, rather than growing their own copy of that rule.
+        for module in ("app.js", "insight-detail.js"):
+            other = _without_comments(_asset("js", module))
+            assert "insightDescription(" in other, module

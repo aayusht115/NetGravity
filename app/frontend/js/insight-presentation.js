@@ -13,8 +13,8 @@
  * dive could not — app.js imports insight-detail.js, so the dependency
  * cannot run the other way. So the deep dive had a generic "Test a change as
  * a scenario" button on every finding while the tile that opened it offered
- * "Open KPIs" or "View affected demand", and the two screens disagreed about
- * what to do next about the same finding.
+ * something else entirely, and the two screens disagreed about what to do
+ * next about the same finding.
  *
  * Nothing here composes prose or derives a figure. §9 — a screen that writes
  * its own recommendation is a second, unverified reasoning agent. The
@@ -36,16 +36,35 @@ import { DEMAND_SHORTFALL } from './data.js';
  *
  * Keyed by the engine's own `theme`, so a new theme falls to the default
  * rather than to a wrong screen.
+ *
+ * NO ENTRY MAY POINT AT THE KPI SCREEN. A reader sent there to check a
+ * recommendation has been handed the analysis rather than the decision, and
+ * the recommendation above the button has been made twice — once by the
+ * engine, once by the reader. Every change this product recommends is proved
+ * by pricing it as a scenario.
  */
 export const INSIGHT_CTA = {
   'Service':              { label: 'Open scenario planner', tab: 'scenarios' },
-  'Capacity':             { label: 'Open KPIs', tab: 'facility-dashboard' },
-  'Utilisation':          { label: 'Open KPIs', tab: 'facility-dashboard' },
+  // THESE FIVE READ "Open KPIs" AND WENT TO THE KPI SCREEN.
+  //
+  // Coherent while the sentence above the button described a finding. It is a
+  // RECOMMENDATION now — "Expand capacity at Western Distribution Centre",
+  // "Test consolidating Eastern Distribution Centre" — and under a
+  // recommendation, "Open KPIs" tells the reader to go and do the analysis
+  // themselves. That is the same defect the recommendation wording was
+  // rewritten to remove, left standing in the control beside it.
+  //
+  // A recommendation is proved by pricing it, and the planner is where it is
+  // priced. Nothing here sends a reader to a dashboard to validate a change.
+  'Capacity':             { label: 'Open scenario planner', tab: 'scenarios' },
+  'Utilisation':          { label: 'Open scenario planner', tab: 'scenarios' },
   'Footprint':            { label: 'Open scenario planner', tab: 'scenarios' },
+  // Not the planner, and not a dashboard either: losing a site is a question
+  // about the network's shape, and the twin is where that is read.
   'Resilience':           { label: 'Open Digital Twin', tab: 'twin' },
-  'Cost':                 { label: 'Open KPIs', tab: 'facility-dashboard' },
-  'Cost structure':       { label: 'Open KPIs', tab: 'facility-dashboard' },
-  'Carbon':               { label: 'Open KPIs', tab: 'facility-dashboard' },
+  'Cost':                 { label: 'Open scenario planner', tab: 'scenarios' },
+  'Cost structure':       { label: 'Open scenario planner', tab: 'scenarios' },
+  'Carbon':               { label: 'Open scenario planner', tab: 'scenarios' },
   'Scenario impact':      { label: 'Open scenario planner', tab: 'scenarios' },
   'Demand outlook':       { label: 'Open forecast', tab: 'forecast' },
   'Where the growth is':  { label: 'Open forecast', tab: 'forecast' },

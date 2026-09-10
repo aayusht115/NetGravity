@@ -416,3 +416,81 @@ class TestTheDerivationCanLeaveTheApplication:
         assert "Could not build the document" in fn, fn
         assert "Preparing" in fn, "a slow button that does not change is pressed twice"
         assert "revokeObjectURL" in fn, "the blob is held in memory until it is"
+
+
+class TestNoRecommendationSendsAReaderToTheKpiScreen:
+    """
+    Five themes routed their call to action to the KPI dashboard: Capacity,
+    Utilisation, Cost, Cost structure and Carbon all read "Open KPIs".
+
+    That was coherent while the sentence above the button DESCRIBED a finding.
+    It is a recommendation now — "Expand capacity at Western Distribution
+    Centre", "Test consolidating Eastern Distribution Centre" — and under a
+    recommendation "Open KPIs" tells the reader to go and do the analysis
+    themselves. It is the same defect the recommendation wording was rewritten
+    to remove, left standing in the control beside it.
+
+    A recommendation is proved by pricing it, and the planner is where it is
+    priced.
+    """
+
+    def _shared(self) -> str:
+        return _without_comments(_asset("js", "insight-presentation.js"))
+
+    def test_the_label_is_gone_from_the_map(self):
+        assert "Open KPIs" not in self._shared()
+
+    def test_no_destination_is_the_kpi_screen(self):
+        assert "facility-dashboard" not in self._shared()
+
+    def test_the_capacity_family_goes_to_the_planner(self):
+        """
+        Named one by one, because these are the five that moved and a map that
+        silently lost an entry would fall to the default and look identical.
+        """
+        cta = self._shared()
+        block = cta[cta.index("export const INSIGHT_CTA = {"):]
+        block = block[:block.index("\n};")]
+        for theme in ("Capacity", "Utilisation", "Cost", "Cost structure",
+                      "Carbon", "Footprint", "Service", "Scenario impact"):
+            line = next((ln for ln in block.splitlines()
+                         if ln.strip().startswith(f"'{theme}':")), None)
+            assert line is not None, f"{theme} lost its entry"
+            assert "tab: 'scenarios'" in line, line
+            assert "Open scenario planner" in line, line
+
+    def test_the_two_better_destinations_are_kept(self):
+        """
+        Not everything belongs in the planner. Losing a site is a question
+        about the network's shape, and what is COMING is the forecast's.
+        """
+        block = self._shared()
+        assert "'Resilience':" in block and "tab: 'twin'" in block
+        assert "tab: 'forecast'" in block
+
+    def test_the_shortfall_override_still_stands(self):
+        """
+        The one destination that is not a tab, and the only special case in
+        `insightCta`. It must survive a change to the map it sits above.
+        """
+        cta = _fn(self._shared(),
+                  "export function insightCta(theme, severity)")
+        assert "View affected demand" in cta, cta
+        assert "DEMAND_SHORTFALL.shortMarkets" in cta, cta
+        assert "theme === 'Service' && severity === 'RISK'" in cta, cta
+
+    def test_nothing_else_in_the_product_offers_a_kpi_cta(self):
+        """
+        The map is not the only place a button could name that screen. Read
+        every module, comments stripped, because the comments here record the
+        defect using its own words.
+        """
+        import pathlib
+
+        offenders = []
+        for path in sorted(pathlib.Path(FRONTEND / "js").rglob("*.js")):
+            code = _without_comments(path.read_text(encoding="utf-8",
+                                                    errors="replace"))
+            if "Open KPIs" in code:
+                offenders.append(path.name)
+        assert offenders == [], offenders
