@@ -282,6 +282,31 @@
              Forecast and Scenarios. Insights has its own entry again: Home
              shows the three findings that lead, and a reader who wants the
              rest needs somewhere to go that is not a card on another page. -->
+        <!-- THREE THINGS, NOT FIVE.
+             ══════════════════════════════════════════════════════════════
+             The menu used to be Overview, a Baseline group of three, then
+             Forecast and Scenarios loose at the bottom — five top-level
+             entries whose grouping said nothing about what the product does.
+             Insights sat under Baseline because it is computed FROM the
+             baseline, which is true and is not the question a reader is
+             asking when they look at a menu.
+
+             The question they are asking is "where do I go next", and there
+             are only two answers: look at what the network IS, or look at
+             what could be done about it. So:
+
+               Overview       what happened, in one screen
+               Baseline       the network as uploaded and solved — what it
+                              looks like (Digital Twin) and what it measures
+                              (KPI Dashboard)
+               Opportunities  what could change — what the engine found
+                              (Insights), what is coming (Forecasting), and
+                              what to do about either (Scenario Builder)
+
+             Both groups are the same control: a head that opens its first
+             child, a caret that collapses it, and `data-group-tab` naming the
+             destination. The head must NOT carry `data-tab` or it would
+             compete with its own child for the active mark. -->
         <div class="sidebar-nav">
           <div class="nav-item active" data-tab="home" id="nav-item-home" title="Overview">
             <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -290,20 +315,8 @@
             <span>Overview</span>
           </div>
 
-          <!-- Baseline: the network as uploaded and solved, before any
-               scenario. Its three views are the twin (what it looks like),
-               the KPIs (what it measures) and the Insights (what the
-               Reasoning Agent concluded about it).
-
-               The head opens the first of them. It was a pure disclosure —
-               a click toggled the group and went nowhere — on the reasoning
-               that there is no "baseline screen" to open. In use that reads
-               as a dead menu item: the row looks exactly like the four that
-               do navigate. `data-group-tab` names the view it stands for,
-               and is deliberately NOT `data-tab`: only `data-tab` elements
-               are wired as tabs, and the head must not be one of them, or
-               it would compete with its own child for the active mark.
-               The caret beside it keeps the collapse. -->
+          <!-- BASELINE — the network as uploaded and solved, before any
+               scenario. What it looks like, and what it measures. -->
           <div class="nav-group" id="nav-group-baseline">
             <div class="nav-item nav-group-head" id="nav-item-baseline"
                  role="button" tabindex="0" aria-expanded="true"
@@ -339,17 +352,44 @@
                   <span>Digital Twin</span>
                 </div>
 
-                <div class="nav-item nav-sub" data-tab="facility-dashboard" id="nav-item-kpis" title="KPIs">
+                <div class="nav-item nav-sub" data-tab="facility-dashboard" id="nav-item-kpis" title="KPI Dashboard">
                   <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
                     <path d="M3 3v14h14M7 13v-4M11 13V7M15 13v-7" />
                   </svg>
-                  <span>KPIs</span>
+                  <span>KPI Dashboard</span>
                 </div>
+              </div>
+            </div>
+          </div>
 
-                <!-- Every finding about the baseline, not just the three
-                     that lead on Home. It belongs in this group for the
-                     same reason the twin and the KPIs do: all three are
-                     accounts of the network as uploaded and solved. -->
+          <!-- OPPORTUNITIES — what could change, and what it would cost.
+               Insights is what the engine found in the baseline, Forecasting
+               is what is coming at it, and the Scenario Builder is where
+               either becomes a priced decision. A reader who has read the
+               baseline and wants to act comes here; grouping the three is
+               what makes that one destination rather than three. -->
+          <div class="nav-group" id="nav-group-opportunities">
+            <div class="nav-item nav-group-head" id="nav-item-opportunities"
+                 role="button" tabindex="0" aria-expanded="true"
+                 data-group-tab="insights"
+                 aria-controls="nav-group-opportunities-items"
+                 title="Opportunities — opens Insights">
+              <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"
+                   stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 2.4l2.1 4.6 5 .5-3.8 3.4 1.1 4.9L10 13.3l-4.4 2.5 1.1-4.9L2.9 7.5l5-.5z" />
+              </svg>
+              <span>Opportunities</span>
+              <button type="button" class="nav-caret-btn" id="nav-caret-opportunities"
+                      aria-label="Show or hide the Opportunities views"
+                      aria-controls="nav-group-opportunities-items">
+                <svg class="nav-caret" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                  <path d="M6 8l4 4 4-4" />
+                </svg>
+              </button>
+            </div>
+
+            <div class="nav-group-items" id="nav-group-opportunities-items">
+              <div class="nav-group-inner">
                 <div class="nav-item nav-sub" data-tab="insights" id="nav-item-insights" title="Insights">
                   <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M10 2.6a5 5 0 0 0-2.9 9.07V13.5h5.8v-1.83A5 5 0 0 0 10 2.6z" />
@@ -357,23 +397,23 @@
                   </svg>
                   <span>Insights</span>
                 </div>
+
+                <div class="nav-item nav-sub" data-tab="forecast" id="nav-item-forecast" title="Forecasting">
+                  <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <polyline points="3,15 7,9 11,12 17,4" />
+                    <polyline points="14,4 17,4 17,7" />
+                  </svg>
+                  <span>Forecasting</span>
+                </div>
+
+                <div class="nav-item nav-sub" data-tab="scenarios" id="nav-item-scenarios" title="Scenario Builder">
+                  <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 13l2 2 4-4" />
+                  </svg>
+                  <span>Scenario Builder</span>
+                </div>
               </div>
             </div>
-          </div>
-
-          <div class="nav-item" data-tab="forecast" id="nav-item-forecast" title="Forecast">
-            <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
-              <polyline points="3,15 7,9 11,12 17,4" />
-              <polyline points="14,4 17,4 17,7" />
-            </svg>
-            <span>Forecast</span>
-          </div>
-
-          <div class="nav-item" data-tab="scenarios" id="nav-item-scenarios" title="Scenarios">
-            <svg class="nav-svg" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
-              <path d="M4 4h5v5H4zM11 4h5v5h-5zM4 11h5v5H4zM11 13l2 2 4-4" />
-            </svg>
-            <span>Scenarios</span>
           </div>
         </div>
 
@@ -662,9 +702,12 @@
              and every request the completeness gate raised — the full list
              behind Home's three tiles.
 
-             It lives under Baseline in the sidebar because that is what it
-             is about: the network as uploaded and solved, before any
-             scenario. Home shows the three that lead; this shows all of
+             It leads the Opportunities group in the sidebar. It is
+             computed FROM the baseline, which is why it used to sit under
+             it — but a finding is not a description of the network, it is
+             something that could be done about it, and it belongs beside
+             the forecast and the scenario builder that act on it.
+             Home shows the three that lead; this shows all of
              them, filterable, and each row opens the same deep dive
              (insight-detail.js) that Home's tiles do — one destination for
              one finding, never two accounts of it. -->
@@ -823,15 +866,6 @@
                no caption to say so. -->
           <div class="grid-3" id="kpi-lane-summary"></div>
           <div class="text-xs kpi-scorecard-note" id="kpi-scorecard-note"></div>
-          <!-- WHERE THE REST OF THE MONEY IS.
-               The network cost has four parts and the solve knows three of
-               them per site. Inventory it decides for the network as a whole,
-               so adding up every facility comes up short by that amount — and
-               a reader who does the sum concludes the page is broken. Naming
-               the gap costs one line; spreading it across sites on an
-               allocation nobody solved for would put an invented number
-               beside solved ones. -->
-          <div class="text-xs kpi-cost-note" id="kpi-cost-attribution" hidden></div>
 
           <!-- TIER 2 — HOW FAR IN. Region and Status narrow the population;
                Facility drills into one site. Every control writes to one view
@@ -919,8 +953,11 @@
           <!-- ── ROLL-UP: the whole population of the current lens ── -->
           <div id="kpi-rollup">
 
-          <!-- 2. Named, with the reason -->
-          <div id="wh-attention" class="mb-lg"></div>
+          <!-- Status only: what the screen is doing, or why it cannot.
+               The per-site exception cards that used to live here are gone —
+               see warehouse.js. The Facility Health table below carries every
+               site, sorted by what needs attention first. -->
+          <div id="wh-status" class="mb-lg"></div>
 
           <!-- CAPACITY FIRST, then cost, then the detail.
                The screen answers "can this network carry its demand" before
@@ -978,6 +1015,16 @@
                 <div class="chart-wrap"><canvas id="chart-wh-spend"></canvas></div>
                 <ul class="ng-legend" id="legend-wh-spend"></ul>
               </div>
+              <!-- WHERE THE REST OF THE MONEY IS — as a caption on the chart
+                   it is about, rather than a loose sentence higher up the page.
+                   The network cost has four parts and the solve knows three of
+                   them per site; inventory it decides for the network as a
+                   whole, so these slices come up short by that amount and a
+                   reader who adds them concludes the page is broken. Naming
+                   the gap costs one line; spreading it across sites on an
+                   allocation nobody solved for would put an invented number
+                   beside solved ones. -->
+              <div class="text-xs kpi-cost-note" id="kpi-cost-attribution" hidden></div>
             </div>
 
             <div class="card">
@@ -996,7 +1043,16 @@
               </div>
             </div>
 
-            <div class="card">
+            <!-- APPLICABILITY, not just availability.
+                 Inventory is a DC metric in most networks: a plant that
+                 reports no stock level is not a plant with an empty
+                 warehouse, it is a site the model does not hold stock at. So
+                 on a lens where NO site reports one, the card comes off the
+                 screen entirely rather than standing there with a note in it
+                 — a chart offered for a population it cannot describe is a
+                 chart the reader has to work out is irrelevant.
+                 `renderStock` decides; see warehouse.js. -->
+            <div class="card" id="wh-stock-card">
               <div class="card-header">
                 <div>
                   <div class="card-title">Stock Held</div>
@@ -1169,7 +1225,13 @@
                        sum to the Facility Cost card above. Transport is NOT
                        among them: the model does not attribute it to a site,
                        and the old subtitle named it first. -->
-                  <div class="card-subtitle">Fixed, opening, handling and holding — transport excluded</div>
+                  <!-- WRITTEN BY THE CHART, from the slices it actually
+                       drew. It read "Fixed, opening, handling and holding"
+                       above a ring that drops zero-value components — and
+                       inventory is decided for the network rather than per
+                       site, so on most sites the fourth slice is not there.
+                       See `renderFacilityCostBreakdownChart`. -->
+                  <div class="card-subtitle" id="dash-costs-subtitle">&mdash;</div>
                 </div>
               </div>
               <div class="chart-wrap" style="height:280px">
@@ -1182,8 +1244,15 @@
           <div class="card mb-lg">
             <div class="card-header">
               <div>
-                <div class="card-title">Connected Corridor Flows & Cost per Unit</div>
-                <div class="card-subtitle">Inbound supply from plants & Outbound dispatches to demand markets</div>
+                <div class="card-title">Connected Corridor Flows &amp; Cost per Unit</div>
+                <!-- ROLE-DEPENDENT, so it is written by JS.
+                     It said "Inbound supply from plants & Outbound dispatches
+                     to demand markets" for every site, including plants — and
+                     a plant has no inbound supply from plants. A caption that
+                     describes a flow the selected facility cannot have is a
+                     caption a reader has to ignore, which is how they learn
+                     to ignore the rest. See `describeCorridorCard`. -->
+                <div class="card-subtitle" id="dash-lanes-subtitle">&mdash;</div>
               </div>
             </div>
             <div class="grid-2-1" style="gap:var(--space-lg);align-items:center">
@@ -1598,15 +1667,31 @@
                 </div>
                 <div class="scn-map-wrap" id="scenario-map-wrap">
                   <div id="scenario-leaflet-map" style="width:100%;height:100%"></div>
+                  <!-- THE SAME KEY CONTROL THE DIGITAL TWIN USES.
+                       It was a permanently-expanded strip below the map: the
+                       same rows, taking about a fifth of a panel whose whole
+                       job is to show a network, on a screen where the reader
+                       has already met this key on the twin.
+                       A dock instead — closed until asked for, opening upward
+                       over the map, closing when the reader touches the
+                       network underneath. Same markup, same behaviour, same
+                       initialiser (`initLegendDock`), because a key that works
+                       differently on the second screen is a second thing to
+                       learn. Filled by `addLegend`. -->
+                  <div class="tw-legend-dock" id="scn-legend-dock">
+                    <div class="tw-legend tw-legend-dock-panel tw-legend-below" id="scenario-map-legend" hidden></div>
+                    <button type="button" class="tw-legend-dock-bar" id="scn-legend-toggle"
+                            aria-expanded="false" aria-controls="scenario-map-legend">
+                      <span class="tw-legend-dock-peek" id="scn-legend-peek" aria-hidden="true"></span>
+                      <span class="tw-legend-dock-label">Key</span>
+                      <svg class="tw-legend-dock-chevron" width="14" height="14" viewBox="0 0 24 24"
+                           fill="none" stroke="currentColor" stroke-width="2.4"
+                           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M6 15l6-6 6 6"/>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-                <!-- The key sits BELOW the map, not over it. As a Leaflet
-                     control it covered the bottom-right corner of a panel the
-                     reader is trying to read a network out of, and the corner
-                     it covered is where a national network's southern sites
-                     sit. Below the map it is a four-column strip: the same
-                     rows, the same chips, roughly a fifth of the height, and
-                     nothing hidden underneath it. Filled by `addLegend`. -->
-                <div class="tw-legend tw-legend-below" id="scenario-map-legend"></div>
               </div>
             </div>
 

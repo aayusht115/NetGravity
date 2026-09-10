@@ -261,19 +261,55 @@ def _site_row(facility_id: str, meta: Dict[str, Dict[str, Any]],
 # ---------------------------------------------------------------------------
 # What to DO about a scenario
 # ---------------------------------------------------------------------------
-#: Every action this application can recommend, and what pressing it opens.
-#: The key is the contract with the client — a screen maps it to a form, the
-#: document prints its label — so a new action is added here and nowhere else.
-_ACTION_KEYS = (
-    "REOPEN_FACILITY", "ADD_CAPACITY", "OPEN_NEW_FACILITY",
-    "SCOPE_DEMAND_GROWTH", "REQUEST_DATA",
-    #: Not an intervention — the STATEMENT that none is indicated, with the
-    #: finding behind it. Carried in the same list because "nothing needs
-    #: doing" is an answer to "what should I do", and a screen that renders an
-    #: empty space there has answered nothing. A consumer draws this as a
-    #: sentence rather than a control.
-    "NO_ACTION",
+#: Every action this application can recommend, IMPORTED rather than restated.
+#:
+#: This was a second tuple of the same strings, and a second vocabulary is a
+#: vocabulary that drifts: the Insights feed now derives its recommendations
+#: from `strategic_actions.build_actions`, and a key added there and not here
+#: would produce a card the scenario screen could not map to a form.
+#:
+#: The LADDER is not shared, and deliberately. This function has something the
+#: generic one does not: a full capacity account, including which regions have
+#: run out of room — computed by `_capacity_response` from every solved site.
+#: `build_actions` sees only the rows it is handed, so asking it to decide
+#: "every site in this region is full" from a subset would have it conclude
+#: that from whatever it was given. The two agree on WHAT can be recommended
+#: and on the words; this one knows more about where.
+#:
+#: NO_ACTION is not an intervention — it is the STATEMENT that none is
+#: indicated, with the finding behind it. Carried in the same list because
+#: "nothing needs doing" is an answer to "what should I do", and a screen that
+#: renders an empty space there has answered nothing. A consumer draws it as a
+#: sentence rather than a control.
+from netgravity.orchestrator.reasoning.strategic_actions import (  # noqa: E402
+    ACTION_KEYS as _ACTION_KEYS,
+    CTA_BY_ACTION as _CTA_BY_ACTION,
 )
+
+
+#: The scenario each recommendation is PROVED by, keyed by action. Pressing the
+#: button opens the builder already filled in with the change being
+#: recommended — which is what makes it a recommendation a leader can price
+#: rather than an opinion. Mirrors `StrategicAction.scenario`, so the Insights
+#: feed and this screen hand the builder the same shape.
+def _scenario_for(key: str, target: Dict[str, Any]) -> Dict[str, Any]:
+    facility_id = target.get("facility_id") or ""
+    name = target.get("name") or facility_id or "site"
+    region = target.get("region") or ""
+    if key == "REOPEN_FACILITY":
+        return {"action": "OPEN_FACILITY", "open_mode": "EXISTING",
+                "facility_id": facility_id, "name": f"Reopen {name}"}
+    if key == "ADD_CAPACITY":
+        return {"action": "CHANGE_CAPACITY", "facility_id": facility_id,
+                "name": f"More capacity at {name}" if facility_id
+                        else "Relieve the network shortfall"}
+    if key == "OPEN_NEW_FACILITY":
+        return {"action": "OPEN_FACILITY", "open_mode": "NEW",
+                "region": region,
+                "name": f"New site in {region}".strip() if region else "New site"}
+    if key == "SCOPE_DEMAND_GROWTH":
+        return {"action": "CHANGE_DEMAND", "name": "Growth, scoped to its region"}
+    return {}
 
 
 def _fmt_units(value: Any) -> str:
@@ -319,7 +355,19 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
     actions: List[Dict[str, Any]] = []
 
     # Reopening beats building: the capacity exists and is already paid for.
-    if idle and (unserved is None or unserved > 0):
+    #
+    # THE GATE WAS TOO NARROW. It read `unserved is None or unserved > 0`, so
+    # reopening was only ever offered on a plan that stranded demand. On a
+    # demand+80% run the solve filled the Southern DC to 100%, left a Northern
+    # DC closed, and served everything — so the plan was feasible, the gate did
+    # not fire, and the only recommendation was to build more capacity at the
+    # site that was full while paid-for capacity sat switched off.
+    #
+    # A site at its ceiling is the same finding as unserved demand one unit
+    # later. Both mean the network has run out of room, and in both cases the
+    # cheapest answer is the capacity already built. Matches the condition in
+    # `strategic_actions.build_actions`, which is the rung this mirrors.
+    if idle and (at_ceiling or (unserved is None or unserved > 0)):
         site = idle[0]
         actions.append({
             "key": "REOPEN_FACILITY",
@@ -457,6 +505,11 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     for index, action in enumerate(actions, start=1):
         action["priority"] = index
+        action["scenario"] = _scenario_for(action["key"], action.get("target") or {})
+        # The phrase under the button, naming THIS change — from the same map
+        # the Insights feed reads, so one decision reads the same on both
+        # screens. No destination: this card is already in the planner.
+        action["cta"] = _CTA_BY_ACTION.get(action["key"], "")
         assert action["key"] in _ACTION_KEYS, action["key"]
     return actions
 

@@ -1822,10 +1822,14 @@
      different widths, and the action boxes beside them started at different
      x. A column of boxes with a ragged left edge is what "the alignment is
      not correct" looks like. Fixed ends make every row identical. */
-  grid-template-columns: 20px minmax(0, 1fr) minmax(0, 0.82fr) 176px;
+  grid-template-columns: 20px minmax(0, 1fr) minmax(0, 0.86fr) 168px;
   align-items: center;
   gap: 14px;
-  padding: 13px 16px;
+  /* SHORTER, because there is less in it. The narrative paragraph came out of
+     the row — it is the first thing on the detail page, which is where a
+     reader who wants the analysis is going. What is left is a decision list:
+     what the finding is, what it measured, what to do, and the way in. */
+  padding: 10px 14px;
   background: var(--bg-card, #ffffff);
   border: 1px solid var(--border-light, #f0f0f5);
   border-left: 3px solid var(--border, #e8e8ef);
@@ -1886,13 +1890,6 @@
   color: var(--text-1, #1a1a2e);
 }
 
-.insp-row-sub {
-  margin: 4px 0 0;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-2, #5a5a72);
-}
-
 /* Its own column, so the tint ends where the sentence ends. */
 .insp-row-action {
   min-width: 0;
@@ -1929,6 +1926,36 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-2, #5a5a72);
+}
+
+/* THE RECOMMENDATION, PRICED — a control inside a row that is itself a
+   control. It has to read as the more specific of the two, so it is a solid
+   affordance where the row is a surface, and it stops the row's own click. */
+.insp-row-test {
+  align-self: flex-start;
+  margin-top: 7px;
+  padding: 4px 9px;
+  border: 1px solid var(--primary, #6B2FA0);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--primary, #6B2FA0);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition, .2s ease), color var(--transition, .2s ease);
+}
+
+.insp-row-test:hover {
+  background: var(--primary, #6B2FA0);
+  color: #ffffff;
+}
+
+.insp-row-test:focus-visible {
+  outline: 2px solid var(--primary, #6B2FA0);
+  outline-offset: 2px;
 }
 
 .insp-row-right {

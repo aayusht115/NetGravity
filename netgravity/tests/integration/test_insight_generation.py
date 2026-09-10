@@ -179,7 +179,7 @@ class TestASolvedNetworkProducesMoreThanACostCard:
         }
         result = bare_agent().reason(payload, allow_llm=False)
         assert result.grounding_status == "GROUNDED", result.validation_warnings
-        assert "8,506,746.48" in result.summary, \
+        assert "8,506,746" in result.summary, \
             "the figure must survive, not be stripped as ungrounded"
         assert "decreases" in result.summary
         assert result.confidence != "LOW"
@@ -561,34 +561,48 @@ class TestEveryFindingSaysWhatToDoAboutIt:
         The deterministic path writes no action. The serialiser supplies the
         one for that theme and severity rather than leaving a tile headed
         "Recommended action" with nothing under it.
+
+        WHAT THIS USED TO ASSERT: `assert "KPI page" in capacity`. It required
+        the recommendation on a capacity risk to contain the phrase "KPI page"
+        — which is the navigation instruction the screen was rewritten to stop
+        producing, and a test that pins it in place is a test working against
+        the product. It now requires the opposite.
         """
         from app.backend.api.insights import _recommended_action
 
         class _I:
             recommended_action = ""
 
-        capacity = _recommended_action(_I(), "Capacity", "RISK")
+        capacity, _ = _recommended_action(_I(), "Capacity", "RISK")
         assert capacity, "a capacity risk was given no step"
-        assert "KPI page" in capacity
+        assert "KPI page" not in capacity
+        assert "Open the" not in capacity
 
         # Opposite advice for the opposite finding under one theme: idle sites
         # and overloaded sites are both "Utilisation".
-        over = _recommended_action(_I(), "Utilisation", "RISK")
-        idle = _recommended_action(_I(), "Utilisation", "OPPORTUNITY")
+        over, _ = _recommended_action(_I(), "Utilisation", "RISK")
+        idle, _ = _recommended_action(_I(), "Utilisation", "OPPORTUNITY")
         assert over != idle, (over, idle)
 
         # A theme the map does not name falls to severity, never to silence.
-        unknown = _recommended_action(_I(), "Some New Theme", "RISK")
+        unknown, _ = _recommended_action(_I(), "Some New Theme", "RISK")
         assert unknown
 
     def test_the_agents_own_step_wins(self):
+        """
+        `_recommended_action` returns `(sentence, intervention)` now: the
+        sentence a card prints, and the structured change behind it when the
+        ladder produced one. A written finding still wins outright, and it
+        carries no intervention — the agent wrote prose, not a scenario.
+        """
         from app.backend.api.insights import _recommended_action
 
         class _I:
             recommended_action = "  Close the Guwahati lane and re-solve.  "
 
-        assert (_recommended_action(_I(), "Capacity", "RISK")
-                == "Close the Guwahati lane and re-solve.")
+        sentence, intervention = _recommended_action(_I(), "Capacity", "RISK")
+        assert sentence == "Close the Guwahati lane and re-solve."
+        assert intervention == {}
 
     def test_no_step_ever_states_a_figure(self):
         """

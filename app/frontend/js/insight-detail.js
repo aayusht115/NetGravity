@@ -305,6 +305,13 @@ function chartPlanFor(record) {
       entities,
       threshold: isPct ? utilisationThreshold() : null,
       unitSuffix: isPct ? '%' : '',
+      // WHAT THE AXES MEASURE, decided here beside the chart's own title so
+      // the two cannot say different things. The card title names the
+      // finding; the axis names the quantity, which is what a reader needs
+      // to read a value off the plot.
+      valueAxis: isPct ? 'Share of stated capacity used (%)'
+                       : labelForMetric(entities[0].metric),
+      categoryAxis: entities[0].kind === 'LANE' ? 'Corridor' : 'Facility',
       note: 'Every site this finding was computed over, ranked. Figures are the '
           + 'optimiser output for this solve.',
     };
@@ -361,6 +368,8 @@ function chartPlanFor(record) {
         cited: group,
         threshold: pct ? utilisationThreshold() : null,
         unitSuffix: pct ? '%' : '',
+        valueAxis: pct ? 'Percentage' : 'Value, as the engine reported it',
+        categoryAxis: 'Figure',
         note: 'The values in the evidence table below, drawn to scale. '
             + 'Nothing here is derived from them.',
       };
@@ -370,6 +379,44 @@ function chartPlanFor(record) {
 }
 
 /** Draw the planned chart. A no-op when Chart.js is absent. */
+// Vertical room per bar on THIS screen. The deep dive's ticks are a point
+// larger than the KPI screen's, so it takes a point more room: 28px leaves a
+// clear half-row between one name and the next.
+const INSD_BAR_ROW_PX = 28;
+const INSD_BAR_CHROME_PX = 90;
+const INSD_BAR_MIN_PX = 200;
+const INSD_BAR_MAX_PX = 620;
+
+/**
+ * Give the deep-dive chart the height its categories need.
+ *
+ * `.insd-chart-canvas-wrap` is a flat 300px in the stylesheet, and the
+ * entities plan draws every facility or lane the finding was computed over
+ * with no cap — so a network with twenty sites over the threshold got 12px
+ * between ticks for 14px labels, and the names ran together.
+ *
+ * Written out here rather than imported from charts.js: app.js imports THIS
+ * module, so a dependency the other way would be a cycle.
+ */
+function sizeInsightChartHost(canvasId, categories) {
+  const canvas = document.getElementById(canvasId);
+  const host = canvas && canvas.parentElement;
+  if (!host || !host.classList.contains('insd-chart-canvas-wrap')) return;
+  const wanted = Math.round(Number(categories) || 0) * INSD_BAR_ROW_PX
+                 + INSD_BAR_CHROME_PX;
+  host.style.height =
+    `${Math.max(INSD_BAR_MIN_PX, Math.min(INSD_BAR_MAX_PX, wanted))}px`;
+}
+
+/** Hand the height back to the stylesheet, for the plans that are not bars. */
+function resetInsightChartHost(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  const host = canvas && canvas.parentElement;
+  if (host && host.classList.contains('insd-chart-canvas-wrap')) {
+    host.style.height = '';
+  }
+}
+
 function renderInsightChart(canvasId, plan) {
   if (insdCharts[canvasId]) {
     insdCharts[canvasId].destroy();
@@ -377,6 +424,12 @@ function renderInsightChart(canvasId, plan) {
   }
   const canvas = document.getElementById(canvasId);
   if (!canvas || !plan || typeof Chart === 'undefined') return;
+
+  // Both bar plans run their categories down the side; the observed plan is a
+  // time series and keeps the height the stylesheet gives it.
+  if (plan.kind === 'evidence') sizeInsightChartHost(canvasId, plan.cited.length);
+  else if (plan.kind === 'entities') sizeInsightChartHost(canvasId, plan.entities.length);
+  else resetInsightChartHost(canvasId);
 
   const grid = '#f3f4f6';
   let config = null;
@@ -422,9 +475,19 @@ function renderInsightChart(canvasId, plan) {
         },
         scales: {
           x: { beginAtZero: true,
+               title: { display: true, text: plan.valueAxis || 'Value',
+                        font: { size: 11, weight: '600' } },
                ticks: { callback: (v) => v + plan.unitSuffix },
                grid: { color: grid } },
-          y: { grid: { display: false } },
+          y: { grid: { display: false },
+               title: { display: true, text: plan.categoryAxis || '',
+                        font: { size: 11, weight: '600' } },
+               ticks: { autoSkip: false, callback(value) {
+                 // Evidence labels are metric names — "Highest single-site
+                 // exposure" — and at full length they take half the plot.
+                 const text = this.getLabelForValue(value);
+                 return text.length > 28 ? `${text.slice(0, 27)}…` : text;
+               } } },
         },
       },
     };
@@ -484,10 +547,20 @@ function renderInsightChart(canvasId, plan) {
           // names instead of against their figures.
           x: {
             beginAtZero: true,
+            title: { display: true, text: plan.valueAxis || 'Value',
+                     font: { size: 11, weight: '600' } },
             ticks: { callback: (v) => v + plan.unitSuffix },
             grid: { color: grid },
           },
-          y: { grid: { display: false }, ticks: { autoSkip: false } },
+          y: { grid: { display: false },
+               title: { display: true, text: plan.categoryAxis || 'Facility',
+                        font: { size: 11, weight: '600' } },
+               ticks: { autoSkip: false, callback(value) {
+                 // Site and corridor names, trimmed with the ellipsis that
+                 // says they were cut. The tooltip carries the whole name.
+                 const text = this.getLabelForValue(value);
+                 return text.length > 28 ? `${text.slice(0, 27)}…` : text;
+               } } },
         },
       },
     };

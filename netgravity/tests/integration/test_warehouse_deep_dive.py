@@ -876,7 +876,11 @@ class TestTheScreen:
         html = (REPO_ROOT / "app" / "frontend" / "index.html").read_text(encoding="utf-8")
         panel = html[html.index('id="tab-facility-dashboard"'):]
         panel = panel[:panel.index("</section>")]
-        for element in ("wh-summary-grid", "wh-attention", "chart-wh-utilisation",
+        # `wh-attention` — the per-site exception cards — was in this list and
+        # is gone. `wh-status` is what took its place: the same element, doing
+        # only the job that had to stay, which is saying what the screen is
+        # doing while it waits and why it cannot when it fails.
+        for element in ("wh-summary-grid", "wh-status", "chart-wh-utilisation",
                         "table-wh-health"):
             assert element in panel, element
         assert 'id="tab-warehouse"' not in html
@@ -1042,7 +1046,7 @@ class TestTheScreen:
         """
         js = _asset("warehouse.js")
         block = js[js.index("function renderSummary()"):]
-        block = block[:block.index("function renderAttention")]
+        block = block[:block.index("function lensNoun")]
         assert "Distribution facilities" in block
         assert "Warehouses" not in block
 
@@ -1405,7 +1409,7 @@ class TestTheThreeTiers:
         to remove. It now follows the scope, and re-counts on every filter.
         """
         js = _asset("warehouse.js")
-        block = js[js.index("function renderSummary()"):js.index("function renderAttention")]
+        block = js[js.index("function renderSummary()"):js.index("function lensNoun")]
         assert "visibleRows()" in block
         # Counted over the rows on screen, never read back off the report's
         # whole-network counters.
@@ -1444,7 +1448,11 @@ class TestTheThreeTiers:
         reads one filtered list.
         """
         js = _asset("warehouse.js")
-        for renderer in ("function renderAttention()", "function renderMix()",
+        # `renderAttention()` was in this list and no longer exists. The
+        # property it was checked for — that every section reads ONE filtered
+        # list, so no card can describe a wider population than the one beside
+        # it — still holds for every renderer that remains.
+        for renderer in ("function renderMix()",
                          "function renderStock()", "function renderHealthTable()"):
             start = js.index(renderer)
             block = js[start:js.index("\n}", start)]
@@ -1729,7 +1737,7 @@ class TestTheCorrectionsAfterReview:
         """
         js = _asset("warehouse.js")
         assert "function absentLabel(" in js
-        summary = js[js.index("function renderSummary()"):js.index("function renderAttention")]
+        summary = js[js.index("function renderSummary()"):js.index("function lensNoun")]
         assert "absentLabel(" in summary
 
     def test_the_drill_down_lands_at_the_top_and_stays_there(self):

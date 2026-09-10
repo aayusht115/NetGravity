@@ -926,6 +926,9 @@ function recommendedActions(scn, comparison) {
       label: row.label || '',
       detail: row.reason || '',
       key: row.key,
+      // The server's own verb for this rung. Falls back only for a record
+      // solved before the field existed.
+      cta: row.cta || 'Test this',
       // A statement, not a control. Rendered as prose: there is nothing to
       // press when the finding is that nothing needs doing.
       statement: row.key === 'NO_ACTION',
@@ -1139,7 +1142,16 @@ function takeActionsHtml(actions) {
                 data-action-index="${i}">
              <span class="scn-take-action-label">${esc(a.label)}</span>
              <span class="scn-take-action-detail">${esc(a.detail)}</span>
-             <span class="scn-take-action-go">Set this up →</span>
+             <!-- NAMES THIS CHANGE, and does NOT name the destination.
+                  "Set this up" read like a commitment; nothing here commits
+                  anything, and what the button does is open the scenario that
+                  PRICES the recommendation. "Test this as a scenario" then
+                  said the same thing under four different recommendations.
+                  The verb comes from the same map the Insights feed reads
+                  (CTA_BY_ACTION in strategic_actions.py), minus the "in the
+                  scenario planner" those buttons carry: this card is already
+                  in it. -->
+             <span class="scn-take-action-go">${esc(a.cta || 'Test this')} →</span>
            </button>`)).join('')}
     </div>`;
 }

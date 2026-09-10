@@ -400,7 +400,7 @@ export function initMap(containerId, options = {}) {
   fitToNetwork(containerId);
 
   // Add legend
-  addLegend(map, options.isCompact);
+  addLegend(map, options.isCompact, containerId);
 
   // Labels that would sit on top of each other are dropped until there is
   // room for them. Recomputed on view change only — a pan or a zoom is the
@@ -1107,7 +1107,30 @@ function scenarioLegendHost() {
   return document.getElementById('scenario-map-legend');
 }
 
-function addLegend(map, isCompact = false) {
+/**
+ * Maps whose legend is NOT a Leaflet control, because the page already has one.
+ *
+ * THE TWO-LEGEND BUG. The Digital Twin's stage carries a legend of its own —
+ * the dock at the foot of the card, opened by the "Key" button, which is the
+ * legend for BOTH views because the reader switches between them with one
+ * button and a key that appears and disappears is a key they have to re-find.
+ *
+ * This function then mounted a SECOND copy, as a Leaflet control in the
+ * bottom-right of the same stage, on every 2D map that was not compact. So the
+ * twin in 2D showed the same key twice: once docked and once floating over the
+ * south-east corner of the network. Switching to 3D removed one of them, which
+ * is what made it look like a rendering fault rather than two mounts.
+ *
+ * The dock wins: it is dismissible, it does not cover any part of the network,
+ * and it is the one the 3D view already uses.
+ */
+const LEGEND_IS_DOCKED_IN_PAGE = new Set(['map-twin']);
+
+function addLegend(map, isCompact = false, containerId = '') {
+  if (LEGEND_IS_DOCKED_IN_PAGE.has(containerId)) {
+    setTimeout(renderMapLegendCounts, 0);
+    return;
+  }
   if (isCompact) {
     // THE SAME KEY THE TWIN USES, plus the three encodings only a scenario
     // map has. This branch used to render three rows — plant, DC, market —

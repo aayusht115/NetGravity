@@ -42,7 +42,7 @@ from __future__ import annotations
 import logging
 import math
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Blueprint, g, jsonify, make_response, request
 
@@ -296,8 +296,19 @@ def _resolve_evidence(refs: List[str], pack: Any,
     return out
 
 
-#: What to DO about a finding, by theme, when the narrative layer wrote no
-#: action of its own.
+#: Themes whose finding is ABOUT the network's capacity, and which therefore
+#: get a real intervention derived from the solved per-site load rather than a
+#: sentence chosen by theme.
+#:
+#: These are the findings where "what should I do" has a defensible answer in
+#: the data: a site is full, a site is empty, demand is not being reached. The
+#: ladder in `strategic_actions` decides which rung applies.
+_CAPACITY_THEMES = frozenset({
+    "Capacity", "Utilisation", "Service", "Footprint", "Resilience",
+})
+
+#: What to DO about the findings the capacity ladder does not speak to, by
+#: theme, when the narrative layer wrote no action of its own.
 #:
 #: The Reasoning Agent writes `recommended_action` per insight when the LLM
 #: path is live (see `reasoning/prompts.py`). The deterministic template path
@@ -305,118 +316,192 @@ def _resolve_evidence(refs: List[str], pack: Any,
 #: most page loads see — writes prose and no action, and a tile headed
 #: "Recommended action" with nothing under it is worse than no tile.
 #:
-#: These are deliberately ADVISORY and deliberately figure-free. Each names a
-#: step this product can actually carry out (a scenario, the twin, the KPI
-#: page, an upload), so the button beside it goes somewhere real. None of them
-#: claims a saving, a magnitude or an outcome — nothing here has been solved.
+#: EVERY ONE OF THESE NAMES A CHANGE, NOT A SCREEN. They used to read "Open the
+#: KPI page to see which sites are over the threshold, then test a scenario
+#: that relieves them" — which tells a reader to go and do the analysis
+#: themselves, is identical on every network ever uploaded, and is the single
+#: thing a senior audience has no use for. What replaced them states the
+#: decision and leaves the evidence to the finding above it.
 #:
-#: Keyed by (theme, severity), falling back to theme, then to severity: an
-#: idle-capacity finding and an overloaded-site finding share the theme
-#: "Utilisation" and need opposite advice.
+#: None claims a saving, a magnitude or an outcome: nothing here has been
+#: solved. The scenario each one names is what produces those.
 _ACTION_BY_THEME = {
+    # ---- the capacity family --------------------------------------------
+    # These are reached only when the ladder produced nothing to say: a
+    # healthy network, or a briefing with no solved rows behind it. They are
+    # still DECISIONS — what to do about the finding — because "there is no
+    # site to name" is not a reason to fall back to telling a reader which tab
+    # to click.
     ("Service", "RISK"):
-        "Test a scenario that adds capacity or a site near the demand this "
-        "plan cannot reach, and compare it against this baseline.",
+        "Put capacity near the demand this plan cannot reach, and price it "
+        "against this baseline before the next planning round.",
     ("Service", "INFORMATION"):
-        "No service action is needed. Keep this run as the baseline the next "
-        "scenario is measured against.",
-    ("Capacity", "INFORMATION"):
-        "Headroom is not a decision on its own. Test a scenario that puts "
-        "more volume through the sites with room before adding any.",
-    ("Utilisation", "INFORMATION"):
-        "Headroom is not a decision on its own. Test a scenario that puts "
-        "more volume through the sites with room before adding any.",
-    ("Footprint", "INFORMATION"):
-        "Open the Digital Twin to see the footprint this plan actually uses "
-        "before committing to any of it.",
-    ("Resilience", "INFORMATION"):
-        "Open the Digital Twin to see which sites carry the exposure this "
-        "figure summarises.",
-    ("Carbon", "RISK"):
-        "Open the KPI page to see which lanes carry the emissions, then test "
-        "a scenario that shortens them.",
-    ("Cost", "OPPORTUNITY"):
-        "Build a scenario against this cost and compare the two before "
-        "committing to either.",
+        "Hold this run as the service baseline every scenario is measured "
+        "against.",
     ("Capacity", "RISK"):
-        "Open the KPI page to see which sites are over the threshold, then "
-        "test a scenario that relieves them.",
+        "Relieve the sites that are over the threshold before demand grows "
+        "into them — the lead time on capacity is longer than the warning.",
     ("Capacity", "OPPORTUNITY"):
-        "Test a scenario that moves volume onto the sites with headroom "
-        "before adding any new capacity.",
+        "Move volume onto the sites with headroom before adding capacity "
+        "anywhere.",
+    ("Capacity", "INFORMATION"):
+        "Headroom is not a decision on its own. Put more volume through the "
+        "sites with room before adding any.",
     ("Utilisation", "RISK"):
-        "Open the KPI page to see which sites are over the threshold, then "
-        "test a scenario that relieves them.",
+        "Relieve the sites that are over the threshold before demand grows "
+        "into them.",
     ("Utilisation", "OPPORTUNITY"):
-        "Test a consolidation scenario that closes or shrinks the idle sites "
-        "and compare its cost with this baseline.",
-    ("Footprint", "OPPORTUNITY"):
-        "Test a footprint scenario that opens the unused candidate sites, and "
-        "compare its cost and service with this baseline.",
+        "Consolidate the idle sites and price the saving against this "
+        "baseline.",
+    ("Utilisation", "INFORMATION"):
+        "Headroom is not a decision on its own. Put more volume through the "
+        "sites with room before adding any.",
     ("Footprint", "RISK"):
-        "Review the footprint on the Digital Twin before committing to the "
-        "sites this plan leaves unused.",
-    ("Resilience", "RISK"):
-        "Open the Digital Twin to see which sites carry the exposure, then "
-        "test a scenario that spreads it.",
-    ("Cost", "INFORMATION"):
-        "Use this cost as the baseline. Any scenario you build is compared "
-        "against it.",
-    ("Cost structure", "INFORMATION"):
-        "Open the KPI page for the full cost breakdown, then target the "
-        "largest component with a scenario.",
-    ("Cost structure", "OPPORTUNITY"):
-        "Target the largest cost component with a scenario and compare it "
+        "Decide on the sites this plan leaves unused before the footprint is "
+        "committed.",
+    ("Footprint", "OPPORTUNITY"):
+        "Open the unused candidate sites and price the cost and service "
         "against this baseline.",
-    ("Carbon", "INFORMATION"):
-        "Open the KPI page to see which lanes carry the emissions before "
-        "changing how volume is routed.",
+    ("Footprint", "INFORMATION"):
+        "Treat this footprint as the baseline any change to it is measured "
+        "against.",
+    ("Resilience", "RISK"):
+        "Spread the exposure off the sites carrying it, and price the "
+        "alternative before it concentrates further.",
+    ("Resilience", "INFORMATION"):
+        "Keep the exposure this figure summarises inside its tolerance as the "
+        "footprint changes.",
+    # ---- everything the ladder does not speak to -------------------------
+    ("Cost", "OPPORTUNITY"):
+        "Price this against a changed footprint before committing to the "
+        "current one.",
+    ("Cost", "INFORMATION"):
+        "Hold this as the baseline every proposed change is measured against.",
+    ("Cost structure", "INFORMATION"):
+        "Target the largest component of this cost first — the smaller ones "
+        "cannot move the total far enough to matter.",
+    ("Cost structure", "OPPORTUNITY"):
+        "Take the largest cost component into a scenario and price the "
+        "alternative before committing.",
+    ("Carbon", "RISK"):
+        "Shorten the longest lanes, or move them to a lower-emitting mode, "
+        "and price the trade-off against cost.",
     ("Carbon", "OPPORTUNITY"):
-        "Test a scenario that shortens the longest lanes and compare its "
-        "emissions with this baseline.",
+        "Shorten the longest lanes and price the emissions saved against what "
+        "the re-route costs.",
+    ("Carbon", "INFORMATION"):
+        "Treat this as the emissions baseline any re-routing is measured "
+        "against.",
     ("Scenario impact", "OPPORTUNITY"):
-        "Review this scenario against the baseline in the scenario planner "
-        "before taking it further.",
+        "Take this scenario to a decision, or park it — it has been priced "
+        "against the baseline and is waiting on a call.",
     ("Demand outlook", "INFORMATION"):
-        "Open the Forecast page to see the series behind this outlook before "
-        "planning capacity against it.",
+        "Size the network against this outlook rather than against last "
+        "year's volume.",
     ("Where the growth is", "INFORMATION"):
-        "Open the Forecast page to see which markets carry the growth, then "
-        "test a scenario that serves them.",
+        "Put capacity where this growth is landing, not where the current "
+        "footprint already sits.",
     ("External signals", "INFORMATION"):
-        "Open the Forecast page to see which signals were applied and what "
-        "each one moved.",
+        "Decide whether these signals belong in the planning assumption "
+        "before the next capacity round.",
     ("History that changed", "INFORMATION"):
-        "Open the Forecast page to see what changed in the history this "
-        "forecast was built on.",
+        "Re-baseline the plan on the corrected history before acting on any "
+        "figure derived from it.",
 }
 
-#: Last resort, by severity alone — a theme this map does not name yet.
+#: Last resort, by severity alone — a theme this map does not name yet. Still
+#: a decision, still not a place to look.
 _ACTION_BY_SEVERITY = {
-    "RISK": "Open the full finding to see the sites and figures behind it, "
-            "then test a scenario that addresses them.",
-    "OPPORTUNITY": "Build a scenario that tests this change and compare it "
-                   "against the current baseline.",
-    "INFORMATION": "No decision is needed. Open the full finding for the "
-                   "figures behind it.",
+    "RISK": "Decide whether this is accepted or acted on, and price the "
+            "change before the next planning round.",
+    "OPPORTUNITY": "Price this change against the current baseline before "
+                   "committing either way.",
+    "INFORMATION": "No decision is needed on this one.",
 }
 
 
-def _recommended_action(insight: Any, theme: str, severity: str) -> str:
+def _facility_rows(pack: Any) -> List[Dict[str, Any]]:
     """
-    The one step to take about this finding.
+    The solved per-site rows a recommendation is derived from.
 
-    The narrative layer's own line wins whenever it wrote one, because it saw
-    the evidence. Everything below is the honest default for a briefing that
-    did not: advisory, figure-free, and pointing at a screen that exists.
+    Read off the evidence pack's own payload rather than re-fetched, because
+    the pack is built from exactly the state this briefing describes — a second
+    read could return a different solve and recommend a change for a network
+    the reader is not looking at.
+    """
+    payload = getattr(pack, "payload", None)
+    if not isinstance(payload, dict):
+        return []
+    rows = payload.get("facilities")
+    return list(rows) if isinstance(rows, list) else []
+
+
+def _unserved(pack: Any) -> Optional[float]:
+    payload = getattr(pack, "payload", None)
+    if not isinstance(payload, dict):
+        return None
+    return _finite((payload.get("network_state") or {}).get("unserved_demand"))
+
+
+def _strategic_action(pack: Any) -> Optional[Dict[str, Any]]:
+    """
+    The top rung of the ladder for this network, as a serialisable action.
+
+    None when there are no solved rows to reason over — in which case the
+    caller falls back to the theme sentence, which claims nothing about sites
+    it cannot see.
+    """
+    from netgravity.orchestrator.reasoning.strategic_actions import build_actions
+
+    rows = _facility_rows(pack)
+    if not rows:
+        return None
+    actions = build_actions(rows, unserved_demand=_unserved(pack), limit=1)
+    if not actions or actions[0].key == "NO_ACTION":
+        return None
+    return actions[0].to_dict()
+
+
+def _recommended_action(insight: Any, theme: str, severity: str,
+                        pack: Any = None) -> Tuple[str, Dict[str, Any]]:
+    """
+    The one decision to take about this finding, and the test that proves it.
+
+    Returns `(sentence, action)`. The sentence is what a card prints; `action`
+    is the structured intervention behind it — its key, the site or region it
+    is about, and the pre-filled scenario a reader presses to price it. `{}`
+    when the recommendation is advisory and has no scenario to open.
+
+    Order of preference:
+
+      1. THE NARRATIVE LAYER'S OWN LINE. It saw the evidence, so it wins
+         whenever it wrote one.
+      2. THE LADDER, for a capacity-family finding on a network with solved
+         rows. This is the one that can name a site.
+      3. THE THEME SENTENCE. A decision, not a destination.
+
+    A finding a reader has to translate into a decision on their own is half a
+    finding — and on a screen read by people who do not run the model
+    themselves, half a finding is none.
     """
     written = str(getattr(insight, "recommended_action", "") or "").strip()
     if written:
-        return written
-    return (_ACTION_BY_THEME.get((theme, severity))
-            or _ACTION_BY_THEME.get((theme, "INFORMATION"))
-            or _ACTION_BY_SEVERITY.get(severity)
-            or _ACTION_BY_SEVERITY["INFORMATION"])
+        return written, {}
+
+    if theme in _CAPACITY_THEMES and severity != "INFORMATION":
+        action = _strategic_action(pack)
+        if action:
+            # The LABEL is the sentence. It is an imperative naming the
+            # intervention — "Expand capacity at Pune DC" — and the evidence
+            # for it is the finding the reader has just read, so repeating the
+            # reason underneath would say the same thing twice.
+            return action["label"], action
+
+    sentence = (_ACTION_BY_THEME.get((theme, severity))
+                or _ACTION_BY_THEME.get((theme, "INFORMATION"))
+                or _ACTION_BY_SEVERITY.get(severity)
+                or _ACTION_BY_SEVERITY["INFORMATION"])
+    return sentence, {}
 
 
 def _serialise_insight(insight: Any, index: int, *, scope: str,
@@ -441,6 +526,7 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
     metric_refs = list(getattr(insight, "metric_refs", []) or [])
     comparison_refs = list(getattr(insight, "comparison_refs", []) or [])
     driver_refs = list(getattr(insight, "driver_refs", []) or [])
+    _action_pair = _recommended_action(insight, theme, severity_name, pack)
     return {
         # The theme alone is not unique within a scope: `_service_insights` can
         # emit two `theme="Service"` findings (unserved demand, and SLA), and
@@ -469,7 +555,13 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
         # one; a theme-appropriate, figure-free default when it did not. A
         # finding a reader has to translate into a decision on their own is
         # half a finding.
-        "recommended_action": _recommended_action(insight, theme, severity_name),
+        "recommended_action": _action_pair[0],
+        # The intervention BEHIND the sentence: which rung of the ladder
+        # it is, the site or region it is about, and the pre-filled
+        # scenario that prices it. `{}` when the recommendation is
+        # advisory and has no scenario to open — a button that opens an
+        # empty form is worse than no button.
+        "action": _action_pair[1],
         # Stated by the engine, not inferred from the wording by the client.
         # The Home feed used to decide a card's colour, icon and priority by
         # searching its prose for "high impact" / "opportunity" / "positive",
@@ -682,8 +774,14 @@ def _format_entity_value(entity: Dict[str, Any]) -> str:
         return "—"
     metric = str(entity.get("metric") or "")
     if metric.endswith("_pct"):
-        return f"{value:,.2f}%"
-    return f"{value:,.2f}"
+        # ONE decimal on a percentage. The second is below the precision of
+        # every input this figure is derived from, and a column of "92.37%"
+        # against "88.41%" invites a comparison at a resolution the model does
+        # not have.
+        return f"{value:,.1f}%"
+    # Whole units above the rate threshold, decimals below it — the same rule
+    # `format_money` applies, so a figure keeps its shape across the product.
+    return f"{value:,.2f}" if abs(value) < 100 else f"{value:,.0f}"
 
 
 def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
@@ -944,6 +1042,16 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 # page of reports with one paragraph of "I recommend" in the
                 # middle of it reads as two different documents.
                 "recommendation": plain_voice(briefing.recommendation or ""),
+                # THE CHANGE BEHIND THAT SENTENCE, when the solved rows justify
+                # one. The page's headline button read "Open scenario planner"
+                # — hardcoded in the browser, identical on every network, and a
+                # destination rather than a decision. With this it names the
+                # intervention and opens the scenario already filled in.
+                #
+                # The SENTENCE is still the engine's; this only says what the
+                # button under it does. `{}` on a network that needs no change,
+                # in which case the button falls back to the planner.
+                "action": _strategic_action(pack) or {},
                 "opening": plain_voice(briefing.opening or ""),
                 "context": plain_voice(briefing.context or ""),
                 "key_drivers": [plain_voice(d) for d in briefing.key_drivers],

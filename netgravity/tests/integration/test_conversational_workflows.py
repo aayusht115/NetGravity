@@ -106,7 +106,7 @@ class TestInformationQuery:
         assert response.results["network"]["business_network_cost"] == pytest.approx(
             1200.0, abs=1e-6
         )
-        assert "1,200.00" in response.reply
+        assert "1,200" in response.reply
 
     def test_the_status_answer_states_that_nothing_was_optimised(self):
         chat, _, _ = _counting_chat()

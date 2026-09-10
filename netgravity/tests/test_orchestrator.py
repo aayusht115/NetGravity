@@ -1076,7 +1076,7 @@ class TestLLMBoundary:
                 {"network_state": {"business_network_cost": 1000.0}},
                 provenance={"business_network_cost": "milp"}, allow_llm=True)
             assert result.source == "llm", f"{label} fell back to template"
-            assert "1,000.00" in result.summary, label
+            assert "1,000" in result.summary, label
             assert result.grounding_status == "GROUNDED", (label, result.grounding_status)
             assert result.grounded_claims, label
 
@@ -1188,7 +1188,7 @@ class TestLLMBoundary:
         result = agent.reason({"network_state": {"business_network_cost": 1000.0,
                                                  "is_feasible": True}})
         assert result.source == "template"
-        assert "1,000.00" in result.summary
+        assert "1,000" in result.summary
         # The template only states values from the payload, so it must ground.
         assert result.grounding_status in ("GROUNDED", "NO_CLAIMS")
         assert result.is_grounded

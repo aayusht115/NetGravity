@@ -246,9 +246,37 @@ function skeletonHtml() {
     </div>`;
 }
 
+/**
+ * Which agent is doing this phase, in words a reader can repeat.
+ *
+ * The layer was in the model from the first version of this screen and was
+ * never drawn, so the dialog said WHAT was happening and never WHO was doing
+ * it — five phases of an agentic system rendering as an ordinary progress
+ * list. Naming the agent is the difference between "Solving the network" and
+ * "Optimisation Agent · Solving the network", and it is free: `step.layer` is
+ * already the layer that genuinely owns the capability behind the request
+ * (see `layerForCapability` and `STAGE_LAYER`).
+ *
+ * Nothing here invents an actor. A phase whose layer is the hub says
+ * Orchestrator, because the orchestrator is what ran it.
+ */
+const AGENT_NAME = {
+  intent:       'Intent Agent',
+  extraction:   'Extraction Agent',
+  forecasting:  'Forecasting Agent',
+  scenario:     'Scenario Agent',
+  reasoning:    'Reasoning Agent',
+  orchestrator: 'Orchestrator',
+};
+
+function agentName(layer) {
+  return AGENT_NAME[layer] || AGENT_NAME.orchestrator;
+}
+
 function phaseHtml(step) {
   return `
-    <div class="agl-phase pending" data-step="${escapeHtml(step.id)}">
+    <div class="agl-phase pending" data-step="${escapeHtml(step.id)}"
+         data-agent="${escapeHtml(step.layer || 'orchestrator')}">
       <span class="agl-node" aria-hidden="true">
         <span class="agl-node-dot"></span>
         <span class="agl-node-spin"></span>
@@ -261,7 +289,13 @@ function phaseHtml(step) {
                stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>
         </span>
       </span>
-      <div class="agl-phase-title"></div>
+      <div class="agl-phase-head">
+        <span class="agl-phase-agent">
+          <span class="agl-phase-agent-pulse" aria-hidden="true"></span>
+          ${escapeHtml(agentName(step.layer))}
+        </span>
+        <div class="agl-phase-title"></div>
+      </div>
       <div class="agl-logs"></div>
     </div>`;
 }

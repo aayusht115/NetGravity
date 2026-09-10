@@ -498,6 +498,15 @@ function renderCostAttribution() {
   // Rounding noise is not a finding.
   if (unattributed <= Math.max(1, inventory * 0.005)) { node.hidden = true; return; }
 
+  // ON THE SPEND CARD, not floating above the filter bar.
+  //
+  // This is a caption about ONE chart's numbers — the facility spend donut,
+  // whose slices do not sum to the network's cost because inventory is decided
+  // for the network rather than per site. Sat between the scorecard and the
+  // controls it read as a general announcement; moved onto the card it
+  // explains, it is where a reader who has just tried to add the slices up
+  // will actually look. Relocated rather than deleted: without it a reader
+  // does that sum, comes up short, and concludes the page is wrong.
   node.hidden = false;
   node.textContent = attributed > 0
     ? `Inventory holding — ${formatCurrency(unattributed)} of `
@@ -636,11 +645,21 @@ export function applyView() {
     // two that state something neither of those does: that a drill-down's
     // scorecard is NOT about the selected site, and that the Network lens
     // agrees with the Overview.
+    // ONLY THE DRILL-DOWN LINE SURVIVES.
+    //
+    // The network branch read "Every facility in this plan — the same figures
+    // the Overview reports." That is a third label for a population the
+    // highlighted tab already names and the "Showing:" line beside it already
+    // counts, floating between the scorecard and the filters. It is exactly
+    // the loose sentence between cards that keeps being asked about.
+    //
+    // The drill-down line stays because it is the one that states something
+    // nothing else on screen does: above a page headed "Bengaluru — one
+    // facility", this row of figures is NOT Bengaluru's, and a reader who
+    // assumes otherwise reads a wrong number off it.
     note.textContent = onEntity
       ? `${lens} network summary — not this facility's own figures, which are below.`
-      : isNetwork
-        ? 'Every facility in this plan — the same figures the Overview reports.'
-        : '';
+      : '';
     note.hidden = !note.textContent;
   }
 

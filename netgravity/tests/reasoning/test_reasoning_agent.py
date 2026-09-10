@@ -156,7 +156,7 @@ class TestACostFigureSaysWhatSpanItCovers:
         result = self._reason({
             "business_network_cost": 1000.0, "periods_modelled": 1,
         })
-        assert "1,000.00 per period" in result.summary
+        assert "1,000 per period" in result.summary
 
     def test_a_horizon_states_the_span_and_the_per_period_figure(self):
         result = self._reason({
@@ -165,9 +165,9 @@ class TestACostFigureSaysWhatSpanItCovers:
             "cost_per_period": 1000.0,
         })
         assert "across the 12 periods modelled" in result.summary
-        assert "1,000.00 per period" in result.summary
+        assert "1,000 per period" in result.summary
         # The horizon total is never restated as a per-period figure.
-        assert "12,000.00 per period" not in result.summary
+        assert "12,000 per period" not in result.summary
 
     def test_the_span_is_stated_even_with_no_per_period_figure(self):
         """
@@ -195,4 +195,4 @@ class TestACostFigureSaysWhatSpanItCovers:
         })
         assert result.grounding_status == "GROUNDED"
         assert result.validation_warnings == []
-        assert "18,049,550.52 per period" in result.summary
+        assert "18,049,551 per period" in result.summary

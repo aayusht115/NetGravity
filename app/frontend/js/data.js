@@ -587,6 +587,11 @@ export const NETWORK_RECOMMENDATION = {
   groundingStatus: '',
   stateId: '',
   computedAt: null,
+  // The CHANGE behind the recommendation sentence, when the solved rows
+  // justify one: which rung of the strategic ladder, the site or region it
+  // names, and the pre-filled scenario that prices it. `{}` on a network that
+  // needs no change. Derived on the server — see `strategic_actions.py`.
+  action: {},
   // The configured policy thresholds, from the module that owns them. A chart
   // draws its threshold line at `utilization_over_pct` rather than at a 90
   // written into the chart code — a second copy of a policy constant is a
@@ -947,6 +952,17 @@ export function toInsightRecord(apiInsight) {
     // `_recommended_action` there. Never composed here: a recommendation
     // written in the browser is a recommendation nothing verified.
     recommendedAction: apiInsight.recommended_action || '',
+    // The INTERVENTION behind that sentence, when the finding has one: which
+    // rung of the strategic ladder it is, the site or region it names, and the
+    // pre-filled scenario that prices it. `{}` for advisory recommendations,
+    // which have nothing to open.
+    //
+    // Derived on the server, in `strategic_actions.py`, from the solved
+    // per-site rows — the same ladder the scenario planner's own
+    // recommendations come off, so a leader reading "Expand capacity at Pune
+    // DC" on Insights and on the planner is reading one decision, not two
+    // screens that happened to agree.
+    action: apiInsight.action || {},
     theme: apiInsight.theme || '',
     severity: apiInsight.severity || 'INFORMATION',
     category: insightCategory(apiInsight),
@@ -997,6 +1013,7 @@ export function applyInsightResponse(response) {
       computedAt: response.computed_at || null,
       thresholds: response.thresholds || {},
       series: response.series || {},
+      action: response.action || {},
     });
   }
 
@@ -1126,6 +1143,12 @@ export function withCurrency(text) {
   return typeof text === 'string' ? text.split('{ccy}').join(currencyLabel()) : text;
 }
 
+// Below this an amount is a RATE and its decimals carry meaning; at or above
+// it they are solver residue. Mirrors `_RATE_THRESHOLD` in
+// netgravity/orchestrator/reasoning/evidence.py — one convention, so a figure
+// does not gain a decimal place by crossing from the server to the screen.
+const RATE_THRESHOLD = 100;
+
 /** The locale whose digit grouping matches the active currency's convention. */
 function numberLocale() {
   return LAKH_CRORE_CURRENCIES.has(ACTIVE_CURRENCY) ? 'en-IN' : 'en-US';
@@ -1148,29 +1171,64 @@ export function formatCurrency(value, decimals = 0) {
   const sign = n < 0 ? '-' : '';
   const abs = Math.abs(n);
   const join = (num, suffix) => `${sign}${sym}${num}${suffix}`;
+  // GROUPED. `toFixed` renders 150628 as "150628", and an ungrouped six-digit
+  // figure is harder to read than the cents this formatter just removed.
+  const grouped = (num, places) => num.toLocaleString(numberLocale(), {
+    minimumFractionDigits: places, maximumFractionDigits: places });
 
+  // ONE DECIMAL PLACE, NEVER TWO.
+  //
+  // "₹15.13 Cr" is a headline pretending to be a ledger: the second decimal is
+  // a hundred thousand rupees of solver residue, printed to a reader who is
+  // deciding whether to build something. At this scale the magnitude is the
+  // message; anyone reconciling against their own model wants the workbook
+  // export, which carries the raw number.
+  //
+  // Below the scale words the amount is grouped and WHOLE. `decimals` still
+  // defaults to 0 and callers that genuinely need cents pass them.
   if (LAKH_CRORE_CURRENCIES.has(ACTIVE_CURRENCY)) {
-    if (abs >= 10000000) return join((abs / 10000000).toFixed(2), 'Cr');
+    if (abs >= 10000000) return join((abs / 10000000).toFixed(1), 'Cr');
     if (abs >= 100000) return join((abs / 100000).toFixed(1), 'L');
     if (abs >= 1000) return join((abs / 1000).toFixed(1), 'K');
-    return join(abs.toFixed(decimals), '');
+    return join(grouped(abs, decimals), '');
   }
-  if (abs >= 1e9) return join((abs / 1e9).toFixed(2), 'B');
-  if (abs >= 1e6) return join((abs / 1e6).toFixed(2), 'M');
+  if (abs >= 1e9) return join((abs / 1e9).toFixed(1), 'B');
+  if (abs >= 1e6) return join((abs / 1e6).toFixed(1), 'M');
   if (abs >= 1000) return join((abs / 1000).toFixed(1), 'K');
-  return join(abs.toFixed(decimals), '');
+  return join(grouped(abs, decimals), '');
 }
 
 /**
  * A money amount in full, unabbreviated — for exports and audit tables, where
  * "$1.2M" loses the precision the reader came for.
+ *
+ * WHOLE UNITS by default. The cents on a network cost are solver residue, and
+ * a table of figures ending in ".00" and ".70" invites a reader to reconcile
+ * to a precision the model does not have. A caller that genuinely needs them —
+ * a per-unit rate, an audit line — passes `decimals` explicitly.
  */
-export function formatCurrencyExact(value, decimals = 2) {
+export function formatCurrencyExact(value, decimals = null) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "—";
-  const body = Number(value).toLocaleString(numberLocale(), {
-    minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+  const n = Number(value);
+  // SCALE DECIDES THE DECIMALS, unless the caller states them.
+  //
+  // Almost every call here is a per-unit RATE — "₹2.45/unit", "₹0.31/u" — where
+  // the decimals ARE the measurement and rounding to whole units destroys the
+  // figure. Almost every OTHER call is a total, where ".70" is solver residue
+  // printed to somebody deciding whether to build something.
+  //
+  // One rule serves both, and it is the same rule `format_money` applies on
+  // the server (`RATE_THRESHOLD` there): below 100 the decimals are the point,
+  // above it they are noise. A caller that knows better passes `decimals`.
+  const places = decimals === null
+    ? (Math.abs(n) < RATE_THRESHOLD ? 2 : 0)
+    : decimals;
+  const sign = n < 0 ? '-' : '';
+  const body = Math.abs(n).toLocaleString(numberLocale(), {
+    minimumFractionDigits: places, maximumFractionDigits: places,
   });
-  return ACTIVE_CURRENCY ? `${currencySymbol()}${body}` : body;
+  // The sign goes OUTSIDE the symbol: "-₹45,890", never "₹-45,890".
+  return ACTIVE_CURRENCY ? `${sign}${currencySymbol()}${body}` : `${sign}${body}`;
 }
 
 /**

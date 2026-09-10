@@ -537,22 +537,16 @@ function renderForecastAttention(listId = 'fc-attn-body') {
        <span class="fc-attn-delta up">+${r.growth_pct.toFixed(0)}%</span>`).join('<br>')]);
   }
 
-  if (outlook && outlook.n_structural_breaks) {
-    rows.push(['History that changed',
-      `${outlook.n_structural_breaks} series changed level partway through, so the
-       forecast for ${outlook.n_structural_breaks === 1 ? 'it is' : 'those are'}
-       built from the period after the break rather than the whole history.`]);
-  }
-
-  const signals = FORECAST_BRIEFING.signals;
-  if (signals && typeof signals.attached === 'number' && signals.attached) {
-    rows.push(['External signals',
-      signals.series_adjusted
-        ? `${signals.attached} supplied · <strong>${signals.series_adjusted}
-           series moved</strong> by them`
-        : `${signals.attached} supplied · none changed a forecast — the router
-           applies a signal only where it names something this network contains`]);
-  }
+  // TWO FACTS, NOT FOUR.
+  //
+  // "History that changed" and "External signals" came off this card. Both are
+  // true and neither is a DECISION: they describe how the forecast was made,
+  // which is what the page below this card is for. On a card a leader reads to
+  // answer "is our network big enough for what is coming", rows of methodology
+  // sit between the demand figure and the button that tests it.
+  //
+  // What is left is what the decision turns on: how much demand is coming, and
+  // where it is landing.
 
   const actions = forecastActions(outlook);
 
@@ -587,21 +581,14 @@ function renderForecastAttention(listId = 'fc-attn-body') {
     ${rows.length ? `<dl class="fc-attn-facts">
       ${rows.map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('')}
     </dl>` : ''}
-    ${card && card.meaning
-      ? `<div class="ov-attn-section"><div class="ov-attn-section-label tone-impact">
-           What it means</div>
-         <div class="ov-attn-section-text">${escapeInsightText(card.meaning)}</div>
-       </div>` : ''}
     ${card && card.warning
       ? `<div class="fc-attn-warning">${escapeInsightText(card.warning)}</div>` : ''}
-    ${card && card.next_step ? `
-      <div class="ov-attn-next">
-        <span class="ov-attn-next-icon">${OV_ICONS.chart}</span>
-        <div class="ov-attn-next-text">
-          <div class="ov-attn-section-label tone-next">Recommended next step</div>
-          <div class="ov-attn-next-sub">${escapeInsightText(card.next_step)}</div>
-        </div>
-      </div>` : ''}
+    <!-- "Recommended next step" WAS HERE, above "Recommended actions".
+         Two recommendation blocks, one after the other: when they agreed the
+         card said the same thing twice, and when they did not the reader had
+         two recommendations and no way to choose. The actions win — they name
+         a change AND open the scenario that prices it, where the next step was
+         a sentence. Same defect the scenario card was fixed for. -->
     ${actions.length ? `
       <div class="scn-take-section-title" style="margin-top:14px">Recommended actions</div>
       <div class="scn-take-actions">
@@ -610,7 +597,8 @@ function renderForecastAttention(listId = 'fc-attn-body') {
                   data-fc-action="${i}">
             <span class="scn-take-action-label">${escapeInsightText(a.label)}</span>
             <span class="scn-take-action-detail">${escapeInsightText(a.detail)}</span>
-            <span class="scn-take-action-go">Set this up →</span>
+            <span class="scn-take-action-go">${escapeInsightText(
+              a.cta || 'Test this')} in the scenario planner →</span>
           </button>`).join('')}
       </div>` : ''}
     ${forecastDownloadHtml()}
@@ -651,9 +639,15 @@ function forecastActions(outlook) {
     const pct = growth.toFixed(0);
     actions.push({
       label: `Test the network at ${growth > 0 ? '+' : ''}${pct}% demand`,
-      detail: 'Opens the scenario builder with this forecast\'s own growth rate '
-        + 'filled in. The forecast says what is coming; only a solve says '
-        + 'whether the current footprint carries it.',
+      // ONE LINE. It was three sentences explaining what the button does,
+      // under a label that already says it. A leader reading a
+      // recommendation needs the reason, not the mechanism.
+      detail: 'The forecast says what is coming; only a solve says whether '
+        + 'the current footprint carries it.',
+      // The verb names THIS change, like every other recommendation in the
+      // product. A demand test is not a capacity change, so it does not
+      // borrow the capacity ladder's wording.
+      cta: 'Test the network at this rate',
       primary: true,
       run: () => openScenarioFromForecast({ pct: Number(pct) }),
     });
@@ -678,10 +672,10 @@ function forecastActions(outlook) {
     if (region) {
       actions.push({
         label: `Test ${region} alone, at +${row.growth_pct.toFixed(0)}%`,
-        detail: `${where} grows fastest in this projection, at `
-          + `+${row.growth_pct.toFixed(0)}%. Growth stated for the whole network `
-          + `loads every site; scoping it to ${region} loads the ones that will `
-          + 'actually feel it.',
+        detail: `${where} grows fastest here. Growth stated for the whole `
+          + `network loads every site; scoping it to ${region} loads the `
+          + 'ones that will actually feel it.',
+        cta: `Test ${region} on its own`,
         run: () => openScenarioFromForecast({
           pct: Number(row.growth_pct.toFixed(0)), region }),
       });
@@ -1417,11 +1411,11 @@ function syncNavGroups() {
 }
 
 function initTabs() {
-  // Every sidebar entry that names a tab: Overview, Baseline's three
-  // (Digital Twin, KPIs, Insights), Forecast and Scenarios. The Baseline
-  // group HEAD is deliberately not one of them — it carries `data-group-tab`
-  // instead, so it opens its first child without competing with that child
-  // for the active mark.
+  // Every sidebar entry that names a tab: Overview, Baseline's two (Digital
+  // Twin, KPI Dashboard) and Opportunities' three (Insights, Forecasting,
+  // Scenario Builder). A group HEAD is deliberately not one of them — it
+  // carries `data-group-tab` instead, so it opens its first child without
+  // competing with that child for the active mark.
   document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
     item.addEventListener('click', () => {
       const tab = item.dataset.tab;
@@ -1962,10 +1956,28 @@ function populateFacilitySelector() {
  * on the handle are the three symbols on the map, by construction rather than
  * by a second list that would drift.
  */
-function initTwinLegendDock() {
-  const toggle = document.getElementById('twin-legend-toggle');
-  const panel = document.getElementById('twin3d-legend');
-  const peek = document.getElementById('twin-legend-peek');
+/**
+ * One legend dock, wired for whichever stage asks for it.
+ *
+ * ONE IMPLEMENTATION, TWO STAGES. The Digital Twin's key is a dock at the foot
+ * of its card: a "Key" bar that opens the legend UPWARD over the map and
+ * closes when the reader touches the network underneath. The scenario
+ * planner's twin card had the same key permanently expanded below its map
+ * instead — the same rows, taking a fifth of a panel whose whole job is to
+ * show a network, on a screen where the reader has already learned the key
+ * from the twin.
+ *
+ * The two are now the same control with the same behaviour, because they
+ * describe the same encodings; a key that behaves differently on the second
+ * screen is a second thing to learn (Nielsen #4).
+ *
+ * `stageId` is what the key gets out of the way FOR: a click on the network is
+ * a click on the thing the key describes.
+ */
+function initLegendDock({ toggleId, panelId, peekId, dockId, stageId }) {
+  const toggle = document.getElementById(toggleId);
+  const panel = document.getElementById(panelId);
+  const peek = peekId ? document.getElementById(peekId) : null;
   if (!toggle || !panel) return;
 
   if (peek && !peek.textContent) {
@@ -1981,11 +1993,24 @@ function initTwinLegendDock() {
 
   // A click on the map is a click on the thing the key describes, so the key
   // gets out of the way rather than staying open over it.
-  document.getElementById('twin-stage')?.addEventListener('click', (e) => {
+  document.getElementById(stageId)?.addEventListener('click', (e) => {
     if (panel.hidden) return;
-    if (document.getElementById('twin-legend-dock')?.contains(e.target)) return;
+    if (dockId && document.getElementById(dockId)?.contains(e.target)) return;
     panel.hidden = true;
     toggle.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function initTwinLegendDock() {
+  initLegendDock({
+    toggleId: 'twin-legend-toggle', panelId: 'twin3d-legend',
+    peekId: 'twin-legend-peek', dockId: 'twin-legend-dock',
+    stageId: 'twin-stage',
+  });
+  initLegendDock({
+    toggleId: 'scn-legend-toggle', panelId: 'scenario-map-legend',
+    peekId: 'scn-legend-peek', dockId: 'scn-legend-dock',
+    stageId: 'scenario-map-wrap',
   });
 }
 
@@ -2607,8 +2632,52 @@ export function renderFacilityDashboard() {
     // the Facility Cost card above. It used to be handed the facility and
     // invent five figures from constants.
     renderFacilityCostBreakdownChart('chart-dash-costs', whRow);
-    renderFacilityLaneFlowsChart('chart-dash-lanes', connectedLanes, state.selectedFacility);
+    // Returns how many corridors it drew against how many the site has: the
+    // chart stops at twelve so its labels stay apart, and the caption below
+    // has to say so rather than let a reader count nine bars under a sentence
+    // promising nineteen.
+    const drawn = renderFacilityLaneFlowsChart(
+      'chart-dash-lanes', connectedLanes, state.selectedFacility);
+    captionCorridorChart(drawn);
   }, 60);
+
+  // WHAT THIS SITE'S CORRIDORS ACTUALLY ARE, in the vocabulary of its role.
+  //
+  // The caption was one fixed sentence — "Inbound supply from plants &
+  // Outbound dispatches to demand markets" — printed above every facility.
+  // On a plant it names an inbound flow a plant does not have; on a DC with
+  // no outbound solved it promises dispatches the chart does not show.
+  //
+  // Counted from the corridors actually attached to this site, so the caption
+  // and the bars below it cannot disagree.
+  function captionCorridorChart(drawn) {
+    const laneSubtitle = document.getElementById('dash-lanes-subtitle');
+    if (!laneSubtitle) return;
+    const inbound = connectedLanes.filter((l) => l.direction === 'Inbound').length;
+    const outbound = connectedLanes.length - inbound;
+    const parts = [];
+    if (inbound) {
+      parts.push(`${inbound} inbound ${inbound === 1 ? 'corridor' : 'corridors'}`
+        + (isDC ? ' carrying supply into this site' : ' feeding this plant'));
+    }
+    if (outbound) {
+      parts.push(`${outbound} outbound ${outbound === 1 ? 'corridor' : 'corridors'}`
+        + (isDC ? ' dispatching to the markets it serves'
+                : ' shipping production onward'));
+    }
+    // Only when the chart is genuinely holding some back.
+    const held = drawn && drawn.total > drawn.shown
+      ? ` · the ${drawn.shown} busiest are charted, all ${drawn.total} are in `
+        + 'the table below'
+      : '';
+    laneSubtitle.textContent = parts.length
+      ? parts.join(' · ') + held
+      : 'This site carries no corridor in the solved plan.';
+  }
+  // Called again once the chart has drawn and can say how much it showed; this
+  // first call fills the caption immediately so the card is never blank while
+  // the 60ms chart timer runs.
+  captionCorridorChart(null);
 
   // Corridor Summary Narrative
   // Only corridors that reported a volume. `l.flow || 0` counted an absent
@@ -3492,6 +3561,12 @@ function escapeInsightText(value) {
  * Returns null when no recommendation has been produced. Absence is not a
  * clean bill of health, and the caller renders nothing rather than reassurance.
  */
+/** "Test the reopening" -> "test the reopening", for use mid-sentence. */
+function lowerFirst(text) {
+  const t = String(text || '');
+  return t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+}
+
 function getNetworkRecommendation() {
   const rec = NETWORK_RECOMMENDATION;
   if (!rec.text) return null;
@@ -3518,11 +3593,26 @@ function getNetworkRecommendation() {
       + 'above as unverified.');
   }
 
+  // WHAT THE BUTTON DOES, from the intervention the engine derived.
+  //
+  // It read "Open scenario planner" on every network ever loaded — a
+  // destination, hardcoded here, under a paragraph that had just told the
+  // reader what the engine concluded. Where the ladder produced a change, the
+  // button names it and opens the scenario already filled in with it; where it
+  // did not, the planner is still the honest answer, because a reader who
+  // wants to test something of their own goes there.
+  const action = rec.action && rec.action.scenario
+                 && Object.keys(rec.action.scenario).length ? rec.action : null;
   return {
     headline,
     text: body || (rec.keyDrivers || []).join(' · '),
     limitation: caveats.join(' '),
-    cta: 'Open scenario planner',
+    // The change, then what pressing it does. "Test the capacity increase:
+    // Expand capacity at Pune DC" says the same thing twice, so the label
+    // leads and the verb follows it.
+    cta: action ? `${action.label} — ${lowerFirst(action.cta)}`
+                : 'Open scenario planner',
+    action,
   };
 }
 
@@ -4053,6 +4143,27 @@ const INSIGHTS_FILTERS = [
   { id: 'action', label: 'Data needed' },
 ];
 
+/**
+ * One finding, as a row a leader can scan.
+ *
+ * WHAT CAME OFF, AND WHY.
+ *
+ * The row used to carry the engine's narrative — two or three sentences of
+ * analysis — between the headline and the recommended action. On a list of
+ * eight findings that is eight paragraphs to read before the first decision is
+ * visible, and every one of them restates evidence the headline has already
+ * summarised. It made each row 157px tall, so four findings filled a screen.
+ *
+ * What is left is the shape of a decision list: what the finding is, what it
+ * measured, what to DO about it, and the way into the working. The narrative
+ * has not been deleted — it is the first thing on the detail page, one click
+ * away, where a reader who wants the analysis is going anyway.
+ *
+ * The action is an IMPERATIVE naming an intervention — "Expand capacity at
+ * Pune DC" — derived on the server from the solved per-site rows. It used to
+ * be "Open the KPI page to see which sites are over the threshold", which is
+ * an instruction to go and do the analysis yourself.
+ */
 function insightRowHtml(item) {
   const rec = item.record || {};
   const sev = OV_TILE_SEVERITY[item.severity] || OV_TILE_SEVERITY.INFORMATION;
@@ -4070,28 +4181,41 @@ function insightRowHtml(item) {
   // produce it, so it must never read as something the engine concluded.
   const action = isAction
     ? (item.required
-        ? 'Request this field from whoever owns it. Until it arrives the analysis runs without it.'
-        : 'Request this field when you can. The result stands without it.')
+        ? 'Request this field from whoever owns it.'
+        : 'Request this field when you can.')
     : (rec.recommendedAction || '').trim();
 
-  // The engine's own prose, minus whatever the headline already said. The row
-  // used to print `subtitle` — the narrative's FIRST SENTENCE — which on a
-  // finding whose headline is that sentence was the heading again, in grey.
-  const description = isAction
-    ? String(item.subtitle || '')
-    : insightDescription(rec, item.title);
+  // The intervention behind the sentence, when the ladder produced one. Its
+  // presence is what turns the recommendation from advice into something a
+  // reader can price: the button opens the scenario builder already filled in
+  // with the change being recommended.
+  const intervention = (!isAction && rec.action && rec.action.scenario
+                        && Object.keys(rec.action.scenario).length)
+    ? rec.action : null;
 
-  // ONE figure, and the finding's own lead. A second one was tried here and
-  // taken out: the engine's description already carries it — "Average
-  // utilisation is 56.23% and the busiest site at 77.14%" — so the chip
-  // beside it said nothing new, and two right-aligned figures moved the
-  // primary one left on the rows that had two. The figure a reader scans the
-  // page for has to be in the same place on every row.
   const figureHtml = lead ? `
         <div class="insp-row-figure">
           <span class="insp-row-figure-value">${escapeInsightText(lead.display_value)}</span>
           <span class="insp-row-figure-label">${escapeInsightText(lead.label || '')}</span>
         </div>` : '';
+
+  // The test, not a commitment. A recommendation nobody can price is an
+  // opinion, and a button that APPLIED one would be a structural change made
+  // from a dashboard — which governance exists to prevent.
+  const testHtml = intervention ? `
+        <button type="button" class="insp-row-test" data-test-scenario="1"
+                data-scn-action="${escapeInsightText(intervention.scenario.action || '')}"
+                data-scn-facility="${escapeInsightText(intervention.scenario.facility_id || '')}"
+                data-scn-mode="${escapeInsightText(intervention.scenario.open_mode || '')}"
+                data-scn-region="${escapeInsightText(intervention.scenario.region || '')}"
+                data-scn-name="${escapeInsightText(intervention.scenario.name || '')}">
+          <!-- NAMES THE CHANGE, AND WHERE IT GOES.
+               "Test this as a scenario" sat under four different
+               recommendations saying the same thing about each; and it did not
+               say that pressing it leaves this page, which is the one thing a
+               reader needs to know before they press it. -->
+          ${escapeInsightText(intervention.cta || 'Test this')} in the scenario planner &rarr;
+        </button>` : '';
 
   return `
     <article class="insp-row ${tone}" data-kind="${item.kind}" data-id="${escapeInsightText(item.id)}"
@@ -4101,7 +4225,6 @@ function insightRowHtml(item) {
       <div class="insp-row-main">
         <div class="insp-row-eyebrow">${escapeInsightText(item.label || item.category || '')}</div>
         <h3 class="insp-row-title">${escapeInsightText(item.title || '')}</h3>
-        ${description ? `<p class="insp-row-sub">${escapeInsightText(description)}</p>` : ''}
       </div>
 
       <!-- BESIDE the finding, not under it. Stacked, every row was 157px of
@@ -4111,12 +4234,13 @@ function insightRowHtml(item) {
       <div class="insp-row-action">
         <div class="insp-row-action-label">Recommended action</div>
         <p class="insp-row-action-text">${escapeInsightText(action)}</p>
+        ${testHtml}
       </div>` : '<div class="insp-row-action is-empty"></div>'}
 
       <div class="insp-row-right">
         ${figureHtml}
         <span class="insp-row-link">
-          <span>${isAction ? 'Open this request' : 'View detailed finding'}</span>
+          <span>${isAction ? 'Open this request' : 'View detail'}</span>
           <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
         </span>
       </div>
@@ -4162,13 +4286,31 @@ function renderInsightsPage() {
       ${change ? `<div class="insp-rec-change">${change.html}</div>` : ''}
       ${rec.limitation
         ? `<p class="insp-rec-limit">${escapeInsightText(rec.limitation)}</p>` : ''}
-      <button type="button" class="insp-rec-cta" data-action="navigateToTab"
-              data-arg="scenarios">
+      <button type="button" class="insp-rec-cta" id="insp-rec-cta"
+              data-action="navigateToTab" data-arg="scenarios">
         <span>${escapeInsightText(rec.cta)}</span>
         <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
       </button>` : '';
-    // No click handler: `data-action` is dispatched by the delegated listener
-    // in actions.js, and a second one here would navigate twice.
+    // `data-action="navigateToTab"` is dispatched by the delegated listener in
+    // actions.js, so the tab change needs no handler here. What DOES need one
+    // is filling the builder in: the listener opens the planner, and this
+    // opens the form on top of it with the recommended change already set.
+    // Ordered so the tab is showing before the form is filled — the builder
+    // reads its facility list from the rendered screen.
+    if (rec && rec.action && rec.action.scenario) {
+      document.getElementById('insp-rec-cta')?.addEventListener('click', () => {
+        const scn = rec.action.scenario;
+        setTimeout(() => {
+          if (typeof window.openScenarioBuilderWith !== 'function') return;
+          window.openScenarioBuilderWith(scn.action || 'CHANGE_CAPACITY', {
+            facilityId: scn.facility_id || undefined,
+            openMode: scn.open_mode || undefined,
+            region: scn.region || undefined,
+            name: scn.name || undefined,
+          });
+        }, 120);
+      });
+    }
   }
 
   const countFor = (id) => id === 'all' ? all.length
@@ -4228,6 +4370,33 @@ function renderInsightsPage() {
         ev.preventDefault();
         open(row);
       }
+    });
+  });
+
+  // THE RECOMMENDATION, PRICED.
+  //
+  // The row opens the finding; this button opens the scenario that would
+  // prove the recommendation, already filled in with the change being
+  // recommended — the site, the kind of intervention, the region. Nothing is
+  // submitted: the builder opens and a person presses Run, which is the whole
+  // difference between recommending a change and making one.
+  //
+  // `stopPropagation` because the button lives inside a row that is itself a
+  // control. Without it, pressing "Test this as a scenario" would open the
+  // detail drawer over the builder it had just opened.
+  listEl.querySelectorAll('[data-test-scenario]').forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      if (typeof window.openScenarioBuilderWith !== 'function') return;
+      const d = btn.dataset;
+      navigateToTab('scenarios');
+      window.openScenarioBuilderWith(d.scnAction || 'CHANGE_CAPACITY', {
+        facilityId: d.scnFacility || undefined,
+        openMode: d.scnMode || undefined,
+        region: d.scnRegion || undefined,
+        name: d.scnName || undefined,
+      });
     });
   });
 }

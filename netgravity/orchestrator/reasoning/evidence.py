@@ -138,19 +138,90 @@ _CURRENCY_SYMBOLS: Dict[str, str] = {
 }
 
 
+#: Below this, an amount is a RATE and its decimals carry meaning. A network
+#: cost of ₹150,627.70 loses nothing when the seventy paise go; a cost per unit
+#: of ₹2.45 becomes ₹2 and loses the thing it was measuring.
+_RATE_THRESHOLD = 100.0
+
+
 def format_money(value: float, currency: Optional[str]) -> str:
     """
-    One amount, in the currency the network states.
+    One amount, in the currency the network states, WITHOUT the cents.
+
+    Why the decimals went. This is the string that reaches a card, a briefing
+    sentence and an evidence chip — everything a senior reader actually looks
+    at — and it rendered every figure to two decimal places. "₹768,768,999.42"
+    is not a more precise answer than "₹768,768,999"; it is the same answer
+    with two digits of solver residue on the end, and on a board slide it reads
+    as false precision about a number that is the output of a model.
+
+    The rounding is presentational only. `value` on the metric keeps the full
+    float, which is what gets plotted and what the numeric validator compares
+    a claim against — and its tolerance (0.5%, plus rounding to the claim's own
+    precision) covers the difference between the two by a wide margin.
+
+    Amounts under `_RATE_THRESHOLD` keep two decimals, because at that scale
+    the decimals are the measurement rather than noise.
 
     With no currency the amount is rendered bare. That is the honest reading of
     an upload that never named a unit, and it must stay distinguishable from a
     figure we know to be rupees.
     """
+    places = 2 if abs(value) < _RATE_THRESHOLD else 0
+    # THE SIGN GOES OUTSIDE THE SYMBOL. Formatting the signed float directly
+    # produced "₹-45,890", which reads as a currency nobody uses before it
+    # reads as a negative amount — and a cost DELTA is the field most likely to
+    # be negative and the one most worth reading correctly at a glance.
+    sign = "-" if value < 0 else ""
+    body = f"{abs(value):,.{places}f}"
     if not currency:
-        return f"{value:,.2f}"
+        return f"{sign}{body}"
     code = str(currency).strip().upper()
     symbol = _CURRENCY_SYMBOLS.get(code)
-    return f"{symbol}{value:,.2f}" if symbol else f"{code} {value:,.2f}"
+    return f"{sign}{symbol}{body}" if symbol else f"{code} {sign}{body}"
+
+
+#: Where each scale word starts, and what to call it. Indian networks read in
+#: lakh and crore; everything else in K/M/B. Stamping "₹232.26L" on a network
+#: priced in dollars was wrong twice — the wrong symbol AND a grouping
+#: convention the reader does not use.
+_LAKH_CRORE = {"INR", "PKR", "LKR", "NPR", "BDT"}
+_SCALES_IN = ((1e7, "Cr"), (1e5, "L"), (1e3, "K"))
+_SCALES_EN = ((1e9, "B"), (1e6, "M"), (1e3, "K"))
+
+
+def format_money_compact(value: float, currency: Optional[str]) -> str:
+    """
+    The same amount at the scale a headline is read at: "₹15.1 Cr", "$1.2M".
+
+    For the ONE figure at the top of a card, where the magnitude is the point
+    and the digits are not. Everything else — tables, evidence chips, exports,
+    anything a reader might reconcile against their own model — uses
+    `format_money`, because a rounded headline is a summary and a rounded table
+    is an error.
+
+    One decimal place, never two. "₹15.13 Cr" is a headline pretending to be a
+    ledger.
+    """
+    if value is None:
+        return "Not available"
+    code = str(currency or "").strip().upper()
+    scales = _SCALES_IN if code in _LAKH_CRORE else _SCALES_EN
+    magnitude = abs(float(value))
+    sign = "-" if value < 0 else ""
+
+    body = None
+    for floor, suffix in scales:
+        if magnitude >= floor:
+            body = f"{magnitude / floor:,.1f}{suffix}"
+            break
+    if body is None:
+        body = f"{magnitude:,.0f}"
+
+    symbol = _CURRENCY_SYMBOLS.get(code)
+    if not code:
+        return f"{sign}{body}"
+    return f"{sign}{symbol}{body}" if symbol else f"{code} {sign}{body}"
 
 
 def _find_currency(node: Any, depth: int = 0) -> Optional[str]:
@@ -189,7 +260,11 @@ def _display(value: Any, key: str, currency: Optional[str] = None) -> tuple[str,
     if key in _CURRENCY_FIELDS or key.endswith("_cost"):
         return format_money(float(value), currency), (currency or "currency")
     if key in _PERCENT_FIELDS or key.endswith("_pct"):
-        return f"{value:,.2f}%", "percent"
+        # ONE decimal. Utilisation is a solved ratio of two modelled
+        # quantities; its second decimal is below the precision of anything it
+        # was derived from, and a card reading "92.37%" invites a comparison at
+        # a resolution the model does not have.
+        return f"{value:,.1f}%", "percent"
     if key in _SHARE_FIELDS:
         # The unit stays "ratio" deliberately: the stored quantity is one, and
         # `display_value` is the only thing a reader reads (`value` exists to
@@ -203,10 +278,14 @@ def _display(value: Any, key: str, currency: Optional[str] = None) -> tuple[str,
     if key in _UNIT_FIELDS or key.endswith("_units"):
         return f"{value:,.0f} units", "units"
     if "carbon_kg" in key:
-        return f"{value:,.2f} kg", "kg"
+        # Grammes of CO2 on a modelled network total is false precision.
+        return f"{value:,.0f} kg", "kg"
     if "distance_km" in key:
-        return f"{value:,.2f} km", "km"
-    return f"{value:,.2f}", ""
+        return f"{value:,.1f} km", "km"
+    # An unlabelled quantity keeps its decimals below the rate threshold, where
+    # they are the measurement, and loses them above it, where they are noise.
+    return (f"{value:,.2f}" if abs(value) < _RATE_THRESHOLD
+            else f"{value:,.0f}"), ""
 
 
 def _source(key: str) -> str:

@@ -410,93 +410,25 @@ function renderSummary() {
     </div>`;
 }
 
-function renderAttention() {
-  const node = el('wh-attention');
-  if (!node) return;
-  const rows = visibleRows()
-    .filter((k) => k.is_open && (k.health_band === 'CRITICAL' || k.health_band === 'TIGHT'
-                                || k.health_band === 'UNDERUSED'))
-    .sort((a, b) => BAND_ORDER.indexOf(a.health_band) - BAND_ORDER.indexOf(b.health_band)
-                    || b.peak_utilization_pct - a.peak_utilization_pct);
-
-  if (rows.length === 0) {
-    // Two different empty states. "Nothing needs attention" is a finding and
-    // the reader should see that it was checked; "your filters match nothing"
-    // is not a finding at all, and printing the first when the second is true
-    // would report a clean bill of health for sites nobody is looking at.
-    node.innerHTML = visibleRows().length === 0
-      ? `<div class="wh-status-note"><strong>No facility matches the current
-          filters.</strong> Clear one of them to see the sites this plan
-          carries.</div>`
-      : `<div class="wh-status-note">
-          <strong>No site here reaches the ${OVER_PCT}% threshold${multiPeriod()
-            ? ' in any modelled period' : ''}, and none is under-used.</strong>
-          Capacity is not what limits this part of the plan.
-        </div>`;
-    return;
-  }
-
-  // TWO, and the rest behind a count.
-  //
-  // Five exception cards stacked above the charts pushed every visual below
-  // the fold, so the screen led with a list rather than with the picture. Two
-  // is enough to say what is worst; a reader who wants the others is one click
-  // from them, and the table below carries all of them anyway.
-  const SHOWN = 2;
-  const card = (k) => {
-    const band = String(k.health_band).toLowerCase();
-    const name = esc(k.facility_name || k.facility_id);
-    let why;
-    if (k.health_band === 'UNDERUSED') {
-      why = `Runs at ${fmtNum(k.peak_utilization_pct, 1)}% even in its busiest `
-          + `period while carrying its full fixed cost of `
-          + `${formatCurrency(k.total_facility_cost)}. Consolidation is worth `
-          + `testing as a scenario — no scenario has been run, so no saving is stated.`;
-    } else if (multiPeriod() && k.avg_utilization_pct < OVER_PCT) {
-      // The finding this screen exists for, stated in full.
-      why = `Averages ${fmtNum(k.avg_utilization_pct, 1)}% across the horizon and `
-          + `reaches ${fmtNum(k.peak_utilization_pct, 1)}%`
-          + (k.peak_period ? ` in period ${esc(k.peak_period)}` : '')
-          + `. The average is below the ${OVER_PCT}% threshold and the peak is not, `
-          + `so it has no room in the period that decides whether it works.`;
-    } else {
-      why = `At ${fmtNum(k.peak_utilization_pct, 1)}% of stated capacity`
-          + (multiPeriod()
-              ? ` in ${k.bottleneck_periods_count} of ${k.periods_observed} periods`
-              : '')
-          + `. There is no headroom here for a surge or for absorbing volume `
-          + `from elsewhere.`;
-    }
-    return `<div class="wh-attention-row band-${band}">
-      <div style="min-width:0">
-        <div class="wh-attention-name">${name} ${bandTag(k.health_band)}</div>
-        <div class="wh-attention-why">${why}</div>
-      </div>
-      <div class="wh-attention-fig" style="color:${
-        k.health_band === 'CRITICAL' ? 'var(--red)'
-        : k.health_band === 'TIGHT' ? 'var(--amber)' : 'var(--blue)'}">
-        ${fmtNum(k.peak_utilization_pct, 1)}%
-        <small>${multiPeriod() ? 'peak period' : 'utilisation'}</small>
-      </div>
-    </div>`;
-  };
-
-  const more = rows.length - SHOWN;
-  node.innerHTML = rows.slice(0, SHOWN).map(card).join('')
-    + (more > 0
-        ? `<div id="wh-attention-rest" hidden>${rows.slice(SHOWN).map(card).join('')}</div>`
-          + `<div class="wh-attention-more">`
-          + `<button type="button" class="wh-attention-more-btn" `
-          + `id="wh-attention-more-btn">View ${more} more</button></div>`
-        : '');
-
-  el('wh-attention-more-btn')?.addEventListener('click', (e) => {
-    const rest = el('wh-attention-rest');
-    if (!rest) return;
-    rest.hidden = !rest.hidden;
-    e.target.textContent = rest.hidden ? `View ${more} more` : 'Show fewer';
-  });
-}
+/*
+ * THE PER-FACILITY EXCEPTION CARDS ARE GONE.
+ *
+ * The renderer that used to sit here drew a card per site that was over,
+ * under or at its threshold — name, band tag, a two-line explanation and a
+ * big percentage — with the rest behind a "View 2 more". On any real network
+ * that is a stack of cards restating, one site at a time, what the Facility
+ * Health table below already lists in full and in one screen.
+ *
+ * A card per row is the right presentation for three or four things a reader
+ * must not miss. It is the wrong presentation for a population, and a
+ * population is what this screen reports on: the table sorts by what needs
+ * attention first, so the worst site is the first row of it either way.
+ *
+ * What the element that held them is still for: STATUS. "Reading the solved
+ * footprint…" and "the analysis is not available" have to land somewhere, and
+ * a screen that goes blank while it waits has told the reader nothing
+ * (Nielsen #1). It is `wh-status` now, because that is all it does.
+ */
 
 /**
  * What this lens calls its population, in the words on the cards.
@@ -642,6 +574,25 @@ function renderStock() {
   }
 
   if (wrap) wrap.style.display = 'none';
+
+  // NOTHING IN THIS LENS REPORTS STOCK — so is the metric absent, or is it
+  // INAPPLICABLE?
+  //
+  // Those are different findings and the lens decides which. On the Plants
+  // tab, "no plant reports a stock level" is the expected shape of a network
+  // where inventory is held at distribution centres; a card headed "Stock
+  // Held" with an explanation inside it is asking the reader to read a
+  // paragraph in order to learn the card was never for them. It comes off.
+  //
+  // On the Network lens the same silence IS a finding — it says this solve
+  // wrote no inventory decisions at all — so the card stays and says so.
+  const card = el('wh-stock-card');
+  if (card) {
+    const inapplicable = view.domain === 'plant' && rows.length > 0;
+    card.style.display = inapplicable ? 'none' : '';
+    if (inapplicable) return;
+  }
+
   if (!note) return;
   note.style.display = '';
 
@@ -715,10 +666,20 @@ function renderHealthTable() {
 // ─── The screen ─────────────────────────────────────────────
 
 function renderAll() {
+  // THE STATUS NOTE COMES DOWN when there is something to show.
+  //
+  // "Reading the solved footprint…" is written into this element before the
+  // fetch, and it used to be overwritten by the exception-card renderer that
+  // rebuilt the same element on every pass. Removing those cards removed the
+  // only thing that cleared it, so the screen sat under a permanent "loading"
+  // line above charts that had finished. Cleared explicitly now, which is
+  // where the responsibility always belonged.
+  const status = el('wh-status');
+  if (status) status.innerHTML = '';
+
   renderBasis();
   renderLensLabels();
   renderSummary();
-  renderAttention();
   renderCharts();
   renderHealthTable();
 }
@@ -726,7 +687,7 @@ function renderAll() {
 function renderUnavailable(message) {
   const grid = el('wh-summary-grid');
   if (grid) grid.innerHTML = '';
-  const node = el('wh-attention');
+  const node = el('wh-status');
   if (node) {
     node.innerHTML = `<div class="wh-status-note"><strong>The facility
       analysis is not available.</strong> ${esc(message)}</div>`;
@@ -745,7 +706,7 @@ export async function renderWarehouseDashboard() {
     return;
   }
 
-  const node = el('wh-attention');
+  const node = el('wh-status');
   if (node) {
     node.innerHTML = `<div class="wh-status-note">Reading the solved footprint…</div>`;
   }

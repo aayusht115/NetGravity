@@ -218,9 +218,9 @@ class TestTheScenarioBecomesADocument:
 
         report = scenarios_api._scenario_derivation(_record(), "", [])
         text = _text(build_derivation_docx(report))
-        assert "₹173,079.20" in text
-        assert "₹150,627.70" in text
-        assert "173,079.20 per period," not in text.replace("₹173,079.20", "")
+        assert "₹173,079" in text
+        assert "₹150,628" in text
+        assert "173,079 per period," not in text.replace("₹173,079", "")
 
     def test_a_fill_rate_is_a_percentage_not_a_ratio(self):
         from netgravity.reporting import build_derivation_docx
@@ -243,7 +243,7 @@ class TestTheScenarioBecomesADocument:
         report = scenarios_api._scenario_derivation(_record(), "", [])
         text = _text(build_derivation_docx(report))
         assert "Fixed facility" in text
-        assert "₹95,000.00" in text
+        assert "₹95,000" in text
 
     def test_a_component_that_is_zero_on_both_sides_reads_as_unchanged(self):
         assert scenarios_api._delta_display(

@@ -59,7 +59,7 @@ class TestWhyTheWinnerBeatsTheAlternatives:
                              _row("B", "Expand Delhi", 41_000_000.0)])
         trade = _themes(out)["Trade-off"]
 
-        assert "Open Nagpur costs 3,000,000.00 less than Expand Delhi" in trade.narrative
+        assert "Open Nagpur costs 3,000,000 less than Expand Delhi" in trade.narrative
         assert "Both serve the same demand." in trade.narrative
 
     def test_a_difference_in_demand_served_is_stated_not_glossed(self):

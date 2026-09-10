@@ -90,7 +90,7 @@ class TestTheArithmeticIsShown:
         worked = step.equations[0].substituted
         assert "45,890" in worked and "95,000" in worked
         assert "8,030" in worked and "1,708" in worked
-        assert "150,627.70" in worked
+        assert "150,628" in worked
         # And the components genuinely add up to it.
         assert round(45889.70 + 95000.0 + 8030.0 + 1708.0, 2) == 150627.70
 

@@ -79,7 +79,28 @@ logger = logging.getLogger(__name__)
 #: not: the facility screen's throughput chart reads the series, finds the
 #: field absent and draws nothing, on a network whose horizon was solved
 #: correctly. The same failure as entry 2, one field deeper.
-_ANALYSIS_VERSION = 6
+#: 7 — the WORDS changed, not the shape. Two things a cached briefing carries
+#: verbatim were rewritten: every money figure lost its cents (`format_money`,
+#: for a senior audience that does not read to the paisa), and the recommended
+#: action on a capacity finding became a real intervention derived from the
+#: solved per-site rows instead of "Open the KPI page to see which sites are
+#: over the threshold".
+#:
+#: A cached document is not WRONG here — it is a correct v6 briefing — which is
+#: exactly why this needed a bump. Nothing raises, nothing looks broken, and
+#: every previously-analysed project would have gone on serving the old prose
+#: forever while the code that produces it read as fixed. Cached PROSE has to
+#: be versioned on the same terms as cached shape.
+#: 8 — the briefing document gained FIELDS, not just words. Each insight now
+#: carries `action` (the intervention behind its recommendation: which rung of
+#: the ladder, the site or region, the pre-filled scenario that prices it) and
+#: the briefing carries one at the top level for the page's headline button.
+#:
+#: A v7 document is a VALID document that simply does not have them, so nothing
+#: raises — the buttons just never appear, on every project analysed before
+#: this line changed. Same lesson as entry 7: a cached document is versioned on
+#: its shape AND its contents, and "it still parses" is not the test.
+_ANALYSIS_VERSION = 8
 
 
 class AnalysisService:

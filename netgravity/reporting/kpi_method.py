@@ -73,9 +73,22 @@ def _display(kpis: Dict[str, Any], metric_id: str) -> str:
         if text:
             return str(text)
         value = _num(row.get("value"))
-        return f"{value:,.2f}" if value is not None else "Not available"
+        return _plain(value)
     value = _num(row)
-    return f"{value:,.2f}" if value is not None else "Not available"
+    return _plain(value)
+
+
+def _plain(value: Optional[float]) -> str:
+    """
+    A bare figure at the precision a reader of a board document reads at.
+
+    Whole units above the rate threshold, two decimals below it — the same
+    rule `format_money` applies on the evidence layer, so a figure does not
+    change shape between the screen and the document explaining the screen.
+    """
+    if value is None:
+        return "Not available"
+    return f"{value:,.2f}" if abs(value) < _RATE_THRESHOLD else f"{value:,.0f}"
 
 
 def _units(value: Optional[float], suffix: str = "") -> str:
@@ -88,11 +101,28 @@ def _pct(value: Optional[float]) -> str:
     return "Not available" if value is None else f"{value:,.1f}%"
 
 
+#: Below this an amount is a RATE and its decimals are the measurement; at or
+#: above it they are solver residue. Mirrors `_RATE_THRESHOLD` in
+#: netgravity/orchestrator/reasoning/evidence.py.
+_RATE_THRESHOLD = 100.0
+
+
 def _money(value: Optional[float], currency: str) -> str:
+    """
+    An amount, without the cents.
+
+    This document is read by the people who sign off what it recommends, and
+    "INR 150,627.70" claims a precision the model does not have: the seventy
+    paise are solver residue on a figure that is the output of a relaxation.
+    Rates keep their decimals — see `_RATE_THRESHOLD` — because at that scale
+    the decimals ARE the quantity.
+    """
     if value is None:
         return "Not available"
     prefix = f"{currency} " if currency else ""
-    return f"{prefix}{value:,.2f}"
+    places = 2 if abs(value) < _RATE_THRESHOLD else 0
+    sign = "-" if value < 0 else ""
+    return f"{sign}{prefix}{abs(value):,.{places}f}"
 
 
 # ─────────────────────────────────────────────────────────────

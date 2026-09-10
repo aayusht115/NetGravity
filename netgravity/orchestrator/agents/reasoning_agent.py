@@ -101,8 +101,13 @@ def _period_span(state: dict) -> str:
         return " per period"
     per_period = state.get("cost_per_period")
     if isinstance(per_period, (int, float)):
+        # Through `_money`, like every other amount in this file. It used to be
+        # `f"{per_period:,.2f}"`, so a sentence read "…₹1,807,532 across the 12
+        # periods modelled (150,627.70 per period)" — the same quantity twice
+        # in one breath, once with a symbol and no cents and once with cents
+        # and no symbol.
         return (f" across the {periods} periods modelled "
-                f"({per_period:,.2f} per period)")
+                f"({_money(per_period, state)} per period)")
     return f" across the {periods} periods modelled"
 
 
@@ -472,6 +477,54 @@ class ReasoningAgent:
         return json.dumps(bounded, default=str, sort_keys=True,
                           separators=(",", ":"))[: cls._EVIDENCE_CHARS]
 
+    @staticmethod
+    def _intervention_options(payload: Dict[str, Any]) -> str:
+        """
+        The ONE change these results justify, for the model to phrase.
+
+        Not a shortlist. A three-option block asking the model to choose cost
+        the entire output budget in deliberation — measured against the live
+        gateway at output_tokens=1984 with zero characters emitted, against
+        1,688 tokens and real prose for the same payload without it. Choosing
+        is a decision task; this model bills its thinking to the same allowance
+        it writes with.
+
+        There was nothing to delegate in the first place. `build_actions` walks
+        the solved per-site rows down a fixed ladder — reopen what is closed
+        before expanding, expand before building, build only where a region has
+        nothing left to reopen or expand — and the first rung it reaches IS the
+        recommendation. The model's job is to say it in a sentence a leader
+        would act on, which is rewriting, not deciding.
+
+        Returns "" when there are no facility rows: a recommendation the
+        results do not support is not improved by having a model write it.
+        """
+        rows = payload.get("facilities")
+        if not isinstance(rows, list) or not rows:
+            return ""
+        try:
+            from netgravity.orchestrator.reasoning.strategic_actions import (
+                build_actions,
+            )
+            state = payload.get("network_state") or {}
+            unserved = state.get("unserved_demand")
+            actions = build_actions(
+                rows,
+                unserved_demand=(unserved
+                                 if isinstance(unserved, (int, float)) else None),
+                limit=1,
+            )
+        except Exception:  # noqa: BLE001 — a briefing must not fail on this
+            return ""
+        if not actions:
+            return ""
+        if actions[0].key == "NO_ACTION":
+            # "Nothing needs doing" is an answer the ladder has already
+            # reached. Told to phrase an intervention anyway, the model would
+            # manufacture one.
+            return "\nRECOMMEND NO NETWORK CHANGE; say so plainly.\n"
+        return f"\nRECOMMEND EXACTLY THIS: {actions[0].label}\n"
+
     def _llm(
         self, payload: Dict[str, Any], missing: Dict[str, Any],
         user_question: str = "",
@@ -551,6 +604,22 @@ class ReasoningAgent:
                 "results mean for the business.\n"
             )
 
+        # THE INTERVENTIONS THIS NETWORK'S OWN RESULTS JUSTIFY.
+        #
+        # Derived, not invented: `build_actions` walks the solved per-site rows
+        # down a fixed ladder — reopen what is closed before expanding, expand
+        # before building, and only build where a region has nothing left to
+        # reopen or expand. The model is given the result and told to phrase
+        # one of them.
+        #
+        # Absent for a chart card (which describes and does not prescribe) and
+        # for any payload with no facility rows, in which case the field falls
+        # back to the open form it had. A recommendation the results do not
+        # support is not improved by having a model write it.
+        options_block = ""
+        if not payload.get("kpi_chart"):
+            options_block = self._intervention_options(payload)
+
         prompt = (
             "DETERMINISTIC RESULTS:\n"
             f"{evidence}\n\n"
@@ -560,6 +629,7 @@ class ReasoningAgent:
             "If something is absent, say it is not available rather than "
             "guessing.\n"
             f"{missing_block}"
+            f"{options_block}"
             f"{ask_block}\n"
             # HOW TO WRITE. Every rule is here because its absence produced a
             # specific defect on screen, and every one is stated in as few
@@ -631,10 +701,13 @@ class ReasoningAgent:
                if payload.get("kpi_chart") else
             '{"summary":"<conclusion in 1 sentence, then what it means in 1 '
             'more>",'
-            '"recommendation":"<1 sentence, one next step>",'
+            + ('"recommendation":"<the RECOMMEND line above, as 1 sentence>",'
+               if options_block else
+               '"recommendation":"<1 sentence, one next step>",')
+            + (
             '"confidence":"LOW|MEDIUM|HIGH",'
             '"key_drivers":["<6 words>","<6 words>"],'
-            '"risks":["<the one thing not to miss, 12 words>"]}\n')
+            '"risks":["<the one thing not to miss, 12 words>"]}\n'))
             + "Set confidence to LOW if key results are missing or the network "
               "is infeasible; HIGH only when the results are complete.\n"
             )
@@ -1309,7 +1382,7 @@ class ReasoningAgent:
             headline="This plan's emissions come from the transport it "
                      "routes, on the declared factors",
             narrative=(
-                f"I see {carbon:,.2f} kg of CO2 from the transport in this plan, "
+                f"I see {carbon:,.0f} kg of CO2 from the transport in this plan, "
                 f"on the declared emission factors. Whether that is priced into "
                 f"the objective is a configuration choice, and it does not change "
                 f"the quantity."
@@ -1447,7 +1520,8 @@ class ReasoningAgent:
     @staticmethod
     def _comparison_insights(comparison: Dict[str, Any],
                              alternatives: List[Dict[str, Any]],
-                             refs_for) -> List[KPIInsight]:
+                             refs_for,
+                             state: Optional[Dict[str, Any]] = None) -> List[KPIInsight]:
         """
         Why the recommended scenario is preferable to the ones beside it.
 
@@ -1470,9 +1544,11 @@ class ReasoningAgent:
             fill_gap = alt.get("fill_gap_vs_recommended_pts")
 
             if gap > 0:
-                lead = f"{winner} costs {gap:,.2f} less than {alt['name']}"
+                lead = (f"{winner} costs {_money(gap, state or {})} less "
+                        f"than {alt['name']}")
             elif gap < 0:
-                lead = f"{winner} costs {abs(gap):,.2f} MORE than {alt['name']}"
+                lead = (f"{winner} costs {_money(abs(gap), state or {})} "
+                        f"MORE than {alt['name']}")
             else:
                 lead = f"{winner} and {alt['name']} cost the same"
 
@@ -2002,7 +2078,7 @@ class ReasoningAgent:
 
         if comparison_block:
             comparison_insights = self._comparison_insights(
-                comparison_block, comparison_alternatives, refs_for)
+                comparison_block, comparison_alternatives, refs_for, state)
             insights.extend(comparison_insights)
             for insight in comparison_insights:
                 parts.append(insight.narrative)

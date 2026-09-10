@@ -375,9 +375,22 @@ export function renderForecastChart(canvasId) {
       scales: {
         x: {
           grid: { display: false },
+          // Suppressed on the compact card, where the axis is 8.5px tall and
+          // a title would take a third of the plot to say what the tick
+          // labels already show.
+          title: { display: !isCompact, text: 'Period',
+                   font: { family: 'Inter', size: 10, weight: '600' } },
           ticks: {
             font: { family: 'Inter', size: isCompact ? 8.5 : 10 },
-            maxRotation: 45,
+            // 45 DEGREES IS A LAST RESORT, NOT A DEFAULT.
+            //
+            // Angled tick labels are the single most common reason a chart
+            // reads as unfinished, and on a period axis they are never
+            // necessary: "2026-03" is short, and `maxTicksLimit` already
+            // drops enough of them to fit. Left horizontal, with the limit
+            // doing the work.
+            maxRotation: 0,
+            autoSkip: true,
             maxTicksLimit: isCompact ? 8 : 16,
           },
         },
@@ -418,313 +431,29 @@ export function renderForecastChart(canvasId) {
 
 // ─── Scenario Cost Comparison ───────────────────────────────
 // ─── Scenario Cost Impact (vs Baseline) ──────────────────────
-export function renderScenarioCostImpactChart(canvasId, scenarioList) {
-  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
+/* ─── FOUR SCENARIO CHARTS REMOVED ──────────────────────────────────────
+   `renderScenarioCostImpactChart`, `renderScenarioCapacityRiskChart`,
+   `renderScenarioSlaChart` and `renderScenarioRadar` were exported here and
+   called from nowhere — no module imported them and no canvas in index.html
+   carried an id they draw into.
 
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return;
+   They were not merely unused, they were WRONG, and would have been the
+   moment anything wired them up. The cost chart divided every figure by
+   100,000 and pinned its axis to `min: 10.0, max: 14.5` — a lakh range fitted
+   to the demo network it was written against. A network costing ₹150,627 is
+   1.5 on that scale and plots below the floor: an empty chart, no error.
+   The risk chart mapped `capacityRisk` through the strings 'High'/'Medium'/
+   'Low' when the backend has reported `HIGH`/`MEDIUM`/`LOW` since the KPI
+   layer became authoritative, so every scenario scored 1, "Very Low".
 
-  const list = scenarioList || SCENARIOS;
-  const labels = list.map(s => s.shortName || s.name);
-  const dataLakhs = list.map(s => +(s.totalCost / 100000).toFixed(2));
+   Deleted rather than fixed. Nothing asks for these; the scenario screen
+   answers the same three questions with the comparison table and the cards,
+   against the solved figures. Keeping a broken renderer alive because it
+   might be wanted is how a demo-era hardcode survives into a client build.
 
-  // Color mapping: Baseline=Gray, Opt Base=Purple, Rec=Green, Others=Purple Accent
-  const backgroundColors = list.map(s => {
-    if (s.id === 'SCN_ACTUAL') return '#94a3b8';
-    if (s.id === 'SCN_REBALANCE') return '#16a34a';
-    if (s.id === 'SCN_OPTIMISED_BASE') return '#6B2FA0';
-    return '#a855f7';
-  });
+   The removed source is in the session scratchpad if any of it is wanted
+   back — but what would be wanted is the intent, not the code. */
 
-  chartInstances[canvasId] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: `Total Cost (${currencyLabel()})`,
-          data: dataLakhs,
-          backgroundColor: backgroundColors,
-          borderRadius: 6,
-          barThickness: 24,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => ` Total Cost: ${formatCurrency(list[ctx.dataIndex].totalCost)} (${list[ctx.dataIndex].costChange ? list[ctx.dataIndex].costChange + '%' : 'Baseline'})`,
-          },
-        },
-      },
-      scales: {
-        y: {
-          min: 10.0,
-          max: 14.5,
-          grid: { color: '#f0f0f5' },
-          ticks: { font: { family: 'Inter', size: 10 }, stepSize: 1.0 },
-        },
-        x: {
-          grid: { display: false },
-          ticks: { font: { family: 'Inter', size: 10, weight: '500' } },
-        },
-      },
-    },
-  });
-}
-
-// ─── Scenario Capacity Risk (December) ──────────────────────
-export function renderScenarioCapacityRiskChart(canvasId, scenarioList) {
-  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
-
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return;
-
-  const list = scenarioList || SCENARIOS;
-  const labels = list.map(s => s.shortName || s.name);
-
-  // Map risk level: High=4, Medium=3, Low=2, Very Low=1
-  const riskValues = list.map(s => {
-    if (s.capacityRisk === 'High') return 4;
-    if (s.capacityRisk === 'Medium') return 3;
-    if (s.capacityRisk === 'Low') return 2;
-    return 1; // Very Low
-  });
-
-  const colors = list.map(s => {
-    if (s.capacityRisk === 'High') return '#dc2626';
-    if (s.capacityRisk === 'Medium') return '#f59e0b';
-    if (s.capacityRisk === 'Low') return '#22c55e';
-    return '#16a34a'; // Very Low
-  });
-
-  chartInstances[canvasId] = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: 'Capacity Risk Level',
-          data: riskValues,
-          backgroundColor: colors,
-          borderRadius: 6,
-          barThickness: 24,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => ` Capacity Risk: ${list[ctx.dataIndex].capacityRisk} (Delhi NCR: ${list[ctx.dataIndex].delhiUtil || list[ctx.dataIndex].maxUtil}%)`,
-          },
-        },
-      },
-      scales: {
-        y: {
-          min: 0,
-          max: 4.5,
-          grid: { color: '#f0f0f5' },
-          ticks: {
-            stepSize: 1,
-            callback: (val) => {
-              if (val === 4) return 'High';
-              if (val === 3) return 'Medium';
-              if (val === 2) return 'Low';
-              if (val === 1) return 'Very Low';
-              return '';
-            },
-            font: { family: 'Inter', size: 10 },
-          },
-        },
-        x: {
-          grid: { display: false },
-          ticks: { font: { family: 'Inter', size: 10, weight: '500' } },
-        },
-      },
-    },
-  });
-}
-
-// ─── Scenario SLA Comparison (On-time Service) ──────────────
-export function renderScenarioSlaChart(canvasId, scenarioList) {
-  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
-
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return;
-
-  const list = scenarioList || SCENARIOS;
-  const labels = list.map(s => s.shortName || s.name);
-  const slaValues = list.map(s => s.sla);
-
-  chartInstances[canvasId] = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: 'On-time SLA (%)',
-          data: slaValues,
-          borderColor: '#6B2FA0',
-          backgroundColor: '#6B2FA0',
-          borderWidth: 2,
-          pointRadius: 5,
-          pointHoverRadius: 7,
-          pointBackgroundColor: '#6B2FA0',
-          tension: 0.2,
-          fill: false,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (ctx) => ` SLA (On-time): ${ctx.raw}%`,
-          },
-        },
-      },
-      scales: {
-        y: {
-          min: 90,
-          max: 100,
-          grid: { color: '#f0f0f5' },
-          ticks: {
-            stepSize: 2,
-            callback: (v) => v + '%',
-            font: { family: 'Inter', size: 10 },
-          },
-        },
-        x: {
-          grid: { display: false },
-          ticks: { font: { family: 'Inter', size: 10, weight: '500' } },
-        },
-      },
-    },
-  });
-}
-
-// ─── Scenario Flow Map Diagram ──────────────────────────────
-// REMOVED — `renderScenarioFlowMap()`
-//
-// A hand-drawn SVG of five fixed nodes (Baddi, Delhi NCR, Mumbai, Kolkata,
-// Chennai) with three fixed arcs colour-coded "Increase / Decrease / No
-// Change". It took a `containerId` and an `activeScenarioId` and used neither:
-// the same picture rendered for every scenario of every network, and the
-// colours asserted flow changes no engine had computed.
-//
-// Deleted rather than left exported: nothing imported it, so it drew for
-// nobody, but an exported function that fabricates a network diagram is one
-// call away from doing so. The real corridor view is `map.js`
-// (`renderScenarioDigitalTwin`), which reads the loaded network and the
-// solver's own per-lane flows.
-
-// ─── Performance Radar ──────────────────────────────────────
-export function renderScenarioRadar(canvasId) {
-  if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
-
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return;
-
-  const scenarios = SCENARIOS.filter(s => s.type === 'SCENARIO');
-
-  // Normalise metrics to 0-100 scale for radar
-  function normalise(arr, invert = false) {
-    const min = Math.min(...arr);
-    const max = Math.max(...arr);
-    const range = max - min || 1;
-    return arr.map(v => {
-      const norm = ((v - min) / range) * 100;
-      return invert ? 100 - norm : norm;
-    });
-  }
-
-  const costs = normalise(scenarios.map(s => s.totalCost), true);         // lower is better
-  const slas = normalise(scenarios.map(s => s.sla));                       // higher is better
-  const utils = normalise(scenarios.map(s => s.maxUtil), true);            // lower is better
-  const carbons = normalise(scenarios.map(s => s.carbonKg), true);        // lower is better
-  const implCosts = normalise(scenarios.map(s => s.implementationCost), true); // lower is better
-
-  const radarColors = ['#6B2FA0', '#f59e0b', '#dc2626', '#2563eb'];
-
-  chartInstances[canvasId] = new Chart(ctx, {
-    type: 'radar',
-    data: {
-      labels: ['Cost Efficiency', 'SLA Performance', 'Utilisation Balance', 'Carbon Footprint', 'Implementation Cost'],
-      datasets: scenarios.map((s, i) => ({
-        label: s.name,
-        data: [costs[i], slas[i], utils[i], carbons[i], implCosts[i]],
-        borderColor: radarColors[i % radarColors.length],
-        backgroundColor: radarColors[i % radarColors.length] + '15',
-        borderWidth: 2,
-        pointRadius: 3,
-        pointHoverRadius: 6,
-      })),
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'top',
-          labels: { usePointStyle: true, font: { family: 'Inter', size: 11 } },
-        },
-      },
-      scales: {
-        r: {
-          beginAtZero: true,
-          max: 100,
-          grid: { color: '#e8e8ef' },
-          pointLabels: { font: { family: 'Inter', size: 11 } },
-          ticks: { display: false },
-        },
-      },
-    },
-  });
-}
-
-// ─── Facility Dashboard Charts ──────────────────────────────
-/**
- * One facility's throughput against its capacity, period by period.
- *
- * THIS CHART USED TO BE INVENTED, in the same way the cost doughnut was. It
- * read:
- *
- *     const months     = ['Sep 25', 'Oct 25', … 'Nov 26 (F)'];   // fixed
- *     const historical = [baseTput * 0.88, baseTput * 0.90, …];  // a ramp
- *     const isAtRisk   = facility.id === 'DC_DELHI' || … ;       // two ids
- *     const growth     = isAtRisk ? 1.05 : 1.015;                // a guess
- *
- * — fifteen hard-coded month labels whatever horizon was solved, a "12-month
- * history" that was one number times a fixed curve, and a "3-month
- * projection" compounding a growth rate nothing had measured, faster for two
- * facility ids left over from the prototype.
- *
- * It also read `facility.throughput` (the network file) while the explanation
- * beside it read `avg_throughput_units` (the solve). That is how a card could
- * state an average of about 4,004 units over a chart whose axis started at
- * 8,800 — the AI was right and the picture was fiction.
- *
- * It now plots `throughput_by_period` from the solve against
- * `rated_capacity_per_period`, and draws NOTHING where the solve produced no
- * series. There is no forecast, because the solve does not produce one.
- *
- * RETURNS WHETHER IT DREW. The caller records that against
- * `throughput_horizon`, so "explain this chart" can ask what is on the chart
- * rather than assuming a selected facility means a drawn one. Without it, a
- * site whose solve carries no series — a single-period solve, by design —
- * still produced a confident paragraph about a horizon nobody could see.
- */
 export function renderFacilityThroughputChart(canvasId, row) {
   if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
   const ctx = document.getElementById(canvasId);
@@ -801,7 +530,13 @@ export function renderFacilityThroughputChart(canvasId, row) {
         },
       },
       scales: {
-        x: { grid: { display: false }, ticks: { font: { family: 'Inter', size: 10 } } },
+        x: { grid: { display: false },
+             // TIME STAYS ON X. This is the one axis arrangement that does
+             // not become a bar chart: periods run left to right because that
+             // is how a horizon is read.
+             title: { display: true, text: 'Period',
+                      font: { family: 'Inter', size: 10, weight: '600' } },
+             ticks: { font: { family: 'Inter', size: 10 } } },
         y: {
           beginAtZero: true,
           grid: { color: 'rgba(0,0,0,.05)' },
@@ -809,10 +544,14 @@ export function renderFacilityThroughputChart(canvasId, row) {
             font: { family: 'Inter', size: 10 },
             callback: (v) => formatNumber(v),
           },
-          // `perPeriodLabel()` already carries the unit ("units/month"), so
-          // prefixing "Units" produced "Units units/month".
-          title: { display: true, text: perPeriodLabel(),
-                   font: { family: 'Inter', size: 10 } },
+          // WHAT is being counted, then the unit. The axis read
+          // "units/month" alone, which names a rate and leaves "a rate of
+          // what" to the reader — on a chart plotting throughput against
+          // rated capacity, that is the whole question.
+          // `perPeriodLabel()` already carries the unit, so it is appended
+          // rather than prefixed with a second "units".
+          title: { display: true, text: `Throughput (${perPeriodLabel()})`,
+                   font: { family: 'Inter', size: 10, weight: '600' } },
         },
       },
     },
@@ -856,6 +595,30 @@ export function renderFacilityCostBreakdownChart(canvasId, breakdown) {
     { label: 'Handling', value: Number(breakdown?.handling_cost) || 0 },
     { label: 'Holding', value: Number(breakdown?.holding_cost) || 0 },
   ].filter((part) => part.value > 0);
+
+  // WHAT THIS CHART ACTUALLY SHOWS, said on the card beside it.
+  //
+  // Zero-value components are dropped below, because a slice of nothing is not
+  // a cost. So a fixed caption listing four components describes a ring that
+  // usually has three: inventory is decided for the NETWORK on this model, not
+  // per site, so `holding_cost` is zero on most sites and "and holding"
+  // promises a slice that is not there.
+  //
+  // Written from the parts that survive the filter instead — the caption and
+  // the picture cannot disagree because one is derived from the other.
+  const subtitle = document.getElementById('dash-costs-subtitle');
+  if (subtitle) {
+    const names = parts.map((p) => p.label.toLowerCase());
+    subtitle.textContent = names.length
+      ? `${names.slice(0, -1).join(', ')}${names.length > 1 ? ' and ' : ''}`
+        + `${names[names.length - 1]} — the components this solve attributed `
+        + 'to this site. Transport is not attributed to a site.'
+      : 'No facility cost was attributed to this site.';
+    // Sentence case: the list is built from labels that are capitalised for
+    // the legend.
+    subtitle.textContent = subtitle.textContent.charAt(0).toUpperCase()
+      + subtitle.textContent.slice(1);
+  }
 
   const host = ctx.parentElement;
   const stale = host && host.querySelector('.ng-cost-absent');
@@ -922,15 +685,37 @@ export function renderFacilityCostBreakdownChart(canvasId, breakdown) {
   });
 }
 
+// How many corridors this chart draws before it stops.
+//:
+// The others cap at twelve upstream; this one drew every corridor attached to
+// the site into a 220px box. Measured at nine corridors the ticks were 18px
+// apart against 13px labels — five pixels of clearance — and a hub with
+// twenty would have overlapped outright. Twelve is what fits at a readable
+// row height, and the telemetry table directly below the chart carries all of
+// them, so nothing is hidden by capping it.
+const LANE_CHART_LIMIT = 12;
+
 export function renderFacilityLaneFlowsChart(canvasId, connectedLanes, facilityId) {
   if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
 
   const ctx = document.getElementById(canvasId);
   if (!ctx || !connectedLanes || connectedLanes.length === 0) return;
 
-  const labels = connectedLanes.map(l => l.label);
-  const flows = connectedLanes.map(l => l.flow);
-  const costs = connectedLanes.map(l => l.cost);
+  // THE BUSIEST FIRST, so the ones that fall off the end are the ones that
+  // matter least. Corridors with no solved volume sort last rather than being
+  // dropped: a lane the plan did not use is a finding, and it is one the
+  // reader should see if there is room for it.
+  const ordered = [...connectedLanes].sort((a, b) => {
+    const av = Number.isFinite(Number(a.flow)) ? Number(a.flow) : -1;
+    const bv = Number.isFinite(Number(b.flow)) ? Number(b.flow) : -1;
+    return bv - av;
+  });
+  const shown = ordered.slice(0, LANE_CHART_LIMIT);
+  sizeBarChartHost(canvasId, shown.length);
+
+  const labels = shown.map(l => l.label);
+  const flows = shown.map(l => l.flow);
+  const costs = shown.map(l => l.cost);
 
   chartInstances[canvasId] = new Chart(ctx, {
     type: 'bar',
@@ -960,16 +745,39 @@ export function renderFacilityLaneFlowsChart(canvasId, connectedLanes, facilityI
       },
       scales: {
         x: {
+          beginAtZero: true,
           grid: { color: '#f0f0f5' },
-          ticks: { font: { family: 'Inter', size: 10 } },
+          // The bars are a VOLUME and the axis said so nowhere: the only
+          // place the unit appeared was the dataset label, and the legend is
+          // switched off on this chart.
+          title: { display: true, text: `Volume moved (${perPeriodLabel()})`,
+                   font: { family: 'Inter', size: 11, weight: '600' } },
+          ticks: { font: { family: 'Inter', size: 10 },
+                   callback: (v) => formatNumber(v) },
         },
         y: {
           grid: { display: false },
-          ticks: { font: { family: 'Inter', size: 11, weight: '500' } },
+          title: { display: true, text: 'Corridor',
+                   font: { family: 'Inter', size: 11, weight: '600' } },
+          ticks: { font: { family: 'Inter', size: 11, weight: '500' },
+                   autoSkip: false,
+                   // A corridor label is "Plant A -> Bengaluru Distribution
+                   // Centre": two site names and an arrow. At full length it
+                   // took a third of the card and pushed the plot into a
+                   // strip. Trimmed with the ellipsis that says it was cut;
+                   // the tooltip carries the whole thing.
+                   callback(value) {
+                     const text = this.getLabelForValue(value);
+                     return text.length > 30 ? `${text.slice(0, 29)}…` : text;
+                   } },
         },
       },
     },
   });
+
+  // What the caller needs to caption it honestly: how many corridors this site
+  // has, and how many of them are on the chart.
+  return { shown: shown.length, total: connectedLanes.length };
 }
 
 /**
@@ -984,25 +792,51 @@ const utilisationThreshold = {
   afterDatasetsDraw(chart, _args, opts) {
     const { ctx, chartArea, scales } = chart;
     const pct = opts && opts.pct;
-    if (!chartArea || !scales || !scales.y || typeof pct !== 'number') return;
-    const y = scales.y.getPixelForValue(pct);
-    if (!Number.isFinite(y) || y < chartArea.top || y > chartArea.bottom) return;
+    if (!chartArea || !scales || typeof pct !== 'number') return;
+
+    // THE LINE FOLLOWS THE VALUE AXIS, WHICHEVER ONE THAT IS.
+    //
+    // This drew a horizontal rule at `scales.y.getPixelForValue(pct)`, which
+    // was right while the chart was columns of facilities. The chart is bars
+    // now, so the percentages run along X — and a horizontal rule on it marks
+    // a POSITION IN THE LIST OF SITES rather than a utilisation. It would
+    // have gone on drawing, in the right colour, in the wrong place, which is
+    // the worst way for a threshold marker to fail.
+    const horizontal = chart.options && chart.options.indexAxis === 'y';
+    const valueScale = horizontal ? scales.x : scales.y;
+    if (!valueScale) return;
+    const at = valueScale.getPixelForValue(pct);
+    if (!Number.isFinite(at)) return;
+    if (horizontal ? (at < chartArea.left || at > chartArea.right)
+                   : (at < chartArea.top || at > chartArea.bottom)) return;
 
     ctx.save();
     ctx.setLineDash([5, 4]);
     ctx.lineWidth = 1.4;
     ctx.strokeStyle = '#dc2626';
     ctx.beginPath();
-    ctx.moveTo(chartArea.left, y);
-    ctx.lineTo(chartArea.right, y);
+    if (horizontal) {
+      ctx.moveTo(at, chartArea.top);
+      ctx.lineTo(at, chartArea.bottom);
+    } else {
+      ctx.moveTo(chartArea.left, at);
+      ctx.lineTo(chartArea.right, at);
+    }
     ctx.stroke();
     ctx.setLineDash([]);
 
     const label = `${pct}% threshold`;
     ctx.font = '600 10.5px Inter, system-ui, sans-serif';
     const w = ctx.measureText(label).width + 12;
-    const bx = chartArea.right - w;
-    const by = Math.max(chartArea.top, y - 18);
+    // The chip sits beside the line it names: at the top of a vertical rule,
+    // above the right-hand end of a horizontal one. Clamped so it never
+    // leaves the plot area on a narrow card.
+    const bx = horizontal
+      ? Math.min(Math.max(chartArea.left, at - w / 2), chartArea.right - w)
+      : chartArea.right - w;
+    const by = horizontal
+      ? chartArea.top + 2
+      : Math.max(chartArea.top, at - 18);
     ctx.fillStyle = '#fef2f2';
     ctx.strokeStyle = '#fecaca';
     ctx.lineWidth = 1;
@@ -1141,9 +975,66 @@ function wrapLabel(name, perLine = AXIS_LINE_CHARS) {
  * until every label on the chart is distinct — spending width only where it
  * buys a distinction.
  */
-export function axisFacilityLabels(names) {
+// Vertical room per bar. A tick label is 13px at the 10.5px font these
+// charts use (12px on the corridor chart), so 26 leaves a clear half-row
+// between one name and the next — enough that a label which wraps to two
+// lines still does not touch its neighbour.
+const BAR_ROW_PX = 26;
+// What the plot needs on top of the bars: the value axis, its title, and the
+// legend where there is one.
+const BAR_CHROME_PX = 86;
+// Never a strip, never taller than a screen.
+const BAR_MIN_PX = 190;
+const BAR_MAX_PX = 640;
+
+/**
+ * Give a horizontal bar chart the height its categories need.
+ *
+ * The container heights are literals in the markup — 300px, 260px, 220px —
+ * chosen against a five-site demo. Measured on the running application: at
+ * twelve sites the ticks are 20px apart with 13px labels, and at twenty they
+ * are 12px apart, which is an overlap. A name past the single-line budget
+ * wraps to two lines and overlaps at twelve.
+ *
+ * Columns get more cramped as categories are added; bars get longer. This is
+ * the second half of turning these charts on their side, and without it the
+ * fix trades rotated labels for colliding ones.
+ *
+ * Bounded at both ends: `BAR_MIN_PX` so a two-site chart is not a strip, and
+ * `BAR_MAX_PX` so a large network does not produce a card whose bottom is off
+ * the screen. Past that the renderers already cap how many rows they draw and
+ * the table below carries the rest.
+ */
+export function sizeBarChartHost(canvasId, categories) {
+  if (typeof document === 'undefined') return;
+  const canvas = document.getElementById(canvasId);
+  const host = canvas && canvas.parentElement;
+  if (!host || !host.classList.contains('chart-wrap')) return;
+  const wanted = Math.round(Number(categories) || 0) * BAR_ROW_PX + BAR_CHROME_PX;
+  const height = Math.max(BAR_MIN_PX, Math.min(BAR_MAX_PX, wanted));
+  host.style.height = `${height}px`;
+}
+
+export function axisFacilityLabels(names, horizontal = false) {
   const full = (names || []).map((n) => String(n || '').trim());
   const distinct = new Set(full).size;
+
+  // A BAR CHART'S CATEGORY AXIS IS NOT A COLUMN CHART'S.
+  //
+  // The 13-character budget is what a COLUMN has: one column-width to write a
+  // site name in, which is why these names were being cut to "Western
+  // Distribution…" and stacked over two lines. Turned on its side the name
+  // runs along the left of the plot with four or five times the room, and
+  // wrapping it there throws that room away — so a horizontal axis takes the
+  // whole name on one line, and only reaches for the wrap on a name long
+  // enough to eat the plot area.
+  if (horizontal) {
+    const LONGEST = 34;
+    return full.map((n) => (n.length <= LONGEST
+      ? [n]
+      : wrapLabel(n, Math.ceil(LONGEST / 2))));
+  }
+
   for (let perLine = AXIS_LINE_CHARS; perLine <= 26; perLine += 3) {
     const wrapped = full.map((n) => wrapLabel(n, perLine));
     if (new Set(wrapped.map((w) => w.join(' '))).size === distinct) return wrapped;
@@ -1163,7 +1054,9 @@ export function renderWarehouseUtilisationChart(canvasId, rows, thresholdPct, mu
   // Cut to a common width they stay level and readable, and the hover gives
   // back the whole name for anyone who needs to be sure which site they are on.
   const labels = axisFacilityLabels(
-    rows.map((r) => r.facility_name || r.facility_id));
+    rows.map((r) => r.facility_name || r.facility_id), true);
+  // The box before the chart, so Chart.js lays out against the real height.
+  sizeBarChartHost(canvasId, rows.length);
   const peak = rows.map((r) => Number(r.peak_utilization_pct) || 0);
   const avg = rows.map((r) => Number(r.avg_utilization_pct) || 0);
 
@@ -1201,15 +1094,35 @@ export function renderWarehouseUtilisationChart(canvasId, rows, thresholdPct, mu
     type: 'bar',
     data: { labels, datasets },
     options: {
+      // BARS, NOT COLUMNS — because the categories are NAMES.
+      //
+      // A site is called "Bengaluru Distribution Centre", and a column chart
+      // has one column-width of horizontal room to write that in. Every such
+      // chart in this product had the same three symptoms: labels wrapped to
+      // three lines, or set at an angle, or trimmed to the point where two
+      // sites read the same — and the plot area squeezed upward to make room.
+      //
+      // Turned on its side the name runs along the axis the way it is read,
+      // at full length, and the chart grows DOWNWARD as sites are added
+      // rather than getting more cramped. The rule applied across the
+      // product: a category that is a name reads horizontally; a category
+      // that is TIME stays a column chart, because time runs left to right
+      // and nobody reads a calendar sideways.
+      indexAxis: 'y',
       responsive: true,
       maintainAspectRatio: false,
       scales: {
-        x: { grid: { display: false }, ticks: { font: { family: 'Inter', size: 10.5 } } },
-        y: {
+        x: {
           beginAtZero: true,
-          title: { display: true, text: '% of stated capacity',
-                   font: { family: 'Inter', size: 11 } },
+          title: { display: true, text: 'Share of stated capacity used (%)',
+                   font: { family: 'Inter', size: 11, weight: '600' } },
           ticks: { font: { family: 'Inter', size: 10.5 }, callback: (v) => `${v}%` },
+        },
+        y: {
+          grid: { display: false },
+          title: { display: true, text: 'Facility',
+                   font: { family: 'Inter', size: 11, weight: '600' } },
+          ticks: { font: { family: 'Inter', size: 10.5 }, autoSkip: false },
         },
       },
       plugins: {
@@ -1452,6 +1365,7 @@ export function renderWarehouseHeadroomChart(canvasId, rows, multiPeriod) {
     (r) => Number.isFinite(Number(r.rated_capacity_per_period))
         && Number(r.rated_capacity_per_period) > 0);
   if (!ctx || sites.length === 0) return;
+  sizeBarChartHost(canvasId, sites.length);
 
   const cap = sites.map((r) => Number(r.rated_capacity_per_period));
   const peak = sites.map((r) => Number(r.peak_throughput_units) || 0);
@@ -1474,13 +1388,13 @@ export function renderWarehouseHeadroomChart(canvasId, rows, multiPeriod) {
 
   chartInstances[canvasId] = new Chart(ctx, {
     type: 'bar',
-    // SHORT ON THE AXIS, FULL IN THE TOOLTIP — the same rule the vertical
-    // charts follow. This one is horizontal and has more room, so it keeps a
-    // longer limit; but a y-axis label still eats plot width, and three cards
-    // shortening names while a fourth does not reads as an oversight.
+    // FULL ON THE AXIS where the axis has room for it. This chart is
+    // horizontal, so a name runs along the left rather than into a
+    // column-width — and `axisFacilityLabels(..., true)` gives it the whole
+    // name on one line, reaching for a wrap only past 34 characters.
     data: {
       labels: axisFacilityLabels(
-        sites.map((r) => r.facility_name || r.facility_id)),
+        sites.map((r) => r.facility_name || r.facility_id), true),
       datasets,
     },
     options: {
@@ -1490,13 +1404,20 @@ export function renderWarehouseHeadroomChart(canvasId, rows, multiPeriod) {
       scales: {
         x: {
           stacked: true, beginAtZero: true,
-          title: { display: true, text: perPeriodLabel(),
-                   font: { family: 'Inter', size: 11 } },
+          // WHAT the units are, not only how often. The axis read
+          // "units/month", which names a rate and not a quantity — on a chart
+          // whose two stacked segments are throughput and the room left above
+          // it, "of what" is the question a reader has.
+          title: { display: true,
+                   text: `Rated capacity, used and spare (${perPeriodLabel()})`,
+                   font: { family: 'Inter', size: 11, weight: '600' } },
           ticks: { font: { family: 'Inter', size: 10.5 },
                    callback: (v) => formatNumber(v) },
         },
         y: { stacked: true, grid: { display: false },
-             ticks: { font: { family: 'Inter', size: 10.5 } } },
+             title: { display: true, text: 'Facility',
+                      font: { family: 'Inter', size: 11, weight: '600' } },
+             ticks: { font: { family: 'Inter', size: 10.5 }, autoSkip: false } },
       },
       plugins: {
         legend: {
@@ -1541,6 +1462,7 @@ export function renderWarehouseStockChart(canvasId, rows) {
   if (chartInstances[canvasId]) chartInstances[canvasId].destroy();
   const ctx = document.getElementById(canvasId);
   if (!ctx || !rows || rows.length === 0) return;
+  sizeBarChartHost(canvasId, rows.length);
 
   // A NETWORK THAT REPORTS ZERO EVERYWHERE STILL NEEDS A READABLE AXIS.
   //
@@ -1560,9 +1482,11 @@ export function renderWarehouseStockChart(canvasId, rows) {
   chartInstances[canvasId] = new Chart(ctx, {
     type: 'bar',
     data: {
-      // Short on the axis, full in the tooltip — see shortFacilityLabel.
+      // Horizontal since this chart stopped being columns of names, so the
+      // axis takes the whole name; the tooltip still carries it in full for
+      // anything past the limit.
       labels: axisFacilityLabels(
-        rows.map((r) => r.facility_name || r.facility_id)),
+        rows.map((r) => r.facility_name || r.facility_id), true),
       datasets: [
         { label: 'Peak', data: rows.map((r) => Number(r.peak_inventory_units) || 0),
           backgroundColor: '#6B2FA0', borderRadius: 4,
@@ -1575,18 +1499,27 @@ export function renderWarehouseStockChart(canvasId, rows) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      // Bars, for the same reason as every other name-categorised chart on
+      // this screen: the categories are site names, and a column has one
+      // column-width to write one in.
+      indexAxis: 'y',
       scales: {
-        x: { grid: { display: false }, ticks: { font: { family: 'Inter', size: 10.5 } } },
-        y: {
+        x: {
           beginAtZero: true,
           ...(highest > 0 ? {} : { suggestedMax: 1 }),
           title: { display: true, text: 'Units held',
-                   font: { family: 'Inter', size: 11 } },
+                   font: { family: 'Inter', size: 11, weight: '600' } },
           ticks: { font: { family: 'Inter', size: 10.5 },
                    // Whole units, matching what the callback prints. Without
                    // it the ticks are fractional and the labels repeat.
                    precision: 0,
                    callback: (v) => formatNumber(v) },
+        },
+        y: {
+          grid: { display: false },
+          title: { display: true, text: 'Facility',
+                   font: { family: 'Inter', size: 11, weight: '600' } },
+          ticks: { font: { family: 'Inter', size: 10.5 }, autoSkip: false },
         },
       },
       plugins: {

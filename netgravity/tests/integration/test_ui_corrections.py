@@ -146,34 +146,68 @@ class TestOneIconInEveryView:
         assert "glyphSize(style.radius)" in fn
 
 
-class TestTheScenarioKeySitsBelowItsMap:
+class TestEveryMapCarriesExactlyOneKey:
     """
-    It used to be a Leaflet control anchored bottom-right, which is the corner
-    a national network's southern sites occupy. It was also taller than the
-    panel at the short end of `clamp(360px, 46vh, 520px)`, so it had to be
-    bounded and scrolled — and a key you scroll to read has stopped being one.
+    THE TWO-LEGEND DEFECT, on both maps that had a version of it.
+
+    The scenario key used to be a Leaflet control anchored bottom-right, which
+    is the corner a national network's southern sites occupy, and was taller
+    than its own panel so it had to be scrolled — a key you scroll to read has
+    stopped being one. It became a strip below the map, and is now the same
+    DOCK the Digital Twin uses: closed until asked for, opening upward over the
+    map, closing when the reader touches the network underneath.
+
+    The Digital Twin had the sharper version of the same fault. Its stage
+    carried a docked key AND `addLegend` mounted a Leaflet control on the same
+    stage, so the 2D view showed the identical key twice — once docked, once
+    floating over the south-east of the network. Switching to 3D removed one of
+    them, which is what made it look like a rendering fault rather than two
+    mounts.
     """
 
-    def test_the_scenario_map_mounts_no_legend_control(self):
-        """
-        The compact branch returns before `L.control` is reached. If it fell
-        through, the map would carry BOTH keys.
-        """
+    def test_neither_docked_map_mounts_a_leaflet_control(self):
         js = _asset("js", "map.js")
-        fn = js[js.index("function addLegend(map, isCompact = false) {"):]
+        fn = js[js.index("function addLegend(map, isCompact = false, containerId = '') {"):]
         fn = fn[:fn.index("\n/** Every legend control")]
-        compact = fn[:fn.index("const legend = L.control(")]
-        assert "scenarioLegendHost()" in compact
-        assert "return;" in compact
+        before_control = fn[:fn.index("const legend = L.control(")]
+        # The twin's stage owns a dock, so its map takes no control at all.
+        assert "LEGEND_IS_DOCKED_IN_PAGE.has(containerId)" in before_control
+        assert "return;" in before_control
+        # ...and the compact (scenario) branch returns before it too.
+        assert "scenarioLegendHost()" in before_control
 
-    def test_the_key_has_a_host_under_the_map_in_the_markup(self):
+    def test_the_twin_map_is_named_as_docked(self):
+        js = _asset("js", "map.js")
+        assert "LEGEND_IS_DOCKED_IN_PAGE = new Set(['map-twin'])" in js
+        # `initMap` has to actually pass the id, or the set is never consulted.
+        assert "addLegend(map, options.isCompact, containerId);" in js
+
+    def test_both_stages_use_one_dock_implementation(self):
+        """
+        A key that behaves differently on the second screen is a second thing
+        to learn (Nielsen #4). One initialiser, two call sites.
+        """
+        js = _asset("js", "app.js")
+        assert "function initLegendDock({" in js
+        block = js[js.index("function initTwinLegendDock()"):]
+        block = block[:block.index("\nfunction publishTopBarHeight")]
+        assert "toggleId: 'twin-legend-toggle'" in block
+        assert "toggleId: 'scn-legend-toggle'" in block
+
+    def test_the_scenario_key_is_a_dock_inside_its_map(self):
         html = _asset("index.html")
         wrap = html.index('id="scenario-map-wrap"')
-        host = html.index('id="scenario-map-legend"')
-        assert host > wrap, "the key must follow the map it explains"
-        # Inside the same card, not adrift at the foot of the page.
-        card = html.rindex('class="scn-visual-context-card"', 0, wrap)
-        assert host - card < 2000
+        dock = html.index('id="scn-legend-dock"')
+        panel = html.index('id="scenario-map-legend"')
+        assert dock > wrap, "the dock belongs inside the map wrap it overlays"
+        assert panel > dock
+        # Closed at rest: a key permanently expanded over a map is the thing
+        # the dock exists to stop.
+        block = html[panel - 200:panel + 200]
+        assert "hidden" in block
+        # It keeps the column layout, because it carries four groups to the
+        # twin's three and as one column it is taller than the map.
+        assert "tw-legend-below" in block
 
     def test_it_redraws_as_a_scenario_key_not_a_twin_key(self):
         """
