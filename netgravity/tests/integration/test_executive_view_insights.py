@@ -90,7 +90,7 @@ class TestOnlyDecisionsLeadTheExecutiveView:
         assert acted["actionable"] is True, acted["recommended_action"]
 
     def test_the_cached_briefing_is_invalidated(self):
-        assert api._PAYLOAD_VERSION >= 11
+        assert api._PAYLOAD_VERSION >= 12
 
 
 class TestTheLargestCostLineNamesHowToCutIt:
@@ -156,13 +156,80 @@ class TestTheLargestCostLineNamesHowToCutIt:
         assert scenario["amount"] == 120
         assert body["actionable"] is True
 
-    def test_handling_without_a_full_cheap_site_names_the_largest_spend(self):
+    def test_a_median_rate_is_not_one_of_the_lowest(self):
+        """
+        The first cut called a handler "one of the lowest rates" when it sat at
+        the lower median — 6.90 in a network whose cheapest sites handle at
+        1.18. Cheap means the cheapest quarter.
+        """
+        rates = [1.0, 1.0, 1.0, 1.0, 5.0, 6.0, 7.0, 8.0]
+        rows = [_row(f"DC{i}", 95 if rate == 5.0 else 50)
+                for i, rate in enumerate(rates)]
+        network = SimpleNamespace(facilities=[
+            _record(f"DC{i}", rate=rate) for i, rate in enumerate(rates)])
+        pack = _pack({"handling_cost": 900.0, "transport_cost": 100.0}, rows)
+        sentence, action = api._cost_structure_action(pack, network)
+        assert "one of the lowest rates" not in sentence, sentence
+        assert action["scenario"].get("facility_id") != "DC4", action
+
+    def test_the_dearest_spend_is_consolidated_where_cheaper_kin_can_take_it(self):
         pack = _pack({"handling_cost": 900.0, "transport_cost": 100.0},
-                     [_row("DC_A", 40, throughput=100), _row("DC_B", 50, throughput=900)])
+                     [_row("DC_A", 10, throughput=100), _row("DC_B", 50, throughput=900)])
+        network = SimpleNamespace(facilities=[_record("DC_A", rate=1.0),
+                                              _record("DC_B", rate=3.0)])
+        sentence, action = api._cost_structure_action(pack, network)
+        assert "DC_B site" in sentence
+        assert action["scenario"] == {"action": "CLOSE_FACILITY", "facility_id": "DC_B",
+                                      "name": "Consolidate DC_B site"}
+
+    def test_without_room_for_its_volume_the_rate_is_the_lever(self):
+        pack = _pack({"handling_cost": 900.0, "transport_cost": 100.0},
+                     [_row("DC_A", 50, throughput=500), _row("DC_B", 50, throughput=900)])
         network = SimpleNamespace(facilities=[_record("DC_A", rate=1.0),
                                               _record("DC_B", rate=3.0)])
         sentence, action = api._cost_structure_action(pack, network)
         assert "DC_B site" in sentence and action["scenario"] == {}
+        assert api.is_decision(sentence, action)
+
+    def test_room_another_card_takes_away_is_not_room(self):
+        """
+        On the Canada upload the idle-sites tile said "consolidate Montreal"
+        while the cost tile counted Montreal's headroom as where Mississauga's
+        volume would go. Two tiles, side by side, opposite advice.
+        """
+        pack = _pack({"handling_cost": 900.0, "transport_cost": 100.0},
+                     [_row("DC_A", 10, throughput=100), _row("DC_B", 50, throughput=900)])
+        network = SimpleNamespace(facilities=[_record("DC_A", rate=1.0),
+                                              _record("DC_B", rate=3.0)])
+        _, action = api._cost_structure_action(
+            pack, network, claimed={("CONSOLIDATE", "DC_A")})
+        assert action["scenario"] == {}, action
+
+    def test_a_site_another_card_expands_is_never_consolidated(self):
+        pack = _pack({"handling_cost": 900.0, "transport_cost": 100.0},
+                     [_row("DC_A", 10, throughput=100), _row("DC_B", 50, throughput=900)])
+        network = SimpleNamespace(facilities=[_record("DC_A", rate=1.0),
+                                              _record("DC_B", rate=3.0)])
+        _, action = api._cost_structure_action(
+            pack, network, claimed={("ADD_CAPACITY", "DC_B")})
+        assert action["scenario"] == {}, action
+
+        fixed = _pack({"facility_cost": 900.0, "transport_cost": 100.0},
+                      [_row("DC_A", 25), _row("DC_B", 40)])
+        costed = SimpleNamespace(facilities=[_record("DC_A", fixed=100_000),
+                                             _record("DC_B", fixed=50_000)])
+        _, action = api._cost_structure_action(
+            fixed, costed, claimed={("ADD_CAPACITY", "DC_A")})
+        assert action["scenario"]["facility_id"] == "DC_B", action
+
+    def test_volume_is_never_moved_onto_a_different_kind_of_site(self):
+        pack = _pack({"handling_cost": 900.0, "transport_cost": 100.0},
+                     [_row("PLANT_A", 10, role="PLANT", throughput=100),
+                      _row("DC_B", 50, throughput=900)])
+        network = SimpleNamespace(facilities=[_record("PLANT_A", role="PLANT", rate=1.0),
+                                              _record("DC_B", rate=3.0)])
+        _, action = api._cost_structure_action(pack, network)
+        assert action["scenario"] == {}, action
 
     def test_inventory_pools_stock_at_a_stocking_point_not_a_plant(self):
         pack = _pack({"inventory_cost": 900.0, "transport_cost": 100.0},
@@ -202,6 +269,44 @@ class TestUnusedCandidatesNameTheSiteToReopen:
         assert "DC_BIG site" in sentence
         assert action["scenario"] == {"action": "OPEN_FACILITY", "open_mode": "EXISTING",
                                       "facility_id": "DC_BIG", "name": "Reopen DC_BIG site"}
+
+
+class TestAFullyServedPlanIsStressTested:
+    """
+    On the demo network only two findings carried a real change, so the third
+    tile was "Hold this run as the service baseline every scenario is measured
+    against" — the recommendation the Executive view was corrected to stop
+    leading with.
+    """
+
+    def _served(self, unserved):
+        return _Pack({"network_state": {"unserved_demand": unserved},
+                      "facilities": [_row("DC_A", 50)], "flows": []})
+
+    def test_served_in_full_is_answered_with_a_growth_test(self):
+        sentence, action = api._recommended_action(
+            _insight("Service", "INFORMATION"), "Service", "INFORMATION",
+            self._served(0.0), claimed=set())
+        assert action["scenario"]["action"] == "CHANGE_DEMAND"
+        assert action["scenario"]["amount"] > 0
+        assert api.is_decision(sentence, action)
+        assert "baseline" not in sentence.lower()
+
+    def test_not_on_a_shortfall_and_not_without_a_solve(self):
+        sentence, action = api._recommended_action(
+            _insight("Service", "INFORMATION"), "Service", "INFORMATION",
+            self._served(25.0), claimed=set())
+        assert action == {}
+        sentence, action = api._recommended_action(
+            _insight("Service", "INFORMATION"), "Service", "INFORMATION")
+        assert action == {} and not api.is_decision(sentence, action)
+
+    def test_one_growth_test_per_briefing(self):
+        claimed = {("STRESS_TEST_DEMAND", "")}
+        _, action = api._recommended_action(
+            _insight("Service", "INFORMATION"), "Service", "INFORMATION",
+            self._served(0.0), claimed=claimed)
+        assert action == {}
 
 
 class TestACapacityTestIsSized:
@@ -276,3 +381,7 @@ class TestExecutiveViewAndForecast:
         js = _asset("js", "app.js")
         assert "All stated demand is served" not in js
         assert "renderOverviewAlert('fc-alert')" not in js
+        # Nothing may be guarded on the element that is gone: the upload
+        # handler redrew this page only `if (document.getElementById('fc-alert'))`.
+        assert "getElementById('fc-alert')" not in js
+        assert "getElementById('fc-attn-body')) renderForecastPage()" in js

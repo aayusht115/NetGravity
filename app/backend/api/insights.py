@@ -120,7 +120,9 @@ _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
 #:      largest cost line and the scenario that prices it, an unused-candidate
 #:      finding names the site to reopen, and a capacity test carries a
 #:      suggested amount. The Executive view ranks its tiles on the first.
-_PAYLOAD_VERSION = 11
+#:  12  a fully-served plan's service finding recommends a demand-growth
+#:      stress test instead of holding the run as the baseline
+_PAYLOAD_VERSION = 12
 
 
 #: Theme -> the per-facility field that theme is ABOUT. A chart for a finding
@@ -626,6 +628,7 @@ def _cost_sites(pack: Any, network: Any) -> List[Dict[str, Any]]:
             "role": role,
             "util": _finite(row.get("utilization_pct")),
             "throughput": _finite(row.get("throughput_units")),
+            "capacity": _finite(row.get("capacity_units")),
             "fixed": _finite(getattr(record, "fixed_cost_per_year", None)),
             "rate": _finite(getattr(record, "handling_cost_per_unit", None)),
         })
@@ -667,7 +670,9 @@ def _consolidation_pick(sites: List[Dict[str, Any]], eligible, claimed):
     pool = [s for s in sites
             if s["util"] is not None and s["util"] < _CONSOLIDATE_BELOW_PCT
             and peers.get(s["role"], 0) > 1 and eligible(s)
-            and _unclaimed("CONSOLIDATE", s["facility_id"], claimed)]
+            and _unclaimed("CONSOLIDATE", s["facility_id"], claimed)
+            # A site another card EXPANDS is not one to take out.
+            and _unclaimed("ADD_CAPACITY", s["facility_id"], claimed)]
     if not pool:
         return None
     return sorted(pool, key=lambda s: (s["util"], -(s["fixed"] or 0),
@@ -747,13 +752,21 @@ def _cut_handling(sites, payload, claimed):
     )
 
     rated = [s for s in sites if s["rate"] is not None and s["rate"] > 0]
-    if len(rated) >= 2:
-        rates = sorted(s["rate"] for s in rated)
-        cheaper_half = rates[(len(rates) - 1) // 2]
+    rates = sorted(s["rate"] for s in rated)
+
+    # 1. A CHEAP HANDLER THAT IS FULL. The solve already routes volume to cheap
+    #    handlers that have room, so a full one is what keeps volume at the
+    #    dear ones. "One of the lowest rates" means the cheapest QUARTER: the
+    #    first cut used the lower median, and on the Canada upload it called a
+    #    6.90 handler one of the lowest rates in a network whose cheapest sites
+    #    handle at 1.18 — true of the rank, false of the sentence.
+    if len(rates) >= 2:
+        cheap_ceiling = rates[(len(rates) - 1) // 4]
         full = [s for s in rated
-                if s["rate"] <= cheaper_half and s["rate"] < rates[-1]
+                if s["rate"] <= cheap_ceiling and s["rate"] < rates[-1]
                 and (s["util"] or 0) >= LOADED_PCT
-                and _unclaimed("ADD_CAPACITY", s["facility_id"], claimed)]
+                and _unclaimed("ADD_CAPACITY", s["facility_id"], claimed)
+                and _unclaimed("CONSOLIDATE", s["facility_id"], claimed)]
         if full:
             site = sorted(full, key=lambda s: (s["rate"], -(s["util"] or 0),
                                                s["facility_id"]))[0]
@@ -772,23 +785,57 @@ def _cut_handling(sites, payload, claimed):
                                     "facility_id": site["facility_id"],
                                     "name": f"More capacity at {site['name']}"},
                           site=site)
-    spenders = [s for s in rated if s["throughput"] is not None]
-    if spenders:
-        site = max(spenders, key=lambda s: (s["rate"] * s["throughput"],
-                                            s["facility_id"]))
-        sentence = (f"Cut handling, the largest cost line: automate or "
-                    f"renegotiate handling at {site['name']}, which carries "
-                    f"more handling spend than any other site, and move volume "
-                    f"toward the sites that handle it more cheaply.")
-        return _lever("REDUCE_HANDLING_COST", sentence,
-                      "No cheap handler is short of room, so the rate itself "
-                      "is the lever.", "", site=site)
-    sentence = ("Cut handling, the largest cost line: automate or renegotiate "
-                "handling at the busiest sites, and move volume toward the "
-                "sites that handle it more cheaply.")
-    return _lever("REDUCE_HANDLING_COST", sentence,
-                  "The upload states no handling rate per site to rank.", "")
 
+    spenders = [s for s in rated if s["throughput"] is not None]
+    if not spenders:
+        sentence = ("Cut handling, the largest cost line: automate or "
+                    "renegotiate handling at the busiest sites, and move volume "
+                    "toward the sites that handle it more cheaply.")
+        return _lever("REDUCE_HANDLING_COST", sentence,
+                      "The upload states no handling rate per site to rank.", "")
+
+    dear = max(spenders, key=lambda s: (s["rate"] * s["throughput"],
+                                        s["facility_id"]))
+
+    # 2. THE DEAREST SPEND, WHERE IT HAS SOMEWHERE TO GO. Only onto sites of
+    #    the same kind — volume does not move from a distribution centre to a
+    #    plant — that handle more cheaply and have room for ALL of it between
+    #    them. Short of that, closing it is not a handling lever; it is a
+    #    shortfall the planner would price as one.
+    median = rates[(len(rates) - 1) // 2]
+    kin = [s for s in sites if s["role"] == dear["role"]]
+    room = sum(max((s["capacity"] or 0.0) - (s["throughput"] or 0.0), 0.0)
+               for s in kin
+               if s is not dear and s["rate"] is not None
+               and s["rate"] < dear["rate"]
+               # NOT ROOM ANOTHER CARD IS TAKING AWAY. On the Canada upload the
+               # idle-sites card recommended consolidating Montreal while this
+               # one counted Montreal's headroom as where Mississauga's volume
+               # would go — two tiles, side by side, giving opposite advice.
+               and _unclaimed("CONSOLIDATE", s["facility_id"], claimed))
+    if (dear["rate"] > median and len(kin) > 1
+            and room >= (dear["throughput"] or 0.0) > 0
+            and _unclaimed("CONSOLIDATE", dear["facility_id"], claimed)
+            and _unclaimed("ADD_CAPACITY", dear["facility_id"], claimed)):
+        sentence = (f"Cut handling, the largest cost line: move the volume at "
+                    f"{dear['name']}, which carries more handling spend than any "
+                    f"other site, onto the cheaper handlers of its kind that "
+                    f"have room for it — price consolidating it — and automate "
+                    f"or renegotiate handling where rates stay high.")
+        return _consolidate(dear, sentence,
+                            "Its handling rate is above the network's median, "
+                            "and sites of the same kind that handle more "
+                            "cheaply have room for all of its volume.")
+
+    # 3. The rate itself is the lever.
+    sentence = (f"Cut handling, the largest cost line: automate or renegotiate "
+                f"handling at {dear['name']}, which carries more handling spend "
+                f"than any other site, and move volume toward the sites that "
+                f"handle it more cheaply as they gain room.")
+    return _lever("REDUCE_HANDLING_COST", sentence,
+                  "No cheap handler is full, and the cheaper sites cannot take "
+                  "all of the dearest site's volume, so the rate is the lever.",
+                  "", site=dear)
 
 def _cut_inventory(sites, payload, claimed):
     from netgravity.orchestrator.reasoning.strategic_actions import format_pct
@@ -895,6 +942,41 @@ def _reopen_action(pack: Any, claimed: Optional[set] = None
         "target": {"facility_id": fid, "name": name},
         "priority": 1,
         "cta": CTA_BY_ACTION["REOPEN_FACILITY"],
+    }
+
+
+#: The demand growth a stress test opens at — an input to edit, not a forecast.
+_STRESS_TEST_GROWTH_PCT = 10
+
+
+def _stress_test_action(pack: Any, claimed: Optional[set] = None
+                        ) -> Optional[Dict[str, Any]]:
+    """
+    The test a fully-served plan is owed: how much growth it absorbs.
+
+    Only when the solve left no demand unserved — a shortfall is a RISK
+    finding with its own rungs, and growth on top of it answers nothing.
+    """
+    unserved = _unserved(pack)
+    if unserved is None or unserved > 0:
+        return None
+    if ("STRESS_TEST_DEMAND", "") in (claimed or set()):
+        return None
+    sentence = ("Stress-test this plan: grow demand across the network and find "
+                "the first site that runs out of room, before the next planning "
+                "round commits the footprint.")
+    return {
+        "key": "STRESS_TEST_DEMAND",
+        "label": sentence,
+        "reason": ("Every unit is served today, so the open question is how much "
+                   "growth the footprint absorbs and where it breaks first. The "
+                   "scenario opens at an assumed uplift for you to edit."),
+        "scenario": {"action": "CHANGE_DEMAND",
+                     "amount": _STRESS_TEST_GROWTH_PCT,
+                     "name": "Demand growth stress test"},
+        "target": {},
+        "priority": 1,
+        "cta": "Test the demand growth",
     }
 
 
@@ -1225,6 +1307,15 @@ def _recommended_action(insight: Any, theme: str, severity: str,
         reopen = _reopen_action(pack, claimed)
         if reopen:
             return reopen["label"], reopen
+
+    # Every unit served. "Hold this run as the service baseline" asked a leader
+    # to do nothing, and on a network with few other decisions it still took
+    # an Executive view tile. What a fully-served plan is owed is the test of
+    # how far it goes: grow demand and find the first site that runs out.
+    if (theme, severity) == ("Service", "INFORMATION") and pack is not None:
+        stress = _stress_test_action(pack, claimed)
+        if stress:
+            return stress["label"], stress
 
     table = _ACTION_BY_THEME_FACILITY if scope == "FACILITY" else {}
     sentence = (table.get((theme, severity))

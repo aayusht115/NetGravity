@@ -963,10 +963,12 @@ window.addEventListener('networkDataLoaded', (e) => {
   try { initHomeSelectors(); } catch (err) { }
   try { renderHome(); } catch (err) { }
   try { renderTwinTables(); } catch (err) { }
-  // The Forecast page shows the same alert, attention card and signals as
-  // Home. Without this they stayed as they were at the moment the tab was
-  // last opened, which for a network loaded afterwards is empty.
-  try { if (document.getElementById('fc-alert')) renderForecastPage(); } catch (err) { }
+  // The Forecast page's attention card and signals. Without this they stayed
+  // as they were at the moment the tab was last opened, which for a network
+  // loaded afterwards is empty. Guarded on the card, not on the demand alert
+  // that used to sit above it: that element is gone, and a guard naming it
+  // silently stopped this page being redrawn after an upload.
+  try { if (document.getElementById('fc-attn-body')) renderForecastPage(); } catch (err) { }
   try {
     // Redraw every mounted map from the arrays as they now stand. This used to
     // call initMap('home-map') and initMap('twin-map') — neither id exists in
