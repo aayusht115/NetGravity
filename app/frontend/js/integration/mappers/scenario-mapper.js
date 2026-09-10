@@ -191,6 +191,11 @@ export function mapScenarioRecord(raw) {
       ? +(scenarioCost - referenceCost).toFixed(2) : null,
     referenceNote: raw.reference_note || '',
 
+    // What a capacity change was PRICED at: the site's fixed cost before and
+    // after, and on what basis. Null for any other kind of scenario, and for a
+    // capacity scenario solved before capacity carried a price.
+    capacityPricing: raw.capacity_pricing || null,
+
     deltas,
     baselineKpis: raw.baseline_kpis || {},
     referenceKpis: raw.reference_kpis || {},

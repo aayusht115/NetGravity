@@ -40,6 +40,7 @@ from app.backend.api.scenarios import (
     _comparison_verdict,
     _is_structural,
     _rank_scenarios,
+    _recommended_actions,
     _service_warning,
 )
 from app.backend.app import app
@@ -1434,3 +1435,371 @@ class TestThePlannerCanRecommendTakingCapacityOut:
         # NO_ACTION is rendered as a statement rather than a control, so it
         # deliberately has no case.
         assert emitted - handled - {"NO_ACTION"} == set(), emitted - handled
+
+
+
+# ---------------------------------------------------------------------------
+# Cheaper by shipping less is not a cheaper network
+# ---------------------------------------------------------------------------
+
+class TestAPlanThatShipsLessIsNotACheaperPlan:
+    """
+    Measured on a real upload: closing one DC stranded 316,754 units (10.4% of
+    demand) and the card read "C$5.72M cheaper than today", in green, because
+    handling and freight are paid per unit shipped. Ranked on cost alone it
+    came first in every comparison it was in.
+    """
+
+    BASELINE = {"business_network_cost": _kpi(100.0),
+                "demand_fill_rate": _kpi(1.0)}
+
+    def test_it_ranks_behind_a_plan_that_keeps_service(self):
+        rows = _rank_scenarios(self.BASELINE, [
+            _record("SHED", cost=80.0, fill=0.90),
+            _record("KEEP", cost=105.0, fill=1.0)])
+        assert [r["scenario_id"] for r in rows] == ["KEEP", "SHED"]
+        assert rows[0]["sheds_demand"] is False
+        assert rows[1]["sheds_demand"] is True
+
+    def test_the_verdict_does_not_call_it_cheaper_than_today(self):
+        rows = _rank_scenarios(self.BASELINE, [
+            _record("SHED", cost=80.0, fill=0.80),
+            _record("KEEP", cost=105.0, fill=1.0)])
+        verdict = _comparison_verdict(rows)["verdict"]
+        assert verdict.startswith(
+            "Nothing compared costs less than the network you run today "
+            "without serving less demand."), verdict
+
+    def test_a_plan_that_sheds_on_its_own_says_why_it_is_cheaper(self):
+        rows = _rank_scenarios(self.BASELINE, [_record("SHED", cost=80.0, fill=0.80)])
+        verdict = _comparison_verdict(rows)["verdict"]
+        assert "only because it leaves demand unserved" in verdict, verdict
+
+    def test_a_keeper_below_today_names_the_options_that_undercut_it(self):
+        rows = _rank_scenarios(self.BASELINE, [
+            _record("KEEP", cost=95.0, fill=1.0),
+            _record("SHED", cost=80.0, fill=0.80)])
+        verdict = _comparison_verdict(rows)["verdict"]
+        assert "while serving the same demand" in verdict, verdict
+        assert "1 other option costs less but serves less demand" in verdict
+
+    def test_a_negligible_shortfall_is_not_shrinkage(self):
+        """638 units on a network of three million is a rounding of service,
+        not a smaller promise."""
+        rows = _rank_scenarios(self.BASELINE, [_record("X", cost=99.0, fill=0.999792)])
+        assert rows[0]["sheds_demand"] is False
+
+    def test_a_saving_far_larger_than_the_demand_it_drops_is_not_blamed_on_it(self):
+        """
+        Measured: 161M cheaper while leaving 0.05% of demand unserved. At
+        today's cost per unit served that demand is worth about 370K; the
+        saving is not made of it, and the verdict must not say it is.
+        """
+        rows = _rank_scenarios({"business_network_cost": _kpi(701.0),
+                                "demand_fill_rate": _kpi(1.0)},
+                               [_record("BEV", cost=540.0, fill=0.99947)])
+        assert rows[0]["sheds_demand"] is True
+        assert rows[0]["saving_is_shrinkage"] is False
+        assert "only because" not in _comparison_verdict(rows)["verdict"]
+
+    def test_the_screen_is_told_rather_than_colouring_it_green(self):
+        js = _asset("scenarios.js")
+        block = js[js.index("function atAGlanceHtml("):]
+        block = block[:block.index("\n}\n")]
+        assert "row.saving_is_shrinkage === true" in block
+        assert "by serving less demand" in block
+        assert "change_sheds_demand" in block
+
+
+class TestSolverToleranceIsNotAFinding:
+    """
+    The re-optimised reference of an unchanged C$56,081,045 network came back
+    at C$56,109,836 — 0.05%, inside the solver's 0.1% gap — and the card said
+    "re-optimising today's footprint adds C$28.8K" on a plan whose footprint is
+    held open.
+    """
+
+    def test_a_reference_inside_the_gap_is_not_narrated(self):
+        rows = _rank_scenarios(
+            {"business_network_cost": _kpi(56_081_045.37)},
+            [_record("X", cost=56_600_000.0, reference=56_109_836.10,
+                     baseline=56_081_045.37)])
+        assert _attribution(rows[0]) == {}
+
+    def test_a_real_redesign_still_is(self):
+        rows = _rank_scenarios(
+            {"business_network_cost": _kpi(701.0)},
+            [_record("D30", cost=640.0, reference=622.0, baseline=701.0)])
+        assert _attribution(rows[0])["change_direction"] == "adds"
+
+    def test_the_floor_is_the_solvers_own_gap(self):
+        from netgravity.schemas.network import OptimizationConfig
+
+        from app.backend.api.scenarios import _noise_floor
+
+        gap = OptimizationConfig.model_fields["mip_gap"].default
+        assert _noise_floor(10_000_000.0) == pytest.approx(10_000_000.0 * gap)
+        assert _noise_floor(None) == 1.0
+        assert _noise_floor(5.0) == 1.0
+
+
+# ---------------------------------------------------------------------------
+# What a capacity change was priced at
+# ---------------------------------------------------------------------------
+
+class _PricedSite:
+    def __init__(self, fid, capacity, fixed, name=None):
+        self.id = fid
+        self.name = name or fid
+        self.capacity_units_per_period = capacity
+        self.fixed_cost_per_year = fixed
+
+
+class TestTheRecordSaysWhatCapacityCost:
+
+    ENGINE = _Engine([_PricedSite("F006", 95_000.0, 38_400_000.0, "Brampton Hub"),
+                      _PricedSite("F012", 42_000.0, 0.0)])
+
+    def test_an_increase_is_priced_with_the_builders_own_function(self):
+        from app.backend.api.scenarios import _capacity_pricing
+
+        out = _capacity_pricing(self.ENGINE, "snap", "CHANGE_CAPACITY",
+                                ["F006"], 20_000.0)
+        assert out["basis"] == "PRO_RATA"
+        # The figure measured end to end on the solve: +C$8,084,210.53.
+        assert out["added_fixed_cost_per_year"] == pytest.approx(8_084_210.53)
+        assert out["sites"][0]["name"] == "Brampton Hub"
+
+    def test_a_site_with_no_fixed_cost_is_unpriced_not_free(self):
+        from app.backend.api.scenarios import _capacity_pricing
+
+        out = _capacity_pricing(self.ENGINE, "snap", "CHANGE_CAPACITY",
+                                ["F012"], 5_000.0)
+        assert out["basis"] == "UNPRICED"
+        assert out["added_fixed_cost_per_year"] == 0.0
+
+    def test_a_reduction_keeps_its_cost(self):
+        from app.backend.api.scenarios import _capacity_pricing
+
+        out = _capacity_pricing(self.ENGINE, "snap", "CHANGE_CAPACITY",
+                                ["F006"], -5_000.0)
+        assert out["basis"] == "REDUCTION_KEEPS_COST"
+        assert out["added_fixed_cost_per_year"] == 0.0
+
+    def test_no_other_change_is_given_a_capacity_price(self):
+        from app.backend.api.scenarios import _capacity_pricing
+
+        assert _capacity_pricing(self.ENGINE, "snap", "CHANGE_DEMAND",
+                                 [], None) is None
+
+    def test_it_is_written_on_every_simulated_record_and_shown(self):
+        import pathlib
+
+        source = (pathlib.Path(__file__).resolve().parents[3] / "app"
+                  / "backend" / "api" / "scenarios.py").read_text(encoding="utf-8")
+        assert '"capacity_pricing": _capacity_pricing(' in source
+        mapper = _asset("integration/mappers/scenario-mapper.js")
+        assert "capacityPricing: raw.capacity_pricing" in mapper
+        js = _asset("scenarios.js")
+        block = js[js.index("function atAGlanceHtml("):]
+        block = block[:block.index("\n}\n")]
+        for basis in ("'PRO_RATA'", "'UNPRICED'", "'REDUCTION_KEEPS_COST'"):
+            assert basis in block, basis
+
+
+# ---------------------------------------------------------------------------
+# The ladder recommends on what THIS change did
+# ---------------------------------------------------------------------------
+
+def _change(action, *, named=(), cap=None, unserved=0.0, was_unserved=0.0,
+            facility_cost=1_000.0, **extra):
+    """A stored scenario with its own capacity account and both KPI sides."""
+    record = {
+        "request": {"action": action, "facility_ids": list(named)},
+        "scenario_kpis": {"unserved_demand": _kpi(unserved),
+                          "total_demand": _kpi(3_000_000.0),
+                          "facility_cost": _kpi(facility_cost)},
+        "baseline_kpis": {"unserved_demand": _kpi(was_unserved),
+                          "facility_cost": _kpi(facility_cost)},
+        "capacity_response": dict({"at_ceiling": [], "working_harder": [],
+                                   "under_used": [], "idle": [],
+                                   "regions_without_room": []}, **(cap or {})),
+        "explanation": {},
+    }
+    for key, value in extra.items():
+        if key == "request":
+            record["request"].update(value)
+        else:
+            record[key] = value
+    return record
+
+
+class TestTheLadderIsAboutTheChange:
+    """
+    Measured on one upload: a closure, a scoped demand run and an unscoped one
+    all opened with "Reopen Brampton" and "Increase capacity at Sudbury" —
+    sites that were closed and full BEFORE any of them ran — and the closure's
+    first recommendation was to reopen the site it had just closed.
+    """
+
+    FULL_BEFORE = {"id": "F003", "name": "Montreal Plant", "util_pct": 100.0,
+                   "baseline_util_pct": 100.0, "added_units": 0.0,
+                   "capacity": 65_000.0, "region": None}
+    CLOSED_BEFORE = {"id": "F012", "name": "Calgary DC", "util_pct": None,
+                     "capacity": 42_000.0, "region": None}
+    FILLED_BY_IT = {"id": "F020", "name": "Sudbury Depot", "util_pct": 100.0,
+                    "baseline_util_pct": 71.0, "added_units": 94_516.0,
+                    "capacity": 336_000.0, "region": None}
+
+    def _keys(self, record):
+        return [a["key"] for a in _recommended_actions(record)]
+
+    def test_a_site_full_before_the_change_is_not_its_recommendation(self):
+        record = _change("CHANGE_DEMAND",
+                         cap={"at_ceiling": [self.FULL_BEFORE],
+                              "idle": [self.CLOSED_BEFORE],
+                              "open_headroom_units": 500_000.0},
+                         request={"demand_region": "Ontario"})
+        actions = _recommended_actions(record)
+        assert [a["key"] for a in actions] == ["NO_ACTION"], actions
+        assert "constraint of today's network" in actions[0]["reason"]
+
+    def test_a_site_this_change_fills_is(self):
+        record = _change("CHANGE_DEMAND",
+                         cap={"at_ceiling": [self.FULL_BEFORE, self.FILLED_BY_IT],
+                              "idle": [self.CLOSED_BEFORE],
+                              "open_headroom_units": 500_000.0},
+                         request={"demand_region": "Ontario"})
+        actions = _recommended_actions(record)
+        assert [a["key"] for a in actions] == ["REOPEN_FACILITY", "ADD_CAPACITY"]
+        assert actions[1]["target"]["facility_id"] == "F020"
+
+    def test_a_closure_is_never_offered_the_site_it_closed_back(self):
+        closed = {"id": "F006", "name": "Brampton Hub", "util_pct": None,
+                  "capacity": 1_140_000.0, "region": None}
+        record = _change("CLOSE_FACILITY", named=["F006"],
+                         unserved=316_754.0, was_unserved=0.0,
+                         cap={"at_ceiling": [self.FULL_BEFORE],
+                              "idle": [closed, self.CLOSED_BEFORE],
+                              "open_headroom_units": 5_682_270.0})
+        actions = _recommended_actions(record)
+
+        first = actions[0]
+        assert first["label"] == "Keep Brampton Hub open"
+        assert first["statement"] is True
+        assert first["scenario"] == {} and first["cta"] == ""
+        # Room elsewhere, so the stranded demand is out of reach: no capacity
+        # anywhere would serve it, and none is recommended.
+        assert "no capacity added elsewhere would serve them" in first["reason"]
+        assert "ADD_CAPACITY" not in [a["key"] for a in actions]
+        # And nothing pressable points back at the closed site.
+        assert not [a for a in actions if not a["statement"]
+                    and (a.get("target") or {}).get("facility_id") == "F006"]
+
+    def test_capacity_nobody_uses_is_said_to_be_unused(self):
+        record = _change(
+            "CHANGE_CAPACITY", named=["F006"],
+            request={"capacity_delta_units": 20_000.0},
+            scenario_facilities={"F006": {"throughput": 443_016.0, "utilPct": 32.1,
+                                          "capacity": 1_380_000.0, "isOpen": True}},
+            baseline_facilities={"F006": {"throughput": 443_016.0, "utilPct": 38.9,
+                                          "capacity": 1_140_000.0, "isOpen": True}},
+            capacity_pricing={"basis": "PRO_RATA"})
+        actions = _recommended_actions(record)
+        assert actions[0]["key"] == "NO_ACTION"
+        assert actions[0]["label"] == "The added capacity at F006 is not used"
+        assert "adds fixed cost for room that goes unused" in actions[0]["reason"]
+
+    def test_capacity_that_is_used_is_not_called_unused(self):
+        record = _change(
+            "CHANGE_CAPACITY", named=["F001"],
+            request={"capacity_delta_units": 10_000.0},
+            scenario_facilities={"F001": {"throughput": 943_378.0, "utilPct": 92.5,
+                                          "capacity": 1_020_000.0, "isOpen": True}},
+            baseline_facilities={"F001": {"throughput": 899_499.0, "utilPct": 99.9,
+                                          "capacity": 900_000.0, "isOpen": True}})
+        labels = [a["label"] for a in _recommended_actions(record)]
+        assert not any("is not used" in label for label in labels), labels
+
+    def test_an_upload_with_no_fixed_cost_is_asked_for_it(self):
+        emptied = {"id": "F008", "name": "Halifax DC", "util_pct": 10.0,
+                   "added_units": -20_000.0, "capacity": 72_000.0}
+        record = _change("CHANGE_CAPACITY", named=["F006"], facility_cost=0.0,
+                         request={"capacity_delta_units": 20_000.0},
+                         cap={"under_used": [emptied]})
+        actions = _recommended_actions(record)
+        keys = [a["key"] for a in actions]
+        assert "REQUEST_DATA" in keys, keys
+        assert any(a["label"] == "Obtain each site's annual fixed cost" for a in actions)
+        # Consolidating saves nothing the model can see without a fixed cost.
+        assert "CONSOLIDATE" not in keys
+
+    def test_growth_that_fills_nothing_is_not_told_to_scope_itself(self):
+        assert "SCOPE_DEMAND_GROWTH" not in self._keys(_change("CHANGE_DEMAND"))
+
+    def test_growth_that_fills_a_site_is(self):
+        record = _change("CHANGE_DEMAND", cap={"at_ceiling": [self.FILLED_BY_IT]})
+        assert "SCOPE_DEMAND_GROWTH" in self._keys(record)
+
+    def test_a_site_near_empty_before_the_change_is_not_its_consolidation(self):
+        steady = {"id": "F008", "name": "Halifax DC", "util_pct": 10.0,
+                  "added_units": 0.0, "capacity": 72_000.0}
+        assert "CONSOLIDATE" not in self._keys(
+            _change("CHANGE_TRANSPORT_COST", cap={"under_used": [steady]}))
+        emptied = dict(steady, added_units=-20_000.0)
+        assert "CONSOLIDATE" in self._keys(
+            _change("CHANGE_TRANSPORT_COST", cap={"under_used": [emptied]}))
+
+    def test_the_same_network_gives_different_changes_different_advice(self):
+        """The complaint in one assertion."""
+        standing = {"at_ceiling": [self.FULL_BEFORE], "idle": [self.CLOSED_BEFORE],
+                    "open_headroom_units": 5_000_000.0}
+        demand = _recommended_actions(_change(
+            "CHANGE_DEMAND", cap=standing, request={"demand_region": "Ontario"}))
+        closure = _recommended_actions(_change(
+            "CLOSE_FACILITY", named=["F006"], unserved=316_754.0,
+            cap=dict(standing, idle=[{"id": "F006", "name": "Brampton Hub",
+                                      "capacity": 1_140_000.0},
+                                     self.CLOSED_BEFORE])))
+        assert [a["label"] for a in demand] != [a["label"] for a in closure]
+
+    def test_a_full_site_squeezing_a_few_more_units_through_is_still_standing(self):
+        squeezed = dict(self.FULL_BEFORE, added_units=501.0)
+        record = _change("CHANGE_DEMAND",
+                         cap={"at_ceiling": [squeezed], "idle": [self.CLOSED_BEFORE],
+                              "open_headroom_units": 500_000.0},
+                         request={"demand_region": "Ontario"})
+        assert self._keys(record) == ["NO_ACTION"]
+
+    def test_growth_whose_shortfall_is_out_of_reach_is_told_so_not_to_scope(self):
+        record = _change("CHANGE_DEMAND", unserved=300_000.0, was_unserved=90_000.0,
+                         cap={"open_headroom_units": 3_000_000.0})
+        actions = _recommended_actions(record)
+        assert [a["key"] for a in actions] == ["NO_ACTION"], actions
+        assert actions[0]["label"] == "No capacity change will serve the missed demand"
+
+    def test_a_site_already_running_hot_is_not_this_changes_risk(self):
+        """"Nothing has reached its ceiling yet" was said beside four sites at
+        100%, about a plant that was running hot before the change ran."""
+        hot = {"id": "F011", "name": "Mississauga Plant", "util_pct": 95.0,
+               "baseline_util_pct": 94.8, "added_units": 300.0, "capacity": 50_000.0}
+        record = _change("CHANGE_DEMAND", cap={"working_harder": [hot]},
+                         capacity_risk="High", request={"demand_region": "Ontario"})
+        assert self._keys(record) == ["NO_ACTION"]
+
+    def test_scope_advice_only_accompanies_an_expansion(self):
+        warm = {"id": "F011", "name": "Mississauga Plant", "util_pct": 89.0,
+                "baseline_util_pct": 60.0, "added_units": 30_000.0,
+                "capacity": 50_000.0}
+        medium = _change("CHANGE_DEMAND", cap={"working_harder": [warm]},
+                         capacity_risk="Medium")
+        assert "SCOPE_DEMAND_GROWTH" not in self._keys(medium)
+        high = _change("CHANGE_DEMAND", cap={"working_harder": [warm]},
+                       capacity_risk="High")
+        assert self._keys(high) == ["ADD_CAPACITY", "SCOPE_DEMAND_GROWTH"]
+
+    def test_the_browser_draws_a_server_statement_as_prose(self):
+        js = _asset("scenarios.js")
+        block = js[js.index("function recommendedActions(scn, comparison)"):]
+        block = block[:block.index("\n}\n")]
+        assert "row.statement === true" in block

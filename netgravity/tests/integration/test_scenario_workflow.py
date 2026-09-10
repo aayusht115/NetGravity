@@ -604,3 +604,122 @@ class TestOnlyTheUserClosesASite:
         builder_source = inspect.getsource(ScenarioBuilder)
         assert "_hold_the_existing_footprint" in builder_source
 
+
+
+# ---------------------------------------------------------------------------
+# A capacity change is not free
+# ---------------------------------------------------------------------------
+
+def _with(network, facility_id, **update):
+    return network.model_copy(update={"facilities": [
+        f.model_copy(update=update) if f.id == facility_id else f
+        for f in network.facilities]})
+
+
+class TestCapacityIsNotFree:
+    """
+    THE REPORTED DEFECT: no capacity scenario ever increased the cost.
+
+    The builder changed the ceiling and nothing else, so capacity was free on
+    the model's terms and more of it could only let the solver find a plan at
+    least as cheap. Measured on a complete upload: +20,000 units at a DC
+    carrying C$38.4M a year left a C$701,441,045.37 network at
+    C$701,441,045.37, to the cent.
+    """
+
+    def test_an_increase_is_priced_pro_rata_to_the_sites_own_capacity(
+            self, delhi_network):
+        net = _with(delhi_network, "DC_DELHI", fixed_cost_per_year=120_000.0)
+        built, overrides = ScenarioBuilder().build(net, ScenarioIntentSpec(
+            action=ScenarioActionType.CHANGE_CAPACITY,
+            facility_ids=["DC_DELHI"], capacity_delta_units=2_000.0))
+
+        delhi = next(f for f in built.facilities if f.id == "DC_DELHI")
+        assert delhi.capacity_units_per_period == pytest.approx(7_000.0)
+        # 5,000 units cost 120,000 a year, so 7,000 cost 168,000.
+        assert delhi.fixed_cost_per_year == pytest.approx(168_000.0)
+        assert overrides == [
+            "CHANGE_CAPACITY DC_DELHI +2,000 units/period; fixed cost "
+            "120,000 -> 168,000 per year, pro rata to capacity"]
+
+    def test_a_reduction_keeps_its_cost(self, delhi_network):
+        """Capacity lost to a disruption or a lease still being paid does not
+        hand its fixed cost back; the cheaper reading is not assumed."""
+        net = _with(delhi_network, "DC_DELHI", fixed_cost_per_year=120_000.0)
+        built, overrides = ScenarioBuilder().build(net, DELHI_MINUS_2000)
+        delhi = next(f for f in built.facilities if f.id == "DC_DELHI")
+        assert delhi.fixed_cost_per_year == pytest.approx(120_000.0)
+        assert overrides == ["CHANGE_CAPACITY DC_DELHI -2,000 units/period"]
+
+    def test_the_price_is_one_function_with_its_edges_stated(self):
+        from netgravity.orchestrator.engines.scenario_builder import (
+            capacity_fixed_cost,
+        )
+
+        assert capacity_fixed_cost(100.0, 100.0, 150.0) == pytest.approx(150.0)
+        # Nothing to price against: no fixed cost, no capacity, or the
+        # schema's "no capacity stated" default.
+        assert capacity_fixed_cost(0.0, 100.0, 200.0) == 0.0
+        assert capacity_fixed_cost(100.0, 0.0, 200.0) == 100.0
+        assert capacity_fixed_cost(100.0, 1e12, 2e12) == 100.0
+        # A reduction keeps its cost.
+        assert capacity_fixed_cost(100.0, 100.0, 50.0) == 100.0
+
+    def test_the_solved_cost_rises_by_exactly_that_price(self, delhi_network):
+        """
+        End to end through the MILP, on a network where the added room is not
+        needed — so routing cannot move, and the whole difference must be the
+        price of the capacity, charged once per period of the horizon.
+        """
+        from netgravity.costs.business_cost import compute_business_network_cost
+        from netgravity.optimization.milp import solve as milp_solve
+        from netgravity.schemas.network import OptimizationMode
+
+        net = _with(delhi_network, "DC_DELHI", fixed_cost_per_year=120_000.0)
+
+        def solve(delta):
+            built, _ = ScenarioBuilder().build(net, ScenarioIntentSpec(
+                action=ScenarioActionType.CHANGE_CAPACITY,
+                facility_ids=["DC_DELHI"], capacity_delta_units=delta))
+            cfg = built.config.model_copy(update={
+                "optimization_mode": OptimizationMode.BROWNFIELD_SCENARIO_OPTIMIZATION})
+            result = milp_solve(built, cfg, f"price-{delta}")
+            delhi = next(f for f in built.facilities if f.id == "DC_DELHI")
+            decision = next(d for d in result.facility_decisions
+                            if d.facility_id == "DC_DELHI")
+            return (compute_business_network_cost(result, built, cfg).total,
+                    delhi.get_fixed_cost_for_period(cfg.cost_period),
+                    decision.n_periods)
+
+        before, per_period_before, periods = solve(0.0)
+        after, per_period_after, _ = solve(2_000.0)
+        assert after > before
+        assert after - before == pytest.approx(
+            (per_period_after - per_period_before) * periods, abs=0.01)
+
+    def test_a_plant_increase_moves_the_limit_that_actually_binds(
+            self, delhi_network):
+        """
+        The MILP bounds a plant by min(throughput, production), and ingestion
+        writes the uploaded capacity into both. Raising only one left the
+        minimum where it was, so an increase at any plant changed nothing.
+        """
+        net = _with(delhi_network, "PLANT_N",
+                    production_capacity_units_per_period=99_999.0)
+        built, _ = ScenarioBuilder().build(net, ScenarioIntentSpec(
+            action=ScenarioActionType.CHANGE_CAPACITY,
+            facility_ids=["PLANT_N"], capacity_delta_units=1_000.0))
+        plant = next(f for f in built.facilities if f.id == "PLANT_N")
+        assert plant.capacity_units_per_period == pytest.approx(100_999.0)
+        assert plant.production_capacity_units_per_period == pytest.approx(100_999.0)
+        assert plant.effective_supply_capacity == pytest.approx(100_999.0)
+
+    def test_a_distinct_production_limit_stands_and_is_named(self, delhi_network):
+        net = _with(delhi_network, "PLANT_N",
+                    production_capacity_units_per_period=50_000.0)
+        built, overrides = ScenarioBuilder().build(net, ScenarioIntentSpec(
+            action=ScenarioActionType.CHANGE_CAPACITY,
+            facility_ids=["PLANT_N"], capacity_delta_units=1_000.0))
+        plant = next(f for f in built.facilities if f.id == "PLANT_N")
+        assert plant.production_capacity_units_per_period == pytest.approx(50_000.0)
+        assert "production capacity 50,000 units/period still limits it" in overrides[0]

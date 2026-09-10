@@ -376,6 +376,8 @@ def _capacity_account(record: Dict[str, Any]) -> Dict[str, Any]:
     working_harder: List[Dict[str, Any]] = []
     under_used: List[Dict[str, Any]] = []
     idle: List[Dict[str, Any]] = []
+    headroom = 0.0
+    headroom_known = False
 
     for facility_id, state in scenario.items():
         if not isinstance(state, dict):
@@ -397,7 +399,11 @@ def _capacity_account(record: Dict[str, Any]) -> Dict[str, Any]:
                  if isinstance(now, (int, float)) and isinstance(was, (int, float))
                  else None)
         row = {"id": facility_id, "name": facility_id, "util_pct": float(util),
+               "baseline_util_pct": (baseline.get(facility_id) or {}).get("utilPct"),
                "region": None, "capacity": capacity, "added_units": added}
+        if isinstance(capacity, (int, float)) and isinstance(now, (int, float)):
+            headroom += max(capacity - now, 0.0)
+            headroom_known = True
 
         if util >= _SATURATED_PCT:
             at_ceiling.append(row)
@@ -417,6 +423,7 @@ def _capacity_account(record: Dict[str, Any]) -> Dict[str, Any]:
         "working_harder_count": len(working_harder),
         "under_used": under_used, "under_used_count": len(under_used),
         "idle": idle, "idle_count": len(idle),
+        "open_headroom_units": round(headroom, 2) if headroom_known else None,
         # Not recoverable from the record — see the note above.
         "regions_without_room": [],
         # Says this account was rebuilt rather than solved, so a consumer that
@@ -445,117 +452,258 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
     that stranded no demand is never told to add capacity and a plan with room
     everywhere is never told to build. An empty list is a real answer and the
     caller must say so rather than filling the space.
+
+    ABOUT THIS CHANGE, NOT ABOUT THE NETWORK. Every rung reads what the
+    scenario did relative to today: a site it pushed to its ceiling, demand it
+    stranded, a site whose load it took away, capacity it added that nothing
+    used. A site that was already full, or already closed, before the change
+    is a property of today's network. The Insights feed recommends on those,
+    and repeating them here put the same "reopen X, expand Y" on every
+    scenario of a project whatever was asked. Measured on one upload: a
+    closure and two demand runs all opened with the same two recommendations,
+    and the closure's first one was to reopen the site it had just closed.
+
+    A FINDING WITH NOTHING TO PRESS is marked `statement`, and carries no
+    scenario and no button verb. "Keep this site open" is an answer; a button
+    under it that opens a form re-running today's network is not.
     """
-    # Rebuilt from the record's own per-site figures when the solve wrote no
-    # account. EVERY RUNG BELOW IS GATED ON THIS BLOCK, so an absent one made
-    # the whole ladder blind — see `_capacity_account`. The derivation report
-    # deliberately does NOT do this: a document showing the working must print
-    # what the solve wrote, or say it is not there.
     cap = _capacity_account(record)
     kpis = record.get("scenario_kpis") or {}
+    base_kpis = record.get("baseline_kpis") or {}
     request = record.get("request") or {}
+    action = str(request.get("action") or "").upper()
+    named = [str(f) for f in (request.get("facility_ids") or [])]
 
-    def kpi(name: str) -> Optional[float]:
-        row = kpis.get(name)
-        value = row.get("value") if isinstance(row, dict) else row
-        return value if isinstance(value, (int, float)) else None
+    def kpi(block: Dict[str, Any], name: str) -> Optional[float]:
+        row = block.get(name)
+        if isinstance(row, dict):
+            if row.get("status") not in (None, "VALID"):
+                return None
+            row = row.get("value")
+        if isinstance(row, bool) or not isinstance(row, (int, float)):
+            return None
+        return float(row)
 
-    unserved = kpi("unserved_demand")
-    at_ceiling = list(cap.get("at_ceiling") or [])
-    idle = list(cap.get("idle") or [])
+    unserved = kpi(kpis, "unserved_demand")
+    was_unserved = kpi(base_kpis, "unserved_demand")
+    # Demand THIS change strands. A record with no baseline figure counts the
+    # whole shortfall, which is how every record was read before.
+    if unserved is None:
+        stranded: Optional[float] = None
+    elif was_unserved is None:
+        stranded = unserved
+    else:
+        stranded = max(unserved - was_unserved, 0.0)
+    total = kpi(kpis, "total_demand")
+    # A rounding tail on a network of millions of units is not a shortfall.
+    tolerance = max(1.0, (total or 0.0) * 1e-6)
+    strands = stranded is not None and stranded > tolerance
+
+    headroom = cap.get("open_headroom_units")
+    # Out of REACH rather than short of ROOM: the open sites have more spare
+    # capacity between them than the whole shortfall, so capacity is not what
+    # binds. The same test `_capacity_verdict` states in words.
+    out_of_reach = bool(strands and isinstance(headroom, (int, float))
+                        and unserved is not None and headroom > unserved)
+
+    def caused(row: Dict[str, Any]) -> bool:
+        """Whether this change put the site at its ceiling."""
+        added = row.get("added_units")
+        was = row.get("baseline_util_pct")
+        # Full before the change is a standing constraint, even when the plan
+        # squeezes a few more units through it in slacker periods (measured:
+        # +501 units at a plant that was already at 100%).
+        if isinstance(was, (int, float)):
+            return was < _SATURATED_PCT
+        if isinstance(added, (int, float)):
+            return added > 0
+        # Too old a record to tell either way: counted, as it always was.
+        return True
+
+    closed_by_change = set(named) if action == "CLOSE_FACILITY" else set()
+    at_ceiling = [r for r in (cap.get("at_ceiling") or []) if caused(r)]
+
+    def warmed(row: Dict[str, Any]) -> bool:
+        """Whether this change took the site into the loaded band."""
+        was = row.get("baseline_util_pct")
+        return not isinstance(was, (int, float)) or was < _LOADED_PCT
+
+    warming = [r for r in (cap.get("working_harder") or []) if warmed(r)]
+    idle = [r for r in (cap.get("idle") or [])
+            if str(r.get("id")) not in closed_by_change]
     regions = list(cap.get("regions_without_room") or [])
-    actions: List[Dict[str, Any]] = []
 
-    # Reopening beats building: the capacity exists and is already paid for.
-    #
-    # THE GATE WAS TOO NARROW. It read `unserved is None or unserved > 0`, so
-    # reopening was only ever offered on a plan that stranded demand. On a
-    # demand+80% run the solve filled the Southern DC to 100%, left a Northern
-    # DC closed, and served everything — so the plan was feasible, the gate did
-    # not fire, and the only recommendation was to build more capacity at the
-    # site that was full while paid-for capacity sat switched off.
-    #
-    # A site at its ceiling is the same finding as unserved demand one unit
-    # later. Both mean the network has run out of room, and in both cases the
-    # cheapest answer is the capacity already built. Matches the condition in
-    # `strategic_actions.build_actions`, which is the rung this mirrors.
-    if idle and (at_ceiling or (unserved is None or unserved > 0)):
-        site = idle[0]
-        actions.append({
+    facility_cost = kpi(base_kpis, "facility_cost")
+    if facility_cost is None:
+        facility_cost = kpi(kpis, "facility_cost")
+    # The upload states no fixed cost anywhere. Capacity, closures and
+    # openings then carry no price, and a cost comparison of them is empty.
+    unpriced = facility_cost is not None and facility_cost <= 0.0
+
+    def site_name(facility_id: str) -> str:
+        for block in ("at_ceiling", "working_harder", "under_used", "idle"):
+            for row in cap.get(block) or []:
+                if str(row.get("id")) == facility_id and row.get("name"):
+                    return str(row["name"])
+        return facility_id
+
+    def name_of(site: Dict[str, Any]) -> str:
+        return str(site.get("name") or site.get("id") or "")
+
+    actions: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    def add(entry: Dict[str, Any]) -> None:
+        target = entry.get("target") or {}
+        identity = (entry["key"], target.get("facility_id") or target.get("region"))
+        if identity in seen:
+            return
+        seen.add(identity)
+        actions.append(entry)
+
+    # 1. A CLOSURE THAT STRANDS DEMAND. The first thing to know about it, and
+    #    not an intervention: the closed site was being offered back as a
+    #    "reopen" button, which re-runs the network as it is today.
+    if action == "CLOSE_FACILITY" and strands and named:
+        who = ", ".join(site_name(f) for f in named)
+        add({
             "key": "REOPEN_FACILITY",
-            "label": f"Reopen {site.get('name') or site.get('id')}",
+            "statement": True,
+            "label": f"Keep {who} open",
+            "reason": (
+                f"Closing it leaves {_fmt_units(stranded)} of demand unserved "
+                f"that today's network serves. "
+                + ("The sites that stay open have room between them, but none "
+                   "can reach those markets, so no capacity added elsewhere "
+                   "would serve them. Those markets need another lane before "
+                   "this closure goes further."
+                   if out_of_reach else
+                   "The sites that stay open do not have the room to take it, "
+                   "and that room is what the closure has to find first.")),
+            "target": {"facility_id": named[0], "name": who},
+        })
+
+    # 2. CAPACITY ADDED THAT NOTHING USED. The finding a capacity scenario is
+    #    run to get, and it was never stated: the card went on to recommend
+    #    whatever the network needed elsewhere.
+    delta = request.get("capacity_delta_units")
+    if action == "CHANGE_CAPACITY" and isinstance(delta, (int, float)) and delta > 0:
+        now_states = record.get("scenario_facilities") or {}
+        was_states = record.get("baseline_facilities") or {}
+        pricing = record.get("capacity_pricing") or {}
+        for facility_id in named:
+            now = (now_states.get(facility_id) or {}).get("throughput")
+            was = (was_states.get(facility_id) or {}).get("throughput")
+            if not (isinstance(now, (int, float)) and isinstance(was, (int, float))):
+                continue
+            if now > was + tolerance:
+                continue
+            util = (now_states.get(facility_id) or {}).get("utilPct")
+            running = (f" and runs at {util:,.0f}% of its new capacity"
+                       if isinstance(util, (int, float)) else "")
+            if pricing.get("basis") == "PRO_RATA":
+                cost = " The change adds fixed cost for room that goes unused."
+            elif pricing.get("basis") == "UNPRICED" or unpriced:
+                cost = (" The upload states no fixed cost for this site, so "
+                        "the plan shows no cost for the added room either.")
+            else:
+                cost = ""
+            add({
+                "key": "NO_ACTION",
+                "statement": True,
+                "label": f"The added capacity at {site_name(facility_id)} is not used",
+                "reason": (
+                    f"{site_name(facility_id)} carries no more in this plan "
+                    f"than it does today{running}. Capacity there is not what "
+                    f"limits this network." + cost),
+                "target": {"facility_id": facility_id,
+                           "name": site_name(facility_id)},
+            })
+
+    # 3. Reopening beats building: the capacity exists and is already paid
+    #    for. Only for a shortage THIS change creates, and never the site the
+    #    change itself closed.
+    if idle and (at_ceiling or (strands and not out_of_reach)):
+        region = at_ceiling[0].get("region") if at_ceiling else None
+        nearby = [r for r in idle if region and r.get("region") == region]
+        site = (nearby or idle)[0]
+        add({
+            "key": "REOPEN_FACILITY",
+            "label": f"Reopen {name_of(site)}",
             "reason": (
                 f"This plan leaves {_fmt_units(site.get('capacity'))} of capacity "
-                f"closed at {site.get('name') or site.get('id')}"
+                f"closed at {name_of(site)}"
                 + (f" in {site['region']}" if site.get("region") else "")
+                + ", while the change "
+                + ("fills " + name_of(at_ceiling[0]) if at_ceiling
+                   else "leaves demand unserved")
                 + ". Capacity that already exists is cheaper to use than "
                   "capacity that has to be built."),
             "target": {"facility_id": site.get("id"), "name": site.get("name"),
                        "region": site.get("region")},
         })
 
+    # 4. Relief where THIS change runs a site out of room.
     if at_ceiling:
         site = at_ceiling[0]
         util = site.get("util_pct")
-        at = f"{util:,.0f}% of its capacity" if isinstance(util, (int, float)) \
-            else "its ceiling"
+        at = (f"{util:,.0f}% of its capacity" if isinstance(util, (int, float))
+              else "its ceiling")
         carrying = ""
         if isinstance(site.get("added_units"), (int, float)) and site["added_units"] > 0:
             carrying = (f", carrying {_fmt_units(site['added_units'])} more than "
                         f"it does today")
-        actions.append({
+        # "Nothing more can move through this network" was said of a full site
+        # on a network with millions of units of room elsewhere. The sentence
+        # now claims only what this site's own figures show.
+        tail = (" Demand is going unserved for want of room, and this is where "
+                "the room runs out first."
+                if strands and not out_of_reach else
+                " It has no room left for anything more this change asks of it.")
+        add({
             "key": "ADD_CAPACITY",
-            "label": f"Increase capacity at {site.get('name') or site.get('id')}",
-            "reason": (
-                f"{site.get('name') or site.get('id')} runs at {at} in this "
-                f"plan{carrying}. It is the constraint: nothing more can move "
-                f"through this network until it has room."),
+            "label": f"Increase capacity at {name_of(site)}",
+            "reason": f"{name_of(site)} runs at {at} in this plan{carrying}.{tail}",
             "target": {"facility_id": site.get("id"), "name": site.get("name"),
                        "region": site.get("region")},
         })
-    elif isinstance(unserved, (int, float)) and unserved > 0:
-        actions.append({
+    elif strands and not out_of_reach:
+        add({
             "key": "ADD_CAPACITY",
             "label": "Increase capacity where the plan runs out",
             "reason": (
-                f"This plan leaves {_fmt_units(unserved)} of demand unserved "
-                f"while no single site reaches its ceiling, so the shortfall is "
-                f"spread across the network rather than sitting at one site."),
+                f"This change leaves {_fmt_units(stranded)} of demand unserved "
+                f"that today's network serves, while no site it fills reaches "
+                f"its ceiling, so the shortfall is spread across the network "
+                f"rather than sitting at one site."),
             "target": {},
         })
-    elif (str(record.get("capacity_risk") or "").upper() == "HIGH"
-          and (cap.get("working_harder") or [])):
-        # HIGH RISK WITH NOTHING YET AT ITS CEILING.
-        #
-        # The gap this closes: the card reported "capacity risk: High" beside
-        # a site running at 92.6% and recommended nothing about capacity,
-        # because the ceiling test had not tripped. A reader is then told the
-        # network is at risk and given no way to act on it — which is the
-        # worst combination of the two, and the reason the previous
-        # browser-side list had a branch here.
-        site = cap["working_harder"][0]
+    elif str(record.get("capacity_risk") or "").upper() == "HIGH" and warming:
+        # HIGH RISK WITH NOTHING THIS CHANGE HAS FILLED. Only a site the change
+        # itself took into the loaded band; one running hot before it is
+        # today's network, and the risk band alone cannot tell them apart.
+        site = warming[0]
         util = site.get("util_pct")
         at = (f"{util:,.0f}% of its capacity" if isinstance(util, (int, float))
               else "close to its ceiling")
-        actions.append({
+        add({
             "key": "ADD_CAPACITY",
-            "label": f"Increase capacity at {site.get('name') or site.get('id')}",
+            "label": f"Increase capacity at {name_of(site)}",
             "reason": (
-                f"Capacity risk is high in this plan. Nothing has reached its "
-                f"ceiling yet, but {site.get('name') or site.get('id')} is "
-                f"running at {at} and is the first site that will. Adding "
-                f"capacity there is what buys the network room before it "
-                f"starts stranding demand."),
+                f"Capacity risk is high in this plan. This change fills no site "
+                f"to its ceiling, but it takes {name_of(site)} to {at}, and "
+                f"that is the first site it will fill. Adding capacity there "
+                f"is what buys the network room before it starts stranding "
+                f"demand."),
             "target": {"facility_id": site.get("id"), "name": site.get("name"),
                        "region": site.get("region")},
         })
 
-    # A new site only where a region has sites at their ceiling, nothing closed
-    # to reopen, and no headroom left. Anything weaker recommends building
-    # where a reopening would have done.
-    if regions:
+    # 5. A new site only where a region this change fills has nothing closed
+    #    to reopen and no room left.
+    if regions and at_ceiling:
         region = regions[0].get("region")
-        actions.append({
+        add({
             "key": "OPEN_NEW_FACILITY",
             "label": f"Set up a new facility in {region}",
             "reason": (
@@ -566,49 +714,72 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
             "target": {"region": region},
         })
 
-    # THE OPPOSITE FINDING, and the only rung on this ladder that is not about
-    # running out of room.
-    #
-    # Gated on nothing being at its ceiling, exactly as the Insights ladder
-    # gates it: proposing to take capacity out of a network while another site
-    # has none left is the one reading of this finding that would be wrong.
-    # Every rung above answers a shortage, so reaching this one means the plan
-    # has no shortage to answer.
-    under_used = list(cap.get("under_used") or [])
-    if under_used and not at_ceiling:
+    # 6. THE OPPOSITE FINDING: a site this change empties. A site that was
+    #    near-empty before it is today's network, not this scenario. Never on
+    #    an upload with no fixed cost, where consolidating saves nothing the
+    #    model can see, and never beside a shortage.
+    def emptied(row: Dict[str, Any]) -> bool:
+        added = row.get("added_units")
+        return not isinstance(added, (int, float)) or added < 0
+
+    under_used = [r for r in (cap.get("under_used") or [])
+                  if emptied(r) and str(r.get("id")) not in named]
+    if under_used and not at_ceiling and not strands and not unpriced:
         site = under_used[0]
         util = site.get("util_pct")
         at = (f"{util:,.0f}% of its capacity" if isinstance(util, (int, float))
               else "a fraction of its capacity")
-        actions.append({
+        lighter = (", with less going through it than today"
+                   if isinstance(site.get("added_units"), (int, float)) else "")
+        add({
             "key": "CONSOLIDATE",
-            "label": f"Test consolidating {site.get('name') or site.get('id')}",
+            "label": f"Test consolidating {name_of(site)}",
             "reason": (
-                f"{site.get('name') or site.get('id')} stays open in this plan "
-                f"and runs at {at}, carrying its full fixed cost either way. "
-                f"Moving its volume onto the sites with room is worth pricing "
-                f"before any capacity is added anywhere."),
+                f"{name_of(site)} stays open in this plan and runs at {at}"
+                f"{lighter}. Moving its volume onto the sites with room is "
+                f"worth pricing before any capacity is added anywhere."),
             "target": {"facility_id": site.get("id"), "name": site.get("name"),
                        "region": site.get("region")},
         })
 
-    # Growth stated for the whole network, on an upload that names regions.
+    # 7. Growth stated for the whole network — worth scoping only when that
+    #    growth actually runs into something. On a run that fills nothing the
+    #    advice changes no decision, and it was on every demand scenario.
     scoped = request.get("demand_region") or request.get("demand_product_category")
-    if request.get("action") == "CHANGE_DEMAND" and not scoped:
-        actions.append({
+    #    Its whole point is that unscoped growth overstates the case for
+    #    EXPANDING, so it accompanies an expansion recommendation or nothing.
+    expands = any(a["key"] in ("ADD_CAPACITY", "REOPEN_FACILITY",
+                               "OPEN_NEW_FACILITY") and not a.get("statement")
+                  for a in actions)
+    if action == "CHANGE_DEMAND" and not scoped and expands:
+        add({
             "key": "SCOPE_DEMAND_GROWTH",
             "label": "Re-run this growth for the region it is happening in",
             "reason": (
-                "This scenario grew every demand row in the network. Loading "
-                "every warehouse with growth that is happening in one region "
-                "overstates the case for expanding the ones that are not."),
+                "This scenario grew every demand row in the network, and the "
+                "capacity recommended above is sized to that. Loading every warehouse "
+                "with growth that is happening in one region overstates the "
+                "case for expanding the ones that are not."),
             "target": {},
         })
 
+    # 8. The input without which this change cannot be judged on cost.
     explanation = record.get("explanation") or {}
     missing = list(explanation.get("missing_information") or [])
-    if missing:
-        actions.append({
+    if unpriced and action in ("CHANGE_CAPACITY", "CLOSE_FACILITY",
+                               "OPEN_FACILITY", "ADD_FACILITY"):
+        add({
+            "key": "REQUEST_DATA",
+            "label": "Obtain each site's annual fixed cost",
+            "reason": (
+                "This upload states no fixed cost for any site, so capacity, "
+                "closures and openings carry no price in this plan: its cost "
+                "moves only with freight and handling. A change like this one "
+                "cannot be judged on cost until that input is in."),
+            "target": {},
+        })
+    elif missing:
+        add({
             "key": "REQUEST_DATA",
             "label": "Obtain the inputs this analysis did not have",
             "reason": (
@@ -621,7 +792,25 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
     if not actions:
         # WHY nothing is recommended, from the same figures the actions are
         # gated on. "No recommended actions" is a blank; this is a finding.
-        if isinstance(unserved, (int, float)) and unserved <= 0 and not at_ceiling:
+        standing = [r for r in (cap.get("at_ceiling") or []) if not caused(r)]
+        label = "No network change is indicated"
+        if out_of_reach:
+            label = "No capacity change will serve the missed demand"
+            reason = (
+                f"This plan leaves {_fmt_units(unserved)} of demand unserved "
+                f"while the open sites have {_fmt_units(headroom)} of room "
+                f"between them. The shortfall is out of reach rather than short "
+                f"of capacity: it is the lanes and the delivery promise that "
+                f"bind, not the size of any site.")
+        elif standing and not strands:
+            count = len(standing)
+            reason = (
+                f"This change strands no demand and fills no site that was not "
+                f"already full. {count} {'site was' if count == 1 else 'sites were'} "
+                f"at {'its' if count == 1 else 'their'} ceiling before it and "
+                f"{'still is' if count == 1 else 'still are'}: that is a "
+                f"constraint of today's network, not of this change.")
+        elif unserved is not None and unserved <= 0 and not cap.get("at_ceiling"):
             reason = (
                 "This plan serves all of the demand and no site reaches its "
                 "capacity ceiling, so nothing in the network is constraining "
@@ -635,20 +824,22 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
         else:
             reason = (
                 "Nothing in this plan meets the threshold for a recommended "
-                "change: no site is at its ceiling, no capacity is sitting "
-                "closed, and no region has run out of room.")
-        actions.append({"key": "NO_ACTION",
-                        "label": "No network change is indicated",
-                        "reason": reason, "target": {}})
+                "change: this change fills no site, strands no demand, and "
+                "leaves no region without room.")
+        add({"key": "NO_ACTION", "label": label, "reason": reason, "target": {}})
 
-    for index, action in enumerate(actions, start=1):
-        action["priority"] = index
-        action["scenario"] = _scenario_for(action["key"], action.get("target") or {})
+    for index, entry in enumerate(actions, start=1):
+        entry["priority"] = index
+        statement = bool(entry.get("statement")) or entry["key"] == "NO_ACTION"
+        entry["statement"] = statement
+        # A statement opens no form and names no verb — see the docstring.
+        entry["scenario"] = ({} if statement else
+                             _scenario_for(entry["key"], entry.get("target") or {}))
         # The phrase under the button, naming THIS change — from the same map
         # the Insights feed reads, so one decision reads the same on both
         # screens. No destination: this card is already in the planner.
-        action["cta"] = _CTA_BY_ACTION.get(action["key"], "")
-        assert action["key"] in _ACTION_KEYS, action["key"]
+        entry["cta"] = "" if statement else _CTA_BY_ACTION.get(entry["key"], "")
+        assert entry["key"] in _ACTION_KEYS, entry["key"]
     return actions
 
 
@@ -797,6 +988,77 @@ def _capacity_response(engine: Any, snapshot_id: str,
     }
 
 
+def _capacity_pricing(engine: Any, snapshot_id: str, action: str,
+                      facility_ids: List[str],
+                      delta_units: Optional[float]) -> Optional[Dict[str, Any]]:
+    """
+    The fixed cost a capacity change was charged, site by site, and on what
+    basis — from the same function the builder applies.
+
+    THE ANSWER TO "WHY DIDN'T THE COST MOVE?" A capacity scenario used to be
+    free on the model's terms, so an unchanged cost could mean the capacity
+    paid for itself or that nobody charged for it, and the screen could not
+    say which. The basis is one of:
+
+      * PRO_RATA             — priced at the site's own fixed cost per unit;
+      * UNPRICED             — the upload states no fixed cost for the site
+                               (or no capacity to price against), so the added
+                               room carries no cost in this plan;
+      * REDUCTION_KEEPS_COST — capacity taken away keeps its fixed cost.
+
+    None for any other action, or when the snapshot cannot be read. Never
+    raises: the solve beside it is authoritative either way.
+    """
+    if (action != "CHANGE_CAPACITY" or not isinstance(delta_units, (int, float))
+            or not facility_ids):
+        return None
+    try:
+        from netgravity.orchestrator.engines.scenario_builder import (
+            _UNSTATED_CAPACITY,
+            capacity_fixed_cost,
+        )
+
+        facilities = {f.id: f for f in
+                      engine.snapshots.get(snapshot_id).network.facilities}
+    except Exception:  # noqa: BLE001 — an unreadable snapshot prices nothing
+        return None
+
+    sites: List[Dict[str, Any]] = []
+    for facility_id in facility_ids:
+        fac = facilities.get(facility_id)
+        if fac is None:
+            continue
+        current = float(fac.capacity_units_per_period)
+        new = current + float(delta_units)
+        before = float(fac.fixed_cost_per_year or 0.0)
+        after = capacity_fixed_cost(before, current, new)
+        if delta_units <= 0:
+            basis = "REDUCTION_KEEPS_COST"
+        elif before <= 0 or current <= 0 or current >= _UNSTATED_CAPACITY:
+            basis = "UNPRICED"
+        else:
+            basis = "PRO_RATA"
+        sites.append({
+            "facility_id": facility_id,
+            "name": fac.name or facility_id,
+            "capacity_before": current,
+            "capacity_after": new,
+            "fixed_cost_per_year_before": round(before, 2),
+            "fixed_cost_per_year_after": round(after, 2),
+            "added_fixed_cost_per_year": round(after - before, 2),
+            "basis": basis,
+        })
+    if not sites:
+        return None
+    bases = {site["basis"] for site in sites}
+    return {
+        "sites": sites,
+        "added_fixed_cost_per_year": round(
+            sum(site["added_fixed_cost_per_year"] for site in sites), 2),
+        "basis": bases.pop() if len(bases) == 1 else "MIXED",
+    }
+
+
 def _capacity_verdict(unserved: Optional[float], headroom: Optional[float],
                       idle_capacity: float, at_ceiling: int) -> str:
     """
@@ -894,6 +1156,29 @@ def _rank_scenarios(baseline: Dict[str, Any],
     baseline_cost = _valid(baseline, "business_network_cost")
     baseline_fill = _valid(baseline, "demand_fill_rate")
 
+    def serves_less(fill: Optional[float], than: Optional[float]) -> bool:
+        return (fill is not None and than is not None
+                and (fill - than) * 100.0 < -_MATERIAL_FILL_DROP_PTS)
+
+    def saving_is_shrinkage(cost_delta: Optional[float], fill: Optional[float],
+                            than_fill: Optional[float],
+                            than_cost: Optional[float]) -> bool:
+        """
+        Whether a saving is made of the demand the plan stops serving.
+
+        The demand dropped is valued at the other side's own average cost per
+        unit served: (fill lost / fill) x that side's cost. When that is at
+        least half the saving, the saving is mostly shrinkage. "Serves less"
+        alone is too blunt: a plan 161M cheaper that left 0.05% of demand
+        unserved was told its saving came from that demand, which on its own
+        figures was worth about 370K of it.
+        """
+        if (cost_delta is None or cost_delta >= 0 or than_cost is None
+                or not than_fill or not serves_less(fill, than_fill)):
+            return False
+        dropped = than_cost * (than_fill - fill) / than_fill
+        return dropped >= 0.5 * abs(cost_delta)
+
     rows: List[Dict[str, Any]] = []
     for record in records:
         kpis = record.get("scenario_kpis") or {}
@@ -901,6 +1186,8 @@ def _rank_scenarios(baseline: Dict[str, Any],
         fill = _valid(kpis, "demand_fill_rate")
         reference_cost = _valid(record.get("reference_kpis") or {},
                                 "business_network_cost")
+        reference_fill = _valid(record.get("reference_kpis") or {},
+                                "demand_fill_rate")
         rows.append({
             "scenario_id": record.get("id"),
             "name": record.get("name"),
@@ -918,6 +1205,26 @@ def _rank_scenarios(baseline: Dict[str, Any],
             "fill_rate": fill,
             "fill_delta": (None if fill is None or baseline_fill is None
                            else round((fill - baseline_fill) * 100.0, 4)),
+            # THE SAVING THAT IS NOT ONE. A plan serving materially less demand
+            # than today spends less because it ships less. Measured: closing
+            # one DC stranded 316,754 units and read as C$5.72M cheaper, in
+            # green. Flagged here so the ranking and the screen stop presenting
+            # a smaller promise as a cheaper network.
+            # Ranks the plan behind every plan that keeps today's service.
+            "sheds_demand": serves_less(fill, baseline_fill),
+            # And whether what it saves is mostly that demand — the claim the
+            # verdict and the screen are allowed to make only when it holds.
+            "saving_is_shrinkage": saving_is_shrinkage(
+                None if cost is None or baseline_cost is None
+                else cost - baseline_cost, fill, baseline_fill, baseline_cost),
+            # The same test against the reference, for the half of the
+            # attribution that is the change itself.
+            "change_sheds_demand": saving_is_shrinkage(
+                None if cost is None or reference_cost is None
+                else cost - reference_cost, fill, reference_fill, reference_cost),
+            # Below this, two solves of the same network differ by the solver's
+            # own optimality tolerance, not by anything that happened.
+            "noise_floor": _noise_floor(baseline_cost),
             "comparable": cost is not None and baseline_cost is not None,
         })
     # Deterministic regardless of the order the ids arrived in.
@@ -927,10 +1234,35 @@ def _rank_scenarios(baseline: Dict[str, Any],
     # A and B named a different winner than comparing B and A, which is the
     # same analysis asked twice. The id is the tiebreak: arbitrary, but
     # stable, which is the property that matters.
+    #
+    # A plan that is cheaper only by serving less ranks BEHIND every plan that
+    # keeps today's service, whatever the two cost. Ranked on cost alone, the
+    # closure that strands a tenth of demand came first on every comparison it
+    # was in.
     rows.sort(key=lambda r: (r["cost_delta"] is None,
+                             bool(r["sheds_demand"]),
                              r["cost_delta"] if r["cost_delta"] is not None else 0.0,
                              str(r["scenario_id"] or "")))
     return rows
+
+
+def _noise_floor(baseline_cost: Optional[float]) -> float:
+    """
+    The smallest cost difference between two solves that is a finding.
+
+    Every solve stops inside a relative optimality gap
+    (`OptimizationConfig.mip_gap`, 0.1%), so two solves of the SAME network can
+    land that far apart — and did: the unchanged 56,081,045 network re-solved
+    as the reference came back at 56,109,836, and the card attributed the
+    28,791 between them to "re-optimising today's footprint" on a plan whose
+    footprint is held open and cannot be re-optimised at all.
+    """
+    from netgravity.schemas.network import OptimizationConfig
+
+    gap = float(OptimizationConfig.model_fields["mip_gap"].default or 0.0)
+    if not isinstance(baseline_cost, (int, float)):
+        return 1.0
+    return max(1.0, abs(float(baseline_cost)) * gap)
 
 
 def _capacity_risk(kpis: Dict[str, Any]) -> str:
@@ -1111,9 +1443,10 @@ def _attribution(best: Dict[str, Any]) -> Dict[str, Any]:
     """
     reopt = best.get("reoptimisation_effect")
     change = best.get("change_effect")
-    if reopt is None or change is None or abs(reopt) < 1:
+    floor = float(best.get("noise_floor") or 1.0)
+    if reopt is None or change is None or abs(reopt) < floor:
         return {}
-    if abs(change) < 1:
+    if abs(change) < floor:
         return {
             "reoptimisation_amount": reopt,
             "change_amount": change,
@@ -1123,14 +1456,20 @@ def _attribution(best: Dict[str, Any]) -> Dict[str, Any]:
                      "from re-optimising the footprint you already have, which "
                      "is available without this scenario."),
         }
+    sheds = change < 0 and bool(best.get("change_sheds_demand"))
     return {
         "reoptimisation_amount": reopt,
         "change_amount": change,
         "change_direction": "adds" if change > 0 else "saves",
+        # A change that "saves" by serving less demand than the same network
+        # re-optimised has not found a cheaper way to do the same job.
+        "change_sheds_demand": sheds,
         "text": ("Part of the difference against the network you run today "
                  "comes from re-optimising the footprint you already have — "
                  "available without this scenario — and part from the change "
-                 "itself."),
+                 "itself."
+                 + (" What the change itself saves, it saves by serving less "
+                    "demand." if sheds else "")),
     }
 
 
@@ -1163,16 +1502,35 @@ def _comparison_verdict(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         }
 
     delta = best["cost_delta"]
+    # Options that cost less than the winner, which after the ranking can only
+    # be ones that serve less demand to do it.
+    undercut = [r for r in rows[1:] if r["comparable"]
+                and r["cost_delta"] is not None and r["cost_delta"] < delta]
     # Plain business English, and no engine vocabulary. It read "below the
     # current network on solved business network cost", which is a sentence
     # about a solver rather than about a decision.
-    if delta < 0:
+    if delta < 0 and best.get("saving_is_shrinkage"):
+        verdict = (f"{best['name']} costs less than the network you run today, "
+                   f"but only because it leaves demand unserved that today's "
+                   f"network serves.")
+    elif delta < 0 and undercut:
+        verdict = (f"{best['name']} costs less than the network you run today "
+                   f"while serving the same demand. "
+                   f"{len(undercut)} other "
+                   f"{'option costs' if len(undercut) == 1 else 'options cost'} "
+                   f"less but {'serves' if len(undercut) == 1 else 'serve'} "
+                   f"less demand.")
+    elif delta < 0:
         others = len(rows) - 1
         verdict = (f"{best['name']} costs less than the network you run today, "
                    f"and less than the {others} other "
                    f"{'option' if others == 1 else 'options'} compared."
                    if others else
                    f"{best['name']} costs less than the network you run today.")
+    elif any(r["comparable"] and r.get("saving_is_shrinkage") for r in rows):
+        verdict = (f"Nothing compared costs less than the network you run "
+                   f"today without serving less demand. {best['name']} comes "
+                   f"closest.")
     else:
         verdict = (f"Nothing compared costs less than the network you run "
                    f"today. {best['name']} comes closest.")
@@ -2158,6 +2516,10 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             # Sites this scenario introduces. Empty for every scenario that
             # only rearranges the existing footprint.
             "new_sites": _new_sites(engine, scenario_key, snapshot_id),
+            # What the capacity change was charged, and on what basis. See
+            # `_capacity_pricing`.
+            "capacity_pricing": _capacity_pricing(
+                engine, snapshot_id, action_str, list(facility_ids), cap_delta),
             "baseline_kpis": record_baseline_kpis,
             "scenario_kpis": record_scenario_kpis,
             "reference_kpis": reference_kpis,

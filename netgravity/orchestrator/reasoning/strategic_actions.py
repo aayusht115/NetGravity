@@ -493,8 +493,12 @@ def build_actions(
         actions.append(StrategicAction(
             key="CONSOLIDATE",
             label=f"Test consolidating {_name(site)}",
+            # No claim about fixed cost. `fixed_cost` on these rows falls back
+            # to `total_facility_cost`, which includes handling, so an upload
+            # that states no fixed cost at all still printed "carries its full
+            # fixed cost" — a sentence about money the network does not have.
             reason=(
-                f"{_name(site)} carries its full fixed cost while running at "
+                f"{_name(site)} is open and running at "
                 f"{_pct(site['util_pct'])} of capacity. Moving its volume onto "
                 f"sites with room is worth pricing before any capacity is "
                 f"added anywhere."),

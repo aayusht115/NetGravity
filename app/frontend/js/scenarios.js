@@ -930,8 +930,10 @@ function recommendedActions(scn, comparison) {
       // solved before the field existed.
       cta: row.cta || 'Test this',
       // A statement, not a control. Rendered as prose: there is nothing to
-      // press when the finding is that nothing needs doing.
-      statement: row.key === 'NO_ACTION',
+      // press when the finding is that nothing needs doing — or when the
+      // server says the finding has no form behind it ("keep this site open",
+      // "the added capacity is not used").
+      statement: row.key === 'NO_ACTION' || row.statement === true,
     };
     switch (row.key) {
       case 'REOPEN_FACILITY':
@@ -1280,15 +1282,38 @@ function atAGlanceHtml(scn, comparison) {
   const asked = requestSummary(scn);
   if (asked) rows.push(['You changed', asked]);
 
+  // 1b. WHAT THE CHANGE WAS PRICED AT. Capacity used to be free on the model's
+  //     terms, so an unchanged cost could mean the room paid for itself or that
+  //     nobody charged for it. The basis is the server's; see
+  //     `_capacity_pricing` in app/backend/api/scenarios.py.
+  const pricing = scn.capacityPricing || null;
+  if (pricing && pricing.basis === 'PRO_RATA'
+      && typeof pricing.added_fixed_cost_per_year === 'number') {
+    rows.push(['Priced at', `<strong>+${formatCurrency(pricing.added_fixed_cost_per_year)} a year</strong>
+      in fixed cost, pro rata to the site's existing capacity`]);
+  } else if (pricing && pricing.basis === 'UNPRICED') {
+    rows.push(['Priced at', `<span class="scn-glance-delta bad">no cost</span> — the upload states
+      no fixed cost for this site, so the added capacity is free in this plan`]);
+  } else if (pricing && pricing.basis === 'REDUCTION_KEEPS_COST') {
+    rows.push(['Priced at', 'fixed cost unchanged — capacity taken away still costs what it did']);
+  }
+
   // 2. WHAT IT COSTS — the figure and its distance from today, together. They
   //    were a tile and a paragraph, and a reader had to hold one while
   //    reading the other.
   const cost = readKpiValue(scn.scenarioKpis, 'business_network_cost');
   if (typeof cost === 'number') {
     const delta = row.cost_delta;
+    // Cheaper by serving less is not a saving. The server says when what a
+    // plan saves is mostly demand it stops serving (`saving_is_shrinkage`),
+    // valued at today's own cost per unit served: the arrow still
+    // points the way the figure moved, but it is not coloured as good news and
+    // it says what bought it.
+    const shrinking = typeof delta === 'number' && delta < 0 && row.saving_is_shrinkage === true;
     const vsToday = typeof delta === 'number'
-      ? ` <span class="scn-glance-delta ${delta < 0 ? 'good' : 'bad'}">${
-          delta < 0 ? '↓' : '↑'} ${formatCurrency(Math.abs(delta))} vs today</span>`
+      ? ` <span class="scn-glance-delta ${delta < 0 && !shrinking ? 'good' : 'bad'}">${
+          delta < 0 ? '↓' : '↑'} ${formatCurrency(Math.abs(delta))} vs today${
+          shrinking ? ', by serving less demand' : ''}</span>`
       : '';
     rows.push(['Cost', `<strong>${formatCurrency(cost)}</strong>${vsToday}`]);
   }
@@ -1305,9 +1330,10 @@ function atAGlanceHtml(scn, comparison) {
         <strong>the change itself moves nothing</strong>`]);
     } else if (typeof attribution.change_amount === 'number') {
       const change = formatCurrency(Math.abs(attribution.change_amount));
+      const verb = attribution.change_direction === 'adds' ? 'adds'
+        : (attribution.change_sheds_demand ? 'cuts, by serving less demand,' : 'saves');
       rows.push(['Of which', `${reopt} is re-optimising today's footprint;
-        <strong>the change itself ${
-          attribution.change_direction === 'adds' ? 'adds' : 'saves'} ${change}</strong>`]);
+        <strong>the change itself ${verb} ${change}</strong>`]);
     }
   }
 

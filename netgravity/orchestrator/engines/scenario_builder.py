@@ -35,6 +35,50 @@ logger = logging.getLogger(__name__)
 MARKET_ROLES = {NodeRole.MARKET, NodeRole.CUSTOMER}
 
 
+#: The schema's "no capacity stated" default is 1e12, and production capacity
+#: treats anything at or above 1e11 as "not set". Neither is a size, so neither
+#: can anchor a price per unit of capacity.
+_UNSTATED_CAPACITY = 1e11
+
+
+def capacity_fixed_cost(fixed_cost_per_year: float, current_capacity: float,
+                        new_capacity: float) -> float:
+    """
+    A site's annual fixed cost once its capacity has changed.
+
+    WHY THIS EXISTS
+    ---------------
+    A capacity scenario used to change the ceiling and nothing else, so on the
+    model's terms capacity was free. Measured on a complete upload: +20,000
+    units at a DC carrying C$38.4M a year left a C$701,441,045.37 network at
+    C$701,441,045.37, to the cent. More room can only ever let the solver find
+    a plan at least as cheap, so every capacity scenario read as "costs
+    nothing, may save something" — which no expansion does.
+
+    THE ASSUMPTION, stated rather than hidden
+    ------------------------------------------
+    Added capacity costs what the site's existing capacity costs per unit: the
+    fixed cost scales pro rata with the new ceiling. That is the linear
+    fixed-cost-per-unit-of-capacity reading of a capacitated site, and it is
+    the only price the upload itself supports; nothing in it states a separate
+    expansion rate.
+
+    A REDUCTION KEEPS ITS COST. Capacity lost to a disruption, a lease still
+    being paid, or a line down for maintenance does not hand its fixed cost
+    back, so the cheaper reading is not assumed on the client's behalf.
+
+    A site with no fixed cost in the upload stays at zero. The caller reports
+    that as unpriced; it is never presented as a price.
+    """
+    fixed = float(fixed_cost_per_year or 0.0)
+    current = float(current_capacity or 0.0)
+    new = float(new_capacity or 0.0)
+    if (fixed <= 0.0 or current <= 0.0 or current >= _UNSTATED_CAPACITY
+            or new <= current):
+        return fixed
+    return fixed * (new / current)
+
+
 class ScenarioBuilder:
     """Materialises hypothetical networks from validated specs."""
 
@@ -298,18 +342,57 @@ class ScenarioBuilder:
                 return float(set_units)
             return current + float(delta_units)  # type: ignore[arg-type]
 
-        facilities = [
-            fac.model_copy(update={
-                "capacity_units_per_period": new_capacity(fac.capacity_units_per_period),
-            }) if fac.id in targets else fac
-            for fac in network.facilities
-        ]
+        def changed(fac: FacilityRecord) -> FacilityRecord:
+            current = fac.capacity_units_per_period
+            capacity = new_capacity(current)
+            update = {
+                "capacity_units_per_period": capacity,
+                # Capacity is not free. See `capacity_fixed_cost`.
+                "fixed_cost_per_year": capacity_fixed_cost(
+                    fac.fixed_cost_per_year, current, capacity),
+            }
+            # A PLANT'S CEILING IS TWO NUMBERS, and this used to move one.
+            #
+            # The MILP bounds a plant by min(throughput capacity, production
+            # capacity), and the assembler writes the uploaded capacity into
+            # BOTH. Raising only the throughput figure left the minimum where it
+            # was, so an increase at any plant changed nothing at all while the
+            # override said it had. Where the two are the same number they move
+            # together. Where the upload stated a distinct production limit,
+            # that limit stands and the description says it still binds.
+            production = fac.production_capacity_units_per_period
+            if (fac.is_plant_or_supplier and production < _UNSTATED_CAPACITY
+                    and abs(production - current) <= 1e-6 * max(1.0, abs(current))):
+                update["production_capacity_units_per_period"] = capacity
+            return fac.model_copy(update=update)
+
+        before = {fac.id: fac for fac in network.facilities}
+        facilities = [changed(fac) if fac.id in targets else fac
+                      for fac in network.facilities]
+        after = {fac.id: fac for fac in facilities}
+
         def describe(fid: str) -> str:
             if multiplier is not None:
-                return f"CHANGE_CAPACITY {fid} x{multiplier}"
-            if set_units is not None:
-                return f"CHANGE_CAPACITY {fid} = {float(set_units):,.0f} units/period"
-            return f"CHANGE_CAPACITY {fid} {float(delta_units):+,.0f} units/period"
+                text = f"CHANGE_CAPACITY {fid} x{multiplier}"
+            elif set_units is not None:
+                text = f"CHANGE_CAPACITY {fid} = {float(set_units):,.0f} units/period"
+            else:
+                text = f"CHANGE_CAPACITY {fid} {float(delta_units):+,.0f} units/period"
+            was, now = before.get(fid), after.get(fid)
+            if was is None or now is None:
+                return text
+            if now.fixed_cost_per_year != was.fixed_cost_per_year:
+                text += (f"; fixed cost {was.fixed_cost_per_year:,.0f} -> "
+                         f"{now.fixed_cost_per_year:,.0f} per year, pro rata "
+                         f"to capacity")
+            if (now.is_plant_or_supplier
+                    and now.production_capacity_units_per_period < _UNSTATED_CAPACITY
+                    and now.production_capacity_units_per_period
+                    < now.capacity_units_per_period):
+                text += (f"; production capacity "
+                         f"{now.production_capacity_units_per_period:,.0f} "
+                         f"units/period still limits it")
+            return text
 
         overrides = [describe(fid) for fid in facility_ids]
         return network.model_copy(update={"facilities": facilities}), overrides
