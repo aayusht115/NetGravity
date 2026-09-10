@@ -99,13 +99,13 @@ if (typeof window !== 'undefined') {
   // Called by ingestion.js the moment an analysis finishes, which can be
   // before Home has ever rendered.
   window.renderOverviewAlert = renderOverviewAlert;
-  // Every screen that reports the state of the solve, in one call. The
-  // notice reaches TWO elements now — the Overview's error-only banner and
-  // the Forecast page's full alert — and ingestion.js has no business
-  // knowing either id.
+  // Every screen that reports the state of the solve, in one call. One
+  // element now — the Executive view's error-only banner. The Forecast page's
+  // full alert is gone: its served-in-full banner told a reader looking at
+  // a demand projection something the Executive view already states as a
+  // finding. ingestion.js has no business knowing the id either way.
   window.refreshNetworkNotice = () => {
     renderOverviewAlert('ov-notice', { errorsOnly: true });
-    renderOverviewAlert('fc-alert');
   };
   // Exposed so the authoritative hydration can refresh the twin once solved
   // figures arrive. Without this its re-render call was a silent no-op, and
@@ -372,9 +372,10 @@ function renderForecastSummary() {
 /**
  * Draw the whole Forecast screen.
  *
- * The left column is the Overview's alert — `renderOverviewAlert` takes the
- * element it draws into — above this page's OWN attention card. Nothing here
- * computes a finding, a figure or a recommendation of its own.
+ * The left column is this page's OWN attention card. The demand alert that
+ * sat above it (the served-in-full banner) is gone — the Executive view
+ * states the same thing as a finding. Nothing here computes a finding, a
+ * figure or a recommendation of its own.
  *
  * On the recommendation: the reasoning agent has no FORECAST scope
  * (netgravity/orchestrator/schemas/reasoning.py lists NETWORK, FACILITY,
@@ -386,7 +387,6 @@ function renderForecastSummary() {
  * recommendation the engine never made.
  */
 function renderForecastPage() {
-  renderOverviewAlert('fc-alert');
   // This page's own card, about the forecast. The Overview's network-scoped
   // feed used to be drawn here as well — the same finding, twice, on two
   // screens, one of them asking a different question. That feed is gone
@@ -1502,7 +1502,7 @@ function initTabs() {
       <p class="text-sm" style="color:var(--text-2)">AI decision intelligence for
       logistics networks.</p>
       <ul class="text-sm" style="margin:10px 0 0 18px;line-height:1.9">
-        <li><strong>Overview</strong> &mdash; what needs attention, the headline
+        <li><strong>Executive view</strong> &mdash; what needs attention, the headline
           KPIs, the twin and your external signals</li>
         <li><strong>KPIs</strong> &mdash; one facility at a time, with its corridors</li>
         <li><strong>Digital Twin</strong> &mdash; 2D and 3D network topology</li>
@@ -2150,11 +2150,10 @@ function renderHome() {
  * link to the rows behind it. The per-market detail is not deleted — it is
  * what the linked view is for.
  */
-// Default is the FORECAST page's element. Home carried this card until the
-// insight tiles replaced it; `#ov-alert` is not in the markup any more, so a
-// default naming it would make every bare call a silent no-op — including
-// ingestion.js's, which is how the shortfall notice reaches a screen at all.
-function renderOverviewAlert(elId = 'fc-alert', { errorsOnly = false } = {}) {
+// Default is the Executive view's error-only notice — the one element this
+// draws into now. The Forecast page's `#fc-alert` is gone, and a default
+// naming it would make every bare call a silent no-op.
+function renderOverviewAlert(elId = 'ov-notice', { errorsOnly = true } = {}) {
   const el = document.getElementById(elId);
   if (!el) return;
   const notice = window.__ngNetworkNotice || null;
@@ -2213,20 +2212,10 @@ function renderOverviewAlert(elId = 'fc-alert', { errorsOnly = false } = {}) {
     return;
   }
 
-  // Nothing wrong that the solve found. Said plainly, and never as a clean
-  // bill of health the evidence does not support.
-  const solved = total !== null;
-  el.className = 'ov-alert tone-ok';
-  el.innerHTML = `
-    ${OV_ICONS.ok}
-    <div class="ov-alert-text">
-      <div class="ov-alert-title">${solved
-        ? 'All stated demand is served'
-        : 'No analysis has run yet'}</div>
-      <div class="ov-alert-sub">${solved
-        ? 'Every unit of demand in your upload is met within its service level.'
-        : 'Upload a network dataset to populate this page.'}</div>
-    </div>`;
+  // Nothing wrong that the solve found: no box. The served-in-full banner
+  // had nothing to act on, and sat above a page about something else.
+  el.hidden = true;
+  el.innerHTML = '';
 }
 
 /**
@@ -3059,7 +3048,6 @@ if (typeof window !== 'undefined') {
       renderHomeDataStrip();
       renderInsightsPage();
       renderOverviewAlert('ov-notice', { errorsOnly: true });
-      renderOverviewAlert('fc-alert');
     } catch (e) { /* a redraw must never break the page */ }
   });
 
@@ -3834,14 +3822,19 @@ function insightTileHtml(item, isLead = false) {
   // wrote one and the theme's own default when it did not. An empty one drops
   // the whole block rather than printing an empty heading.
   const action = (rec.recommendedAction || '').trim();
-  const actionHtml = action ? `
-      <div class="ov-tile-section ov-tile-action">
-        <div class="ov-tile-section-label">Recommended action</div>
-        <p class="ov-tile-section-text">${escapeInsightText(action)}</p>
+  // NO "OPEN SCENARIO PLANNER" ON A TILE. It went to an empty planner, the
+  // same on every tile, and the scenario that prices the recommendation is
+  // filled in from the detailed finding instead. The destinations that ARE
+  // specific — the unserved-demand breakdown, the twin, the forecast — stay.
+  const ctaHtml = cta.tab === 'scenarios' ? '' : `
         <button type="button" class="ov-tile-cta" data-cta-tab="${escapeInsightText(cta.tab)}">
           <span>${escapeInsightText(cta.label)}</span>
           <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
-        </button>
+        </button>`;
+  const actionHtml = action ? `
+      <div class="ov-tile-section ov-tile-action">
+        <div class="ov-tile-section-label">Recommended action</div>
+        <p class="ov-tile-section-text">${escapeInsightText(action)}</p>${ctaHtml}
       </div>` : '';
 
   // THE TINT GOES ON ONE TILE, and only when that tile is a risk.
@@ -3892,6 +3885,36 @@ function insightTileHtml(item, isLead = false) {
 }
 
 /**
+ * WHICH three findings lead the Executive view.
+ *
+ * Not simply the top three of the ranking. Two rules on top of it:
+ *
+ *   1. A DECISION BEFORE A HOLD. A finding whose recommendation is "Hold this
+ *      as the baseline every proposed change is measured against" asks a
+ *      leader to do nothing, and three tiles are too few to spend one on it.
+ *      `actionable` is the server's call (`is_decision` in api/insights.py);
+ *      holds fill a slot only when there are not enough decisions.
+ *
+ *   2. THE THIRD TILE IS WHERE THE MONEY GOES. The total network cost is the
+ *      first figure in the KPI strip above these tiles, and a tile restating
+ *      it said nothing new. The cost-structure finding names the largest cost
+ *      line and how to cut it, which is the cost question a leader can act on.
+ *      Where the network has no such finding (a single cost line), the slot
+ *      goes to the next decision. The total-cost finding never takes a tile.
+ */
+function executiveTileInsights(ranked) {
+  const isCostStructure = (it) => it.theme === 'Cost structure';
+  const decides = (it) => !it.record || it.record.actionable !== false;
+  const cost = ranked.find((it) => isCostStructure(it) && decides(it)) || null;
+  const rest = ranked.filter((it) => !isCostStructure(it));
+  const decisions = rest.filter(decides);
+  const holds = rest.filter((it) => !decides(it) && it.theme !== 'Cost');
+  const room = cost ? 2 : 3;
+  const picked = [...decisions, ...holds].slice(0, room);
+  return cost ? [...picked, cost] : picked;
+}
+
+/**
  * The three findings that lead, as tiles.
  *
  * RISK first, because `rankedAttentionInsights()` ranks them that way — so
@@ -3902,7 +3925,7 @@ function renderHomeInsightTiles(containerId = 'ov-tiles') {
   const el = document.getElementById(containerId);
   if (!el) return;
 
-  const items = rankedAttentionInsights();
+  const items = executiveTileInsights(rankedAttentionInsights());
 
   // An empty list means no insight has been generated for this network — it
   // does NOT mean the network is healthy, and this copy has never said so.
@@ -4207,7 +4230,8 @@ function insightRowHtml(item) {
                 data-scn-facility="${escapeInsightText(intervention.scenario.facility_id || '')}"
                 data-scn-mode="${escapeInsightText(intervention.scenario.open_mode || '')}"
                 data-scn-region="${escapeInsightText(intervention.scenario.region || '')}"
-                data-scn-name="${escapeInsightText(intervention.scenario.name || '')}">
+                data-scn-name="${escapeInsightText(intervention.scenario.name || '')}"
+                data-scn-amount="${typeof intervention.scenario.amount === 'number' ? intervention.scenario.amount : ''}">
           <!-- NAMES THE CHANGE, AND WHERE IT GOES.
                "Test this as a scenario" sat under four different
                recommendations saying the same thing about each; and it did not
@@ -4306,6 +4330,7 @@ function renderInsightsPage() {
             openMode: scn.open_mode || undefined,
             region: scn.region || undefined,
             name: scn.name || undefined,
+            amount: typeof scn.amount === 'number' ? scn.amount : undefined,
           });
         }, 120);
       });
@@ -4395,6 +4420,7 @@ function renderInsightsPage() {
         openMode: d.scnMode || undefined,
         region: d.scnRegion || undefined,
         name: d.scnName || undefined,
+        amount: d.scnAmount ? Number(d.scnAmount) : undefined,
       });
     });
   });

@@ -534,7 +534,10 @@ class TestTheForecastScreenIsTheMockup:
         has not changed.
         """
         fc = self._section()
-        assert 'class="ov-alert" id="fc-alert"' in fc
+        # The demand alert that sat above the attention card is gone: "All
+        # stated demand is served" said nothing about the forecast, and the
+        # Executive view states it as a finding.
+        assert 'id="fc-alert"' not in fc
         assert 'class="ov-attn-card"' in fc
         assert 'id="fc-attn-body"' in fc
         assert 'class="ov-signals-card"' in fc
@@ -544,16 +547,17 @@ class TestTheForecastScreenIsTheMockup:
         # keeps only an error-only notice, `#ov-notice` — so a default naming
         # `#ov-alert` would make every bare call a silent no-op, including
         # ingestion.js's, which is how a shortfall notice reaches a screen.
-        assert "function renderOverviewAlert(elId = 'fc-alert'" in js
+        assert "function renderOverviewAlert(elId = 'ov-notice'" in js
+        assert "All stated demand is served" not in js
         # Same rule for the signals row: this renderer's only caller is the
         # Forecast tab, and a default naming an element that no longer exists
         # is a trap for the next reader.
         assert "function renderHomeSignals(rowId = 'fc-signals-row')" in js
         page = js[js.index("function renderForecastPage()"):]
         page = page[:page.index("\n}\n")]
-        for call in ("renderOverviewAlert('fc-alert')",
-                     "renderHomeSignals('fc-signals-row')"):
-            assert call in page, call
+        assert "renderHomeSignals('fc-signals-row')" in page, page
+        assert "renderOverviewAlert(" not in page, page
+        assert "renderOverviewAlert('fc-alert')" not in js
 
     def test_the_attention_card_is_about_the_forecast_not_the_network(self):
         """

@@ -115,7 +115,12 @@ _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
 #:  10  percentages print whole ("54%", not "54.00%") and a FACILITY-scoped
 #:      card answers about the facility rather than repeating the network
 #:      card's sentence word for word
-_PAYLOAD_VERSION = 10
+#:  11  every insight says whether its recommendation is a DECISION
+#:      (`actionable`), the cost-structure finding names the way to cut the
+#:      largest cost line and the scenario that prices it, an unused-candidate
+#:      finding names the site to reopen, and a capacity test carries a
+#:      suggested amount. The Executive view ranks its tiles on the first.
+_PAYLOAD_VERSION = 11
 
 
 #: Theme -> the per-facility field that theme is ABOUT. A chart for a finding
@@ -509,6 +514,429 @@ _ACTION_BY_SEVERITY = {
 }
 
 
+#: WHAT IS NOT A DECISION.
+#:
+#: Several sentences above hold a figure in place rather than change anything
+#: — "Hold this as the baseline every proposed change is measured against".
+#: They are true, and on the Insights page, under a finding that asks for
+#: nothing, they are the right thing to say. They are the wrong thing to lead a
+#: screen with: the Executive view has three tiles, and a tile spent on "keep
+#: measuring against this" is a tile not spent on a change a leader can make.
+#:
+#: So every serialised insight says whether its recommendation is a decision —
+#: `actionable` — and the tiles rank on it. Keyed by the sentence rather than
+#: the theme, because one theme carries a real change at one severity and a
+#: hold at another.
+_HOLD_SENTENCES = frozenset(
+    [_ACTION_BY_THEME[key] for key in (
+        ("Service", "INFORMATION"), ("Capacity", "INFORMATION"),
+        ("Utilisation", "INFORMATION"), ("Footprint", "INFORMATION"),
+        ("Resilience", "INFORMATION"), ("Cost", "INFORMATION"),
+        ("Carbon", "INFORMATION"))]
+    + [_ACTION_BY_THEME_FACILITY[key] for key in (
+        ("Cost", "INFORMATION"), ("Capacity", "INFORMATION"),
+        ("Utilisation", "INFORMATION"))]
+    + [_ACTION_BY_SEVERITY["INFORMATION"]]
+)
+
+#: The same test, for a sentence the narrative layer wrote itself.
+_HOLD_PATTERN = re.compile(
+    r"^\s*(hold|treat|keep|use)\b[^.]*\bbaseline\b|\bno decision is needed\b",
+    re.IGNORECASE)
+
+
+def is_decision(sentence: str, action: Optional[Dict[str, Any]] = None) -> bool:
+    """
+    Whether a recommendation CHANGES something.
+
+    A recommendation with a scenario behind it always does. One without is a
+    decision unless it only holds a figure as the baseline — see
+    `_HOLD_SENTENCES`.
+    """
+    if (action or {}).get("scenario"):
+        return True
+    text = str(sentence or "").strip()
+    if not text or text in _HOLD_SENTENCES:
+        return False
+    return not _HOLD_PATTERN.search(text)
+
+
+# ---------------------------------------------------------------------------
+# The largest cost line, and how to cut it
+# ---------------------------------------------------------------------------
+#
+# "Target the largest component of this cost first" was the recommendation
+# under the cost-structure finding on every network: it named no site, no
+# lever and no test, so the one finding about where the money goes told a
+# reader to go and work out what to do about it. What replaces it reads the
+# same solved rows the capacity ladder does, plus the uploaded cost rates, and
+# names the lever that actually moves THAT line:
+#
+#   transport   renegotiate freight where the spend is concentrated, and
+#               re-source the longest lanes
+#   facility    consolidate a site carrying full fixed cost for part of its
+#               capacity, and renegotiate the leases that stay
+#   handling    expand a cheap handler that is full, so volume leaves the dear
+#               ones — the solve already uses cheap sites that have room, so
+#               their ceiling is what keeps volume at the expensive ones
+#   inventory   hold stock in fewer places, so safety stock pools
+#
+# Each names a scenario the planner can price. None states a saving: nothing
+# has been solved at this point, and the scenario is what produces the figure.
+
+#: A capacity test is sized to bring the site back to this share of its limit.
+_SUGGESTED_UTILISATION_PCT = 85.0
+#: Below this a site is a consolidation candidate when facility or inventory
+#: cost is the largest line. Looser than `IDLE_PCT` on purpose: the question is
+#: where the largest line can be cut, not whether a site is idle.
+_CONSOLIDATE_BELOW_PCT = 60.0
+#: The freight-rate change a transport test opens at — an assumption the
+#: planner edits, never a negotiated rate.
+_FREIGHT_TEST_PCT = -10
+
+_PLANT_ROLES = frozenset({"PLANT", "SUPPLIER"})
+_DEMAND_ROLES = frozenset({"MARKET", "CUSTOMER"})
+
+
+def _role_of(value: Any) -> str:
+    raw = str(getattr(value, "value", value) or "").strip().upper()
+    return raw.split(".")[-1]
+
+
+def _cost_sites(pack: Any, network: Any) -> List[Dict[str, Any]]:
+    """
+    The open supply sites, each with the solve's load and the upload's rates.
+
+    Utilisation and throughput come from the twin state this briefing is
+    about; fixed cost and handling rate are the inputs on the snapshot. Nothing
+    is derived from either beyond ranking them.
+    """
+    records = {str(getattr(r, "id", "")): r
+               for r in (getattr(network, "facilities", None) or [])}
+    out: List[Dict[str, Any]] = []
+    for row in _facility_rows(pack):
+        fid = str(row.get("facility_id") or "")
+        record = records.get(fid)
+        role = _role_of(row.get("role")) or _role_of(getattr(record, "role", ""))
+        if not fid or role in _DEMAND_ROLES or not row.get("is_open"):
+            continue
+        out.append({
+            "facility_id": fid,
+            "name": str(row.get("facility_name") or row.get("name") or fid),
+            "role": role,
+            "util": _finite(row.get("utilization_pct")),
+            "throughput": _finite(row.get("throughput_units")),
+            "fixed": _finite(getattr(record, "fixed_cost_per_year", None)),
+            "rate": _finite(getattr(record, "handling_cost_per_unit", None)),
+        })
+    return out
+
+
+def _lever(key: str, sentence: str, reason: str, cta: str,
+           scenario: Optional[Dict[str, Any]] = None,
+           site: Optional[Dict[str, Any]] = None) -> Tuple[str, Dict[str, Any]]:
+    """A recommendation in the shape `StrategicAction.to_dict` produces."""
+    return sentence, {
+        "key": key,
+        "label": sentence,
+        "reason": reason,
+        "scenario": dict(scenario or {}),
+        "target": ({"facility_id": site["facility_id"], "name": site["name"]}
+                   if site else {}),
+        "priority": 1,
+        # No scenario, no button: a form opened from advice would be empty.
+        "cta": cta if scenario else "",
+    }
+
+
+def _unclaimed(key: str, fid: str, claimed: Optional[set]) -> bool:
+    return (key, fid) not in (claimed or set())
+
+
+def _consolidation_pick(sites: List[Dict[str, Any]], eligible, claimed):
+    """
+    The least-used site worth consolidating, or None.
+
+    Never the last open site of its kind — closing that is not a
+    consolidation — and never a site another card already recommends
+    consolidating.
+    """
+    peers: Dict[str, int] = {}
+    for site in sites:
+        peers[site["role"]] = peers.get(site["role"], 0) + 1
+    pool = [s for s in sites
+            if s["util"] is not None and s["util"] < _CONSOLIDATE_BELOW_PCT
+            and peers.get(s["role"], 0) > 1 and eligible(s)
+            and _unclaimed("CONSOLIDATE", s["facility_id"], claimed)]
+    if not pool:
+        return None
+    return sorted(pool, key=lambda s: (s["util"], -(s["fixed"] or 0),
+                                       s["facility_id"]))[0]
+
+
+def _consolidate(site: Dict[str, Any], sentence: str, reason: str):
+    return _lever("CONSOLIDATE", sentence, reason, "Test the consolidation",
+                  scenario={"action": "CLOSE_FACILITY",
+                            "facility_id": site["facility_id"],
+                            "name": f"Consolidate {site['name']}"},
+                  site=site)
+
+
+def _cut_transport(sites, payload, claimed):
+    from netgravity.orchestrator.reasoning.strategic_actions import format_pct  # noqa: F401
+
+    by_id = {s["facility_id"]: s for s in sites}
+    spend: Dict[str, float] = {}
+    for flow in payload.get("flows") or []:
+        origin = str((flow or {}).get("origin_id") or "")
+        cost = _finite((flow or {}).get("transport_cost"))
+        if origin in by_id and cost is not None and cost > 0:
+            spend[origin] = spend.get(origin, 0.0) + cost
+    reason = ("Transport is the largest line in what this network costs. A "
+              "freight-rate change is the quickest lever on it to price; the "
+              "scenario opens at an assumed rate cut for you to edit, not a "
+              "negotiated one.")
+    if not spend:
+        sentence = ("Cut transport, the largest cost line: renegotiate freight "
+                    "on the busiest lanes, and re-source the longest ones from "
+                    "a site nearer the demand they serve.")
+        return _lever("REDUCE_TRANSPORT_COST", sentence, reason,
+                      "Test a freight-rate cut",
+                      scenario={"action": "CHANGE_TRANSPORT_COST",
+                                "amount": _FREIGHT_TEST_PCT,
+                                "name": "Renegotiated freight"})
+    top = by_id[max(spend, key=lambda k: (spend[k], k))]
+    sentence = (f"Cut transport, the largest cost line: renegotiate freight on "
+                f"the lanes out of {top['name']}, which carry more transport "
+                f"spend than any other site's, and re-source the longest lanes "
+                f"from a site nearer the demand they serve.")
+    return _lever("REDUCE_TRANSPORT_COST", sentence, reason,
+                  "Test a freight-rate cut",
+                  scenario={"action": "CHANGE_TRANSPORT_COST",
+                            "facility_id": top["facility_id"],
+                            "amount": _FREIGHT_TEST_PCT,
+                            "name": f"Renegotiated freight out of {top['name']}"},
+                  site=top)
+
+
+def _cut_facility(sites, payload, claimed):
+    from netgravity.orchestrator.reasoning.strategic_actions import format_pct
+
+    site = _consolidation_pick(sites, lambda s: (s["fixed"] or 0) > 0, claimed)
+    if site is not None:
+        sentence = (f"Cut facility cost, the largest cost line: consolidate "
+                    f"{site['name']}, which carries a full fixed cost at "
+                    f"{format_pct(site['util'])} of its capacity, onto sites "
+                    f"with room, and renegotiate the leases on the sites that "
+                    f"stay.")
+        reason = ("Facility cost is the largest line, and it is fixed: it is "
+                  "cut by carrying fewer sites, not by moving volume between "
+                  "them.")
+        return _consolidate(site, sentence, reason)
+    sentence = ("Cut facility cost, the largest cost line: renegotiate the "
+                "leases and service contracts on the sites with the largest "
+                "fixed cost, and give up space the plan does not use.")
+    return _lever("REDUCE_FACILITY_COST", sentence,
+                  "No open site is lightly enough used to consolidate, so the "
+                  "fixed cost is cut by its terms rather than by its sites.", "")
+
+
+def _cut_handling(sites, payload, claimed):
+    from netgravity.orchestrator.reasoning.strategic_actions import (
+        LOADED_PCT, format_pct,
+    )
+
+    rated = [s for s in sites if s["rate"] is not None and s["rate"] > 0]
+    if len(rated) >= 2:
+        rates = sorted(s["rate"] for s in rated)
+        cheaper_half = rates[(len(rates) - 1) // 2]
+        full = [s for s in rated
+                if s["rate"] <= cheaper_half and s["rate"] < rates[-1]
+                and (s["util"] or 0) >= LOADED_PCT
+                and _unclaimed("ADD_CAPACITY", s["facility_id"], claimed)]
+        if full:
+            site = sorted(full, key=lambda s: (s["rate"], -(s["util"] or 0),
+                                               s["facility_id"]))[0]
+            sentence = (f"Cut handling, the largest cost line: expand "
+                        f"{site['name']}, which handles at one of the lowest "
+                        f"rates in the network and is at "
+                        f"{format_pct(site['util'])} of its capacity, so volume "
+                        f"can move off dearer sites; then automate or "
+                        f"renegotiate handling where the rates are highest.")
+            reason = ("The solve already routes volume to cheap handlers that "
+                      "have room. A cheap handler that is full is what keeps "
+                      "volume at the dear ones.")
+            return _lever("ADD_CAPACITY", sentence, reason,
+                          "Test the capacity increase",
+                          scenario={"action": "CHANGE_CAPACITY",
+                                    "facility_id": site["facility_id"],
+                                    "name": f"More capacity at {site['name']}"},
+                          site=site)
+    spenders = [s for s in rated if s["throughput"] is not None]
+    if spenders:
+        site = max(spenders, key=lambda s: (s["rate"] * s["throughput"],
+                                            s["facility_id"]))
+        sentence = (f"Cut handling, the largest cost line: automate or "
+                    f"renegotiate handling at {site['name']}, which carries "
+                    f"more handling spend than any other site, and move volume "
+                    f"toward the sites that handle it more cheaply.")
+        return _lever("REDUCE_HANDLING_COST", sentence,
+                      "No cheap handler is short of room, so the rate itself "
+                      "is the lever.", "", site=site)
+    sentence = ("Cut handling, the largest cost line: automate or renegotiate "
+                "handling at the busiest sites, and move volume toward the "
+                "sites that handle it more cheaply.")
+    return _lever("REDUCE_HANDLING_COST", sentence,
+                  "The upload states no handling rate per site to rank.", "")
+
+
+def _cut_inventory(sites, payload, claimed):
+    from netgravity.orchestrator.reasoning.strategic_actions import format_pct
+
+    site = _consolidation_pick(sites, lambda s: s["role"] not in _PLANT_ROLES,
+                               claimed)
+    if site is not None:
+        sentence = (f"Cut inventory, the largest cost line: hold stock in fewer "
+                    f"places — consolidate {site['name']}, the least-used "
+                    f"stocking point at {format_pct(site['util'])} of its "
+                    f"capacity, so its safety stock pools with the sites that "
+                    f"take its volume — and shorten cover on the slowest-moving "
+                    f"lines.")
+        return _consolidate(site, sentence,
+                            "Safety stock grows with the number of places it is "
+                            "held, so fewer stocking points hold less of it.")
+    sentence = ("Cut inventory, the largest cost line: shorten safety-stock "
+                "cover and reorder quantities at the sites holding the most "
+                "stock, and hold slow-moving lines centrally.")
+    return _lever("REDUCE_INVENTORY_COST", sentence,
+                  "No stocking point is lightly enough used to consolidate.", "")
+
+
+def _advice(sentence: str, key: str):
+    return lambda sites, payload, claimed: _lever(key, sentence, "", "")
+
+
+_COST_LEVERS = {
+    "transport_cost": _cut_transport,
+    "facility_cost": _cut_facility,
+    "handling_cost": _cut_handling,
+    "inventory_cost": _cut_inventory,
+    "opening_cost": _advice(
+        "Cut opening cost, the largest cost line: phase or defer the openings "
+        "this plan commits to, and price expanding an existing site as the "
+        "alternative.", "REDUCE_OPENING_COST"),
+    "closure_cost": _advice(
+        "Cut closure cost, the largest cost line: revisit the closures this "
+        "plan pays for, and price keeping the cheapest of them open.",
+        "REDUCE_CLOSURE_COST"),
+    "carbon_cost": _advice(
+        "Cut carbon cost, the largest cost line: shorten the longest lanes, "
+        "move them to lower-emitting modes, and price the re-route against "
+        "what it saves.", "REDUCE_CARBON_COST"),
+}
+
+
+def _cost_structure_action(pack: Any, network: Any = None,
+                           claimed: Optional[set] = None
+                           ) -> Optional[Tuple[str, Dict[str, Any]]]:
+    """
+    How to cut the network's largest cost line, and the scenario that prices it.
+
+    The same component the finding names: the largest positive entry in the
+    solve's own `cost_components`, and only when there are at least two — the
+    emitter's rule, so the recommendation never answers a finding that was not
+    made.
+    """
+    payload = getattr(pack, "payload", None)
+    if not isinstance(payload, dict):
+        return None
+    components = (payload.get("network_state") or {}).get("cost_components") or {}
+    priced = {k: v for k, v in ((k, _finite(v)) for k, v in components.items())
+              if v is not None and v > 0}
+    if len(priced) < 2:
+        return None
+    largest = max(priced, key=lambda k: (priced[k], k))
+    lever = _COST_LEVERS.get(largest)
+    if lever is None:
+        return None
+    return lever(_cost_sites(pack, network), payload, claimed)
+
+
+def _reopen_action(pack: Any, claimed: Optional[set] = None
+                   ) -> Optional[Dict[str, Any]]:
+    """
+    The candidate site to reopen, for a finding that the plan leaves some unused.
+
+    "Open the unused candidate sites" named none of them and carried no
+    scenario. The largest closed candidate is the one worth pricing first:
+    it is the most capacity the network already has and does not use.
+    """
+    from netgravity.orchestrator.reasoning.strategic_actions import CTA_BY_ACTION
+
+    closed = [r for r in _facility_rows(pack)
+              if not r.get("is_open") and r.get("facility_id")
+              and _role_of(r.get("role")) not in _DEMAND_ROLES
+              and _unclaimed("REOPEN_FACILITY", str(r.get("facility_id")), claimed)]
+    if not closed:
+        return None
+    row = sorted(closed, key=lambda r: (-(_finite(r.get("capacity_units")) or 0),
+                                        str(r.get("facility_id"))))[0]
+    fid = str(row.get("facility_id"))
+    name = str(row.get("facility_name") or row.get("name") or fid)
+    sentence = (f"Price reopening {name}, the largest of the candidate sites "
+                f"this plan leaves unused, against today's cost and service.")
+    return {
+        "key": "REOPEN_FACILITY",
+        "label": sentence,
+        "reason": ("Capacity that already exists costs less to bring into use "
+                   "than capacity that has to be built."),
+        "scenario": {"action": "OPEN_FACILITY", "open_mode": "EXISTING",
+                     "facility_id": fid, "name": f"Reopen {name}"},
+        "target": {"facility_id": fid, "name": name},
+        "priority": 1,
+        "cta": CTA_BY_ACTION["REOPEN_FACILITY"],
+    }
+
+
+def _suggested_capacity_units(record: Any, util_pct: Any) -> Optional[int]:
+    """
+    How much capacity a test of an expansion should open at, or None.
+
+    Enough to bring the site back to `_SUGGESTED_UTILISATION_PCT` of its
+    stated capacity, and never less than a tenth of it, rounded up to two
+    significant figures. The form opened at 2,000 units whatever the site —
+    a rounding error on a 150,000-unit plant, and a doubling of a small depot.
+    It is an INPUT to the test, stated as editable, not a finding.
+    """
+    capacity = _finite(getattr(record, "capacity_units_per_period", None))
+    if capacity is None or capacity <= 0 or capacity >= 1e11:
+        return None
+    util = _finite(util_pct) or 0.0
+    raw = capacity * max(util / _SUGGESTED_UTILISATION_PCT - 1.0, 0.10)
+    if raw <= 0:
+        return None
+    step = 10 ** max(0, int(math.floor(math.log10(raw))) - 1)
+    return int(math.ceil(raw / step) * step)
+
+
+def _with_suggested_amount(action: Dict[str, Any], pack: Any,
+                           network: Any) -> Dict[str, Any]:
+    """The action, with a sized amount on a capacity test that names a site."""
+    scenario = (action or {}).get("scenario") or {}
+    if (scenario.get("action") != "CHANGE_CAPACITY"
+            or not scenario.get("facility_id") or "amount" in scenario):
+        return action
+    fid = str(scenario["facility_id"])
+    record = next((r for r in (getattr(network, "facilities", None) or [])
+                   if str(getattr(r, "id", "")) == fid), None)
+    row = next((r for r in _facility_rows(pack)
+                if str(r.get("facility_id")) == fid), {})
+    units = _suggested_capacity_units(record, row.get("utilization_pct"))
+    if units is None:
+        return action
+    return {**action, "scenario": {**scenario, "amount": units}}
+
+
 #: WHICH RUNGS ANSWER WHICH FINDING, best first.
 #:
 #: This is the fix for the thing that made the recommendations useless: every
@@ -735,7 +1163,8 @@ def _finding_action(insight: Any, theme: str, severity: str, pack: Any,
 def _recommended_action(insight: Any, theme: str, severity: str,
                         pack: Any = None,
                         claimed: Optional[set] = None,
-                        scope: str = "NETWORK"
+                        scope: str = "NETWORK",
+                        network: Any = None,
                         ) -> Tuple[str, Dict[str, Any]]:
     """
     The one decision to take about this finding, and the test that proves it.
@@ -782,6 +1211,21 @@ def _recommended_action(insight: Any, theme: str, severity: str,
             # reason underneath would say the same thing twice.
             return action["label"], action
 
+    # THE LARGEST COST LINE, AND HOW TO CUT IT — see `_COST_LEVERS`. The theme
+    # sentence below it stays as the answer when there are no solved rows.
+    if theme == "Cost structure" and pack is not None:
+        lever = _cost_structure_action(pack, network, claimed)
+        if lever:
+            return lever
+
+    # Unused candidate sites, with the one to reopen named. The ladder's own
+    # REOPEN rung needs a tight site or unserved demand, so on a healthy
+    # network this finding used to fall to a sentence naming no site.
+    if (theme, severity) == ("Footprint", "OPPORTUNITY") and pack is not None:
+        reopen = _reopen_action(pack, claimed)
+        if reopen:
+            return reopen["label"], reopen
+
     table = _ACTION_BY_THEME_FACILITY if scope == "FACILITY" else {}
     sentence = (table.get((theme, severity))
                 or table.get((theme, "INFORMATION"))
@@ -795,7 +1239,8 @@ def _recommended_action(insight: Any, theme: str, severity: str,
 def _serialise_insight(insight: Any, index: int, *, scope: str,
                        entity_id: Optional[str],
                        pack: Any = None,
-                       claimed: Optional[set] = None) -> Dict[str, Any]:
+                       claimed: Optional[set] = None,
+                       network: Any = None) -> Dict[str, Any]:
     """
     One KPI insight, in the shape a feed can render.
 
@@ -816,7 +1261,10 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
     comparison_refs = list(getattr(insight, "comparison_refs", []) or [])
     driver_refs = list(getattr(insight, "driver_refs", []) or [])
     _action_pair = _recommended_action(insight, theme, severity_name, pack,
-                                       claimed, scope)
+                                       claimed, scope, network)
+    if _action_pair[1] and pack is not None:
+        _action_pair = (_action_pair[0],
+                        _with_suggested_amount(_action_pair[1], pack, network))
     # Spend the rung, so the next card in this briefing reaches for a different
     # one. `claimed` is per-briefing and is passed in by the loop below; a
     # caller serialising one insight on its own passes None and nothing is
@@ -858,6 +1306,10 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
         # advisory and has no scenario to open — a button that opens an
         # empty form is worse than no button.
         "action": _action_pair[1],
+        # Whether that recommendation CHANGES something. False for the
+        # sentences that hold a figure as the baseline; the Executive view
+        # ranks its three tiles on this. See `is_decision`.
+        "actionable": is_decision(_action_pair[0], _action_pair[1]),
         # Stated by the engine, not inferred from the wording by the client.
         # The Home feed used to decide a card's colour, icon and priority by
         # searching its prose for "high impact" / "opportunity" / "positive",
@@ -1307,6 +1759,10 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 raise NotFoundError(str(exc)) from exc
 
             briefing = result.briefing
+            # The uploaded inputs behind the solve — fixed cost and handling
+            # rate per site — which the cost levers rank on. The same snapshot
+            # the state was solved from.
+            network = getattr(snapshot, "network", None)
             # The rungs this briefing has already spent, filled in rank order
             # as the cards are serialised. Shared across the whole list on
             # purpose: it is what stops six cards printing one sentence.
@@ -1326,7 +1782,7 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 "insights": [
                     _serialise_insight(item, i, scope=scope_arg,
                                        entity_id=entity_id, pack=pack,
-                                       claimed=claimed)
+                                       claimed=claimed, network=network)
                     for i, item in enumerate(briefing.kpi_insights)
                 ],
                 # The policy constants a threshold line may be drawn at, so the
@@ -1357,7 +1813,8 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 # The SENTENCE is still the engine's; this only says what the
                 # button under it does. `{}` on a network that needs no change,
                 # in which case the button falls back to the planner.
-                "action": _strategic_action(pack) or {},
+                "action": _with_suggested_amount(
+                    _strategic_action(pack) or {}, pack, network),
                 "opening": plain_voice(briefing.opening or ""),
                 "context": plain_voice(briefing.context or ""),
                 "key_drivers": [plain_voice(d) for d in briefing.key_drivers],

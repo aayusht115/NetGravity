@@ -904,6 +904,8 @@ const _THEME_CATEGORY = {
 
 export function insightCategory(insight) {
   if (!insight) return 'Status';
+  // Where the money goes, and how to cut it — a cost decision, not a status.
+  if (insight.theme === 'Cost structure') return 'Cost Reduction';
   const byTheme = _THEME_CATEGORY[insight.theme];
   if (insight.severity === 'RISK') return byTheme || 'Capacity Risk';
   if (insight.severity === 'OPPORTUNITY') return byTheme || 'Network Opportunity';
@@ -963,6 +965,12 @@ export function toInsightRecord(apiInsight) {
     // DC" on Insights and on the planner is reading one decision, not two
     // screens that happened to agree.
     action: apiInsight.action || {},
+    // Whether the recommendation CHANGES something, or only holds a figure as
+    // the baseline. The server's call (`is_decision`); the Executive view's
+    // tiles rank on it. A record from before the field existed counts as a
+    // decision when it carries any recommendation at all.
+    actionable: typeof apiInsight.actionable === 'boolean'
+      ? apiInsight.actionable : Boolean(apiInsight.recommended_action),
     theme: apiInsight.theme || '',
     severity: apiInsight.severity || 'INFORMATION',
     category: insightCategory(apiInsight),
