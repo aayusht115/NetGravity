@@ -191,6 +191,42 @@ MODE_COLS = ("transport_mode", "mode", "transportation_mode", "shipping_mode",
 HANDLING_COLS = ("handling_cost_per_unit", "handling_cost", "variable_cost_per_unit",
                  "cost_per_unit_handled", "handling_rate")
 COST_TYPE_COLS = ("cost_type", "cost_category", "expense_type")
+#: Where the client says how a cost line BEHAVES. Overrides the reading of the
+#: line's name in `_cost_behaviour`.
+COST_BEHAVIOUR_COLS = ("cost_behaviour", "cost_behavior", "fixed_or_variable",
+                       "cost_nature", "cost_class", "fixed_variable")
+
+#: How a warehouse cost line behaves when the table does not say.
+#:
+#: FIXED lines are paid whether or not a unit moves — the site's rent, lease,
+#: insurance, the 3PL management fee, planned maintenance. VARIABLE lines move
+#: with volume — labour, utilities, packaging. Maintenance and utilities are
+#: semi-fixed in practice; the reading chosen here is stated in the notes every
+#: time it is applied, and a Cost_Behaviour column overrides it.
+_FIXED_COST_LINES = frozenset({
+    "RENT", "LEASE", "DEPRECIATION", "INSURANCE", "PROPERTY_TAX", "RATES",
+    "SECURITY", "MAINTENANCE", "3PL_MANAGEMENT", "MANAGEMENT", "MANAGEMENT_FEE",
+    "OVERHEAD", "ADMIN", "IT", "FACILITY",
+})
+_VARIABLE_COST_LINES = frozenset({
+    "LABOR", "LABOUR", "UTILITIES", "ENERGY", "POWER", "PACKAGING",
+    "CONSUMABLES", "HANDLING", "PICKING", "FUEL", "TEMP_LABOR", "TEMP_LABOUR",
+})
+
+
+def _cost_behaviour(line: str, stated: str = "") -> str:
+    """"FIXED", "VARIABLE" or "UNCLASSIFIED" for one warehouse cost line."""
+    said = str(stated or "").strip().upper()
+    if said.startswith("FIX"):
+        return "FIXED"
+    if said.startswith("VAR"):
+        return "VARIABLE"
+    name = str(line or "").strip().upper().replace(" ", "_").replace("-", "_")
+    if name in _FIXED_COST_LINES:
+        return "FIXED"
+    if name in _VARIABLE_COST_LINES:
+        return "VARIABLE"
+    return "UNCLASSIFIED"
 EFFECTIVE_DATE_COLS = ("effective_date", "valid_from", "effective_from", "as_of")
 CURRENCY_COLS = ("currency", "ccy", "rate_currency", "currency_code")
 
@@ -641,6 +677,7 @@ _COLUMN_ROLES: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
     "warehouse_costs": (
         ("Facility ID", FACILITY_ID_COLS),
         ("Cost type", COST_TYPE_COLS),
+        ("Cost behaviour", COST_BEHAVIOUR_COLS),
         ("Handling cost per unit", HANDLING_COLS),
         ("Monthly facility cost", ("monthly_cost", "monthly_cost_usd", "monthly_cost_inr",
                                    "cost_per_month", "monthly_amount")),
@@ -1242,8 +1279,33 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
     #
     # So rows are reduced to one per (facility, cost type), keeping the latest
     # effective date, before anything is added up.
+    # FIXED OR VARIABLE, DECIDED ONCE PER LINE.
+    #
+    # Each line in this table states the same money twice: what it costs a
+    # month, and that monthly figure spread over the units handled — rent of
+    # 164,667 a month is also "2.63 per unit". Every line used to be charged at
+    # its per-unit figure, rent included, and the monthly figures were read and
+    # never used. So a network whose only fixed costs were in this table was
+    # assembled with a fixed cost of zero at every site: closing a DC saved
+    # nothing but freight, and adding capacity cost nothing at all.
+    #
+    # Charging both halves would be the opposite error — the same rent twice.
+    # Each line is therefore classified, from a cost-behaviour column where the
+    # table has one and otherwise from its name (`_cost_behaviour`), and counted
+    # exactly once:
+    #
+    #   * a FIXED line is fixed cost at its monthly figure, and its per-unit
+    #     figure is not charged;
+    #   * a VARIABLE line is charged per unit handled, and its monthly figure is
+    #     not charged — it is that rate times some past month's volume;
+    #   * a line neither settles is charged per unit, as before, and named in
+    #     the notes so the client can classify it.
+    #
+    # A fixed cost on the FACILITIES sheet is the client's own consolidated
+    # figure and wins; the table's fixed lines are then not added to it.
     handling_by_facility: Dict[str, Dict[str, Tuple[str, float]]] = {}
     monthly_by_facility: Dict[str, Dict[str, Tuple[str, float]]] = {}
+    stated_behaviour: Dict[str, str] = {}
     wc_rows = 0
     for _, df in sheets("warehouse_costs"):
         cl = {str(c).strip().lower(): c for c in df.columns}
@@ -1253,6 +1315,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         monthly_col = _pick(cl, "monthly_cost", "monthly_cost_usd", "monthly_cost_inr",
                             "cost_per_month", "monthly_amount")
         date_col = _pick(cl, *EFFECTIVE_DATE_COLS)
+        behaviour_col = _pick(cl, *COST_BEHAVIOUR_COLS)
         for _, row in df.iterrows():
             fid = _text(row, fac_col)
             if not fid:
@@ -1260,6 +1323,9 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
             wc_rows += 1
             # A table with no cost-type column states one line per site.
             line = _text(row, type_col).upper() or "TOTAL"
+            said = _text(row, behaviour_col)
+            if said:
+                stated_behaviour[line] = said
             eff = _text(row, date_col)  # ISO dates sort lexicographically
             per_unit = _num(row, unit_col)
             monthly = _num(row, monthly_col)
@@ -1272,32 +1338,95 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 if prev_m is None or eff >= prev_m[0]:
                     monthly_by_facility[fid][line] = (eff, monthly)
 
-    if handling_by_facility:
-        applied = 0
+    def behaviour(line: str) -> str:
+        return _cost_behaviour(line, stated_behaviour.get(line, ""))
+
+    if handling_by_facility or monthly_by_facility:
+        handling_sites = 0
+        fixed_sites = 0
+        fixed_on_sheet: List[str] = []
+        consolidated_handling: List[str] = []
+        classes: Dict[str, set] = {"FIXED": set(), "VARIABLE": set(),
+                                   "UNCLASSIFIED": set()}
         for node in plants + dcs:
-            lines = handling_by_facility.get(node["id"])
-            if not lines:
+            fid = node["id"]
+            per_unit = handling_by_facility.get(fid) or {}
+            monthly = monthly_by_facility.get(fid) or {}
+            if not per_unit and not monthly:
                 continue
-            # Only fills a gap. A handling cost stated on the facilities sheet
-            # is the client's own consolidated figure and wins.
-            if node.get("handlingCost") is None:
-                node["handlingCost"] = round(sum(v for _d, v in lines.values()), 4)
-                node["handlingCostLines"] = {k: v for k, (_d, v) in lines.items()}
-                applied += 1
-        if applied:
-            notes.append(
-                f"Handling cost per unit for {applied} site(s) built from the "
-                f"warehouse cost table: the sum of its cost lines "
-                f"({', '.join(sorted({l for v in handling_by_facility.values() for l in v}))[:120]}), "
-                f"taking the latest effective date where a line is restated. "
-                f"{wc_rows} row(s) were read."
-            )
-    if monthly_by_facility:
-        for node in plants + dcs:
-            lines = monthly_by_facility.get(node["id"])
-            if lines:
+            for line in set(per_unit) | set(monthly):
+                classes[behaviour(line)].add(line)
+            fixed_lines = {line: v for line, (_d, v) in monthly.items()
+                           if behaviour(line) == "FIXED"}
+            # Per unit: every line that is not fixed, plus a fixed line the
+            # table states ONLY per unit — with no monthly figure it cannot be
+            # a fixed cost, and dropping it would drop the money.
+            unit_lines = {line: v for line, (_d, v) in per_unit.items()
+                          if behaviour(line) != "FIXED" or line not in monthly}
+            if unit_lines and node.get("handlingCost") is None:
+                node["handlingCost"] = round(sum(unit_lines.values()), 4)
+                node["handlingCostLines"] = dict(unit_lines)
+                handling_sites += 1
+            elif node.get("handlingCost") is not None and fixed_lines:
+                consolidated_handling.append(fid)
+            if fixed_lines:
+                if node.get("fixedCost") is None:
+                    node["fixedCost"] = round(sum(fixed_lines.values()), 2)
+                    node["fixedCostBasis"] = "month"
+                    node["fixedCostSource"] = "warehouse_costs"
+                    node["fixedCostLines"] = dict(fixed_lines)
+                    fixed_sites += 1
+                else:
+                    fixed_on_sheet.append(fid)
+            if monthly:
                 node["operatingCostPerMonth"] = round(
-                    sum(v for _d, v in lines.values()), 2)
+                    sum(v for _d, v in monthly.values()), 2)
+
+        def listed(lines: set) -> str:
+            return ", ".join(sorted(lines))[:160]
+
+        notes.append(
+            "Warehouse cost lines were classified once, so no line is charged "
+            f"twice: fixed at their monthly figure ({listed(classes['FIXED']) or 'none'}) "
+            f"and variable per unit handled ({listed(classes['VARIABLE']) or 'none'}). "
+            "A line's per-unit figure and its monthly figure state the same money, "
+            f"so only one of them is used. {wc_rows} row(s) were read, taking the "
+            "latest effective date where a line is restated."
+        )
+        if classes["UNCLASSIFIED"]:
+            notes.append(
+                f"Cost line(s) {listed(classes['UNCLASSIFIED'])} do not say whether "
+                "they are fixed or variable and their names do not settle it, so "
+                "they are charged per unit handled. Add a Cost_Behaviour column "
+                "stating FIXED or VARIABLE to classify them."
+            )
+        if handling_sites:
+            notes.append(
+                f"Handling cost per unit for {handling_sites} site(s) is the sum of "
+                "their variable cost lines per unit handled."
+            )
+        if fixed_sites:
+            notes.append(
+                f"Fixed cost for {fixed_sites} site(s) is the sum of their fixed "
+                "cost lines per month in the warehouse cost table; the per-unit "
+                "figures of those lines are an allocation of the same money and are "
+                "not charged."
+            )
+        if fixed_on_sheet:
+            notes.append(
+                f"{len(fixed_on_sheet)} site(s) state a fixed cost on the facilities "
+                "sheet as well as fixed lines in the warehouse cost table. The "
+                "facilities figure is used and the table's fixed lines are not added "
+                f"to it: {', '.join(sorted(fixed_on_sheet))[:200]}."
+            )
+        if consolidated_handling:
+            notes.append(
+                f"{len(consolidated_handling)} site(s) state a handling cost per unit "
+                "on the facilities sheet and fixed lines in the warehouse cost table. "
+                "Both are used; if the facilities figure already includes those "
+                "lines, they are counted twice: "
+                f"{', '.join(sorted(consolidated_handling))[:200]}."
+            )
 
     # ---- Demand history ----------------------------------------------
     # The client's demand is a monthly series per market and product. The

@@ -195,6 +195,12 @@ export function mapScenarioRecord(raw) {
     // after, and on what basis. Null for any other kind of scenario, and for a
     // capacity scenario solved before capacity carried a price.
     capacityPricing: raw.capacity_pricing || null,
+    // The one-time investment beside the operating cost, whether the costs are
+    // a fully priced network, and what a period is. Null for a record solved
+    // before each existed, and for scenarios they do not apply to.
+    investment: raw.investment || null,
+    costCompleteness: raw.cost_completeness || null,
+    horizon: raw.horizon || null,
 
     deltas,
     baselineKpis: raw.baseline_kpis || {},

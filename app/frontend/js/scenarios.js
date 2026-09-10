@@ -1291,11 +1291,43 @@ function atAGlanceHtml(scn, comparison) {
       && typeof pricing.added_fixed_cost_per_year === 'number') {
     rows.push(['Priced at', `<strong>+${formatCurrency(pricing.added_fixed_cost_per_year)} a year</strong>
       in fixed cost, pro rata to the site's existing capacity`]);
+  } else if (pricing && pricing.basis === 'STATED'
+      && typeof pricing.added_fixed_cost_per_year === 'number') {
+    rows.push(['Priced at', `<strong>+${formatCurrency(pricing.added_fixed_cost_per_year)} a year</strong>
+      in recurring cost, as stated`]);
+  } else if (pricing && pricing.basis === 'LIMIT_NOT_RAISED') {
+    rows.push(['Priced at', `<span class="scn-glance-delta bad">no usable capacity added</span> — the
+      limit that binds this site was not the one raised`]);
   } else if (pricing && pricing.basis === 'UNPRICED') {
     rows.push(['Priced at', `<span class="scn-glance-delta bad">no cost</span> — the upload states
       no fixed cost for this site, so the added capacity is free in this plan`]);
   } else if (pricing && pricing.basis === 'REDUCTION_KEEPS_COST') {
     rows.push(['Priced at', 'fixed cost unchanged — capacity taken away still costs what it did']);
+  }
+
+  // 1c. INVESTMENT, BESIDE THE OPERATING COST AND NEVER INSIDE IT. The server
+  //     separates the one-time cost, the new capacity's own recurring cost and
+  //     the operating effect; see `_investment` in app/backend/api/scenarios.py.
+  const investment = scn.investment || null;
+  if (investment) {
+    const unit = String(investment.cost_period || 'MONTH').toLowerCase();
+    const bits = [];
+    if (typeof investment.one_time_cost === 'number') {
+      bits.push(`<strong>${formatCurrency(investment.one_time_cost)} one-time</strong>, not in the cost figures`);
+      if (typeof investment.payback_periods === 'number') {
+        bits.push(`pays back in ${investment.payback_periods.toFixed(1)} ${unit}s`);
+      }
+    } else {
+      bits.push('<span class="scn-glance-delta bad">no one-time cost stated</span>');
+    }
+    rows.push(['Investment', bits.join(' · ')]);
+    const own = investment.capacity_fixed_cost_change;
+    const operating = investment.operating_cost_change;
+    if (typeof own === 'number' && typeof operating === 'number' && Math.abs(own) >= 1) {
+      rows.push(['Operating effect', `${operating <= 0 ? '↓' : '↑'} ${formatCurrency(Math.abs(operating))}
+        in freight, handling and stock, before the ${formatCurrency(Math.abs(own))} of
+        fixed cost the new capacity carries`]);
+    }
   }
 
   // 2. WHAT IT COSTS — the figure and its distance from today, together. They
@@ -1315,7 +1347,15 @@ function atAGlanceHtml(scn, comparison) {
           delta < 0 ? '↓' : '↑'} ${formatCurrency(Math.abs(delta))} vs today${
           shrinking ? ', by serving less demand' : ''}</span>`
       : '';
-    rows.push(['Cost', `<strong>${formatCurrency(cost)}</strong>${vsToday}`]);
+    // INCOMPLETE COST IS SAID ON THE FIGURE. An upload with no fixed cost for
+    // some sites is missing their rent, lease and overhead from this number,
+    // and the server says how many; it is not presented as a priced network.
+    const completeness = scn.costCompleteness || null;
+    const incomplete = completeness && completeness.complete === false
+      ? ` <span class="scn-glance-delta bad">incomplete — no fixed cost for ${
+          completeness.count} of ${completeness.sites} sites</span>`
+      : '';
+    rows.push(['Cost', `<strong>${formatCurrency(cost)}</strong>${vsToday}${incomplete}`]);
   }
 
   // 3. HOW MUCH OF THAT IS THE CHANGE. The single most misread thing on this
@@ -1404,7 +1444,8 @@ function requestSummary(scn) {
   if (typeof req.capacity_delta_units === 'number' && req.capacity_delta_units) {
     return `Capacity ${req.capacity_delta_units > 0 ? '+' : '−'}`
       + `${formatNumber(Math.abs(req.capacity_delta_units))} units at `
-      + `${esc((req.facility_ids || []).join(', ')) || 'the named site'}`;
+      + `${esc((req.facility_ids || []).join(', ')) || 'the named site'}`
+      + (req.capacity_limit ? ` (${esc(String(req.capacity_limit).toLowerCase())} limit)` : '');
   }
   if (typeof req.sla_days_delta === 'number' && req.sla_days_delta) {
     return `Delivery promise ${req.sla_days_delta > 0 ? '+' : ''}`
@@ -2617,6 +2658,30 @@ function renderToolboxDynamicFields(type) {
           rather than clamped — to remove a site entirely, use Close Facility.
         </div>
       </div>
+      <div class="grid-2 mb-sm" style="gap:var(--space-sm)">
+        <div class="form-group">
+          <label class="form-label">Which limit</label>
+          <select class="form-select" id="toolbox-capacity-limit">
+            <option value="" selected>Handling, and production where it is the same figure</option>
+            <option value="BOTH">Handling and production</option>
+            <option value="HANDLING">Handling only</option>
+            <option value="PRODUCTION">Production only (plants)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">One-time expansion cost (${currencyLabel()})</label>
+          <input type="number" class="form-input" id="toolbox-expansion-capex" placeholder="Equipment, construction — optional" min="0" step="100000">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Added recurring cost (${currencyLabel()} per year)</label>
+        <input type="number" class="form-input" id="toolbox-expansion-recurring" placeholder="Blank: pro rata to the site's fixed cost" min="0" step="100000">
+        <div class="text-xs text-muted" style="margin-top:4px">
+          A plant has two limits — what it can handle and what it can produce —
+          and ships at the smaller. The one-time cost is reported beside the
+          plan, not inside its operating cost; the recurring cost is charged in it.
+        </div>
+      </div>
     `;
   } else if (type === 'CLOSE_FACILITY') {
     setHeader('Close Facility',
@@ -2725,6 +2790,10 @@ function renderToolboxDynamicFields(type) {
             <label class="form-label">Handling cost (${currencyLabel()} per unit)</label>
             <input type="number" class="form-input" id="toolbox-site-handling" value="${handling != null ? Number(handling).toFixed(2) : ''}" placeholder="Per unit" min="0" step="0.5">
           </div>
+        </div>
+        <div class="form-group" style="margin-top:var(--space-sm)">
+          <label class="form-label">One-time opening cost (${currencyLabel()})</label>
+          <input type="number" class="form-input" id="toolbox-site-opening" value="" placeholder="Construction, fit-out, launch — 0 if none" min="0" step="100000">
         </div>
         <div class="text-xs text-muted" style="margin-top:8px;line-height:1.5">
           Freight to and from the new site is derived from the distance to each
@@ -3055,6 +3124,24 @@ function readScenarioForm() {
     }
     body.facility_ids = [facilityId];
     body.capacity_delta_units = direction === 'DECREASE' ? -amount : amount;
+    // What moves and what it costs. Blank means "not stated", never zero: a
+    // blank recurring cost is priced pro rata by the server, which says so,
+    // and a blank one-time cost is reported as not stated.
+    const optional = (id) => {
+      const raw = document.getElementById(id)?.value;
+      if (raw === undefined || raw === null || String(raw).trim() === '') return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : NaN;
+    };
+    const capex = optional('toolbox-expansion-capex');
+    const recurring = optional('toolbox-expansion-recurring');
+    if ([capex, recurring].some((v) => Number.isNaN(v) || (v !== null && v < 0))) {
+      return { error: 'Expansion costs must be amounts of zero or more, or left blank.' };
+    }
+    const limit = document.getElementById('toolbox-capacity-limit')?.value || '';
+    if (limit) body.capacity_limit = limit;
+    if (capex !== null) body.expansion_one_time_cost = capex;
+    if (recurring !== null) body.expansion_fixed_cost_per_year = recurring;
 
   } else if (type === 'CLOSE_FACILITY') {
     if (!facilityId) return { error: 'Choose a facility to close.' };
@@ -3082,6 +3169,7 @@ function readScenarioForm() {
       const capacity = num('toolbox-site-capacity');
       const fixed = num('toolbox-site-fixed');
       const handling = num('toolbox-site-handling');
+      const opening = num('toolbox-site-opening');
       const role = document.getElementById('toolbox-site-role')?.value || 'DC';
 
       if (!siteName) return { error: 'Give the new site a name.', field: 'toolbox-site-name' };
@@ -3102,11 +3190,22 @@ function readScenarioForm() {
         return { error: 'Fixed and handling costs cannot be negative.',
                  field: fixed < 0 ? 'toolbox-site-fixed' : 'toolbox-site-handling' };
       }
+      // Required, like the two above: a new site that costs nothing to build is
+      // the most favourable assumption available, and it is not made silently.
+      if (opening === null) {
+        return { error: 'Enter the one-time opening cost — construction, fit-out and launch. '
+                      + 'Enter 0 if there is none; it is not assumed.',
+                 field: 'toolbox-site-opening' };
+      }
+      if (opening < 0) {
+        return { error: 'The opening cost cannot be negative.', field: 'toolbox-site-opening' };
+      }
       body.action = 'ADD_FACILITY';
       body.new_facility = {
         name: siteName, latitude: lat, longitude: lng,
         capacity_units_per_period: capacity,
         fixed_cost_per_year: fixed, handling_cost_per_unit: handling,
+        opening_cost: opening,
         role,
       };
     }

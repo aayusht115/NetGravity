@@ -139,6 +139,16 @@ class FacilitySummary(BaseModel):
     #: dividing by a period count it had to go and find.
     throughput_units_per_period: float = 0.0
 
+    #: Rated, available, production and binding capacity, and the RECORDED
+    #: utilisation — four different measurements that used to collapse into
+    #: one `capacity_units`. See `FacilityDecision`.
+    rated_capacity_units:      float = 0.0
+    available_capacity_units:  Optional[float] = None
+    production_capacity_units: Optional[float] = None
+    capacity_limit:            str = "HANDLING"
+    capacity_by_period:        Dict[str, float] = Field(default_factory=dict)
+    observed_utilization_pct:  Optional[float] = None
+
     #: What this site cost the plan, split the way the engine charged it.
     #:
     #: Read verbatim from `FacilityDecision` — the MILP's own attribution, not

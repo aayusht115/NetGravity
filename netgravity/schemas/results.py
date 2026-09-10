@@ -158,6 +158,25 @@ class FacilityDecision(BaseModel):
     n_periods:            int   = 1
     throughput_by_period: Dict[str, float] = Field(default_factory=dict)
 
+    # WHICH CAPACITY `capacity_units` IS.
+    #
+    # `capacity_units` is the capacity that actually bound the site in each
+    # period, summed over the horizon: the rated capacity, or the month's
+    # stated availability, or a plant's separate production limit — whichever
+    # was tightest. Utilisation is measured against it. It used to be the rated
+    # throughput capacity always, so a plant expanded on paper but held at its
+    # old production limit shipped exactly what it did before and reported its
+    # utilisation falling from 97.61% to 62.75%.
+    #
+    # The others are published beside it so none is mistaken for another.
+    rated_capacity_units:      float = 0.0            # uploaded capacity × periods
+    available_capacity_units:  Optional[float] = None  # Σ stated monthly availability
+    production_capacity_units: Optional[float] = None  # separate production limit × periods
+    #: "HANDLING" | "AVAILABLE" | "PRODUCTION", or "MIXED" when it changed by period.
+    capacity_limit:            str = "HANDLING"
+    #: The binding capacity in each period.
+    capacity_by_period:        Dict[str, float] = Field(default_factory=dict)
+
     # Cost breakdown
     fixed_cost:           float = 0.0     # Σ over periods open
     handling_cost:        float = 0.0

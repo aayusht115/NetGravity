@@ -722,10 +722,6 @@ def _solve_milp(
         # that may ship nothing at all, with no diagnostic anywhere: it still
         # reports its throughput capacity in every KPI while the model holds it
         # at zero.
-        cap_vals = [c for c in (fac.capacity_units_per_period,
-                                fac.effective_supply_capacity)
-                    if c is not None]
-        eff_cap = min(cap_vals) if cap_vals else None
         min_thru = fac.min_throughput_per_period
 
         for period in periods:
@@ -734,8 +730,13 @@ def _solve_milp(
                 continue
             outbound_sum = pulp.lpSum(x[key] for key in period_keys)
             suffix = f"_t{period}" if multi_period else ""
-            if eff_cap is not None:
-                prob += outbound_sum <= eff_cap * y[fac.id], f"cap_{fac.id}{suffix}"
+            # The limit that binds THIS period: the rated capacity, the month's
+            # stated availability where lower, and a plant's separate
+            # production limit where lower still. See
+            # `FacilityRecord.period_limit`, which the reporting below reads as
+            # well, so the constraint and the utilisation cannot disagree.
+            eff_cap, _limit = fac.period_limit(period)
+            prob += outbound_sum <= eff_cap * y[fac.id], f"cap_{fac.id}{suffix}"
             if config.minimum_throughput_enabled and min_thru is not None and min_thru > 0:
                 prob += outbound_sum >= min_thru * y[fac.id], f"min_thru_{fac.id}{suffix}"
 
@@ -987,13 +988,25 @@ def _solve_milp(
             # decides whether the footprint works and the one an average hides:
             # a DC at 50% for eleven months and 140% in December is not a DC at
             # 57%.
-            per_period_cap = fac.capacity_units_per_period
-            horizon_cap = (per_period_cap * n_periods
-                           if (per_period_cap and per_period_cap > 0) else per_period_cap)
+            limits = {p: fac.period_limit(p) for p in periods}
+            cap_by_period = {p: limits[p][0] for p in periods}
+            horizon_cap = sum(cap_by_period.values())
             util_pct = (outbound_flow / horizon_cap * 100.0) if (is_open and horizon_cap and horizon_cap > 0) else 0.0
-            peak_util = (max(by_period.values()) / per_period_cap * 100.0
-                         if (is_open and per_period_cap and per_period_cap > 0 and by_period)
+            peak_util = (max((by_period[p] / cap_by_period[p] * 100.0)
+                             for p in periods if cap_by_period[p] > 0)
+                         if (is_open and any(cap_by_period[p] > 0 for p in periods))
                          else 0.0)
+            used_limits = {limits[p][1] for p in periods}
+            capacity_limit = used_limits.pop() if len(used_limits) == 1 else "MIXED"
+            rated_cap = fac.capacity_units_per_period * n_periods
+            stated_months = [fac.capacity_by_period.get(str(p)) for p in periods
+                             if (fac.capacity_by_period or {}).get(str(p)) is not None]
+            available_cap = (float(sum(min(float(v), fac.capacity_units_per_period)
+                                       for v in stated_months))
+                             if stated_months else None)
+            separate_production = fac.production_limit()
+            production_cap = (separate_production * n_periods
+                              if separate_production is not None else None)
 
             markets_served = sum(
                 1 for mkt in markets
@@ -1014,6 +1027,12 @@ def _solve_milp(
                 peak_utilization_pct    = round(peak_util, 2),
                 n_periods               = n_periods,
                 throughput_by_period    = {str(p): round(v, 4) for p, v in by_period.items()},
+                rated_capacity_units      = rated_cap,
+                available_capacity_units  = available_cap,
+                production_capacity_units = production_cap,
+                capacity_limit            = capacity_limit,
+                capacity_by_period        = {str(p): round(float(c), 4)
+                                             for p, c in cap_by_period.items()},
                 fixed_cost              = round(fixed_c, 4),
                 opening_cost            = round(open_c, 4),
                 closure_cost            = round(close_c, 4),

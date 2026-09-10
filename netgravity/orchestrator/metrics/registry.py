@@ -464,6 +464,21 @@ class KPIRegistry:
                     authoritative_owner="netgravity.optimization.milp",
                     snapshot_id=context.baseline_snapshot_id, execution_id=eid,
                 ),
+                # The capacity as UPLOADED, beside the capacity that bound.
+                # `capacity_units` is now the limit that actually restricted
+                # the site each period, so a plant held at its production limit
+                # reads full against it while its rated capacity is larger.
+                # Both are published so neither is mistaken for the other.
+                "rated_capacity_units": KPIResult(
+                    metric_id="rated_capacity_units",
+                    value=(getattr(fac, "rated_capacity_units", 0.0)
+                           or fac.capacity_units),
+                    unit="units",
+                    scope=MetricScope.FACILITY, entity_id=fac.facility_id,
+                    formula_id="CAPACITY_RATED", source_capability="optimization.solve",
+                    authoritative_owner="netgravity.optimization.milp",
+                    snapshot_id=context.baseline_snapshot_id, execution_id=eid,
+                ),
             }
         return out
 

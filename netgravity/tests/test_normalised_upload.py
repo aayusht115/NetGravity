@@ -819,27 +819,29 @@ class TestWarehouseCostsBecomeHandlingCost:
         """
         st = build_network_from_dataframes(us_shaped_tables)
         by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
-        assert by_id["F001"]["handlingCost"] == pytest.approx(1.62 + 5.16)
+        # RENT is a fixed line: its 1.62 per unit is the same money as its
+        # 89,348 a month, and is no longer charged a second time per unit.
+        assert by_id["F001"]["handlingCost"] == pytest.approx(5.16)
 
     def test_a_restated_cost_line_supersedes_the_earlier_one(self, us_shaped_tables):
         """F004 rent is restated at a later effective date. It is a rent
         review, not a second rent."""
         st = build_network_from_dataframes(us_shaped_tables)
         by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
-        assert by_id["F004"]["handlingCost"] == pytest.approx(2.80 + 5.48)
+        assert by_id["F004"]["operatingCostPerMonth"] == pytest.approx(78400 + 153451)
 
     def test_duplicate_rows_are_one_fact_not_several(self, us_shaped_tables):
         """F004 later rent row appears twice; summing both doubles it."""
         st = build_network_from_dataframes(us_shaped_tables)
         by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
-        assert by_id["F004"]["handlingCost"] < 2.80 + 2.80 + 5.48
+        assert by_id["F004"]["operatingCostPerMonth"] < 78400 * 2 + 153451
 
     def test_it_reaches_the_facility_record(self, us_shaped_tables):
         st = build_network_from_dataframes(us_shaped_tables)
         network, _, _ = assemble_network_from_structure(st)
         handling = {f.id: f.handling_cost_per_unit for f in network.facilities}
-        assert handling["F001"] == pytest.approx(6.78)
-        assert handling["F004"] == pytest.approx(8.28)
+        assert handling["F001"] == pytest.approx(5.16)
+        assert handling["F004"] == pytest.approx(5.48)
 
     def test_a_facilities_sheet_figure_is_not_overwritten(self, us_shaped_tables):
         """The client own consolidated figure wins over a derived sum."""
@@ -849,6 +851,116 @@ class TestWarehouseCostsBecomeHandlingCost:
         st = build_network_from_dataframes(us_shaped_tables)
         by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
         assert by_id["F001"]["handlingCost"] == 4.0
+
+
+class TestWarehouseCostLinesAreCountedOnce:
+    """
+    Every line in a warehouse cost table states the same money twice: a month
+    of it, and that month spread over the units handled. All of it used to be
+    charged per unit — rent included — and the monthly figures were read and
+    never used, so an upload whose only fixed costs were in this table was
+    assembled with a fixed cost of zero at all twenty sites.
+    """
+
+    def test_rent_is_not_charged_per_unit(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
+        assert "RENT" not in by_id["F001"]["handlingCostLines"]
+
+    def test_without_a_sheet_figure_fixed_lines_become_the_fixed_cost(
+            self, us_shaped_tables):
+        us_shaped_tables["Facilities"] = us_shaped_tables["Facilities"].drop(
+            columns=["Fixed_Cost"])
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
+        assert by_id["F001"]["fixedCost"] == pytest.approx(89348)
+        assert by_id["F001"]["fixedCostSource"] == "warehouse_costs"
+        # The restated rent, once.
+        assert by_id["F004"]["fixedCost"] == pytest.approx(78400)
+
+        network, assumptions, _ = assemble_network_from_structure(st)
+        fixed = {f.id: f.fixed_cost_per_year for f in network.facilities}
+        assert fixed["F001"] == pytest.approx(89348 * 12)
+        assert any("fixed cost lines in the warehouse cost table" in a
+                   for a in assumptions), assumptions
+
+    def test_a_facilities_sheet_fixed_cost_wins_and_says_so(self, us_shaped_tables):
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
+        assert by_id["F001"]["fixedCost"] == pytest.approx(4250000)
+        assert any("facilities figure is used" in n for n in st["notes"]), st["notes"]
+
+    def test_a_stated_cost_behaviour_overrides_the_name(self, us_shaped_tables):
+        table = us_shaped_tables["Warehouse_Costs"].copy()
+        table["Cost_Behaviour"] = "VARIABLE"
+        us_shaped_tables["Warehouse_Costs"] = table
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
+        assert by_id["F001"]["handlingCost"] == pytest.approx(1.62 + 5.16)
+
+    def test_an_unrecognised_line_is_charged_per_unit_and_named(self, us_shaped_tables):
+        import pandas as pd
+
+        table = us_shaped_tables["Warehouse_Costs"]
+        extra = pd.DataFrame([("F001", "SECURITY_ESCORT", 1000, 0.40, "2023-09-01")],
+                             columns=list(table.columns))
+        us_shaped_tables["Warehouse_Costs"] = pd.concat([table, extra], ignore_index=True)
+        st = build_network_from_dataframes(us_shaped_tables)
+        by_id = {n["id"]: n for n in st["plants"] + st["dcs"]}
+        assert by_id["F001"]["handlingCost"] == pytest.approx(5.16 + 0.40)
+        assert any("SECURITY_ESCORT" in n and "Cost_Behaviour" in n
+                   for n in st["notes"]), st["notes"]
+
+    def test_a_site_with_no_fixed_cost_anywhere_is_called_incomplete(
+            self, us_shaped_tables):
+        us_shaped_tables["Facilities"] = us_shaped_tables["Facilities"].drop(
+            columns=["Fixed_Cost"])
+        table = us_shaped_tables["Warehouse_Costs"]
+        us_shaped_tables["Warehouse_Costs"] = table[table["Facility_ID"] != "F004"]
+        st = build_network_from_dataframes(us_shaped_tables)
+        _, assumptions, _ = assemble_network_from_structure(st)
+        assert any(a.startswith("Cost is incomplete: 1 of 2 site(s)") and "F004" in a
+                   for a in assumptions), assumptions
+
+
+class TestMonthlyCapacityReachesThePlan:
+    """
+    The capacity table — what was available in each month, and what was used —
+    was stored for reporting and never reached the optimiser, which bound every
+    month at the facilities sheet's rated capacity.
+    """
+
+    def _with_capacity(self, tables):
+        import pandas as pd
+
+        st = build_network_from_dataframes(tables)
+        network, _, _ = assemble_network_from_structure(st)
+        labels = network.period_labels or {}
+        assert labels, "the fixture must model at least one period"
+        rows = []
+        for i, label in enumerate(sorted(labels.values())):
+            rows.append(("F001", label, 40000 + i, 30000))
+        tables["Capacity"] = pd.DataFrame(
+            rows, columns=["Facility_ID", "Period", "Available_Capacity_Units",
+                           "Used_Capacity_Units"])
+        st = build_network_from_dataframes(tables)
+        network, assumptions, _ = assemble_network_from_structure(st)
+        return network, assumptions, labels
+
+    def test_each_modelled_month_carries_its_available_capacity(self, us_shaped_tables):
+        network, assumptions, labels = self._with_capacity(us_shaped_tables)
+        plant = next(f for f in network.facilities if f.id == "F001")
+        by_label = {label: key for key, label in labels.items()}
+        for i, label in enumerate(sorted(labels.values())):
+            assert plant.capacity_by_period[by_label[label]] == pytest.approx(40000 + i)
+        assert any("Available capacity for 1 site(s)" in a for a in assumptions)
+
+    def test_recorded_utilisation_is_kept_beside_the_simulated_one(self, us_shaped_tables):
+        network, _, labels = self._with_capacity(us_shaped_tables)
+        plant = next(f for f in network.facilities if f.id == "F001")
+        latest = len(labels) - 1
+        assert plant.observed_utilization_pct == pytest.approx(
+            round(30000 / (40000 + latest) * 100.0, 2))
 
 
 class TestCrossSheetReferentialIntegrity:

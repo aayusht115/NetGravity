@@ -117,7 +117,9 @@ class TestScenarioWorkflow:
         response = _run_scenario(orch, spec, planner_actor)
 
         assert response.reasoning is not None
-        assert "200.00" in response.reasoning.summary
+        # The grounded delta and its percentage, as the briefing formats money:
+        # whole units, no trailing ".00".
+        assert "200 (+16.67%)" in response.reasoning.summary
         assert response.reasoning.grounding_status in ("GROUNDED", "NO_CLAIMS")
 
     def test_no_rf_is_calculated_for_a_plain_what_if(self, orch, planner_actor):

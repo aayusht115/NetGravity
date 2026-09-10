@@ -156,23 +156,53 @@ class ScenarioValidator:
                     "capacity_delta_units or capacity_set_units.",
                     context={"facility_ids": spec.facility_ids},
                 )
-            # A delta that drives capacity below zero is rejected rather than
+            # A change that drives a limit below zero is rejected rather than
             # clamped: clamping to 0 would silently turn "reduce by 5,000" into
-            # a full closure, which is a structurally different action.
-            if spec.capacity_delta_units is not None:
-                for fid in spec.facility_ids:
-                    current = fac_map[fid].capacity_units_per_period
-                    if current + spec.capacity_delta_units < 0:
-                        raise InvalidScenarioError(
-                            f"capacity_delta_units {spec.capacity_delta_units:+,.0f} would "
-                            f"take '{fid}' from {current:,.0f} to "
-                            f"{current + spec.capacity_delta_units:,.0f} units/period. "
-                            f"Negative capacity is not meaningful; to remove the facility "
-                            f"entirely use CLOSE_FACILITY, which is governed as a "
-                            f"structural change.",
-                            context={"facility_id": fid, "current_capacity": current,
-                                     "delta": spec.capacity_delta_units},
-                        )
+            # a full closure, which is a structurally different action. Checked
+            # on the limit the change actually moves — see `planned_capacity`.
+            from netgravity.orchestrator.engines.scenario_builder import (
+                _UNSTATED_CAPACITY,
+                planned_capacity,
+            )
+
+            for fid in spec.facility_ids:
+                fac = fac_map[fid]
+                if (spec.capacity_limit == "PRODUCTION"
+                        and not fac.is_plant_or_supplier):
+                    raise InvalidScenarioError(
+                        f"'{fid}' is not a plant, so it has no production limit "
+                        f"to change. Change its handling capacity instead.",
+                        context={"facility_id": fid, "limit": "PRODUCTION"},
+                    )
+                if spec.capacity_delta_units is None:
+                    continue
+                handling, production = planned_capacity(
+                    fac, delta_units=spec.capacity_delta_units,
+                    limit=spec.capacity_limit)
+                moved_production = (spec.capacity_limit == "PRODUCTION")
+                current = (fac.production_capacity_units_per_period
+                           if moved_production
+                           and fac.production_capacity_units_per_period < _UNSTATED_CAPACITY
+                           else fac.capacity_units_per_period)
+                if handling < 0 or (production < 0 and fac.is_plant_or_supplier):
+                    raise InvalidScenarioError(
+                        f"capacity_delta_units {spec.capacity_delta_units:+,.0f} would "
+                        f"take '{fid}' from {current:,.0f} to "
+                        f"{current + spec.capacity_delta_units:,.0f} units/period. "
+                        f"Negative capacity is not meaningful; to remove the facility "
+                        f"entirely use CLOSE_FACILITY, which is governed as a "
+                        f"structural change.",
+                        context={"facility_id": fid, "current_capacity": current,
+                                 "delta": spec.capacity_delta_units},
+                    )
+            for name, value in (
+                    ("expansion_one_time_cost", spec.expansion_one_time_cost),
+                    ("expansion_fixed_cost_per_year", spec.expansion_fixed_cost_per_year)):
+                if value is not None and value < 0:
+                    raise InvalidScenarioError(
+                        f"{name} must not be negative, got {value:,.0f}.",
+                        context={"field": name},
+                    )
 
         if spec.demand_multiplier is not None and spec.demand_multiplier < 0:
             raise InvalidScenarioError(
@@ -269,6 +299,8 @@ class ScenarioValidator:
             )
         if site.fixed_cost_per_year < 0 or site.handling_cost_per_unit < 0:
             raise InvalidScenarioError("Facility costs must not be negative.")
+        if site.opening_cost is not None and site.opening_cost < 0:
+            raise InvalidScenarioError("The opening cost must not be negative.")
         if site.role.upper() not in {"DC", "PLANT", "WAREHOUSE", "HUB"}:
             raise InvalidScenarioError(
                 f"A new site must be a DC or a PLANT, got '{site.role}'. Markets "

@@ -394,9 +394,13 @@ def assemble_network_from_structure(
                 )
             else:
                 record.fixed_cost_per_year = fixed * 12.0
-                stated = ("the column states a monthly figure" if basis == "month"
-                          else "the column names no period, so the monthly "
-                               "convention for these workbooks is applied")
+                if raw.get("fixedCostSource") == "warehouse_costs":
+                    stated = ("the sum of its fixed cost lines in the warehouse "
+                              "cost table, which are monthly")
+                else:
+                    stated = ("the column states a monthly figure" if basis == "month"
+                              else "the column names no period, so the monthly "
+                                   "convention for these workbooks is applied")
                 assumptions.append(
                     f"{fid}: fixed cost read as {_money(fixed)}/month "
                     f"({stated}) and annualised to "
@@ -410,6 +414,26 @@ def assemble_network_from_structure(
         add_facility(d, NodeRole.DC)
     for m in markets:
         add_facility(m, NodeRole.MARKET)
+
+    # COST COMPLETENESS, said once where the network is built.
+    #
+    # A site with no fixed cost is not a free site: it is a site whose rent,
+    # lease and overhead the upload did not give. Every cost figure built on it
+    # is short by that amount, and that amount is what decides a closure or an
+    # expansion. The scenario planner reads the same fact off the network and
+    # marks its figures incomplete rather than presenting a priced network.
+    in_scope = [f for f in facilities
+                if f.role != NodeRole.MARKET and f.status != FacilityStatus.CLOSED]
+    unpriced_sites = [f.id for f in in_scope if f.fixed_cost_per_year <= 0]
+    if unpriced_sites:
+        assumptions.append(
+            f"Cost is incomplete: {len(unpriced_sites)} of {len(in_scope)} site(s) "
+            f"carry no fixed cost, because the upload states none for them — "
+            f"neither on the facilities sheet nor as fixed lines in a warehouse "
+            f"cost table. Their rent, lease and overhead are missing from every "
+            f"cost figure, so closing, consolidating or expanding them is priced "
+            f"on freight and handling alone: {', '.join(unpriced_sites)[:240]}."
+        )
 
     if missing_status:
         assumptions.append(
@@ -531,6 +555,61 @@ def assemble_network_from_structure(
     period_labels: Dict[str, str] = {
         str(i + 1): label for i, label in enumerate(modelled_periods)
     }
+
+    # ---- Monthly available capacity, and what was recorded ------------
+    #
+    # The optimiser models these periods one by one, and used to bind every one
+    # of them at the facilities sheet's rated capacity. The capacity table —
+    # what was actually AVAILABLE in each month, and what was USED — went to a
+    # reporting store and nowhere else, so a seasonal restriction the client
+    # had recorded never reached a plan.
+    #
+    # Available capacity now binds its own month, up to the rated capacity
+    # (`FacilityRecord.period_limit`); a modelled month the table does not
+    # cover binds at the rated capacity. The latest recorded utilisation is
+    # kept as a measurement beside the simulated one, never in place of it.
+    capacity_rows = structure.get("capacityHistory") or []
+    if capacity_rows:
+        monthly: Dict[str, Dict[str, float]] = {}
+        recorded: Dict[str, Tuple[str, float]] = {}
+        for row in capacity_rows:
+            fid = str(row.get("facilityId") or "").strip()
+            label = str(row.get("period") or "").strip()
+            available = _as_float(row.get("available"))
+            used = _as_float(row.get("used"))
+            if not fid or not label:
+                continue
+            if label in period_index and available is not None and available >= 0:
+                monthly.setdefault(fid, {})[str(period_index[label])] = available
+            if available is not None and available > 0 and used is not None:
+                previous = recorded.get(fid)
+                if previous is None or label >= previous[0]:
+                    recorded[fid] = (label, used / available * 100.0)
+        applied = 0
+        for record in facilities:
+            if record.role == NodeRole.MARKET:
+                continue
+            months = monthly.get(record.id)
+            if months:
+                record.capacity_by_period = dict(months)
+                applied += 1
+            if record.id in recorded:
+                record.observed_utilization_pct = round(recorded[record.id][1], 2)
+        if applied:
+            assumptions.append(
+                f"Available capacity for {applied} site(s) is taken month by month "
+                f"from the capacity table for the {len(period_index)} modelled "
+                f"period(s): each month binds at what was available in it, up to "
+                f"the rated capacity on the facilities sheet. A modelled month the "
+                f"table does not cover binds at the rated capacity."
+            )
+        if recorded:
+            assumptions.append(
+                f"Observed utilisation for {len(recorded)} site(s) is the latest "
+                f"period in the capacity table, used over available. It is a "
+                f"measurement of what happened, reported beside the utilisation "
+                f"the plan would run at, and the two are not the same figure."
+            )
 
     # Demand variability, for the safety-stock term the inventory module already
     # owns. `DemandRecord.std_dev` defaults to 0.0, and a sigma of zero means no

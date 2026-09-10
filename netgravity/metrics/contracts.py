@@ -112,14 +112,18 @@ def _utilisation_by_period(fd: Any) -> Dict[str, float]:
     horizon_capacity = getattr(fd, "capacity_units", 0.0) or 0.0
     if not by_period or n_periods <= 1 or horizon_capacity <= 0:
         return {}
-    # The engine's basis: one period's throughput over ONE period's capacity.
-    per_period_capacity = horizon_capacity / n_periods
-    if per_period_capacity <= 0:
-        return {}
-    return {
-        str(period): round(float(units) / per_period_capacity * 100.0, 2)
-        for period, units in by_period.items()
-    }
+    # The engine's basis: one period's throughput over THAT period's binding
+    # capacity. Monthly availability makes the denominator differ by period,
+    # so it is read per period where the solve published it, and the peak the
+    # engine reports stays the maximum of exactly this series.
+    per_period = getattr(fd, "capacity_by_period", None) or {}
+    fallback = horizon_capacity / n_periods
+    out: Dict[str, float] = {}
+    for period, units in by_period.items():
+        capacity = per_period.get(str(period), fallback)
+        if capacity and capacity > 0:
+            out[str(period)] = round(float(units) / capacity * 100.0, 2)
+    return out
 
 
 def _inventory_by_facility(
@@ -242,6 +246,14 @@ def build_network_state_result(
             utilization_by_period = _utilisation_by_period(fd),
             throughput_units_per_period = round(
                 fd.throughput_units / periods_modelled, 4),
+            rated_capacity_units      = round(
+                getattr(fd, "rated_capacity_units", 0.0) or fd.capacity_units, 4),
+            available_capacity_units  = getattr(fd, "available_capacity_units", None),
+            production_capacity_units = getattr(fd, "production_capacity_units", None),
+            capacity_limit            = getattr(fd, "capacity_limit", None) or "HANDLING",
+            capacity_by_period        = dict(getattr(fd, "capacity_by_period", None) or {}),
+            observed_utilization_pct  = (getattr(fac, "observed_utilization_pct", None)
+                                         if fac is not None else None),
             # The engine's own cost attribution for this site, unchanged. The
             # total is the engine's sum rather than one made here, so a screen
             # adding the parts up and a screen reading the total cannot

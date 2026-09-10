@@ -111,6 +111,9 @@ def _facility_states(registry: Any, context: Any, key: Optional[str]) -> Dict[st
     if not key:
         return {}
     out: Dict[str, Any] = {}
+    state = (getattr(context, "network_states", {}) or {}).get(key)
+    summaries = {getattr(f, "facility_id", None): f
+                 for f in (getattr(state, "facilities", None) or [])}
     for facility_id, metrics in registry.facility_kpis(context, key=key).items():
         def value(metric_id: str) -> Any:
             result = metrics.get(metric_id)
@@ -121,6 +124,13 @@ def _facility_states(registry: Any, context: Any, key: Optional[str]) -> Dict[st
             "throughput": value("throughput_units"),
             "capacity": value("capacity_units"),
             "isOpen": value("is_open"),
+            # `capacity` is the capacity that BOUND the site: rated, the
+            # month's availability, or a plant's production limit. These say
+            # which, and what was uploaded and recorded beside it.
+            "ratedCapacity": value("rated_capacity_units"),
+            "capacityLimit": getattr(summaries.get(facility_id), "capacity_limit", None),
+            "observedUtilPct": getattr(summaries.get(facility_id),
+                                       "observed_utilization_pct", None),
         }
     return out
 
@@ -261,6 +271,10 @@ def _site_row(facility_id: str, meta: Dict[str, Dict[str, Any]],
         "added_units": (round(throughput - was, 2)
                         if isinstance(throughput, (int, float))
                         and isinstance(was, (int, float)) else None),
+        # What was uploaded, which limit `capacity` is, and what was recorded.
+        "rated_capacity": scenario.get("ratedCapacity"),
+        "capacity_limit": scenario.get("capacityLimit"),
+        "observed_util_pct": scenario.get("observedUtilPct"),
         "headroom_units": (round(scenario["capacity"] - throughput, 2)
                            if isinstance(throughput, (int, float))
                            and isinstance(scenario.get("capacity"), (int, float))
@@ -539,6 +553,12 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
     # The upload states no fixed cost anywhere. Capacity, closures and
     # openings then carry no price, and a cost comparison of them is empty.
     unpriced = facility_cost is not None and facility_cost <= 0.0
+    # Some sites unpriced rather than all of them. Said, and never offered as
+    # a consolidation: closing a site whose fixed cost is missing saves
+    # nothing the model can see.
+    completeness = record.get("cost_completeness") or {}
+    unpriced_sites = {str(f) for f in (completeness.get("sites_without_fixed_cost") or [])}
+    partly_unpriced = completeness.get("complete") is False and not unpriced
 
     def site_name(facility_id: str) -> str:
         for block in ("at_ceiling", "working_harder", "under_used", "idle"):
@@ -601,7 +621,10 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
             util = (now_states.get(facility_id) or {}).get("utilPct")
             running = (f" and runs at {util:,.0f}% of its new capacity"
                        if isinstance(util, (int, float)) else "")
-            if pricing.get("basis") == "PRO_RATA":
+            if pricing.get("basis") == "LIMIT_NOT_RAISED":
+                cost = (" The change did not raise the limit that binds this "
+                        "site, so none of the added room could be used.")
+            elif pricing.get("basis") in ("PRO_RATA", "STATED"):
                 cost = " The change adds fixed cost for room that goes unused."
             elif pricing.get("basis") == "UNPRICED" or unpriced:
                 cost = (" The upload states no fixed cost for this site, so "
@@ -723,7 +746,8 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
         return not isinstance(added, (int, float)) or added < 0
 
     under_used = [r for r in (cap.get("under_used") or [])
-                  if emptied(r) and str(r.get("id")) not in named]
+                  if emptied(r) and str(r.get("id")) not in named
+                  and str(r.get("id")) not in unpriced_sites]
     if under_used and not at_ceiling and not strands and not unpriced:
         site = under_used[0]
         util = site.get("util_pct")
@@ -766,16 +790,20 @@ def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
     # 8. The input without which this change cannot be judged on cost.
     explanation = record.get("explanation") or {}
     missing = list(explanation.get("missing_information") or [])
-    if unpriced and action in ("CHANGE_CAPACITY", "CLOSE_FACILITY",
-                               "OPEN_FACILITY", "ADD_FACILITY"):
+    if (unpriced or partly_unpriced) and action in (
+            "CHANGE_CAPACITY", "CLOSE_FACILITY", "OPEN_FACILITY", "ADD_FACILITY"):
+        count = completeness.get("count")
+        sites = completeness.get("sites")
+        where = ("any site" if unpriced or not count or not sites
+                 else f"{count} of its {sites} sites")
         add({
             "key": "REQUEST_DATA",
             "label": "Obtain each site's annual fixed cost",
             "reason": (
-                "This upload states no fixed cost for any site, so capacity, "
-                "closures and openings carry no price in this plan: its cost "
-                "moves only with freight and handling. A change like this one "
-                "cannot be judged on cost until that input is in."),
+                f"This upload states no fixed cost for {where}, so rent, lease "
+                f"and overhead there are missing from this plan's cost, and "
+                f"capacity, closures and openings there carry no price. A change "
+                f"like this one cannot be judged on cost until that input is in."),
             "target": {},
         })
     elif missing:
@@ -990,20 +1018,27 @@ def _capacity_response(engine: Any, snapshot_id: str,
 
 def _capacity_pricing(engine: Any, snapshot_id: str, action: str,
                       facility_ids: List[str],
-                      delta_units: Optional[float]) -> Optional[Dict[str, Any]]:
+                      delta_units: Optional[float],
+                      *,
+                      limit: Optional[str] = None,
+                      recurring_per_year: Optional[float] = None,
+                      ) -> Optional[Dict[str, Any]]:
     """
     The fixed cost a capacity change was charged, site by site, and on what
-    basis — from the same function the builder applies.
+    basis — from the same functions the builder applies.
 
-    THE ANSWER TO "WHY DIDN'T THE COST MOVE?" A capacity scenario used to be
-    free on the model's terms, so an unchanged cost could mean the capacity
-    paid for itself or that nobody charged for it, and the screen could not
-    say which. The basis is one of:
+    THE ANSWER TO "WHY DID THE COST MOVE, OR NOT?" The basis is one of:
 
-      * PRO_RATA             — priced at the site's own fixed cost per unit;
-      * UNPRICED             — the upload states no fixed cost for the site
-                               (or no capacity to price against), so the added
-                               room carries no cost in this plan;
+      * STATED               — the caller stated the recurring cost, and it is
+                               charged as stated;
+      * PRO_RATA             — priced at the site's own fixed cost per unit of
+                               the capacity it can actually use;
+      * LIMIT_NOT_RAISED     — the change raised a limit that does not bind
+                               (a plant's handling capacity above its
+                               production limit), so nothing usable was added
+                               and nothing is charged;
+      * UNPRICED             — the upload states no fixed cost for the site,
+                               so the added room carries no cost in this plan;
       * REDUCTION_KEEPS_COST — capacity taken away keeps its fixed cost.
 
     None for any other action, or when the snapshot cannot be read. Never
@@ -1016,6 +1051,8 @@ def _capacity_pricing(engine: Any, snapshot_id: str, action: str,
         from netgravity.orchestrator.engines.scenario_builder import (
             _UNSTATED_CAPACITY,
             capacity_fixed_cost,
+            planned_capacity,
+            usable_capacity,
         )
 
         facilities = {f.id: f for f in
@@ -1028,21 +1065,40 @@ def _capacity_pricing(engine: Any, snapshot_id: str, action: str,
         fac = facilities.get(facility_id)
         if fac is None:
             continue
-        current = float(fac.capacity_units_per_period)
-        new = current + float(delta_units)
+        handling = float(fac.capacity_units_per_period)
+        raw = getattr(fac, "production_capacity_units_per_period", None)
+        production = float(raw) if raw is not None else 1e12
+        new_handling, new_production = planned_capacity(
+            fac, delta_units=float(delta_units), limit=limit)
+        usable_before = usable_capacity(fac, handling, production)
+        usable_after = usable_capacity(fac, new_handling, new_production)
         before = float(fac.fixed_cost_per_year or 0.0)
-        after = capacity_fixed_cost(before, current, new)
-        if delta_units <= 0:
-            basis = "REDUCTION_KEEPS_COST"
-        elif before <= 0 or current <= 0 or current >= _UNSTATED_CAPACITY:
-            basis = "UNPRICED"
+        if recurring_per_year is not None:
+            after = before + float(recurring_per_year)
+            basis = "STATED"
         else:
-            basis = "PRO_RATA"
+            after = capacity_fixed_cost(before, usable_before, usable_after)
+            if delta_units <= 0:
+                basis = "REDUCTION_KEEPS_COST"
+            elif usable_after <= usable_before:
+                basis = "LIMIT_NOT_RAISED"
+            elif (before <= 0 or usable_before <= 0
+                  or usable_before >= _UNSTATED_CAPACITY):
+                basis = "UNPRICED"
+            else:
+                basis = "PRO_RATA"
         sites.append({
             "facility_id": facility_id,
-            "name": fac.name or facility_id,
-            "capacity_before": current,
-            "capacity_after": new,
+            "name": getattr(fac, "name", None) or facility_id,
+            "limit": (limit or "ORDINARY"),
+            "capacity_before": handling,
+            "capacity_after": new_handling,
+            "production_capacity_before": (production
+                                           if production < _UNSTATED_CAPACITY else None),
+            "production_capacity_after": (new_production
+                                          if new_production < _UNSTATED_CAPACITY else None),
+            "usable_capacity_before": usable_before,
+            "usable_capacity_after": usable_after,
             "fixed_cost_per_year_before": round(before, 2),
             "fixed_cost_per_year_after": round(after, 2),
             "added_fixed_cost_per_year": round(after - before, 2),
@@ -1056,6 +1112,122 @@ def _capacity_pricing(engine: Any, snapshot_id: str, action: str,
         "added_fixed_cost_per_year": round(
             sum(site["added_fixed_cost_per_year"] for site in sites), 2),
         "basis": bases.pop() if len(bases) == 1 else "MIXED",
+    }
+
+
+def _cost_completeness(engine: Any, snapshot_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Whether this network's cost is fully priced — said, not implied.
+
+    A site with no fixed cost is a site whose rent, lease and overhead the
+    upload did not give. Every figure is short by that amount, and a scenario
+    that closes, consolidates or expands such a site is priced on freight and
+    handling alone. Measured: an upload with its fixed-cost column removed was
+    solved, compared and ranked as a complete network, and closing a DC read as
+    a C$5.72M saving.
+
+    None when the snapshot cannot be read, which is not the same as complete.
+    """
+    try:
+        facilities = engine.snapshots.get(snapshot_id).network.facilities
+    except Exception:  # noqa: BLE001
+        return None
+    scope = [f for f in facilities
+             if getattr(f.role, "value", str(f.role)) not in ("MARKET", "CUSTOMER")
+             and getattr(f.status, "value", str(f.status)) != "CLOSED"]
+    if not scope:
+        return None
+    missing = [f.id for f in scope if float(f.fixed_cost_per_year or 0.0) <= 0.0]
+    return {
+        "complete": not missing,
+        "sites": len(scope),
+        "count": len(missing),
+        "sites_without_fixed_cost": missing[:50],
+        "missing_input": "fixed_cost_per_year" if missing else None,
+    }
+
+
+def _horizon(engine: Any, snapshot_id: str) -> Optional[Dict[str, Any]]:
+    """How many periods a plan's costs cover, and what a period is."""
+    try:
+        network = engine.snapshots.get(snapshot_id).network
+    except Exception:  # noqa: BLE001
+        return None
+    periods = len({d.period for d in network.demands}) or 1
+    cost_period = network.config.cost_period
+    return {"periods": periods,
+            "cost_period": getattr(cost_period, "value", str(cost_period))}
+
+
+def _investment(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    The one-time cost of a change, beside — never inside — its operating cost.
+
+    Expansion and new sites used to carry no investment at all: capacity was a
+    constraint with nothing to build, and a new DC cost its fixed and handling
+    rates and nothing up front. Putting a one-time figure into a twelve-month
+    operating solve would be the opposite error — a building that lasts decades
+    charged against one year of savings, so nothing would ever be built.
+
+    So the solve stays an operating plan, and this block states the rest from
+    the record's own figures:
+
+      * `cost_change`                — the plan's cost against today;
+      * `capacity_fixed_cost_change` — the part of that which is the new
+                                       capacity's own recurring fixed cost;
+      * `operating_cost_change`      — the rest: freight, handling and stock;
+      * `payback_periods`            — the one-time cost over the plan's saving
+                                       per period, where it saves anything.
+
+    `one_time_cost_stated` is False when the caller gave none, which the screen
+    says rather than treating as free. None for any other action.
+    """
+    request = record.get("request") or {}
+    action = str(request.get("action") or "").upper()
+    if action == "CHANGE_CAPACITY":
+        one_time = request.get("expansion_one_time_cost")
+        # Taking capacity away builds nothing. Without this a reduction read
+        # "no one-time cost stated" and was compared "as though it cost
+        # nothing up front", which is a caveat about a decision it is not.
+        delta = request.get("capacity_delta_units")
+        if (one_time is None and isinstance(delta, (int, float))
+                and not isinstance(delta, bool) and delta <= 0):
+            return None
+    elif action == "ADD_FACILITY":
+        one_time = (request.get("new_facility") or {}).get("opening_cost")
+    else:
+        return None
+    stated = isinstance(one_time, (int, float)) and not isinstance(one_time, bool)
+
+    baseline = record.get("baseline_kpis") or {}
+    scenario = record.get("scenario_kpis") or {}
+    base_cost = _valid(baseline, "business_network_cost")
+    cost = _valid(scenario, "business_network_cost")
+    base_fixed = _valid(baseline, "facility_cost")
+    fixed = _valid(scenario, "facility_cost")
+    horizon = record.get("horizon") or {}
+    periods = horizon.get("periods")
+    periods = periods if isinstance(periods, int) and periods > 0 else 1
+
+    change = None if cost is None or base_cost is None else round(cost - base_cost, 4)
+    own = None if fixed is None or base_fixed is None else round(fixed - base_fixed, 4)
+    operating = None if change is None or own is None else round(change - own, 4)
+    per_period = None if change is None else change / periods
+    payback = (round(float(one_time) / -per_period, 2)
+               if stated and one_time > 0 and per_period is not None and per_period < 0
+               else None)
+    return {
+        "one_time_cost": float(one_time) if stated else None,
+        "one_time_cost_stated": stated,
+        "cost_change": change,
+        "capacity_fixed_cost_change": own,
+        "operating_cost_change": operating,
+        "periods": periods,
+        "cost_period": horizon.get("cost_period") or "MONTH",
+        "payback_periods": payback,
+        "note": ("The one-time cost is in none of the cost figures on this "
+                 "scenario, which are operating costs over the modelled "
+                 "periods. The recurring cost of the new capacity is in them."),
     }
 
 
@@ -2175,6 +2347,31 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
 
         recommended = by_id.get(verdict["recommended_scenario_id"])
         caveats = list(verdict["caveats"])
+        # WHAT THE FIGURES DO NOT CONTAIN, before anything about what they say.
+        incomplete = [r for r in selected
+                      if (r.get("cost_completeness") or {}).get("complete") is False]
+        if incomplete:
+            caveats.insert(0, (
+                "These costs are incomplete: the upload states no fixed cost for "
+                "some sites, so their rent, lease and overhead are missing from "
+                "every figure compared, and closing, consolidating or expanding "
+                "them is priced on freight and handling alone."))
+        investing = [r for r in selected
+                     if ((r.get("investment") or {}).get("one_time_cost") or 0) > 0]
+        if investing:
+            caveats.append(
+                f"{len(investing)} of the scenarios compared "
+                f"{'requires' if len(investing) == 1 else 'require'} a one-time "
+                f"investment that is not in the cost ranking; it is reported "
+                f"beside each scenario.")
+        unstated = [r for r in selected
+                    if (r.get("investment") or {}).get("one_time_cost_stated") is False]
+        if unstated:
+            caveats.append(
+                f"{len(unstated)} of the scenarios compared "
+                f"{'states' if len(unstated) == 1 else 'state'} no one-time "
+                f"cost, so building or expanding is compared as though it cost "
+                f"nothing up front.")
         if recommended and recommended.get("reference_note"):
             caveats.append(recommended["reference_note"])
 
@@ -2321,6 +2518,15 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
         demand_scale = number("demand_multiplier", "demand_scale")
         transport_mult = number("transport_cost_multiplier")
         sla_delta = number("sla_days_delta")
+        # What a capacity change moves and what it costs. See
+        # `ScenarioIntentSpec.capacity_limit` and the two expansion fields.
+        one_time = number("expansion_one_time_cost")
+        recurring = number("expansion_fixed_cost_per_year")
+        capacity_limit = str(body.get("capacity_limit") or "").strip().upper() or None
+        if capacity_limit not in (None, "BOTH", "HANDLING", "PRODUCTION"):
+            raise ValidationError(
+                "capacity_limit must be BOTH, HANDLING or PRODUCTION.",
+                context={"capacity_limit": capacity_limit})
 
         required = {
             ScenarioActionType.CHANGE_CAPACITY: (
@@ -2351,6 +2557,12 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             action=action,
             facility_ids=list(facility_ids),
             capacity_delta_units=cap_delta if action == ScenarioActionType.CHANGE_CAPACITY else None,
+            capacity_limit=(capacity_limit
+                            if action == ScenarioActionType.CHANGE_CAPACITY else None),
+            expansion_one_time_cost=(
+                one_time if action == ScenarioActionType.CHANGE_CAPACITY else None),
+            expansion_fixed_cost_per_year=(
+                recurring if action == ScenarioActionType.CHANGE_CAPACITY else None),
             demand_multiplier=demand_scale if action == ScenarioActionType.CHANGE_DEMAND else None,
             # Growth the client states for one region and/or one product
             # category. Empty string and missing are the same thing — no scope,
@@ -2496,6 +2708,12 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
                 "action": action_str,
                 "facility_ids": list(facility_ids),
                 "capacity_delta_units": cap_delta,
+                "capacity_limit": (capacity_limit
+                                   if action_str == "CHANGE_CAPACITY" else None),
+                "expansion_one_time_cost": (one_time
+                                            if action_str == "CHANGE_CAPACITY" else None),
+                "expansion_fixed_cost_per_year": (recurring
+                                                  if action_str == "CHANGE_CAPACITY" else None),
                 "demand_multiplier": demand_scale,
                 # WHERE the growth was applied. These reach the solver through
                 # `ScenarioIntentSpec` and were dropped from the record, so a
@@ -2519,7 +2737,12 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             # What the capacity change was charged, and on what basis. See
             # `_capacity_pricing`.
             "capacity_pricing": _capacity_pricing(
-                engine, snapshot_id, action_str, list(facility_ids), cap_delta),
+                engine, snapshot_id, action_str, list(facility_ids), cap_delta,
+                limit=capacity_limit, recurring_per_year=recurring),
+            # Whether the costs on this record are a fully priced network.
+            "cost_completeness": _cost_completeness(engine, snapshot_id),
+            # How many periods the costs cover, and what a period is.
+            "horizon": _horizon(engine, snapshot_id),
             "baseline_kpis": record_baseline_kpis,
             "scenario_kpis": record_scenario_kpis,
             "reference_kpis": reference_kpis,
@@ -2585,6 +2808,10 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
         # What to DO about it, from the solved result. Written onto the record
         # AFTER it is complete, because it reads the capacity response and the
         # explanation that were just built.
+        # One-time investment, reported BESIDE the operating cost. Written
+        # before the recommendations, which do not read it, and after the
+        # KPIs, which it does.
+        record["investment"] = _investment(record)
         record["recommended_actions"] = _recommended_actions(record)
 
         with _lock:

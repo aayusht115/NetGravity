@@ -1803,3 +1803,159 @@ class TestTheLadderIsAboutTheChange:
         block = js[js.index("function recommendedActions(scn, comparison)"):]
         block = block[:block.index("\n}\n")]
         assert "row.statement === true" in block
+
+
+
+# ---------------------------------------------------------------------------
+# Investment, limits and completeness on the record
+# ---------------------------------------------------------------------------
+
+class _PlantSite:
+    is_plant_or_supplier = True
+
+    def __init__(self, fid, handling, production, fixed):
+        self.id = fid
+        self.name = fid
+        self.capacity_units_per_period = handling
+        self.production_capacity_units_per_period = production
+        self.fixed_cost_per_year = fixed
+
+
+class _CostedSite:
+    def __init__(self, fid, fixed, role="DC", status="EXISTING"):
+        self.id = fid
+        self.name = fid
+        self.role = role
+        self.status = status
+        self.fixed_cost_per_year = fixed
+
+
+class TestTheRecordPricesTheLimitThatMoved:
+
+    ENGINE = _Engine([_PlantSite("F002", 90_000.0, 90_000.0, 73_200_000.0)])
+
+    def test_raising_a_limit_that_does_not_bind_adds_nothing_usable(self):
+        from app.backend.api.scenarios import _capacity_pricing
+
+        out = _capacity_pricing(self.ENGINE, "snap", "CHANGE_CAPACITY", ["F002"],
+                                50_000.0, limit="HANDLING")
+        assert out["basis"] == "LIMIT_NOT_RAISED"
+        assert out["added_fixed_cost_per_year"] == 0.0
+        assert out["sites"][0]["usable_capacity_after"] == 90_000.0
+
+    def test_an_ordinary_plant_expansion_is_priced_on_usable_capacity(self):
+        from app.backend.api.scenarios import _capacity_pricing
+
+        out = _capacity_pricing(self.ENGINE, "snap", "CHANGE_CAPACITY", ["F002"],
+                                50_000.0)
+        assert out["basis"] == "PRO_RATA"
+        assert out["added_fixed_cost_per_year"] == pytest.approx(
+            73_200_000.0 * 50_000.0 / 90_000.0, abs=0.01)
+
+    def test_a_stated_recurring_cost_is_the_price(self):
+        from app.backend.api.scenarios import _capacity_pricing
+
+        out = _capacity_pricing(self.ENGINE, "snap", "CHANGE_CAPACITY", ["F002"],
+                                50_000.0, recurring_per_year=12_000_000.0)
+        assert out["basis"] == "STATED"
+        assert out["added_fixed_cost_per_year"] == pytest.approx(12_000_000.0)
+
+
+class TestInvestmentIsReportedBesideOperatingCost:
+
+    def _record(self, **request):
+        return {
+            "request": dict({"action": "CHANGE_CAPACITY"}, **request),
+            "baseline_kpis": {"business_network_cost": _kpi(10_000_000.0),
+                              "facility_cost": _kpi(1_000_000.0)},
+            "scenario_kpis": {"business_network_cost": _kpi(9_900_000.0),
+                              "facility_cost": _kpi(1_050_000.0)},
+            "horizon": {"periods": 12, "cost_period": "MONTH"},
+        }
+
+    def test_the_one_time_cost_is_separate_and_paid_back_from_the_saving(self):
+        from app.backend.api.scenarios import _investment
+
+        out = _investment(self._record(expansion_one_time_cost=500_000.0))
+        assert out["one_time_cost"] == 500_000.0
+        assert out["cost_change"] == pytest.approx(-100_000.0)
+        assert out["capacity_fixed_cost_change"] == pytest.approx(50_000.0)
+        assert out["operating_cost_change"] == pytest.approx(-150_000.0)
+        # 100,000 saved over 12 months is 8,333.33 a month: 60 months.
+        assert out["payback_periods"] == pytest.approx(60.0)
+
+    def test_an_unstated_cost_is_said_to_be_unstated(self):
+        from app.backend.api.scenarios import _investment
+
+        out = _investment(self._record())
+        assert out["one_time_cost_stated"] is False
+        assert out["one_time_cost"] is None and out["payback_periods"] is None
+
+    def test_a_new_site_reads_its_opening_cost(self):
+        from app.backend.api.scenarios import _investment
+
+        record = self._record()
+        record["request"] = {"action": "ADD_FACILITY",
+                             "new_facility": {"name": "X", "opening_cost": 2_000_000.0}}
+        assert _investment(record)["one_time_cost"] == 2_000_000.0
+
+    def test_taking_capacity_away_is_not_an_investment(self):
+        from app.backend.api.scenarios import _investment
+
+        assert _investment(self._record(capacity_delta_units=-5_000.0)) is None
+
+    def test_no_other_change_carries_an_investment(self):
+        from app.backend.api.scenarios import _investment
+
+        record = self._record()
+        record["request"] = {"action": "CHANGE_DEMAND"}
+        assert _investment(record) is None
+
+    def test_the_screen_shows_it_and_the_form_asks_for_it(self):
+        js = _asset("scenarios.js")
+        for needle in ("toolbox-capacity-limit", "toolbox-expansion-capex",
+                       "toolbox-expansion-recurring", "toolbox-site-opening",
+                       "body.expansion_one_time_cost", "body.capacity_limit",
+                       "opening_cost: opening", "scn.investment",
+                       "scn.costCompleteness", "'LIMIT_NOT_RAISED'", "'STATED'"):
+            assert needle in js, needle
+        mapper = _asset("integration/mappers/scenario-mapper.js")
+        assert "investment: raw.investment" in mapper
+        assert "costCompleteness: raw.cost_completeness" in mapper
+
+
+class TestIncompleteCostIsSaid:
+
+    def test_sites_without_fixed_cost_are_counted(self):
+        from app.backend.api.scenarios import _cost_completeness
+
+        engine = _Engine([_CostedSite("F001", 0.0), _CostedSite("F002", 5.0),
+                          _CostedSite("M1", 0.0, role="MARKET"),
+                          _CostedSite("F009", 0.0, status="CLOSED")])
+        out = _cost_completeness(engine, "snap")
+        assert out == {"complete": False, "sites": 2, "count": 1,
+                       "sites_without_fixed_cost": ["F001"],
+                       "missing_input": "fixed_cost_per_year"}
+
+    def test_a_partly_priced_network_is_asked_for_the_rest(self):
+        record = _change(
+            "CLOSE_FACILITY", named=["F002"], facility_cost=5_000.0,
+            cost_completeness={"complete": False, "sites": 20, "count": 3,
+                               "sites_without_fixed_cost": ["F008", "F009", "F010"]},
+            cap={"under_used": [{"id": "F008", "name": "Halifax DC", "util_pct": 5.0,
+                                 "added_units": -1_000.0, "capacity": 9_000.0}]})
+        actions = _recommended_actions(record)
+        request = [a for a in actions if a["key"] == "REQUEST_DATA"]
+        assert request and "3 of its 20 sites" in request[0]["reason"]
+        assert "CONSOLIDATE" not in [a["key"] for a in actions]
+
+    def test_the_comparison_says_it_first(self):
+        import pathlib
+
+        source = (pathlib.Path(__file__).resolve().parents[3] / "app"
+                  / "backend" / "api" / "scenarios.py").read_text(encoding="utf-8")
+        block = source[source.index("def compare_scenarios("):]
+        block = block[:block.index("return jsonify(")]
+        assert 'caveats.insert(0, (\n                "These costs are incomplete' in block \
+            or "These costs are incomplete" in block
+        assert "one-time" in block
