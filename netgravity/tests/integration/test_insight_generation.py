@@ -229,7 +229,10 @@ class TestSeverityIsStatedByTheEngine:
             {"demand_fill_rate": 1.0, "pct_demand_in_sla": 82.5}, no_refs)
         risks = [i for i in insights if i.severity is InsightSeverity.RISK]
         assert risks, "served late is still a service finding"
-        assert "82.50%" in risks[0].narrative
+        # Whole percent: see `strategic_actions.format_pct`. The exact figure
+        # stays on the evidence row beside the card; the sentence is read at a
+        # glance and "82.50%" is two digits of noise in it.
+        assert "82%" in risks[0].narrative
 
     def test_an_overloaded_site_is_a_risk_and_an_idle_one_an_opportunity(self):
         agent = bare_agent()
@@ -405,8 +408,15 @@ class TestTheSlaInsightDescribesWhatTheEngineActuallyDid:
             "total_demand": 129803.0,
             "service_methodology": "TRANSIT_TIME_SLA_FEASIBILITY",
         })
-        sla = [i for i in out if "64.19" in i.narrative]
-        assert sla, "the SLA figure must still be reported"
+        # Located by what the finding IS. It used to be located by the string
+        # "64.19", which made these tests a pin on the number's PRECISION —
+        # so rounding the percentages for a leadership audience (54.00% is
+        # two digits that are always zero) failed a test about whether the
+        # engine describes unserved demand as delivered late.
+        sla = [i for i in out if "service level" in i.narrative]
+        assert sla, "the SLA finding must still be reported"
+        assert "64%" in sla[0].narrative, (
+            "the figure is still stated, at the precision a card is read at")
         text = sla[0].narrative.lower()
         assert "not served at all" in text
         assert "46,482" in sla[0].narrative, (
@@ -431,8 +441,9 @@ class TestTheSlaInsightDescribesWhatTheEngineActuallyDid:
             "unserved_demand": 46482.0,
             "service_methodology": None,
         })
-        sla = [i for i in out if "64.19" in i.narrative]
+        sla = [i for i in out if "service level" in i.narrative]
         assert sla
+        assert "64%" in sla[0].narrative
         text = sla[0].narrative
         assert "not recorded" in text
         assert "cannot say" in text
@@ -656,7 +667,13 @@ class TestTheScreensReadAReportRatherThanANarration:
             for field in ("headline", "narrative"):
                 assert " I " not in f" {body[field]} ", (field, body[field])
                 assert not body[field].startswith("I "), body[field]
-            assert body["recommended_action"], insight.theme
+            # Every finding says what to do about it — except the briefing's
+            # own lead card, which restates the findings rather than making
+            # one and would otherwise print the page's headline
+            # recommendation a second time.
+            from app.backend.api.insights import _NO_ACTION_THEMES
+            if insight.theme not in _NO_ACTION_THEMES:
+                assert body["recommended_action"], insight.theme
 
     def test_the_id_is_still_stable_across_the_rewording(self, solved):
         """

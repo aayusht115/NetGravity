@@ -536,7 +536,13 @@ export function renderFacilityThroughputChart(canvasId, row) {
              // is how a horizon is read.
              title: { display: true, text: 'Period',
                       font: { family: 'Inter', size: 10, weight: '600' } },
-             ticks: { font: { family: 'Inter', size: 10 } } },
+             // The only axis in the product without these. Chart.js angles
+             // tick labels on its own once they stop fitting, so a horizon of
+             // twenty-four periods produced the rotated axis every other
+             // chart here was fixed to avoid — silently, and only on the
+             // networks with enough periods to trigger it.
+             ticks: { font: { family: 'Inter', size: 10 },
+                      maxRotation: 0, autoSkip: true, maxTicksLimit: 16 } },
         y: {
           beginAtZero: true,
           grid: { color: 'rgba(0,0,0,.05)' },

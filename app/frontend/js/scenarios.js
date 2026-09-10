@@ -1079,6 +1079,19 @@ function openCreateToolboxWith(type, options = {}) {
       mode.value = options.openMode;
       mode.dispatchEvent(new Event('change'));
     }
+    // AND THE SITE THE RECOMMENDATION NAMED.
+    //
+    // "Establish a new distribution centre in the West" opened this form on a
+    // site called "New DC" at the network's centroid — the one field on the
+    // panel that could carry the recommendation, left at its placeholder. The
+    // new-site panel has no region select (it takes a latitude and a
+    // longitude), so the region reached nothing and the form no longer said
+    // what had been recommended. The name does say it, and it is the same
+    // string the scenario is titled with, so the two agree.
+    const siteName = document.getElementById('toolbox-site-name');
+    if (options.openMode === 'NEW' && siteName && options.name) {
+      siteName.value = String(options.name).slice(0, 48);
+    }
   }
   if (options.facilityId) {
     const select = document.getElementById('toolbox-facility');

@@ -54,7 +54,6 @@ import { getActiveProjectId, setActiveProject } from './integration/project-cont
 import { loadIdentity, getCurrentUser } from './identity.js';
 import { kpiService } from './integration/services/kpi-service.js';
 import { twinService } from './integration/services/twin-service.js';
-import { mapNetworkKPIsToCards } from './integration/mappers/kpi-mapper.js';
 import { initKpiView, renderKpiView, currentKpiView } from './kpi-view.js';
 import { clearKpiExplainCache } from './kpi-explain.js';
 import { mapTwinStateToFrontend } from './integration/mappers/twin-mapper.js';

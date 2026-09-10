@@ -8,6 +8,8 @@
  * - Preserves provenance and evidence status.
  */
 
+import { formatCurrency } from '../../data.js';
+
 export function mapKPIValue(kpiResult, formatter = (v) => String(v)) {
   if (!kpiResult) {
     return { display: '—', status: 'UNAVAILABLE', isValid: false };
@@ -31,11 +33,24 @@ export function mapKPIValue(kpiResult, formatter = (v) => String(v)) {
   };
 }
 
+/**
+ * Money, at the precision and in the currency the rest of the product uses.
+ *
+ * THIS USED TO BE ITS OWN OPINION ABOUT BOTH, and it was wrong on both. It
+ * hardcoded the rupee and the lakh — so a network priced in dollars printed
+ * "₹12.45L" — and it printed two decimal places on a figure in the millions,
+ * which is the thing a leadership audience reads as noise rather than
+ * precision. It also decided whether a number was already in lakhs by testing
+ * `val > 10000`, so a genuine ₹9,000 cost was rendered "₹9000.00L".
+ *
+ * `formatCurrency` in `data.js` is the one definition of all of that: it reads
+ * the project's own currency, and it picks the scale and the precision from
+ * the magnitude. Delegating means a figure formatted here and the same figure
+ * formatted anywhere else cannot disagree.
+ */
 export function formatCurrencyLakhs(val) {
   if (typeof val !== 'number') return '—';
-  // If value is in raw rupees, convert to Lakhs
-  const inLakhs = val > 10000 ? val / 100000 : val;
-  return `₹${inLakhs.toFixed(2)}L`;
+  return formatCurrency(val);
 }
 
 export function formatPct(val) {

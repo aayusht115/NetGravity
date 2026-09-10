@@ -32,6 +32,7 @@ from netgravity.orchestrator.reasoning.evidence import (
 )
 from netgravity.orchestrator.reasoning.runtime import ReasoningRuntime
 from netgravity.orchestrator.reasoning.validation import validate_reasoning_draft
+from netgravity.orchestrator.reasoning.strategic_actions import format_pct
 from netgravity.orchestrator.schemas.reasoning import (
     EvidenceCompleteness,
     ExecutiveBriefing,
@@ -426,6 +427,37 @@ class ReasoningAgent:
     #: only happens on a payload the structural trim could not bring down.
     _EVIDENCE_CHARS = 16_000
 
+    @staticmethod
+    def _readable_figures(node: Any, currency: Optional[str],
+                          key: str = "") -> Any:
+        """
+        The same payload with its money and percentages already rendered.
+
+        A model told to copy a figure exactly will copy `150627.7036`, because
+        that is what the JSON says. Rendering them here means "copy it exactly"
+        and "write it the way a reader reads it" stop being two instructions
+        that contradict each other — and it costs nothing from the output
+        budget, which every extra line of prompt does.
+
+        `_display` is the evidence layer's own renderer: the one behind the
+        chips on the cards. Using it here is what makes a figure in a sentence
+        and the same figure on a screen agree.
+        """
+        from netgravity.orchestrator.reasoning.evidence import _display
+
+        if isinstance(node, dict):
+            return {k: ReasoningAgent._readable_figures(v, currency, k)
+                    for k, v in node.items()}
+        if isinstance(node, list):
+            return [ReasoningAgent._readable_figures(v, currency, key)
+                    for v in node]
+        if isinstance(node, (int, float)) and not isinstance(node, bool):
+            text, _unit = _display(node, key, currency)
+            # `_display` returns the raw string for anything it has no opinion
+            # about. Leaving those as numbers keeps counts as counts.
+            return text if text != str(node) else node
+        return node
+
     @classmethod
     def _bounded_evidence(cls, payload: Dict[str, Any]) -> str:
         """
@@ -538,6 +570,17 @@ class ReasoningAgent:
         # deliberates scales with how much it is given. See
         # `_bounded_evidence` for what was measured.
         evidence = self._bounded_evidence(payload)
+        question = (user_question or "").strip()[:400]
+        answering = bool(question) and not payload.get("kpi_chart")
+        if answering:
+            # See `_readable_figures`. Only this path, because it is the only
+            # one that both writes figures and has nothing printed beside it.
+            from netgravity.orchestrator.reasoning.evidence import _find_currency
+
+            evidence = json.dumps(
+                self._readable_figures(
+                    json.loads(evidence), _find_currency(payload)),
+                separators=(",", ":"), default=str)[:self._EVIDENCE_CHARS]
 
         missing_block = ""
         if missing:
@@ -587,7 +630,6 @@ class ReasoningAgent:
         # It is placed AFTER the evidence and immediately before the response
         # contract, because that is the position a model weights most heavily,
         # and it is bounded so a long paste cannot displace the instructions.
-        question = (user_question or "").strip()[:400]
         if question:
             ask_block = (
                 "\nTHE USER ASKED:\n"
@@ -619,6 +661,26 @@ class ReasoningAgent:
         options_block = ""
         if not payload.get("kpi_chart"):
             options_block = self._intervention_options(payload)
+
+        # ANSWERING A QUESTION IS THE OTHER CASE WHERE THE FIGURES ARE THE POINT.
+        #
+        # A dashboard card is read beside the numbers it describes, which is
+        # why the default rule below forbids the model from writing any. The
+        # chat assistant has nothing beside it — its sentence is the whole
+        # answer — and under that rule "what is my total network cost?" came
+        # back as "The total network cost is reported as the business network
+        # cost." Grounded, true, and not an answer.
+        #
+        # Same safety as the chart exception: grounding runs afterwards and
+        # removes any figure that is not in the results above.
+        #
+        # The rule below carries no currency or rounding instruction, because
+        # `_readable_figures` has already rendered every amount in the
+        # network's own currency and every percentage at the precision the
+        # cards use. "Copy it exactly" therefore produces a well-formed figure
+        # on its own — and the two clauses that would otherwise have said so
+        # are two clauses not paid for out of the same 2,000-token allowance as
+        # the answer itself.
 
         prompt = (
             "DETERMINISTIC RESULTS:\n"
@@ -674,7 +736,26 @@ class ReasoningAgent:
                "sentence, then TWO more that do not repeat it: the key figures, "
                "how they compare, what the pattern means to run. "
                if payload.get("kpi_chart") else
-               "RULES: no figures, amounts, percentages or currency symbols. ")
+               # SHORT ON PURPOSE, and the length is the whole engineering
+               # problem here. The backing model bills its internal reasoning
+               # to the same 2,000-token output allowance as its text, so
+               # every additional instruction is paid for in deliberation
+               # before a character is emitted. A fuller version of this rule
+               # — six clauses, about fifty words — was measured against the
+               # live gateway at output_tokens=1984 with ZERO characters of
+               # text on two calls out of three: the reasoning layer silently
+               # degraded to templates, which is the exact failure the note
+               # above this prompt records. Cut to one clause per defect.
+               # "Never a field name" is the chart rule's clause, here for
+               # the same reason: told to copy the evidence exactly, the model
+               # copied the key with it — 'the most utilised, with
+               # utilization_pct "77.1%"' — which reads as a database dump
+               # rather than an answer.
+               ("RULES: quote the figure asked for, exactly as written "
+                "above, in sentence one. Never a field name or raw key. "
+                "No figure that is not in the results. "
+                if answering else
+                "RULES: no figures, amounts, percentages or currency symbols. "))
             + (
             "Third person, never 'I' or 'my'. Plain business English, no "
             "solver or model vocabulary. Name the real things the results "
@@ -1042,7 +1123,7 @@ class ReasoningAgent:
                 headline = ("Some demand cannot be reached inside its lead "
                             "time, so this plan does not serve it at all")
                 narrative = (
-                    f"I see {sla_pct:.2f}% of demand served within its stated "
+                    f"I see {format_pct(sla_pct)} of demand served within its stated "
                     f"service level. The rest is not served late — it is not "
                     f"served at all: this plan moves volume only on lanes that "
                     f"already meet the destination's lead time, so demand it "
@@ -1056,7 +1137,7 @@ class ReasoningAgent:
                 headline = ("Some demand falls outside its stated service "
                             "level, and this run does not record why")
                 narrative = (
-                    f"I see {sla_pct:.2f}% of demand served within its stated "
+                    f"I see {format_pct(sla_pct)} of demand served within its stated "
                     f"service level. How this run enforced service is not "
                     f"recorded on the result, so I cannot say whether the rest "
                     f"was delivered late or not delivered at all."
@@ -1123,8 +1204,8 @@ class ReasoningAgent:
                            f"a finding in either direction.")
             return [KPIInsight(
                 theme="Capacity",
-                headline=f"{name(only)} is running at {util:.2f}% of its stated capacity",
-                narrative=f"I see {name(only)} running at {util:.2f}% of its stated "
+                headline=f"{name(only)} is running at {format_pct(util)} of its stated capacity",
+                narrative=f"I see {name(only)} running at {format_pct(util)} of its stated "
                           f"capacity. {verdict}",
                 metric_refs=refs_for("utilization_pct"),
             )]
@@ -1152,8 +1233,9 @@ class ReasoningAgent:
                          f"threshold, so capacity is not what limits this "
                          f"plan",
                 narrative=(
-                    f"I see average utilisation at {avg_util:.2f}% and the busiest "
-                    f"site at {max_util:.2f}%. No open site reaches the "
+                    f"I see average utilisation at {format_pct(avg_util)} and the "
+                    f"busiest site at {format_pct(max_util)}. No open site "
+                    f"reaches the "
                     f"{over_pct:.0f}% threshold, so capacity is not what limits "
                     f"this plan."
                 ),
@@ -1234,11 +1316,12 @@ class ReasoningAgent:
                       f"same way." if len(hidden) > 1 else "")
             out.append(KPIInsight(
                 theme="Capacity",
-                headline=f"{name} is at {peak:.1f}% in its busiest period, not {avg:.1f}%",
+                headline=f"{name} is at {format_pct(peak)} in its busiest period, not {format_pct(avg)}",
                 severity=InsightSeverity.RISK,
                 narrative=(
-                    f"I see {name} averaging {avg:.2f}% of stated capacity across "
-                    f"the {periods} modelled periods and reaching {peak:.2f}%"
+                    f"I see {name} averaging {format_pct(avg)} of stated capacity across "
+                    f"the {periods} modelled periods and reaching "
+                    f"{format_pct(peak)}"
                     f"{where}. The average is below the {over_pct:.0f}% threshold "
                     f"and the peak is not, so a reading of the average alone would "
                     f"report headroom this site does not have when it matters."
@@ -1298,7 +1381,7 @@ class ReasoningAgent:
                     narrative=(
                         f"I see {name} accounting for "
                         f"{_money(cost, state or {})} of facility "
-                        f"cost, which is {share * 100:.2f}% of what every site in "
+                        f"cost, which is {format_pct(share * 100)} of what every site in "
                         f"this plan costs together. That is fixed, opening, "
                         f"handling and holding cost at the site — it does not "
                         f"include transport, so it is where to look first for "
@@ -1360,6 +1443,10 @@ class ReasoningAgent:
             theme="Footprint",
             headline=f"The plan leaves {closed:.0f} candidate "
                      f"{_sites(closed)} unused",
+            # Capacity that is costed and switched off. The decision this
+            # finding asks for is whether to bring one IN — not, as the theme
+            # alone would suggest, to take one out.
+            action_hint="REOPEN_FACILITY",
             severity=InsightSeverity.OPPORTUNITY,
             narrative=(
                 f"I see {opened:.0f} {_sites(opened)} open and {closed:.0f} not selected. "
@@ -1975,6 +2062,10 @@ class ReasoningAgent:
                 theme="Footprint",
                 headline=f"{len(negatives)} open {_sites(len(negatives))} "
                          f"cost more than the routing they save",
+                # The OPPOSITE footprint decision, under the same theme and
+                # the same severity as the one above: these sites are open and
+                # are not paying for themselves.
+                action_hint="CONSOLIDATE",
                 severity=InsightSeverity.OPPORTUNITY,
                 narrative=(
                     f"I see {len(negatives)} open {_sites(len(negatives))} — {named} — whose "

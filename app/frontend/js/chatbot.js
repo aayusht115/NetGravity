@@ -365,9 +365,35 @@ export async function askChatbotPrompt(query) {
     // to fetch nothing at all. `response` is still accepted in case a
     // deployment predates the rename.
     const answer = res && (res.reply || res.response);
-    const clarification = res && res.clarification;
+    // The QUESTION, not the object around it. `clarification` is a record —
+    // `{kind, question, options, missing_parameter}` — and the branch below
+    // used to hand the whole thing to `escapeChatText`, which renders
+    // "[object Object]".
+    const clarification = res && res.clarification && res.clarification.question;
 
-    if (answer) {
+    // A CLARIFICATION IS A QUESTION, whatever else came back with it.
+    //
+    // This was ordered `answer` first, and `_clarification_response` sets
+    // `reply` to the very same question — so the clarification branch was
+    // unreachable and its question was rendered as an ANSWER: labelled with
+    // the intent, under an "Explore in Digital Twin" button, as though the
+    // assistant had concluded something. Nobody noticed while unrunnable
+    // what-ifs were failing with a 500; they now correctly come back as
+    // clarifications, which makes this the common path.
+    if (clarification) {
+      const options = (res.clarification.options || [])
+        .map((o) => o && o.label).filter(Boolean);
+      chatMessages.push({
+        role: 'ai',
+        topic: 'NEEDS CLARIFICATION',
+        text: escapeChatText(clarification)
+          // The concrete choices, when the engine named them. An open question
+          // invites an answer the engine cannot run; these cannot be wrong.
+          + (options.length
+              ? `<br><br>${options.map((o) => `• ${escapeChatText(o)}`).join('<br>')}`
+              : ''),
+      });
+    } else if (answer) {
       chatMessages.push({
         role: 'ai',
         // `intent` is 'UNKNOWN' when the request was not understood; labelling
@@ -378,12 +404,6 @@ export async function askChatbotPrompt(query) {
         text: escapeChatText(answer),
         actionText: 'Explore in Digital Twin →',
         actionTab: 'twin',
-      });
-    } else if (clarification) {
-      chatMessages.push({
-        role: 'ai',
-        topic: 'NEEDS CLARIFICATION',
-        text: escapeChatText(clarification),
       });
     } else {
       // The orchestrator answered but produced no text. Say so; do not

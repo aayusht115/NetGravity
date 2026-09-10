@@ -176,7 +176,7 @@ def _num(value: Any) -> Optional[float]:
     return number
 
 
-def _pct(value: Any) -> str:
+def format_pct(value: Any) -> str:
     """
     A utilisation, at the precision a leader reads — with one exception.
 
@@ -192,6 +192,15 @@ def _pct(value: Any) -> str:
     if number < 100 and round(number) >= 100:
         return f"{number:,.1f}%"
     return f"{number:,.0f}%"
+
+
+#: PUBLIC because the narrative layer needs the same rule.
+#:
+#: The Reasoning Agent wrote its own percentages with `f"{util:.2f}%"`, so a
+#: card read "Central Distribution Centre is running at 54.00% of its stated
+#: capacity" — two digits of precision that are always zero, on a screen whose
+#: whole point is that a leader can read it at a glance. One rule, one place.
+_pct = format_pct
 
 
 def _units(value: Any) -> str:
@@ -286,6 +295,9 @@ def build_actions(
     demand_change_is_unscoped: bool = False,
     missing_inputs: int = 0,
     limit: int = 3,
+    focus_ids: Sequence[str] = (),
+    prefer: Optional[Sequence[str]] = None,
+    exclude: Sequence[str] = (),
 ) -> List[StrategicAction]:
     """
     The ranked interventions this network's own solved rows justify.
@@ -293,7 +305,42 @@ def build_actions(
     `limit` caps the list because a recommendation that names five things has
     recommended nothing. Three is what fits above the fold on the cards these
     feed, and the ladder is ordered so the three kept are the three that matter.
+
+    ONE NETWORK, SEVERAL QUESTIONS
+    ------------------------------
+    The three arguments below exist because this ladder has two different jobs
+    and used to do only the first.
+
+    Asked "what should be done about this NETWORK", the answer is the top rung
+    and the cross-rung suppression is right: do not propose consolidating a
+    site while another one is on fire.
+
+    Asked "what should be done about THIS FINDING" — which is what an insights
+    feed asks, once per card — the same call returned the same top rung every
+    time. Seven findings on one loaded network, seven identical sentences, six
+    of which did not answer the finding printed above them: a card reporting
+    idle sites recommended bringing more capacity online.
+
+      `focus_ids`  the sites the finding is ABOUT. Within each rung these sort
+                   first, so a card headed "Nagpur DC is at 97%" recommends
+                   expanding Nagpur DC rather than whichever site happens to be
+                   busiest network-wide.
+      `prefer`     the rungs that ANSWER this finding, best first. The result
+                   is filtered to these and ordered by them. Passing it also
+                   lifts the cross-rung suppression, because a network can have
+                   a saturated site AND an idle one and both are real findings
+                   with opposite answers.
+      `exclude`    rungs an earlier finding has already claimed, so two cards
+                   in one briefing cannot print the same recommendation.
+
+    With `prefer` set, an empty list is a legitimate answer — this finding has
+    no intervention in the data — and the caller says something else. NO_ACTION
+    is only ever returned for the network-wide question, where "nothing meets
+    the bar" is itself the finding.
     """
+    if prefer is not None:
+        for key in prefer:
+            assert key in ACTION_KEYS, key
     sites = normalise_rows(rows)
     live = [s for s in sites if s["is_open"]]
     closed = [s for s in sites
@@ -310,7 +357,22 @@ def build_actions(
          if s["util_pct"] is not None and s["util_pct"] < IDLE_PCT],
         key=lambda s: (s["util_pct"] or 0))
 
-    tight = saturated + loaded
+    # The sites this finding is about come first inside every rung, so the
+    # recommendation names the site the reader has just read about. Ordering
+    # rather than filtering: a finding about one site can still be answered by
+    # a rung that needs the rest of the network (there is no reopening without
+    # something closed to reopen).
+    focus = {str(f) for f in (focus_ids or []) if f}
+
+    def _focused_first(sites: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not focus:
+            return sites
+        return ([s for s in sites if str(s["facility_id"]) in focus]
+                + [s for s in sites if str(s["facility_id"]) not in focus])
+
+    tight = _focused_first(saturated + loaded)
+    idle = _focused_first(idle)
+    closed = _focused_first(closed)
     unserved = _num(unserved_demand)
     actions: List[StrategicAction] = []
 
@@ -421,7 +483,12 @@ def build_actions(
         ))
 
     # ---- 4. The opposite finding ------------------------------------------
-    if idle and not tight:
+    # `not tight` is the NETWORK-WIDE judgement: do not propose taking capacity
+    # out while somewhere else has none left. Asked about the idle-sites
+    # finding specifically, that suppression is the bug — it is the only rung
+    # that answers it, and withholding it left the card recommending the exact
+    # opposite of what it had just reported.
+    if idle and (prefer is not None or not tight):
         site = idle[0]
         actions.append(StrategicAction(
             key="CONSOLIDATE",
@@ -462,8 +529,21 @@ def build_actions(
                 f"the rest of it."),
         ))
 
-    if not actions:
-        actions.append(_nothing_to_do(live, unserved))
+    if exclude:
+        spent = {str(k) for k in exclude}
+        actions = [a for a in actions if a.key not in spent]
+
+    if prefer is not None:
+        rank = {key: i for i, key in enumerate(prefer)}
+        actions = sorted((a for a in actions if a.key in rank),
+                         key=lambda a: rank[a.key])
+    elif not actions:
+        # Only for the network-wide question. Under `prefer`, or after an
+        # exclusion, an empty list means "this finding has no intervention
+        # left to offer" — which is not the same claim as "this network needs
+        # no change", and printing the second for the first would be false.
+        if not exclude:
+            actions.append(_nothing_to_do(live, unserved))
 
     kept = actions[:limit]
     for index, action in enumerate(kept, start=1):

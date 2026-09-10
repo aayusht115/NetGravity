@@ -2004,22 +2004,25 @@
 
           <!-- Filter Pills -->
           <div class="chatbot-pills-row">
-            <button class="chatbot-pill-btn" data-action="askChatbotPrompt" data-arg="Summarize key network insights">
+            <button class="chatbot-pill-btn" data-action="askChatbotPrompt" data-arg="What is the current network cost, utilisation and fill rate?">
               <span class="pill-icon" style="color:#9218EA">✨</span>
               <span>Summarize key insights</span>
             </button>
-            <button class="chatbot-pill-btn" data-action="askChatbotPrompt" data-arg="Which DCs have high capacity risks?">
+            <button class="chatbot-pill-btn" data-action="askChatbotPrompt" data-arg="Which sites have the highest utilisation and the least headroom?">
               <span class="pill-icon">🛡️</span>
               <span>Capacity risks</span>
             </button>
-            <button class="chatbot-pill-btn" data-action="askChatbotPrompt" data-arg="Show cost reduction opportunities">
+            <button class="chatbot-pill-btn" data-action="askChatbotPrompt" data-arg="Where is the highest cost in my network?">
               <span class="pill-icon" style="color:#16a34a;font-weight:700">↓</span>
               <span>Cost opportunities</span>
             </button>
-            <button class="chatbot-pill-btn" data-action="askChatbotPrompt" data-arg="Show more recommended AI prompts">
-              <span class="pill-icon">⊞</span>
-              <span>More prompts ⌄</span>
-            </button>
+            <!-- "More prompts ⌄" WAS HERE. It was a UI affordance wired to
+                 the chat endpoint, sending the literal string "Show more
+                 recommended AI prompts" to the optimisation engine — a
+                 question that is not a question, against a build with no
+                 further prompt list to reveal. It could only ever answer "I
+                 could not work out what you would like me to do", which is
+                 the one thing a suggestion control must never do. -->
           </div>
         </div>
 

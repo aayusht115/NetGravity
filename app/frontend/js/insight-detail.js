@@ -329,6 +329,12 @@ function chartPlanFor(record) {
       points,
       threshold: utilisationThreshold(),
       unitSuffix: '%',
+      // Named here beside the title, like the two bar plans above, rather
+      // than left to the chart. This plan was the one that carried neither,
+      // so the deep dive's only time series had a bare "%" up one side and
+      // nothing at all along the bottom.
+      valueAxis: 'Share of stated capacity used (%)',
+      categoryAxis: 'Period',
       note: 'Your own recorded available and used capacity, period by period. '
           + 'This is measurement from your upload, not an output of the solve.',
     };
@@ -601,10 +607,30 @@ function renderInsightChart(canvasId, plan) {
           tooltip: { mode: 'index', intersect: false },
         },
         scales: {
-          y: { min: 0, max: 100, ticks: { callback: (v) => v + '%' },
-               grid: { color: grid } },
-          x: { grid: { display: false },
-               ticks: { autoSkip: true, maxTicksLimit: 12, maxRotation: 42 } },
+          y: {
+            min: 0,
+            max: 100,
+            ticks: { callback: (v) => v + '%' },
+            grid: { color: grid },
+            title: { display: true,
+                     text: plan.valueAxis || 'Share of stated capacity used (%)',
+                     font: { family: 'Inter', size: 11, weight: '600' } },
+          },
+          x: {
+            grid: { display: false },
+            ticks: {
+              autoSkip: true,
+              maxTicksLimit: 12,
+              // WAS 42 DEGREES. Angled labels are the thing that makes a
+              // chart read as unfinished, and on a period axis they buy
+              // nothing: "2026-03" is six characters and `maxTicksLimit`
+              // already drops enough of them to fit. Every other axis in the
+              // product is horizontal; this one was the exception.
+              maxRotation: 0,
+            },
+            title: { display: true, text: plan.categoryAxis || 'Period',
+                     font: { family: 'Inter', size: 11, weight: '600' } },
+          },
         },
       },
     };

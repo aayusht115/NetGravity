@@ -570,3 +570,325 @@ class TestEveryCtaNamesTheChangeItIsAbout:
         block = source[source.index("const testHtml = intervention"):]
         block = block[:block.index("return `")]
         assert "in the scenario planner" in block
+
+
+# ---------------------------------------------------------------------------
+# One network, several findings, several answers
+# ---------------------------------------------------------------------------
+
+class _Finding:
+    """The parts of a `KPIInsight` a recommendation is derived from."""
+
+    def __init__(self, headline="", narrative="", hint=""):
+        self.headline = headline
+        self.narrative = narrative
+        self.action_hint = hint
+        self.recommended_action = ""
+
+
+class _Pack:
+    def __init__(self, rows, unserved=0.0):
+        self.payload = {"facilities": rows,
+                        "network_state": {"unserved_demand": unserved}}
+
+
+#: A network with all four rungs live at once: two sites past the threshold,
+#: one running near-empty, and a costed candidate switched off. This is the
+#: shape that produced the defect — on the healthy demo network there is only
+#: ever one thing to say, so nothing repeats.
+MIXED = [
+    site("F1", "Western Distribution Centre", 97.4, capacity=3500.0),
+    site("F2", "Northern Manufacturing Plant", 92.1, role="PLANT",
+         capacity=8000.0),
+    site("F3", "Eastern Distribution Centre", 22.0, capacity=4000.0),
+    site("F4", "Proposed Southern DC", 0.0, capacity=4000.0, is_open=False),
+]
+
+
+class TestOneBriefingDoesNotSayOneThingSixTimes:
+    """
+    THE DEFECT, AND WHY IT WAS NOT A COSMETIC ONE.
+
+    Every capacity-family card called the ladder for its TOP rung. The ladder
+    answers "what should be done about this NETWORK", and there is one answer
+    to that — so seven findings on the network above printed one sentence
+    between them.
+
+    Repetition was the visible half. The other half was that six of the seven
+    did not answer the card they sat under: a finding reporting sites running
+    at 22% of capacity carried the recommendation "bring more capacity into the
+    network", which is the opposite of what it had just reported.
+    """
+
+    def _recommend(self, cases, pack=None):
+        """Serialise a briefing's worth of findings, in rank order."""
+        from app.backend.api.insights import (
+            _recommended_action, action_identity,
+        )
+        pack = pack or _Pack(MIXED)
+        claimed, out = set(), []
+        for theme, severity, finding in cases:
+            sentence, action = _recommended_action(finding, theme, severity,
+                                                   pack, claimed)
+            if action.get("key"):
+                claimed.add(action_identity(action))
+            out.append((theme, severity, sentence, action))
+        return out
+
+    def test_no_two_findings_carry_the_same_recommendation(self):
+        rows = self._recommend([
+            ("Capacity", "RISK", _Finding()),
+            ("Utilisation", "OPPORTUNITY", _Finding()),
+            ("Service", "RISK", _Finding()),
+            ("Resilience", "RISK", _Finding()),
+            ("Footprint", "OPPORTUNITY", _Finding()),
+        ])
+        sentences = [r[2] for r in rows]
+        assert len(set(sentences)) == len(sentences), sentences
+
+    def test_the_recommendation_answers_the_finding_it_sits_under(self):
+        """
+        The part repetition was hiding. Each of these findings has one correct
+        KIND of answer and the network supports all of them at once.
+        """
+        by_theme = {(t, sev): action
+                    for t, sev, _, action in self._recommend([
+                        ("Utilisation", "OPPORTUNITY", _Finding()),
+                        ("Capacity", "RISK", _Finding()),
+                        ("Service", "RISK", _Finding()),
+                    ])}
+        # Sites running near-empty are answered by taking one out...
+        assert by_theme[("Utilisation", "OPPORTUNITY")]["key"] == "CONSOLIDATE"
+        # ...sites at their ceiling by giving one room...
+        assert by_theme[("Capacity", "RISK")]["key"] == "ADD_CAPACITY"
+        # ...and demand the footprint cannot reach by adding reach.
+        assert by_theme[("Service", "RISK")]["key"] in {
+            "REOPEN_FACILITY", "OPEN_NEW_FACILITY"}
+
+    def test_the_idle_finding_is_answered_even_while_a_site_is_on_fire(self):
+        """
+        CONSOLIDATE is gated on `not tight` for the NETWORK-wide question —
+        do not propose taking capacity out while somewhere else has none left.
+        Applied to the idle-sites card it was the bug: it is the only rung that
+        answers that finding, and withholding it left the card recommending the
+        exact opposite of what it reported.
+        """
+        assert any(s["utilization_pct"] >= LOADED_PCT for s in MIXED)
+        actions = build_actions(MIXED, prefer=("CONSOLIDATE",))
+        assert [a.key for a in actions] == ["CONSOLIDATE"]
+        assert "Eastern Distribution Centre" in actions[0].label
+
+    def test_a_finding_with_no_rung_left_still_says_something(self):
+        """
+        Falling through is not falling silent. Once the rungs are spent the
+        recommendation is a decision sentence chosen by theme — never a blank,
+        and never a navigation instruction.
+        """
+        rows = self._recommend([
+            ("Capacity", "RISK", _Finding()),
+            ("Utilisation", "OPPORTUNITY", _Finding()),
+            ("Service", "RISK", _Finding()),
+            ("Resilience", "RISK", _Finding()),
+            ("Footprint", "OPPORTUNITY", _Finding()),
+            ("Capacity", "RISK", _Finding()),
+        ])
+        for theme, severity, sentence, _ in rows:
+            assert sentence.strip(), (theme, severity)
+            assert not NAVIGATIONAL.search(sentence), sentence
+
+    def test_it_never_claims_a_change_the_rows_do_not_support(self):
+        """
+        Exhausting the rungs must not make the ladder reach for one whose
+        evidence is absent. On a network with nothing closed there is nothing
+        to reopen, whatever a finding would prefer.
+        """
+        healthy = [site("F1", "Alpha DC", 55.0), site("F2", "Beta DC", 61.0)]
+        rows = self._recommend(
+            [("Service", "RISK", _Finding()), ("Capacity", "RISK", _Finding())],
+            pack=_Pack(healthy),
+        )
+        for _, _, _, action in rows:
+            assert action.get("key") != "REOPEN_FACILITY"
+
+
+class TestARecommendationIsAboutTheSiteTheCardNames:
+    """
+    Several findings name their site in the headline — "Nagpur DC is at 97.4%
+    in its busiest period". The recommendation under them named whichever site
+    was busiest NETWORK-wide, which on a network with three tight sites is the
+    wrong one twice.
+    """
+
+    NAMED = [
+        site("F1", "Western Distribution Centre", 99.2, capacity=3500.0),
+        site("F2", "Nagpur Distribution Centre", 93.0, capacity=6000.0),
+    ]
+
+    def test_the_named_site_is_the_one_recommended(self):
+        from app.backend.api.insights import _recommended_action
+        finding = _Finding(
+            headline="Nagpur Distribution Centre is at 93.0% in its busiest "
+                     "period, not 71.4%")
+        _, action = _recommended_action(finding, "Capacity", "RISK",
+                                        _Pack(self.NAMED))
+        assert action["target"]["facility_id"] == "F2", action["target"]
+
+    def test_an_unnamed_finding_still_gets_the_worst_site(self):
+        from app.backend.api.insights import _recommended_action
+        _, action = _recommended_action(
+            _Finding(headline="2 sites are at or above the 90% threshold"),
+            "Capacity", "RISK", _Pack(self.NAMED))
+        assert action["target"]["facility_id"] == "F1", action["target"]
+
+    def test_a_name_is_matched_at_its_edges_not_anywhere_inside_a_word(self):
+        """
+        Substring matching would let "Central DC" claim a finding about
+        "Central DC North". The names come from the rows themselves, so an
+        exact bounded match is a lookup; an unbounded one is a guess.
+        """
+        from app.backend.api.insights import _subject_ids
+        rows = [{"facility_id": "A", "facility_name": "Central DC"},
+                {"facility_id": "B", "facility_name": "Central DC North"}]
+        finding = _Finding(headline="Central DC North has no headroom left")
+        assert _subject_ids(finding, rows) == ["B"]
+
+    def test_a_network_wide_finding_names_nobody(self):
+        from app.backend.api.insights import _subject_ids
+        finding = _Finding(headline="3 sites are above the 90% threshold")
+        assert _subject_ids(finding, self.NAMED) == []
+
+
+class TestTwoFindingsUnderOneThemeCanPointOppositeWays:
+    """
+    "Footprint" at severity OPPORTUNITY is emitted twice with opposite
+    meanings: candidate sites going unused, and open sites costing more than
+    the routing they save. Nothing in (theme, severity) separates them, so the
+    emit site states which it is.
+    """
+
+    def test_the_schema_carries_the_hint(self):
+        from netgravity.orchestrator.schemas.reasoning import KPIInsight
+        assert KPIInsight(theme="Footprint", headline="h",
+                          narrative="n").action_hint == ""
+
+    def test_both_footprint_findings_declare_which_way_they_point(self):
+        source = (REPO_ROOT / "netgravity" / "orchestrator" / "agents"
+                  / "reasoning_agent.py").read_text(encoding="utf-8")
+        assert 'action_hint="REOPEN_FACILITY"' in source
+        assert 'action_hint="CONSOLIDATE"' in source
+
+    def test_the_hint_outranks_the_theme(self):
+        from app.backend.api.insights import _recommended_action
+        pack = _Pack(MIXED)
+        _, consolidate = _recommended_action(
+            _Finding(hint="CONSOLIDATE"), "Footprint", "OPPORTUNITY", pack)
+        _, reopen = _recommended_action(
+            _Finding(hint="REOPEN_FACILITY"), "Footprint", "OPPORTUNITY", pack)
+        assert consolidate["key"] == "CONSOLIDATE"
+        assert reopen["key"] == "REOPEN_FACILITY"
+
+    def test_a_hint_outside_the_vocabulary_is_ignored_not_obeyed(self):
+        from app.backend.api.insights import _recommended_action
+        _, action = _recommended_action(
+            _Finding(hint="DO_SOMETHING_CLEVER"), "Capacity", "RISK",
+            _Pack(MIXED))
+        assert action["key"] in ACTION_KEYS
+
+
+class TestTheNetworkQuestionStillHasOneAnswer:
+    """
+    `prefer` must not change what the ladder says when nobody passes it. The
+    page's own headline recommendation, the scenario planner and the reasoning
+    prompt all still ask "what should be done about this network".
+    """
+
+    def test_the_top_rung_is_unchanged(self):
+        assert build_actions(MIXED, limit=1)[0].key == "REOPEN_FACILITY"
+
+    def test_a_healthy_network_still_reports_no_action(self):
+        healthy = [site("F1", "Alpha DC", 55.0), site("F2", "Beta DC", 61.0)]
+        assert build_actions(healthy, unserved_demand=0.0)[0].key == "NO_ACTION"
+
+    def test_a_filtered_call_never_returns_no_action(self):
+        """
+        NO_ACTION says "nothing in this network meets the bar". Returned from a
+        per-finding call it would say that about a network where something
+        plainly does — so an empty list is the answer, and the caller prints a
+        sentence instead.
+        """
+        healthy = [site("F1", "Alpha DC", 55.0)]
+        assert build_actions(healthy, prefer=("CONSOLIDATE",)) == []
+        assert build_actions(MIXED, exclude=ACTION_KEYS) == []
+
+    def test_a_briefing_bumps_its_cache_when_the_wording_moves(self):
+        """
+        Cached briefings carry these sentences in their body, and nothing about
+        the network changes when the recommendation logic does — so a project
+        that had already loaded its insights would keep the repeated ones.
+        """
+        from app.backend.api.insights import _PAYLOAD_VERSION
+        assert _PAYLOAD_VERSION >= 9
+
+
+class TestTheSameChangeAtTwoPLACESIsTwoRecommendations:
+    """
+    The first cut of the de-duplication keyed on the RUNG alone, which is a
+    different mistake with the same shape as the one it fixed.
+
+    Two capacity findings about two different sites both want "expand
+    capacity". They are two decisions about two places, and suppressing the
+    second because the first spent the rung hides a real finding — the reader
+    is told about the site at 99% and never about the one at 93%.
+
+    What must not appear twice is the same change at the same place.
+    """
+
+    TWO_TIGHT = [
+        site("F1", "Western Distribution Centre", 99.2, capacity=3500.0),
+        site("F2", "Nagpur Distribution Centre", 93.0, capacity=6000.0),
+    ]
+
+    def _pair(self, first, second):
+        from app.backend.api.insights import (
+            _recommended_action, action_identity,
+        )
+        pack = _Pack(self.TWO_TIGHT)
+        claimed = set()
+        out = []
+        for finding in (first, second):
+            sentence, action = _recommended_action(finding, "Capacity", "RISK",
+                                                   pack, claimed)
+            if action.get("key"):
+                claimed.add(action_identity(action))
+            out.append((sentence, action))
+        return out
+
+    def test_two_sites_both_get_the_change_they_need(self):
+        (s1, a1), (s2, a2) = self._pair(
+            _Finding(headline="Western Distribution Centre is at 99.2% of "
+                              "stated capacity"),
+            _Finding(headline="Nagpur Distribution Centre is at 93.0% in its "
+                              "busiest period"),
+        )
+        assert a1["key"] == a2["key"] == "ADD_CAPACITY"
+        assert a1["target"]["facility_id"] == "F1"
+        assert a2["target"]["facility_id"] == "F2"
+        assert s1 != s2
+
+    def test_the_same_site_twice_still_falls_to_another_rung(self):
+        """
+        Two findings that name nobody both resolve to the busiest site, and
+        the second must not repeat the first.
+        """
+        (s1, a1), (s2, a2) = self._pair(_Finding(), _Finding())
+        assert a1["key"] == "ADD_CAPACITY"
+        assert s1 != s2
+        assert (a2.get("key"), (a2.get("target") or {}).get("facility_id"))             != (a1["key"], a1["target"]["facility_id"])
+
+    def test_identity_is_the_change_and_the_place(self):
+        from app.backend.api.insights import action_identity
+        assert action_identity({"key": "ADD_CAPACITY",
+                                "target": {"facility_id": "F1"}})             != action_identity({"key": "ADD_CAPACITY",
+                                "target": {"facility_id": "F2"}})
+        # A network-wide action has no place, and two of those ARE the same.
+        assert action_identity({"key": "ADD_CAPACITY", "target": {}})             == action_identity({"key": "ADD_CAPACITY", "target": {}})

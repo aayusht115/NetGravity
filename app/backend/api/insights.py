@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -101,7 +102,20 @@ _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
 #:      entry is keyed on the network's `data_version`, which does not move
 #:      when the wording does, so without this every project that had already
 #:      loaded its insights would keep the old labels for ever.
-_PAYLOAD_VERSION = 8
+#:   6-8 further wording and shape changes: the structured `action` behind
+#:      each recommendation, and the strategic phrasing that replaced
+#:      "open the KPI page" throughout
+#:   9  a recommendation is derived per FINDING rather than per network.
+#:      Every capacity-family card used to call the ladder for its top rung
+#:      and print the same sentence — seven identical recommendations on a
+#:      loaded network, several of them contradicting the card above them.
+#:      A cached briefing carries those sentences in its body, and nothing
+#:      about the network changed, so without this bump every project that
+#:      had loaded its insights would keep them.
+#:  10  percentages print whole ("54%", not "54.00%") and a FACILITY-scoped
+#:      card answers about the facility rather than repeating the network
+#:      card's sentence word for word
+_PAYLOAD_VERSION = 10
 
 
 #: Theme -> the per-facility field that theme is ABOUT. A chart for a finding
@@ -395,6 +409,30 @@ _ACTION_BY_THEME = {
     ("Scenario impact", "OPPORTUNITY"):
         "Take this scenario to a decision, or park it — it has been priced "
         "against the baseline and is waiting on a call.",
+    # The severity this one actually carries. It was emitted with the default
+    # (INFORMATION), missed both lookups above, and fell through to the
+    # severity fallback — so a card reading "this change raises what the
+    # network costs" carried the line "No decision is needed on this one."
+    ("Scenario impact", "INFORMATION"):
+        "Weigh this price against the operational benefit and take the "
+        "scenario to a decision, or park it.",
+    ("Scenario impact", "RISK"):
+        "Decide whether this price is worth paying before the change is "
+        "committed.",
+    # ---- comparisons -----------------------------------------------------
+    ("Trade-off", "OPPORTUNITY"):
+        "Commit to the option that wins on the terms that matter here, or "
+        "state which of them the business is willing to trade.",
+    ("Trade-off", "INFORMATION"):
+        "Choose between these on the basis they differ on — the cost gap "
+        "alone does not settle it.",
+    ("Not compared", "RISK"):
+        "Re-run the scenarios that returned no usable cost before the "
+        "ranking is relied on — they are absent from it, not behind in it.",
+    # ---- costs -----------------------------------------------------------
+    ("Cost", "RISK"):
+        "Decide which cost line is going to move, and price the change "
+        "against this baseline before the next planning round.",
     ("Demand outlook", "INFORMATION"):
         "Size the network against this outlook rather than against last "
         "year's volume.",
@@ -409,6 +447,57 @@ _ACTION_BY_THEME = {
         "figure derived from it.",
 }
 
+#: The same theme, said to a reader looking at ONE SITE.
+#:
+#: The Insights feed merges two briefings — the network's, and one per facility
+#: — and each is computed in its own request, so neither can see what the other
+#: recommended. On the demo network that produced two cards a few rows apart
+#: carrying the same sentence word for word: "No open site reaches the 90%
+#: threshold" and "Central Distribution Centre is running at 54% of its stated
+#: capacity", both answered with "Headroom is not a decision on its own. Put
+#: more volume through the sites with room before adding any."
+#:
+#: De-duplicating that after the fact would be papering over it. The two
+#: findings are genuinely different — one is about the footprint, one is about
+#: a site — and the answers should differ because the findings do. A
+#: facility-scoped card speaks about the facility.
+_ACTION_BY_THEME_FACILITY = {
+    ("Capacity", "INFORMATION"):
+        "Put more volume through this site before any capacity is added "
+        "elsewhere in the network.",
+    ("Capacity", "RISK"):
+        "Relieve this site before demand grows into it — the lead time on "
+        "capacity is longer than the warning.",
+    ("Capacity", "OPPORTUNITY"):
+        "Move volume onto this site before adding capacity anywhere.",
+    ("Utilisation", "INFORMATION"):
+        "Judge this site on what it is asked to carry, not on the reading "
+        "alone — headroom is only worth having where demand can reach it.",
+    ("Utilisation", "RISK"):
+        "Relieve this site before demand grows into it.",
+    ("Utilisation", "OPPORTUNITY"):
+        "Price moving this site's volume onto sites with room.",
+    ("Service", "RISK"):
+        "Put capacity within reach of the demand this site cannot serve, and "
+        "price it against this baseline.",
+    ("Footprint", "OPPORTUNITY"):
+        "Price this site's cost against the routing it saves before the "
+        "footprint is committed.",
+    ("Resilience", "RISK"):
+        "Decide what covers this site's volume if it is lost, before the "
+        "exposure concentrates further.",
+    ("Cost", "INFORMATION"):
+        "Hold this site's cost as the baseline any change to it is measured "
+        "against.",
+}
+
+#: Findings that are not decisions and must not be given one.
+#:
+#: "Summary" is the briefing's own lead — the sentence the whole page is about.
+#: Any action under it is either the page's headline recommendation printed
+#: twice or a second, weaker one competing with it.
+_NO_ACTION_THEMES = frozenset({"Summary"})
+
 #: Last resort, by severity alone — a theme this map does not name yet. Still
 #: a decision, still not a place to look.
 _ACTION_BY_SEVERITY = {
@@ -417,6 +506,52 @@ _ACTION_BY_SEVERITY = {
     "OPPORTUNITY": "Price this change against the current baseline before "
                    "committing either way.",
     "INFORMATION": "No decision is needed on this one.",
+}
+
+
+#: WHICH RUNGS ANSWER WHICH FINDING, best first.
+#:
+#: This is the fix for the thing that made the recommendations useless: every
+#: capacity-family card called the ladder for its TOP rung and got the same
+#: sentence. Measured on a network with two sites over 90%, one idle site and
+#: one closed candidate, seven findings printed one recommendation between them
+#: — and it contradicted several of the cards it sat under. A card reporting
+#: idle sites recommended bringing more capacity online.
+#:
+#: A finding is not a network. "3 sites are above the threshold" is answered by
+#: relieving them; "3 sites run at 22%" is answered by taking one out; "demand
+#: is going unserved" is answered by whatever adds reach soonest. The rungs are
+#: the same ladder — this says which of them speak to which question.
+#:
+#: Order inside each tuple is preference, not alternatives: the first rung the
+#: data supports wins, the rest are what it falls to when it does not.
+#: `strategic_actions.build_actions` still decides whether a rung applies at
+#: all, so nothing here can recommend expanding a site that is not tight.
+_ACTIONS_BY_FINDING = {
+    # Sites at their ceiling. Expand the constraint first; build only where
+    # there is nothing to expand into and nothing closed to bring back.
+    ("Capacity", "RISK"):
+        ("ADD_CAPACITY", "REOPEN_FACILITY", "OPEN_NEW_FACILITY"),
+    ("Utilisation", "RISK"):
+        ("ADD_CAPACITY", "REOPEN_FACILITY", "OPEN_NEW_FACILITY"),
+    # Sites carrying full fixed cost for a fraction of their capacity. The one
+    # rung that answers this, and the one the network-wide call withheld
+    # whenever anything else was tight.
+    ("Capacity", "OPPORTUNITY"): ("CONSOLIDATE",),
+    ("Utilisation", "OPPORTUNITY"): ("CONSOLIDATE",),
+    # Demand the footprint cannot reach. Reopening beats expanding here
+    # because reach, not throughput, is what is short.
+    ("Service", "RISK"):
+        ("REOPEN_FACILITY", "OPEN_NEW_FACILITY", "ADD_CAPACITY"),
+    # Both directions are live under this theme, which is why the emit site
+    # sets `action_hint` — see `KPIInsight`. This is the fallback for a
+    # footprint finding that sets none.
+    ("Footprint", "OPPORTUNITY"): ("CONSOLIDATE", "REOPEN_FACILITY"),
+    ("Footprint", "RISK"): ("CONSOLIDATE", "REOPEN_FACILITY"),
+    # Exposure concentrated on one site. An alternative is what reduces it;
+    # making the exposed site bigger concentrates it further, so ADD_CAPACITY
+    # is deliberately absent.
+    ("Resilience", "RISK"): ("REOPEN_FACILITY", "OPEN_NEW_FACILITY"),
 }
 
 
@@ -445,7 +580,12 @@ def _unserved(pack: Any) -> Optional[float]:
 
 def _strategic_action(pack: Any) -> Optional[Dict[str, Any]]:
     """
-    The top rung of the ladder for this network, as a serialisable action.
+    The top rung of the ladder for this NETWORK, as a serialisable action.
+
+    This is the page's own headline recommendation — the single change that
+    ranks above the others — and it is the one place the top rung is still the
+    right answer. Per-finding recommendations go through
+    `_finding_action` instead; see `_ACTIONS_BY_FINDING` for why.
 
     None when there are no solved rows to reason over — in which case the
     caller falls back to the theme sentence, which claims nothing about sites
@@ -462,8 +602,141 @@ def _strategic_action(pack: Any) -> Optional[Dict[str, Any]]:
     return actions[0].to_dict()
 
 
+def _subject_ids(insight: Any, rows: List[Dict[str, Any]]) -> List[str]:
+    """
+    The facilities THIS finding is about, by id.
+
+    Several findings name their site in the headline — "Nagpur DC is at 97.4%
+    in its busiest period", "Kochi DC is where losing a single site would cost
+    the most" — and the recommendation under them named whichever site was
+    busiest network-wide instead, which on a network with three tight sites is
+    the wrong one twice.
+
+    Matched against the AUTHORITATIVE name on the solved row, not parsed out of
+    the prose: the names in the sentence were interpolated from these same rows
+    by the layer that wrote it, so an exact match is a lookup rather than a
+    guess. Bounded by word edges, so "Central DC" does not claim "Central DC
+    North", and the result is empty for a network-wide finding — which is the
+    honest answer for one.
+    """
+    text = " ".join((
+        str(getattr(insight, "headline", "") or ""),
+        str(getattr(insight, "narrative", "") or ""),
+    ))
+    if not text.strip():
+        return []
+    # LONGEST NAME FIRST, and each match consumes the characters it used.
+    #
+    # Word edges alone are not enough: "Central DC" sits at both edges of its
+    # own mention inside "Central DC North", so a bounded match still let the
+    # shorter name claim the longer one's site — and on a network that names
+    # its sites that way the recommendation went to the wrong facility. A
+    # matched name is removed from the text before the shorter ones are
+    # offered it, which also leaves a genuine second mention still matchable.
+    candidates = []
+    for row in rows:
+        fid = str(row.get("facility_id") or "").strip()
+        for token in (str(row.get("facility_name") or "").strip(), fid):
+            # Two characters is not an identifier, it is a coincidence.
+            if len(token) >= 3:
+                candidates.append((fid, token))
+    candidates.sort(key=lambda pair: -len(pair[1]))
+
+    residue = text
+    hit = set()
+    for fid, token in candidates:
+        if not fid or fid in hit:
+            continue
+        pattern = (r"(?<![A-Za-z0-9])" + re.escape(token) + r"(?![A-Za-z0-9])")
+        if re.search(pattern, residue):
+            hit.add(fid)
+            residue = re.sub(pattern, " ", residue)
+
+    # Row order, so the same finding produces the same list every time.
+    out: List[str] = []
+    for row in rows:
+        fid = str(row.get("facility_id") or "").strip()
+        if fid in hit and fid not in out:
+            out.append(fid)
+    return out
+
+
+def action_identity(action: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    What makes two recommendations THE SAME recommendation.
+
+    Not the rung on its own. "Expand capacity at Western DC" and "Expand
+    capacity at Nagpur DC" are both ADD_CAPACITY and they are two different
+    decisions about two different sites — suppressing the second because the
+    first spent the rung would hide a real finding. What must not appear twice
+    is the same change at the same place.
+    """
+    target = action.get("target") or {}
+    where = str(target.get("facility_id") or target.get("region") or "")
+    return (str(action.get("key") or ""), where)
+
+
+def _finding_action(insight: Any, theme: str, severity: str, pack: Any,
+                    claimed: Optional[set] = None) -> Optional[Dict[str, Any]]:
+    """
+    The intervention that answers THIS finding, not this network.
+
+    Three things make it specific where `_strategic_action` is general:
+
+      * the rungs are chosen by what the finding says (`_ACTIONS_BY_FINDING`),
+        with the emit site's own `action_hint` ahead of them when it set one;
+      * the sites the finding NAMES rank first inside each rung, so the
+        recommendation is about the site the reader has just read about;
+      * a rung another card in this briefing has already used is excluded, so
+        one briefing cannot print one sentence six times.
+
+    None when no rung answers it — a legitimate outcome, and the caller falls
+    back to a decision sentence chosen by theme rather than inventing a change
+    the rows do not support.
+    """
+    from netgravity.orchestrator.reasoning.strategic_actions import (
+        ACTION_KEYS, build_actions,
+    )
+
+    rows = _facility_rows(pack)
+    if not rows:
+        return None
+
+    prefer: List[str] = []
+    hint = str(getattr(insight, "action_hint", "") or "").strip()
+    # The emit site wins, because it is the only thing that can separate two
+    # findings that share a theme and a severity and point opposite ways.
+    if hint in ACTION_KEYS:
+        prefer.append(hint)
+    for key in _ACTIONS_BY_FINDING.get((theme, severity), ()):
+        if key not in prefer:
+            prefer.append(key)
+    if not prefer:
+        return None
+
+    # Every rung that answers this finding, in preference order — not just the
+    # first. The pick below needs somewhere to fall to when the best answer is
+    # one another card has already given about the same site.
+    actions = build_actions(
+        rows,
+        unserved_demand=_unserved(pack),
+        limit=len(prefer),
+        focus_ids=_subject_ids(insight, rows),
+        prefer=prefer,
+    )
+    spent = claimed if claimed is not None else set()
+    for action in actions:
+        body = action.to_dict()
+        if action_identity(body) not in spent:
+            return body
+    return None
+
+
 def _recommended_action(insight: Any, theme: str, severity: str,
-                        pack: Any = None) -> Tuple[str, Dict[str, Any]]:
+                        pack: Any = None,
+                        claimed: Optional[set] = None,
+                        scope: str = "NETWORK"
+                        ) -> Tuple[str, Dict[str, Any]]:
     """
     The one decision to take about this finding, and the test that proves it.
 
@@ -480,6 +753,11 @@ def _recommended_action(insight: Any, theme: str, severity: str,
          rows. This is the one that can name a site.
       3. THE THEME SENTENCE. A decision, not a destination.
 
+    `claimed` is the set of rungs the cards above this one have already used.
+    A briefing that recommends the same change five times has recommended it
+    once and wasted four cards — and the rungs it falls through to are the
+    other real answers to the same finding, not weaker phrasings of the first.
+
     A finding a reader has to translate into a decision on their own is half a
     finding — and on a screen read by people who do not run the model
     themselves, half a finding is none.
@@ -488,8 +766,15 @@ def _recommended_action(insight: Any, theme: str, severity: str,
     if written:
         return written, {}
 
+    # The briefing's own lead card. It restates the whole finding set rather
+    # than making one, and a "Recommended action" tile under it either repeats
+    # the recommendation the page already carries at the top or invents a
+    # second one. Empty, and the card omits the tile.
+    if theme in _NO_ACTION_THEMES:
+        return "", {}
+
     if theme in _CAPACITY_THEMES and severity != "INFORMATION":
-        action = _strategic_action(pack)
+        action = _finding_action(insight, theme, severity, pack, claimed)
         if action:
             # The LABEL is the sentence. It is an imperative naming the
             # intervention — "Expand capacity at Pune DC" — and the evidence
@@ -497,7 +782,10 @@ def _recommended_action(insight: Any, theme: str, severity: str,
             # reason underneath would say the same thing twice.
             return action["label"], action
 
-    sentence = (_ACTION_BY_THEME.get((theme, severity))
+    table = _ACTION_BY_THEME_FACILITY if scope == "FACILITY" else {}
+    sentence = (table.get((theme, severity))
+                or table.get((theme, "INFORMATION"))
+                or _ACTION_BY_THEME.get((theme, severity))
                 or _ACTION_BY_THEME.get((theme, "INFORMATION"))
                 or _ACTION_BY_SEVERITY.get(severity)
                 or _ACTION_BY_SEVERITY["INFORMATION"])
@@ -506,7 +794,8 @@ def _recommended_action(insight: Any, theme: str, severity: str,
 
 def _serialise_insight(insight: Any, index: int, *, scope: str,
                        entity_id: Optional[str],
-                       pack: Any = None) -> Dict[str, Any]:
+                       pack: Any = None,
+                       claimed: Optional[set] = None) -> Dict[str, Any]:
     """
     One KPI insight, in the shape a feed can render.
 
@@ -526,7 +815,14 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
     metric_refs = list(getattr(insight, "metric_refs", []) or [])
     comparison_refs = list(getattr(insight, "comparison_refs", []) or [])
     driver_refs = list(getattr(insight, "driver_refs", []) or [])
-    _action_pair = _recommended_action(insight, theme, severity_name, pack)
+    _action_pair = _recommended_action(insight, theme, severity_name, pack,
+                                       claimed, scope)
+    # Spend the rung, so the next card in this briefing reaches for a different
+    # one. `claimed` is per-briefing and is passed in by the loop below; a
+    # caller serialising one insight on its own passes None and nothing is
+    # spent.
+    if claimed is not None and _action_pair[1].get("key"):
+        claimed.add(action_identity(_action_pair[1]))
     return {
         # The theme alone is not unique within a scope: `_service_insights` can
         # emit two `theme="Service"` findings (unserved demand, and SLA), and
@@ -1011,6 +1307,10 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 raise NotFoundError(str(exc)) from exc
 
             briefing = result.briefing
+            # The rungs this briefing has already spent, filled in rank order
+            # as the cards are serialised. Shared across the whole list on
+            # purpose: it is what stops six cards printing one sentence.
+            claimed: set = set()
             return {
                 "project_id": project_id,
                 "snapshot_id": snapshot_id,
@@ -1018,9 +1318,15 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 "scenario_id": state.scenario_id,
                 "scope": scope_arg,
                 "entity_id": entity_id,
+                # A comprehension, and ORDER MATTERS inside it: each card
+                # spends the rung it used, so the ones after it reach for a
+                # different one. Python evaluates this left to right, and the
+                # insights arrive already ranked, so the most important finding
+                # gets first pick.
                 "insights": [
                     _serialise_insight(item, i, scope=scope_arg,
-                                       entity_id=entity_id, pack=pack)
+                                       entity_id=entity_id, pack=pack,
+                                       claimed=claimed)
                     for i, item in enumerate(briefing.kpi_insights)
                 ],
                 # The policy constants a threshold line may be drawn at, so the

@@ -25,6 +25,7 @@ from typing import List, Optional, Sequence
 from netgravity.orchestrator.agents.llm_gateway import LLMGateway, extract_json
 from netgravity.orchestrator.exceptions import LLMFailureError
 from netgravity.orchestrator.schemas.requests import (
+    NETWORK_WIDE_ACTIONS,
     Intent,
     IntentResolution,
     ScenarioActionType,
@@ -517,7 +518,9 @@ class IntentAgent:
             '  "scenarios": [{"action": "<valid action>", "facility_ids": ["..."], '
             '"target_facility_id": null, "capacity_multiplier": null, '
             '"capacity_delta_units": null, "capacity_set_units": null, '
-            '"demand_multiplier": null, '
+            '"demand_multiplier": null, "demand_region": null, '
+            '"demand_product_category": null, '
+            '"transport_cost_multiplier": null, "sla_days_delta": null, '
             '"label": "short label"}],\n'
             '  "rationale": "one short sentence"\n'
             "}\n\n"
@@ -541,6 +544,15 @@ class IntentAgent:
             "  output a probability for a market change.\n"
             "- Use EXPLANATION when the user asks WHY something is the case, rather than\n"
             "  asking for a new analysis.\n"
+            "- CHANGE_DEMAND, CHANGE_TRANSPORT_COST and CHANGE_SLA describe the\n"
+            "  WHOLE NETWORK unless the user narrows them, so leave facility_ids\n"
+            "  empty for those unless specific sites are named. Each needs its\n"
+            "  own quantity and says nothing without one: demand_multiplier for\n"
+            "  demand (1.2 is up 20%, 0.9 is down 10%), transport_cost_multiplier\n"
+            "  for freight rates, sla_days_delta for the delivery promise in days\n"
+            "  (-1 tightens it by a day). Narrow a demand change with\n"
+            "  demand_region or demand_product_category when the user names one —\n"
+            "  these are the client's own labels, copied as the user wrote them.\n"
             "- For CHANGE_CAPACITY set capacity_delta_units for an absolute CHANGE\n"
             "  stated in units (negative to reduce), capacity_multiplier for a\n"
             "  percentage change (0.8 = 20% reduction), or capacity_set_units when the\n"
@@ -577,7 +589,23 @@ class IntentAgent:
             except ValueError:
                 continue
             fids = [f for f in raw.get("facility_ids", []) or [] if f in allowed]
-            if not fids:
+            # A SCENARIO THAT NAMES NO SITE IS NOT AN EMPTY SCENARIO.
+            #
+            # This dropped every proposal with no facility in it, which threw
+            # away the whole class of scenario that is network-wide by nature.
+            # "What happens if demand grows 20%?" is complete, runnable and
+            # names nobody: the model classified it correctly and proposed
+            # CHANGE_DEMAND with a multiplier of 1.2, and this line deleted it.
+            # `scenario.create` then failed three steps later with "No scenario
+            # specification at index 0", the execution went to FAILED, the
+            # endpoint answered 500 and the assistant told the user it could
+            # not reach the analysis engine. It had reached it. It had solved
+            # the network twice. The answer was inside the 500's body.
+            #
+            # `NETWORK_WIDE_ACTIONS` is the schema's own list of the actions
+            # this applies to; the REST scenario API and the scenario validator
+            # both already read it. This was the one place that did not.
+            if not fids and action not in NETWORK_WIDE_ACTIONS:
                 continue
             target = raw.get("target_facility_id")
 
@@ -604,6 +632,12 @@ class IntentAgent:
                 )
                 multiplier = delta = set_units = None
 
+            def scope(key: str) -> Optional[str]:
+                """A client's own label for a region or a product category."""
+                value = raw.get(key)
+                text_value = str(value).strip() if value is not None else ""
+                return text_value[:80] or None
+
             scenarios.append(ScenarioIntentSpec(
                 action=action,
                 facility_ids=fids,
@@ -612,7 +646,19 @@ class IntentAgent:
                 capacity_delta_units=delta,
                 capacity_set_units=set_units,
                 demand_multiplier=number("demand_multiplier"),
-                label=str(raw.get("label") or f"{action.value} {', '.join(fids)}")[:120],
+                # The three network-wide quantities the scenario engine has
+                # always accepted and this parser never read. Without them the
+                # model could classify "freight is up 10%" as
+                # CHANGE_TRANSPORT_COST and the ratio it had extracted went
+                # nowhere — an action with no magnitude, which is the same dead
+                # end as no scenario at all.
+                demand_region=scope("demand_region"),
+                demand_product_category=scope("demand_product_category"),
+                transport_cost_multiplier=number("transport_cost_multiplier"),
+                sla_days_delta=number("sla_days_delta"),
+                label=str(raw.get("label")
+                          or f"{action.value} "
+                             f"{', '.join(fids) or 'network-wide'}")[:120],
             ))
 
         try:
