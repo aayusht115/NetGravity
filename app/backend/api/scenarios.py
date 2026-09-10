@@ -28,7 +28,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify, make_response, request
 
 from app.backend.services.errors import (
     ApplicationError,
@@ -111,6 +111,9 @@ def _facility_states(registry: Any, context: Any, key: Optional[str]) -> Dict[st
     if not key:
         return {}
     out: Dict[str, Any] = {}
+    state = (getattr(context, "network_states", {}) or {}).get(key)
+    summaries = {getattr(f, "facility_id", None): f
+                 for f in (getattr(state, "facilities", None) or [])}
     for facility_id, metrics in registry.facility_kpis(context, key=key).items():
         def value(metric_id: str) -> Any:
             result = metrics.get(metric_id)
@@ -121,6 +124,13 @@ def _facility_states(registry: Any, context: Any, key: Optional[str]) -> Dict[st
             "throughput": value("throughput_units"),
             "capacity": value("capacity_units"),
             "isOpen": value("is_open"),
+            # `capacity` is the capacity that BOUND the site: rated, the
+            # month's availability, or a plant's production limit. These say
+            # which, and what was uploaded and recorded beside it.
+            "ratedCapacity": value("rated_capacity_units"),
+            "capacityLimit": getattr(summaries.get(facility_id), "capacity_limit", None),
+            "observedUtilPct": getattr(summaries.get(facility_id),
+                                       "observed_utilization_pct", None),
         }
     return out
 
@@ -183,6 +193,16 @@ _SATURATED_PCT = 99.0
 #: the mapper already use for "high", so one site is not "hot" on one screen
 #: and "healthy" on the next.
 _LOADED_PCT = 85.0
+
+#: Below this, an OPEN site is carrying its full fixed cost for a fraction of
+#: its capacity. The opposite finding to the two thresholds above, and the one
+#: this file had no name for — so every plan that was not short of room
+#: produced "No network change is indicated" whatever it was wasting.
+#:
+#: Mirrors `strategic_actions.IDLE_PCT`, which is what the Insights ladder uses
+#: for the same finding. One number, so a site the Insights page calls
+#: under-used is not called healthy here.
+_UNDER_USED_PCT = 30.0
 
 #: How many sites a capacity account names before it stops listing them. A
 #: recommendation that names twenty sites has recommended nothing.
@@ -251,11 +271,604 @@ def _site_row(facility_id: str, meta: Dict[str, Dict[str, Any]],
         "added_units": (round(throughput - was, 2)
                         if isinstance(throughput, (int, float))
                         and isinstance(was, (int, float)) else None),
+        # What was uploaded, which limit `capacity` is, and what was recorded.
+        "rated_capacity": scenario.get("ratedCapacity"),
+        "capacity_limit": scenario.get("capacityLimit"),
+        "observed_util_pct": scenario.get("observedUtilPct"),
         "headroom_units": (round(scenario["capacity"] - throughput, 2)
                            if isinstance(throughput, (int, float))
                            and isinstance(scenario.get("capacity"), (int, float))
                            else None),
     }
+
+
+# ---------------------------------------------------------------------------
+# What to DO about a scenario
+# ---------------------------------------------------------------------------
+#: Every action this application can recommend, IMPORTED rather than restated.
+#:
+#: This was a second tuple of the same strings, and a second vocabulary is a
+#: vocabulary that drifts: the Insights feed now derives its recommendations
+#: from `strategic_actions.build_actions`, and a key added there and not here
+#: would produce a card the scenario screen could not map to a form.
+#:
+#: The LADDER is not shared, and deliberately. This function has something the
+#: generic one does not: a full capacity account, including which regions have
+#: run out of room — computed by `_capacity_response` from every solved site.
+#: `build_actions` sees only the rows it is handed, so asking it to decide
+#: "every site in this region is full" from a subset would have it conclude
+#: that from whatever it was given. The two agree on WHAT can be recommended
+#: and on the words; this one knows more about where.
+#:
+#: NO_ACTION is not an intervention — it is the STATEMENT that none is
+#: indicated, with the finding behind it. Carried in the same list because
+#: "nothing needs doing" is an answer to "what should I do", and a screen that
+#: renders an empty space there has answered nothing. A consumer draws it as a
+#: sentence rather than a control.
+from netgravity.orchestrator.reasoning.strategic_actions import (  # noqa: E402
+    ACTION_KEYS as _ACTION_KEYS,
+    CTA_BY_ACTION as _CTA_BY_ACTION,
+)
+
+
+#: The scenario each recommendation is PROVED by, keyed by action. Pressing the
+#: button opens the builder already filled in with the change being
+#: recommended — which is what makes it a recommendation a leader can price
+#: rather than an opinion. Mirrors `StrategicAction.scenario`, so the Insights
+#: feed and this screen hand the builder the same shape.
+def _scenario_for(key: str, target: Dict[str, Any]) -> Dict[str, Any]:
+    facility_id = target.get("facility_id") or ""
+    name = target.get("name") or facility_id or "site"
+    region = target.get("region") or ""
+    if key == "REOPEN_FACILITY":
+        return {"action": "OPEN_FACILITY", "open_mode": "EXISTING",
+                "facility_id": facility_id, "name": f"Reopen {name}"}
+    if key == "ADD_CAPACITY":
+        return {"action": "CHANGE_CAPACITY", "facility_id": facility_id,
+                "name": f"More capacity at {name}" if facility_id
+                        else "Relieve the network shortfall"}
+    if key == "OPEN_NEW_FACILITY":
+        return {"action": "OPEN_FACILITY", "open_mode": "NEW",
+                "region": region,
+                "name": f"New site in {region}".strip() if region else "New site"}
+    if key == "CONSOLIDATE":
+        return {"action": "CLOSE_FACILITY", "facility_id": facility_id,
+                "name": f"Consolidate {name}"}
+    if key == "SCOPE_DEMAND_GROWTH":
+        return {"action": "CHANGE_DEMAND", "name": "Growth, scoped to its region"}
+    return {}
+
+
+def _fmt_units(value: Any) -> str:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return "an unrecorded quantity"
+    return f"{value:,.0f} units"
+
+
+def _capacity_account(record: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Which sites this plan fills, empties and leaves closed — for a record of
+    any age.
+
+    `_capacity_response` computes this at simulate time and writes it onto the
+    record, and every rung in `_recommended_actions` is gated on it. A scenario
+    stored before it existed carries no such block, so `cap` was `{}` and the
+    ladder could see nothing: measured on the demo project, all three saved
+    scenarios return `capacity_response: ABSENT`, one of them a +30% demand run
+    with a site sitting at 100% of capacity — and the card recommended nothing
+    about capacity, because the only rung that could still fire reads the
+    scenario REQUEST rather than the account.
+
+    `/compare` recomputes the recommendations against the stored record, which
+    was meant to cover exactly this. Recomputing a ladder over a block that is
+    not there recovers nothing.
+
+    So the account is rebuilt from what the record does carry:
+    `scenario_facilities` and `baseline_facilities` are the same authoritative
+    per-site figures `_capacity_response` reads, and the thresholds are the same
+    three constants.
+
+    TWO THINGS ARE NOT RECOVERED, deliberately:
+
+      * site NAMES live on the engine's facility metadata rather than on the
+        record, so the id is used. "Test consolidating DC_EAST" is worse than
+        the same sentence with the site's real name and far better than no
+        recommendation at all;
+      * `regions_without_room` stays empty. A region cannot be declared full
+        without knowing which sites are in it, and the record does not say. A
+        record of this age can therefore be recommended an expansion, a
+        reopening or a consolidation — never a new site somewhere the data
+        cannot place.
+    """
+    stored = record.get("capacity_response")
+    if isinstance(stored, dict) and stored:
+        return stored
+
+    scenario = record.get("scenario_facilities") or {}
+    baseline = record.get("baseline_facilities") or {}
+    at_ceiling: List[Dict[str, Any]] = []
+    working_harder: List[Dict[str, Any]] = []
+    under_used: List[Dict[str, Any]] = []
+    idle: List[Dict[str, Any]] = []
+    headroom = 0.0
+    headroom_known = False
+
+    for facility_id, state in scenario.items():
+        if not isinstance(state, dict):
+            continue
+        capacity = state.get("capacity")
+        if state.get("isOpen") is False:
+            if isinstance(capacity, (int, float)) and capacity > 0:
+                idle.append({"id": facility_id, "name": facility_id,
+                             "util_pct": None, "region": None,
+                             "capacity": capacity})
+            continue
+
+        util = state.get("utilPct")
+        if not isinstance(util, (int, float)) or isinstance(util, bool):
+            continue
+        was = (baseline.get(facility_id) or {}).get("throughput")
+        now = state.get("throughput")
+        added = (round(now - was, 2)
+                 if isinstance(now, (int, float)) and isinstance(was, (int, float))
+                 else None)
+        row = {"id": facility_id, "name": facility_id, "util_pct": float(util),
+               "baseline_util_pct": (baseline.get(facility_id) or {}).get("utilPct"),
+               "region": None, "capacity": capacity, "added_units": added}
+        if isinstance(capacity, (int, float)) and isinstance(now, (int, float)):
+            headroom += max(capacity - now, 0.0)
+            headroom_known = True
+
+        if util >= _SATURATED_PCT:
+            at_ceiling.append(row)
+        elif util >= _LOADED_PCT and (added or 0) > 0:
+            working_harder.append(row)
+        elif util < _UNDER_USED_PCT:
+            under_used.append(row)
+
+    at_ceiling.sort(key=lambda r: -(r["added_units"] or 0))
+    working_harder.sort(key=lambda r: -(r["util_pct"] or 0))
+    under_used.sort(key=lambda r: (r["util_pct"] or 0))
+    idle.sort(key=lambda r: -(r["capacity"] or 0))
+
+    return {
+        "at_ceiling": at_ceiling, "at_ceiling_count": len(at_ceiling),
+        "working_harder": working_harder,
+        "working_harder_count": len(working_harder),
+        "under_used": under_used, "under_used_count": len(under_used),
+        "idle": idle, "idle_count": len(idle),
+        "open_headroom_units": round(headroom, 2) if headroom_known else None,
+        # Not recoverable from the record — see the note above.
+        "regions_without_room": [],
+        # Says this account was rebuilt rather than solved, so a consumer that
+        # cares can tell the difference.
+        "reconstructed": True,
+    }
+
+
+def _recommended_actions(record: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    What a reader should DO about this scenario, in priority order.
+
+    DERIVED HERE, NOT ON THE SCREEN. This list used to be built in the browser
+    from the same block, and the drawer, the card and anything else that wanted
+    it would each have had their own copy. One definition means the sentence a
+    leader reads on the card is the sentence in the document they forward.
+
+    Every entry is a NETWORK INTERVENTION — add capacity, reopen a site, build
+    one, scope the growth, get the missing input. Reading the result is not an
+    action: "review the proposed changes" told a reader to look at the screen
+    they were already looking at, and it was the first thing offered on every
+    scenario whatever the solve found. It is a way into the detail, which the
+    screen offers separately, and it is not a recommendation.
+
+    Each is gated on a FINDING in this scenario's own solved result, so a plan
+    that stranded no demand is never told to add capacity and a plan with room
+    everywhere is never told to build. An empty list is a real answer and the
+    caller must say so rather than filling the space.
+
+    ABOUT THIS CHANGE, NOT ABOUT THE NETWORK. Every rung reads what the
+    scenario did relative to today: a site it pushed to its ceiling, demand it
+    stranded, a site whose load it took away, capacity it added that nothing
+    used. A site that was already full, or already closed, before the change
+    is a property of today's network. The Insights feed recommends on those,
+    and repeating them here put the same "reopen X, expand Y" on every
+    scenario of a project whatever was asked. Measured on one upload: a
+    closure and two demand runs all opened with the same two recommendations,
+    and the closure's first one was to reopen the site it had just closed.
+
+    A FINDING WITH NOTHING TO PRESS is marked `statement`, and carries no
+    scenario and no button verb. "Keep this site open" is an answer; a button
+    under it that opens a form re-running today's network is not.
+    """
+    cap = _capacity_account(record)
+    kpis = record.get("scenario_kpis") or {}
+    base_kpis = record.get("baseline_kpis") or {}
+    request = record.get("request") or {}
+    action = str(request.get("action") or "").upper()
+    named = [str(f) for f in (request.get("facility_ids") or [])]
+
+    def kpi(block: Dict[str, Any], name: str) -> Optional[float]:
+        row = block.get(name)
+        if isinstance(row, dict):
+            if row.get("status") not in (None, "VALID"):
+                return None
+            row = row.get("value")
+        if isinstance(row, bool) or not isinstance(row, (int, float)):
+            return None
+        return float(row)
+
+    unserved = kpi(kpis, "unserved_demand")
+    was_unserved = kpi(base_kpis, "unserved_demand")
+    # Demand THIS change strands. A record with no baseline figure counts the
+    # whole shortfall, which is how every record was read before.
+    if unserved is None:
+        stranded: Optional[float] = None
+    elif was_unserved is None:
+        stranded = unserved
+    else:
+        stranded = max(unserved - was_unserved, 0.0)
+    total = kpi(kpis, "total_demand")
+    # A rounding tail on a network of millions of units is not a shortfall.
+    tolerance = max(1.0, (total or 0.0) * 1e-6)
+    strands = stranded is not None and stranded > tolerance
+
+    headroom = cap.get("open_headroom_units")
+    # Out of REACH rather than short of ROOM: the open sites have more spare
+    # capacity between them than the whole shortfall, so capacity is not what
+    # binds. The same test `_capacity_verdict` states in words.
+    out_of_reach = bool(strands and isinstance(headroom, (int, float))
+                        and unserved is not None and headroom > unserved)
+
+    def caused(row: Dict[str, Any]) -> bool:
+        """Whether this change put the site at its ceiling."""
+        added = row.get("added_units")
+        was = row.get("baseline_util_pct")
+        # Full before the change is a standing constraint, even when the plan
+        # squeezes a few more units through it in slacker periods (measured:
+        # +501 units at a plant that was already at 100%).
+        if isinstance(was, (int, float)):
+            return was < _SATURATED_PCT
+        if isinstance(added, (int, float)):
+            return added > 0
+        # Too old a record to tell either way: counted, as it always was.
+        return True
+
+    closed_by_change = set(named) if action == "CLOSE_FACILITY" else set()
+    at_ceiling = [r for r in (cap.get("at_ceiling") or []) if caused(r)]
+
+    def warmed(row: Dict[str, Any]) -> bool:
+        """Whether this change took the site into the loaded band."""
+        was = row.get("baseline_util_pct")
+        return not isinstance(was, (int, float)) or was < _LOADED_PCT
+
+    warming = [r for r in (cap.get("working_harder") or []) if warmed(r)]
+    idle = [r for r in (cap.get("idle") or [])
+            if str(r.get("id")) not in closed_by_change]
+    regions = list(cap.get("regions_without_room") or [])
+
+    facility_cost = kpi(base_kpis, "facility_cost")
+    if facility_cost is None:
+        facility_cost = kpi(kpis, "facility_cost")
+    # The upload states no fixed cost anywhere. Capacity, closures and
+    # openings then carry no price, and a cost comparison of them is empty.
+    unpriced = facility_cost is not None and facility_cost <= 0.0
+    # Some sites unpriced rather than all of them. Said, and never offered as
+    # a consolidation: closing a site whose fixed cost is missing saves
+    # nothing the model can see.
+    completeness = record.get("cost_completeness") or {}
+    unpriced_sites = {str(f) for f in (completeness.get("sites_without_fixed_cost") or [])}
+    partly_unpriced = completeness.get("complete") is False and not unpriced
+
+    def site_name(facility_id: str) -> str:
+        for block in ("at_ceiling", "working_harder", "under_used", "idle"):
+            for row in cap.get(block) or []:
+                if str(row.get("id")) == facility_id and row.get("name"):
+                    return str(row["name"])
+        return facility_id
+
+    def name_of(site: Dict[str, Any]) -> str:
+        return str(site.get("name") or site.get("id") or "")
+
+    actions: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    def add(entry: Dict[str, Any]) -> None:
+        target = entry.get("target") or {}
+        identity = (entry["key"], target.get("facility_id") or target.get("region"))
+        if identity in seen:
+            return
+        seen.add(identity)
+        actions.append(entry)
+
+    # 1. A CLOSURE THAT STRANDS DEMAND. The first thing to know about it, and
+    #    not an intervention: the closed site was being offered back as a
+    #    "reopen" button, which re-runs the network as it is today.
+    if action == "CLOSE_FACILITY" and strands and named:
+        who = ", ".join(site_name(f) for f in named)
+        add({
+            "key": "REOPEN_FACILITY",
+            "statement": True,
+            "label": f"Keep {who} open",
+            "reason": (
+                f"Closing it leaves {_fmt_units(stranded)} of demand unserved "
+                f"that today's network serves. "
+                + ("The sites that stay open have room between them, but none "
+                   "can reach those markets, so no capacity added elsewhere "
+                   "would serve them. Those markets need another lane before "
+                   "this closure goes further."
+                   if out_of_reach else
+                   "The sites that stay open do not have the room to take it, "
+                   "and that room is what the closure has to find first.")),
+            "target": {"facility_id": named[0], "name": who},
+        })
+
+    # 2. CAPACITY ADDED THAT NOTHING USED. The finding a capacity scenario is
+    #    run to get, and it was never stated: the card went on to recommend
+    #    whatever the network needed elsewhere.
+    delta = request.get("capacity_delta_units")
+    if action == "CHANGE_CAPACITY" and isinstance(delta, (int, float)) and delta > 0:
+        now_states = record.get("scenario_facilities") or {}
+        was_states = record.get("baseline_facilities") or {}
+        pricing = record.get("capacity_pricing") or {}
+        for facility_id in named:
+            now = (now_states.get(facility_id) or {}).get("throughput")
+            was = (was_states.get(facility_id) or {}).get("throughput")
+            if not (isinstance(now, (int, float)) and isinstance(was, (int, float))):
+                continue
+            if now > was + tolerance:
+                continue
+            util = (now_states.get(facility_id) or {}).get("utilPct")
+            running = (f" and runs at {util:,.0f}% of its new capacity"
+                       if isinstance(util, (int, float)) else "")
+            if pricing.get("basis") == "LIMIT_NOT_RAISED":
+                cost = (" The change did not raise the limit that binds this "
+                        "site, so none of the added room could be used.")
+            elif pricing.get("basis") in ("PRO_RATA", "STATED"):
+                cost = " The change adds fixed cost for room that goes unused."
+            elif pricing.get("basis") == "UNPRICED" or unpriced:
+                cost = (" The upload states no fixed cost for this site, so "
+                        "the plan shows no cost for the added room either.")
+            else:
+                cost = ""
+            add({
+                "key": "NO_ACTION",
+                "statement": True,
+                "label": f"The added capacity at {site_name(facility_id)} is not used",
+                "reason": (
+                    f"{site_name(facility_id)} carries no more in this plan "
+                    f"than it does today{running}. Capacity there is not what "
+                    f"limits this network." + cost),
+                "target": {"facility_id": facility_id,
+                           "name": site_name(facility_id)},
+            })
+
+    # 3. Reopening beats building: the capacity exists and is already paid
+    #    for. Only for a shortage THIS change creates, and never the site the
+    #    change itself closed.
+    if idle and (at_ceiling or (strands and not out_of_reach)):
+        region = at_ceiling[0].get("region") if at_ceiling else None
+        nearby = [r for r in idle if region and r.get("region") == region]
+        site = (nearby or idle)[0]
+        add({
+            "key": "REOPEN_FACILITY",
+            "label": f"Reopen {name_of(site)}",
+            "reason": (
+                f"This plan leaves {_fmt_units(site.get('capacity'))} of capacity "
+                f"closed at {name_of(site)}"
+                + (f" in {site['region']}" if site.get("region") else "")
+                + ", while the change "
+                + ("fills " + name_of(at_ceiling[0]) if at_ceiling
+                   else "leaves demand unserved")
+                + ". Capacity that already exists is cheaper to use than "
+                  "capacity that has to be built."),
+            "target": {"facility_id": site.get("id"), "name": site.get("name"),
+                       "region": site.get("region")},
+        })
+
+    # 4. Relief where THIS change runs a site out of room.
+    if at_ceiling:
+        site = at_ceiling[0]
+        util = site.get("util_pct")
+        at = (f"{util:,.0f}% of its capacity" if isinstance(util, (int, float))
+              else "its ceiling")
+        carrying = ""
+        if isinstance(site.get("added_units"), (int, float)) and site["added_units"] > 0:
+            carrying = (f", carrying {_fmt_units(site['added_units'])} more than "
+                        f"it does today")
+        # "Nothing more can move through this network" was said of a full site
+        # on a network with millions of units of room elsewhere. The sentence
+        # now claims only what this site's own figures show.
+        tail = (" Demand is going unserved for want of room, and this is where "
+                "the room runs out first."
+                if strands and not out_of_reach else
+                " It has no room left for anything more this change asks of it.")
+        add({
+            "key": "ADD_CAPACITY",
+            "label": f"Increase capacity at {name_of(site)}",
+            "reason": f"{name_of(site)} runs at {at} in this plan{carrying}.{tail}",
+            "target": {"facility_id": site.get("id"), "name": site.get("name"),
+                       "region": site.get("region")},
+        })
+    elif strands and not out_of_reach:
+        add({
+            "key": "ADD_CAPACITY",
+            "label": "Increase capacity where the plan runs out",
+            "reason": (
+                f"This change leaves {_fmt_units(stranded)} of demand unserved "
+                f"that today's network serves, while no site it fills reaches "
+                f"its ceiling, so the shortfall is spread across the network "
+                f"rather than sitting at one site."),
+            "target": {},
+        })
+    elif str(record.get("capacity_risk") or "").upper() == "HIGH" and warming:
+        # HIGH RISK WITH NOTHING THIS CHANGE HAS FILLED. Only a site the change
+        # itself took into the loaded band; one running hot before it is
+        # today's network, and the risk band alone cannot tell them apart.
+        site = warming[0]
+        util = site.get("util_pct")
+        at = (f"{util:,.0f}% of its capacity" if isinstance(util, (int, float))
+              else "close to its ceiling")
+        add({
+            "key": "ADD_CAPACITY",
+            "label": f"Increase capacity at {name_of(site)}",
+            "reason": (
+                f"Capacity risk is high in this plan. This change fills no site "
+                f"to its ceiling, but it takes {name_of(site)} to {at}, and "
+                f"that is the first site it will fill. Adding capacity there "
+                f"is what buys the network room before it starts stranding "
+                f"demand."),
+            "target": {"facility_id": site.get("id"), "name": site.get("name"),
+                       "region": site.get("region")},
+        })
+
+    # 5. A new site only where a region this change fills has nothing closed
+    #    to reopen and no room left.
+    if regions and at_ceiling:
+        region = regions[0].get("region")
+        add({
+            "key": "OPEN_NEW_FACILITY",
+            "label": f"Set up a new facility in {region}",
+            "reason": (
+                f"Every site in {region} is at its ceiling in this plan and "
+                f"none is closed, so demand growing there has nowhere to go. "
+                f"This is the only condition under which building is the "
+                f"cheapest answer rather than the first one."),
+            "target": {"region": region},
+        })
+
+    # 6. THE OPPOSITE FINDING: a site this change empties. A site that was
+    #    near-empty before it is today's network, not this scenario. Never on
+    #    an upload with no fixed cost, where consolidating saves nothing the
+    #    model can see, and never beside a shortage.
+    def emptied(row: Dict[str, Any]) -> bool:
+        added = row.get("added_units")
+        return not isinstance(added, (int, float)) or added < 0
+
+    under_used = [r for r in (cap.get("under_used") or [])
+                  if emptied(r) and str(r.get("id")) not in named
+                  and str(r.get("id")) not in unpriced_sites]
+    if under_used and not at_ceiling and not strands and not unpriced:
+        site = under_used[0]
+        util = site.get("util_pct")
+        at = (f"{util:,.0f}% of its capacity" if isinstance(util, (int, float))
+              else "a fraction of its capacity")
+        lighter = (", with less going through it than today"
+                   if isinstance(site.get("added_units"), (int, float)) else "")
+        add({
+            "key": "CONSOLIDATE",
+            "label": f"Test consolidating {name_of(site)}",
+            "reason": (
+                f"{name_of(site)} stays open in this plan and runs at {at}"
+                f"{lighter}. Moving its volume onto the sites with room is "
+                f"worth pricing before any capacity is added anywhere."),
+            "target": {"facility_id": site.get("id"), "name": site.get("name"),
+                       "region": site.get("region")},
+        })
+
+    # 7. Growth stated for the whole network — worth scoping only when that
+    #    growth actually runs into something. On a run that fills nothing the
+    #    advice changes no decision, and it was on every demand scenario.
+    scoped = request.get("demand_region") or request.get("demand_product_category")
+    #    Its whole point is that unscoped growth overstates the case for
+    #    EXPANDING, so it accompanies an expansion recommendation or nothing.
+    expands = any(a["key"] in ("ADD_CAPACITY", "REOPEN_FACILITY",
+                               "OPEN_NEW_FACILITY") and not a.get("statement")
+                  for a in actions)
+    if action == "CHANGE_DEMAND" and not scoped and expands:
+        add({
+            "key": "SCOPE_DEMAND_GROWTH",
+            "label": "Re-run this growth for the region it is happening in",
+            "reason": (
+                "This scenario grew every demand row in the network, and the "
+                "capacity recommended above is sized to that. Loading every warehouse "
+                "with growth that is happening in one region overstates the "
+                "case for expanding the ones that are not."),
+            "target": {},
+        })
+
+    # 8. The input without which this change cannot be judged on cost.
+    explanation = record.get("explanation") or {}
+    missing = list(explanation.get("missing_information") or [])
+    if (unpriced or partly_unpriced) and action in (
+            "CHANGE_CAPACITY", "CLOSE_FACILITY", "OPEN_FACILITY", "ADD_FACILITY"):
+        count = completeness.get("count")
+        sites = completeness.get("sites")
+        where = ("any site" if unpriced or not count or not sites
+                 else f"{count} of its {sites} sites")
+        add({
+            "key": "REQUEST_DATA",
+            "label": "Obtain each site's annual fixed cost",
+            "reason": (
+                f"This upload states no fixed cost for {where}, so rent, lease "
+                f"and overhead there are missing from this plan's cost, and "
+                f"capacity, closures and openings there carry no price. A change "
+                f"like this one cannot be judged on cost until that input is in."),
+            "target": {},
+        })
+    elif missing:
+        add({
+            "key": "REQUEST_DATA",
+            "label": "Obtain the inputs this analysis did not have",
+            "reason": (
+                f"{len(missing)} input this scenario needed was not in the "
+                f"upload, so part of the answer rests on less evidence than "
+                f"the rest of it."),
+            "target": {},
+        })
+
+    if not actions:
+        # WHY nothing is recommended, from the same figures the actions are
+        # gated on. "No recommended actions" is a blank; this is a finding.
+        standing = [r for r in (cap.get("at_ceiling") or []) if not caused(r)]
+        label = "No network change is indicated"
+        if out_of_reach:
+            label = "No capacity change will serve the missed demand"
+            reason = (
+                f"This plan leaves {_fmt_units(unserved)} of demand unserved "
+                f"while the open sites have {_fmt_units(headroom)} of room "
+                f"between them. The shortfall is out of reach rather than short "
+                f"of capacity: it is the lanes and the delivery promise that "
+                f"bind, not the size of any site.")
+        elif standing and not strands:
+            count = len(standing)
+            reason = (
+                f"This change strands no demand and fills no site that was not "
+                f"already full. {count} {'site was' if count == 1 else 'sites were'} "
+                f"at {'its' if count == 1 else 'their'} ceiling before it and "
+                f"{'still is' if count == 1 else 'still are'}: that is a "
+                f"constraint of today's network, not of this change.")
+        elif unserved is not None and unserved <= 0 and not cap.get("at_ceiling"):
+            reason = (
+                "This plan serves all of the demand and no site reaches its "
+                "capacity ceiling, so nothing in the network is constraining "
+                "it. There is no capacity change to recommend.")
+        elif not cap:
+            reason = (
+                "This scenario was solved before the per-site capacity "
+                "account was recorded, so which sites it fills is not known "
+                "for it. Re-run the scenario to see what it asks of each "
+                "site.")
+        else:
+            reason = (
+                "Nothing in this plan meets the threshold for a recommended "
+                "change: this change fills no site, strands no demand, and "
+                "leaves no region without room.")
+        add({"key": "NO_ACTION", "label": label, "reason": reason, "target": {}})
+
+    for index, entry in enumerate(actions, start=1):
+        entry["priority"] = index
+        statement = bool(entry.get("statement")) or entry["key"] == "NO_ACTION"
+        entry["statement"] = statement
+        # A statement opens no form and names no verb — see the docstring.
+        entry["scenario"] = ({} if statement else
+                             _scenario_for(entry["key"], entry.get("target") or {}))
+        # The phrase under the button, naming THIS change — from the same map
+        # the Insights feed reads, so one decision reads the same on both
+        # screens. No destination: this card is already in the planner.
+        entry["cta"] = "" if statement else _CTA_BY_ACTION.get(entry["key"], "")
+        assert entry["key"] in _ACTION_KEYS, entry["key"]
+    return actions
 
 
 def _capacity_response(engine: Any, snapshot_id: str,
@@ -295,6 +908,7 @@ def _capacity_response(engine: Any, snapshot_id: str,
 
     at_ceiling: List[Dict[str, Any]] = []
     working_harder: List[Dict[str, Any]] = []
+    under_used: List[Dict[str, Any]] = []
     idle: List[Dict[str, Any]] = []
     open_headroom = 0.0
     open_headroom_known = False
@@ -342,10 +956,19 @@ def _capacity_response(engine: Any, snapshot_id: str,
                 slot["at_ceiling"] += 1
         elif util >= _LOADED_PCT and (row["added_units"] or 0) > 0:
             working_harder.append(row)
+        elif util < _UNDER_USED_PCT:
+            # OPEN, PAID FOR, AND NEARLY EMPTY. Everything that was neither at
+            # its ceiling nor working harder used to fall off the end of this
+            # loop, so the one plan shape this card could say nothing about was
+            # the one with capacity going to waste in it.
+            under_used.append(row)
 
     # Busiest first: the site a planner has to deal with is the fullest one.
     at_ceiling.sort(key=lambda r: -(r["added_units"] or 0))
     working_harder.sort(key=lambda r: -(r["util_pct"] or 0))
+    # Emptiest first: the site with the least going through it is the one worth
+    # pricing a consolidation against.
+    under_used.sort(key=lambda r: (r["util_pct"] or 0))
     idle.sort(key=lambda r: -(r["capacity"] or 0))
 
     # A region qualifies as needing its own site only when it has a site the
@@ -368,6 +991,10 @@ def _capacity_response(engine: Any, snapshot_id: str,
         "at_ceiling_count": len(at_ceiling),
         "working_harder": working_harder[:_CAPACITY_SITE_LIMIT],
         "working_harder_count": len(working_harder),
+        # Open sites running below `_UNDER_USED_PCT`. The finding this card
+        # could not make.
+        "under_used": under_used[:_CAPACITY_SITE_LIMIT],
+        "under_used_count": len(under_used),
         "idle": idle[:_CAPACITY_SITE_LIMIT],
         "idle_count": len(idle),
         "idle_capacity_units": round(idle_capacity, 2) if idle else 0.0,
@@ -386,6 +1013,221 @@ def _capacity_response(engine: Any, snapshot_id: str,
         "verdict": _capacity_verdict(
             unserved, open_headroom if open_headroom_known else None,
             idle_capacity, len(at_ceiling)),
+    }
+
+
+def _capacity_pricing(engine: Any, snapshot_id: str, action: str,
+                      facility_ids: List[str],
+                      delta_units: Optional[float],
+                      *,
+                      limit: Optional[str] = None,
+                      recurring_per_year: Optional[float] = None,
+                      ) -> Optional[Dict[str, Any]]:
+    """
+    The fixed cost a capacity change was charged, site by site, and on what
+    basis — from the same functions the builder applies.
+
+    THE ANSWER TO "WHY DID THE COST MOVE, OR NOT?" The basis is one of:
+
+      * STATED               — the caller stated the recurring cost, and it is
+                               charged as stated;
+      * PRO_RATA             — priced at the site's own fixed cost per unit of
+                               the capacity it can actually use;
+      * LIMIT_NOT_RAISED     — the change raised a limit that does not bind
+                               (a plant's handling capacity above its
+                               production limit), so nothing usable was added
+                               and nothing is charged;
+      * UNPRICED             — the upload states no fixed cost for the site,
+                               so the added room carries no cost in this plan;
+      * REDUCTION_KEEPS_COST — capacity taken away keeps its fixed cost.
+
+    None for any other action, or when the snapshot cannot be read. Never
+    raises: the solve beside it is authoritative either way.
+    """
+    if (action != "CHANGE_CAPACITY" or not isinstance(delta_units, (int, float))
+            or not facility_ids):
+        return None
+    try:
+        from netgravity.orchestrator.engines.scenario_builder import (
+            _UNSTATED_CAPACITY,
+            capacity_fixed_cost,
+            planned_capacity,
+            usable_capacity,
+        )
+
+        facilities = {f.id: f for f in
+                      engine.snapshots.get(snapshot_id).network.facilities}
+    except Exception:  # noqa: BLE001 — an unreadable snapshot prices nothing
+        return None
+
+    sites: List[Dict[str, Any]] = []
+    for facility_id in facility_ids:
+        fac = facilities.get(facility_id)
+        if fac is None:
+            continue
+        handling = float(fac.capacity_units_per_period)
+        raw = getattr(fac, "production_capacity_units_per_period", None)
+        production = float(raw) if raw is not None else 1e12
+        new_handling, new_production = planned_capacity(
+            fac, delta_units=float(delta_units), limit=limit)
+        usable_before = usable_capacity(fac, handling, production)
+        usable_after = usable_capacity(fac, new_handling, new_production)
+        before = float(fac.fixed_cost_per_year or 0.0)
+        if recurring_per_year is not None:
+            after = before + float(recurring_per_year)
+            basis = "STATED"
+        else:
+            after = capacity_fixed_cost(before, usable_before, usable_after)
+            if delta_units <= 0:
+                basis = "REDUCTION_KEEPS_COST"
+            elif usable_after <= usable_before:
+                basis = "LIMIT_NOT_RAISED"
+            elif (before <= 0 or usable_before <= 0
+                  or usable_before >= _UNSTATED_CAPACITY):
+                basis = "UNPRICED"
+            else:
+                basis = "PRO_RATA"
+        sites.append({
+            "facility_id": facility_id,
+            "name": getattr(fac, "name", None) or facility_id,
+            "limit": (limit or "ORDINARY"),
+            "capacity_before": handling,
+            "capacity_after": new_handling,
+            "production_capacity_before": (production
+                                           if production < _UNSTATED_CAPACITY else None),
+            "production_capacity_after": (new_production
+                                          if new_production < _UNSTATED_CAPACITY else None),
+            "usable_capacity_before": usable_before,
+            "usable_capacity_after": usable_after,
+            "fixed_cost_per_year_before": round(before, 2),
+            "fixed_cost_per_year_after": round(after, 2),
+            "added_fixed_cost_per_year": round(after - before, 2),
+            "basis": basis,
+        })
+    if not sites:
+        return None
+    bases = {site["basis"] for site in sites}
+    return {
+        "sites": sites,
+        "added_fixed_cost_per_year": round(
+            sum(site["added_fixed_cost_per_year"] for site in sites), 2),
+        "basis": bases.pop() if len(bases) == 1 else "MIXED",
+    }
+
+
+def _cost_completeness(engine: Any, snapshot_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Whether this network's cost is fully priced — said, not implied.
+
+    A site with no fixed cost is a site whose rent, lease and overhead the
+    upload did not give. Every figure is short by that amount, and a scenario
+    that closes, consolidates or expands such a site is priced on freight and
+    handling alone. Measured: an upload with its fixed-cost column removed was
+    solved, compared and ranked as a complete network, and closing a DC read as
+    a C$5.72M saving.
+
+    None when the snapshot cannot be read, which is not the same as complete.
+    """
+    try:
+        facilities = engine.snapshots.get(snapshot_id).network.facilities
+    except Exception:  # noqa: BLE001
+        return None
+    scope = [f for f in facilities
+             if getattr(f.role, "value", str(f.role)) not in ("MARKET", "CUSTOMER")
+             and getattr(f.status, "value", str(f.status)) != "CLOSED"]
+    if not scope:
+        return None
+    missing = [f.id for f in scope if float(f.fixed_cost_per_year or 0.0) <= 0.0]
+    return {
+        "complete": not missing,
+        "sites": len(scope),
+        "count": len(missing),
+        "sites_without_fixed_cost": missing[:50],
+        "missing_input": "fixed_cost_per_year" if missing else None,
+    }
+
+
+def _horizon(engine: Any, snapshot_id: str) -> Optional[Dict[str, Any]]:
+    """How many periods a plan's costs cover, and what a period is."""
+    try:
+        network = engine.snapshots.get(snapshot_id).network
+    except Exception:  # noqa: BLE001
+        return None
+    periods = len({d.period for d in network.demands}) or 1
+    cost_period = network.config.cost_period
+    return {"periods": periods,
+            "cost_period": getattr(cost_period, "value", str(cost_period))}
+
+
+def _investment(record: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """
+    The one-time cost of a change, beside — never inside — its operating cost.
+
+    Expansion and new sites used to carry no investment at all: capacity was a
+    constraint with nothing to build, and a new DC cost its fixed and handling
+    rates and nothing up front. Putting a one-time figure into a twelve-month
+    operating solve would be the opposite error — a building that lasts decades
+    charged against one year of savings, so nothing would ever be built.
+
+    So the solve stays an operating plan, and this block states the rest from
+    the record's own figures:
+
+      * `cost_change`                — the plan's cost against today;
+      * `capacity_fixed_cost_change` — the part of that which is the new
+                                       capacity's own recurring fixed cost;
+      * `operating_cost_change`      — the rest: freight, handling and stock;
+      * `payback_periods`            — the one-time cost over the plan's saving
+                                       per period, where it saves anything.
+
+    `one_time_cost_stated` is False when the caller gave none, which the screen
+    says rather than treating as free. None for any other action.
+    """
+    request = record.get("request") or {}
+    action = str(request.get("action") or "").upper()
+    if action == "CHANGE_CAPACITY":
+        one_time = request.get("expansion_one_time_cost")
+        # Taking capacity away builds nothing. Without this a reduction read
+        # "no one-time cost stated" and was compared "as though it cost
+        # nothing up front", which is a caveat about a decision it is not.
+        delta = request.get("capacity_delta_units")
+        if (one_time is None and isinstance(delta, (int, float))
+                and not isinstance(delta, bool) and delta <= 0):
+            return None
+    elif action == "ADD_FACILITY":
+        one_time = (request.get("new_facility") or {}).get("opening_cost")
+    else:
+        return None
+    stated = isinstance(one_time, (int, float)) and not isinstance(one_time, bool)
+
+    baseline = record.get("baseline_kpis") or {}
+    scenario = record.get("scenario_kpis") or {}
+    base_cost = _valid(baseline, "business_network_cost")
+    cost = _valid(scenario, "business_network_cost")
+    base_fixed = _valid(baseline, "facility_cost")
+    fixed = _valid(scenario, "facility_cost")
+    horizon = record.get("horizon") or {}
+    periods = horizon.get("periods")
+    periods = periods if isinstance(periods, int) and periods > 0 else 1
+
+    change = None if cost is None or base_cost is None else round(cost - base_cost, 4)
+    own = None if fixed is None or base_fixed is None else round(fixed - base_fixed, 4)
+    operating = None if change is None or own is None else round(change - own, 4)
+    per_period = None if change is None else change / periods
+    payback = (round(float(one_time) / -per_period, 2)
+               if stated and one_time > 0 and per_period is not None and per_period < 0
+               else None)
+    return {
+        "one_time_cost": float(one_time) if stated else None,
+        "one_time_cost_stated": stated,
+        "cost_change": change,
+        "capacity_fixed_cost_change": own,
+        "operating_cost_change": operating,
+        "periods": periods,
+        "cost_period": horizon.get("cost_period") or "MONTH",
+        "payback_periods": payback,
+        "note": ("The one-time cost is in none of the cost figures on this "
+                 "scenario, which are operating costs over the modelled "
+                 "periods. The recurring cost of the new capacity is in them."),
     }
 
 
@@ -486,6 +1328,29 @@ def _rank_scenarios(baseline: Dict[str, Any],
     baseline_cost = _valid(baseline, "business_network_cost")
     baseline_fill = _valid(baseline, "demand_fill_rate")
 
+    def serves_less(fill: Optional[float], than: Optional[float]) -> bool:
+        return (fill is not None and than is not None
+                and (fill - than) * 100.0 < -_MATERIAL_FILL_DROP_PTS)
+
+    def saving_is_shrinkage(cost_delta: Optional[float], fill: Optional[float],
+                            than_fill: Optional[float],
+                            than_cost: Optional[float]) -> bool:
+        """
+        Whether a saving is made of the demand the plan stops serving.
+
+        The demand dropped is valued at the other side's own average cost per
+        unit served: (fill lost / fill) x that side's cost. When that is at
+        least half the saving, the saving is mostly shrinkage. "Serves less"
+        alone is too blunt: a plan 161M cheaper that left 0.05% of demand
+        unserved was told its saving came from that demand, which on its own
+        figures was worth about 370K of it.
+        """
+        if (cost_delta is None or cost_delta >= 0 or than_cost is None
+                or not than_fill or not serves_less(fill, than_fill)):
+            return False
+        dropped = than_cost * (than_fill - fill) / than_fill
+        return dropped >= 0.5 * abs(cost_delta)
+
     rows: List[Dict[str, Any]] = []
     for record in records:
         kpis = record.get("scenario_kpis") or {}
@@ -493,6 +1358,8 @@ def _rank_scenarios(baseline: Dict[str, Any],
         fill = _valid(kpis, "demand_fill_rate")
         reference_cost = _valid(record.get("reference_kpis") or {},
                                 "business_network_cost")
+        reference_fill = _valid(record.get("reference_kpis") or {},
+                                "demand_fill_rate")
         rows.append({
             "scenario_id": record.get("id"),
             "name": record.get("name"),
@@ -510,6 +1377,26 @@ def _rank_scenarios(baseline: Dict[str, Any],
             "fill_rate": fill,
             "fill_delta": (None if fill is None or baseline_fill is None
                            else round((fill - baseline_fill) * 100.0, 4)),
+            # THE SAVING THAT IS NOT ONE. A plan serving materially less demand
+            # than today spends less because it ships less. Measured: closing
+            # one DC stranded 316,754 units and read as C$5.72M cheaper, in
+            # green. Flagged here so the ranking and the screen stop presenting
+            # a smaller promise as a cheaper network.
+            # Ranks the plan behind every plan that keeps today's service.
+            "sheds_demand": serves_less(fill, baseline_fill),
+            # And whether what it saves is mostly that demand — the claim the
+            # verdict and the screen are allowed to make only when it holds.
+            "saving_is_shrinkage": saving_is_shrinkage(
+                None if cost is None or baseline_cost is None
+                else cost - baseline_cost, fill, baseline_fill, baseline_cost),
+            # The same test against the reference, for the half of the
+            # attribution that is the change itself.
+            "change_sheds_demand": saving_is_shrinkage(
+                None if cost is None or reference_cost is None
+                else cost - reference_cost, fill, reference_fill, reference_cost),
+            # Below this, two solves of the same network differ by the solver's
+            # own optimality tolerance, not by anything that happened.
+            "noise_floor": _noise_floor(baseline_cost),
             "comparable": cost is not None and baseline_cost is not None,
         })
     # Deterministic regardless of the order the ids arrived in.
@@ -519,10 +1406,35 @@ def _rank_scenarios(baseline: Dict[str, Any],
     # A and B named a different winner than comparing B and A, which is the
     # same analysis asked twice. The id is the tiebreak: arbitrary, but
     # stable, which is the property that matters.
+    #
+    # A plan that is cheaper only by serving less ranks BEHIND every plan that
+    # keeps today's service, whatever the two cost. Ranked on cost alone, the
+    # closure that strands a tenth of demand came first on every comparison it
+    # was in.
     rows.sort(key=lambda r: (r["cost_delta"] is None,
+                             bool(r["sheds_demand"]),
                              r["cost_delta"] if r["cost_delta"] is not None else 0.0,
                              str(r["scenario_id"] or "")))
     return rows
+
+
+def _noise_floor(baseline_cost: Optional[float]) -> float:
+    """
+    The smallest cost difference between two solves that is a finding.
+
+    Every solve stops inside a relative optimality gap
+    (`OptimizationConfig.mip_gap`, 0.1%), so two solves of the SAME network can
+    land that far apart — and did: the unchanged 56,081,045 network re-solved
+    as the reference came back at 56,109,836, and the card attributed the
+    28,791 between them to "re-optimising today's footprint" on a plan whose
+    footprint is held open and cannot be re-optimised at all.
+    """
+    from netgravity.schemas.network import OptimizationConfig
+
+    gap = float(OptimizationConfig.model_fields["mip_gap"].default or 0.0)
+    if not isinstance(baseline_cost, (int, float)):
+        return 1.0
+    return max(1.0, abs(float(baseline_cost)) * gap)
 
 
 def _capacity_risk(kpis: Dict[str, Any]) -> str:
@@ -703,9 +1615,10 @@ def _attribution(best: Dict[str, Any]) -> Dict[str, Any]:
     """
     reopt = best.get("reoptimisation_effect")
     change = best.get("change_effect")
-    if reopt is None or change is None or abs(reopt) < 1:
+    floor = float(best.get("noise_floor") or 1.0)
+    if reopt is None or change is None or abs(reopt) < floor:
         return {}
-    if abs(change) < 1:
+    if abs(change) < floor:
         return {
             "reoptimisation_amount": reopt,
             "change_amount": change,
@@ -715,14 +1628,20 @@ def _attribution(best: Dict[str, Any]) -> Dict[str, Any]:
                      "from re-optimising the footprint you already have, which "
                      "is available without this scenario."),
         }
+    sheds = change < 0 and bool(best.get("change_sheds_demand"))
     return {
         "reoptimisation_amount": reopt,
         "change_amount": change,
         "change_direction": "adds" if change > 0 else "saves",
+        # A change that "saves" by serving less demand than the same network
+        # re-optimised has not found a cheaper way to do the same job.
+        "change_sheds_demand": sheds,
         "text": ("Part of the difference against the network you run today "
                  "comes from re-optimising the footprint you already have — "
                  "available without this scenario — and part from the change "
-                 "itself."),
+                 "itself."
+                 + (" What the change itself saves, it saves by serving less "
+                    "demand." if sheds else "")),
     }
 
 
@@ -755,16 +1674,35 @@ def _comparison_verdict(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
         }
 
     delta = best["cost_delta"]
+    # Options that cost less than the winner, which after the ranking can only
+    # be ones that serve less demand to do it.
+    undercut = [r for r in rows[1:] if r["comparable"]
+                and r["cost_delta"] is not None and r["cost_delta"] < delta]
     # Plain business English, and no engine vocabulary. It read "below the
     # current network on solved business network cost", which is a sentence
     # about a solver rather than about a decision.
-    if delta < 0:
+    if delta < 0 and best.get("saving_is_shrinkage"):
+        verdict = (f"{best['name']} costs less than the network you run today, "
+                   f"but only because it leaves demand unserved that today's "
+                   f"network serves.")
+    elif delta < 0 and undercut:
+        verdict = (f"{best['name']} costs less than the network you run today "
+                   f"while serving the same demand. "
+                   f"{len(undercut)} other "
+                   f"{'option costs' if len(undercut) == 1 else 'options cost'} "
+                   f"less but {'serves' if len(undercut) == 1 else 'serve'} "
+                   f"less demand.")
+    elif delta < 0:
         others = len(rows) - 1
         verdict = (f"{best['name']} costs less than the network you run today, "
                    f"and less than the {others} other "
                    f"{'option' if others == 1 else 'options'} compared."
                    if others else
                    f"{best['name']} costs less than the network you run today.")
+    elif any(r["comparable"] and r.get("saving_is_shrinkage") for r in rows):
+        verdict = (f"Nothing compared costs less than the network you run "
+                   f"today without serving less demand. {best['name']} comes "
+                   f"closest.")
     else:
         verdict = (f"Nothing compared costs less than the network you run "
                    f"today. {best['name']} comes closest.")
@@ -898,6 +1836,325 @@ def _is_structural(record: Dict[str, Any]) -> bool:
     return False
 
 
+# ---------------------------------------------------------------------------
+# "What did we change, what did it do, and how do you know?" — as a document
+# ---------------------------------------------------------------------------
+#: The cost lines a plan is made of, in the order a reader adds them up.
+_COST_COMPONENTS = (
+    ("transport_cost", "Transport"),
+    # `facility_cost`, which is what the KPI registry calls it. Asking for
+    # `fixed_cost` matched nothing, so the largest single line in this
+    # network's cost — ₹95,000 a period, more than half the total — was
+    # missing from the table while the components below it were listed.
+    ("facility_cost", "Fixed facility"),
+    ("handling_cost", "Handling"),
+    ("inventory_cost", "Inventory"),
+    ("opening_cost", "Opening"),
+    ("closure_cost", "Closure"),
+    ("business_network_cost", "Total network cost"),
+)
+
+#: The service and utilisation figures, with the label a reader recognises.
+_OUTCOME_METRICS = (
+    ("demand_fill_rate", "Demand met"),
+    ("unserved_demand", "Demand left unserved"),
+    ("pct_demand_in_sla", "Demand within its lead time"),
+    ("avg_utilization_pct", "Average site utilisation"),
+    ("max_utilization_pct", "Busiest site"),
+    ("n_facilities_open", "Sites open"),
+    ("total_carbon_kg", "Transport emissions"),
+)
+
+
+def _kpi_display(block: Dict[str, Any], key: str) -> str:
+    """
+    One KPI, formatted the way the screens format it.
+
+    Reads `display_value` when the KPI layer supplied one — which is the rule
+    everywhere else in this product: the engine that computed a figure decided
+    how it reads, and a second opinion about that here is how a document and
+    the screen it came from disagree about one number.
+
+    THE ROW'S OWN `unit` DECIDES THE REST, not the metric name. A stored KPI
+    carries `unit: "INR"` or `unit: "fraction"` beside its value, and that is
+    the only place the currency of THIS network is recorded on the record —
+    the reasoning payload's currency is not in scope here. Formatting money
+    without it printed "167,050.33 per period" in a document that is
+    forwarded to people who cannot know from context whether that is rupees
+    or dollars.
+    """
+    row = block.get(key)
+    unit = ""
+    if isinstance(row, dict):
+        shown = row.get("display_value")
+        if shown:
+            return str(shown)
+        value = row.get("value")
+        unit = str(row.get("unit") or "")
+    else:
+        value = row
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return "Not available"
+
+    from netgravity.orchestrator.reasoning.evidence import (
+        _CURRENCY_SYMBOLS, _display, format_money)
+
+    code = unit.strip().upper()
+    # A three-letter alphabetic unit that is not one of the measures this
+    # product records IS an ISO currency code — `format_money` renders an
+    # unlisted one as "AED 1,234.00" rather than dropping it, so a network in
+    # a currency this build has no symbol for still says which one it is.
+    _NOT_CURRENCY = {"PCT", "KGS", "DAY", "QTY", "PPM", "KMS", "TON"}
+    if code in _CURRENCY_SYMBOLS or (
+            len(code) == 3 and code.isalpha() and code not in _NOT_CURRENCY):
+        return format_money(value, code)
+    if unit.strip().lower() in ("fraction", "ratio"):
+        # A fill rate stored as 1.0 is "100.0%" to a reader. "1.000" is the
+        # storage format and reads as a scale nobody defined.
+        return f"{value * 100:,.1f}%"
+    return _display(value, key)[0]
+
+
+def _delta_display(scenario: Dict[str, Any], baseline: Dict[str, Any],
+                   key: str) -> str:
+    """The change between the two plans, as a percentage of the baseline."""
+    def raw(block):
+        row = block.get(key)
+        value = row.get("value") if isinstance(row, dict) else row
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+    after, before = raw(scenario), raw(baseline)
+    if after is None or before is None:
+        return "not comparable"
+    if after == before:
+        # Reached before the zero check, so a line that is zero on both sides
+        # reads "unchanged" rather than "no baseline to compare against" — a
+        # component neither plan incurs is not a missing comparison.
+        return "unchanged"
+    if before == 0:
+        return "nothing in the baseline to compare against"
+    return f"{(after - before) / abs(before) * 100.0:+,.1f}%"
+
+
+def _scenario_derivation(record: Dict[str, Any], project_name: str,
+                         actions: List[Dict[str, Any]]) -> Any:
+    """
+    One scenario, as a `DerivationReport`.
+
+    The third caller of `netgravity.reporting`, and deliberately the same
+    shape as the insight and the forecast: a reader asking "how was this
+    reached?" is asking one question, and three documents answering it
+    differently would make the answer look like a property of which screen it
+    was pressed from.
+
+    NOTHING IS SOLVED HERE. Every figure is one the MILP already produced and
+    this project already stored, printed through the same display rule the
+    screens use.
+    """
+    from datetime import datetime, timezone
+
+    from netgravity.reporting import DerivationReport, DerivationStep, Figure
+
+    scenario_kpis = record.get("scenario_kpis") or {}
+    baseline_kpis = record.get("baseline_kpis") or {}
+    request_block = record.get("request") or {}
+    explanation = record.get("explanation") or {}
+    card = explanation.get("card") or {}
+    cap = record.get("capacity_response") or {}
+    name = record.get("name") or record.get("id") or "Scenario"
+
+    steps: List[Any] = []
+
+    # ── 1. what was changed ──────────────────────────────────────────
+    change_figures = []
+    action = str(request_block.get("action") or "").replace("_", " ").title()
+    if action:
+        change_figures.append(Figure("Change requested", action, "Input",
+                                     "scenario builder"))
+    if request_block.get("facility_ids"):
+        change_figures.append(Figure(
+            "Sites named", ", ".join(str(f) for f in request_block["facility_ids"]),
+            "Input", "scenario builder"))
+    if request_block.get("capacity_delta_units") is not None:
+        delta = request_block["capacity_delta_units"]
+        change_figures.append(Figure(
+            "Capacity adjustment",
+            f"{delta:+,.0f} units per period", "Input", "scenario builder"))
+    if request_block.get("demand_multiplier") is not None:
+        change_figures.append(Figure(
+            "Demand", f"x{request_block['demand_multiplier']} on every demand row",
+            "Input", "scenario builder"))
+    if request_block.get("transport_cost_multiplier") is not None:
+        change_figures.append(Figure(
+            "Freight rates", f"x{request_block['transport_cost_multiplier']}",
+            "Input", "scenario builder"))
+    if request_block.get("sla_days_delta") is not None:
+        change_figures.append(Figure(
+            "Delivery promise", f"{request_block['sla_days_delta']:+} days",
+            "Input", "scenario builder"))
+    for override in (record.get("overrides") or []):
+        change_figures.append(Figure("Applied to the network as", str(override),
+                                     "Input", "scenario builder"))
+    steps.append(DerivationStep(
+        title="What was changed",
+        detail=("The intervention exactly as it was submitted, and how the "
+                "builder applied it to the network. Everything below follows "
+                "from re-solving the network with these changes in place and "
+                "nothing else altered."),
+        figures=tuple(change_figures) or (
+            Figure("Change requested", "Not recorded", "Input", ""),)))
+
+    # ── 2. what it cost ──────────────────────────────────────────────
+    cost_figures = []
+    for key, label in _COST_COMPONENTS:
+        after = _kpi_display(scenario_kpis, key)
+        if after == "Not available":
+            continue
+        before = _kpi_display(baseline_kpis, key)
+        cost_figures.append(Figure(
+            label, f"{after}   (was {before}, {_delta_display(scenario_kpis, baseline_kpis, key)})",
+            "Measured", "MILP"))
+    if cost_figures:
+        steps.append(DerivationStep(
+            title="What the plan costs, component by component",
+            detail=("Each line is the solved plan's own cost for this "
+                    "scenario, with the same line from the baseline solve "
+                    "beside it. The shortage penalty the solver uses to decide "
+                    "which demand to strand is excluded — nobody pays it — so "
+                    "unserved demand is reported below as a quantity rather "
+                    "than as money."),
+            figures=tuple(cost_figures)))
+
+    # ── 3. what it does to service ───────────────────────────────────
+    outcome_figures = []
+    for key, label in _OUTCOME_METRICS:
+        after = _kpi_display(scenario_kpis, key)
+        if after == "Not available":
+            continue
+        before = _kpi_display(baseline_kpis, key)
+        outcome_figures.append(Figure(
+            label, f"{after}   (was {before})", "Measured", "MILP"))
+    if outcome_figures:
+        steps.append(DerivationStep(
+            title="What it does to service and utilisation",
+            detail=("Cost is not the only thing a network change moves. These "
+                    "are the figures a cost saving has to be weighed against, "
+                    "each from the same solve."),
+            figures=tuple(outcome_figures)))
+
+    # ── 4. what it asks of the sites ─────────────────────────────────
+    site_figures = []
+    for row in (cap.get("at_ceiling") or [])[:8]:
+        util = row.get("util_pct")
+        site_figures.append(Figure(
+            str(row.get("name") or row.get("id")),
+            (f"{util:,.1f}% of capacity" if isinstance(util, (int, float))
+             else "at its ceiling"),
+            "Full in this plan", str(row.get("region") or "")))
+    for row in (cap.get("working_harder") or [])[:8]:
+        util = row.get("util_pct")
+        site_figures.append(Figure(
+            str(row.get("name") or row.get("id")),
+            (f"{util:,.1f}% of capacity" if isinstance(util, (int, float))
+             else "carrying more"),
+            "Working harder", str(row.get("region") or "")))
+    for row in (cap.get("idle") or [])[:8]:
+        site_figures.append(Figure(
+            str(row.get("name") or row.get("id")),
+            _fmt_units(row.get("capacity")) + " left closed",
+            "Not used by this plan", str(row.get("region") or "")))
+    if site_figures:
+        steps.append(DerivationStep(
+            title="What this asks of each site",
+            detail=("Which sites the plan fills, which are carrying more than "
+                    "they do today, and what capacity it chose to leave "
+                    "closed. This is the part that differs between raising "
+                    "demand by 5% and raising it by 50%, and it is where every "
+                    "recommendation below comes from."),
+            figures=tuple(site_figures)))
+
+    # ── 5. what to do about it ───────────────────────────────────────
+    if actions:
+        steps.append(DerivationStep(
+            title="What is recommended, and why",
+            detail=("Each recommendation is gated on a finding in this "
+                    "scenario's own solved result — not on a general rule "
+                    "about networks. Where nothing meets the threshold, that "
+                    "is stated rather than filled in."),
+            figures=tuple(
+                Figure(str(a.get("label") or ""), str(a.get("reason") or ""),
+                       ("Statement" if a.get("key") == "NO_ACTION"
+                        else "Recommendation"),
+                       "solved result")
+                for a in actions)))
+
+    # ── the conclusion ───────────────────────────────────────────────
+    cost_now = _kpi_display(scenario_kpis, "business_network_cost")
+    cost_change = _delta_display(scenario_kpis, baseline_kpis,
+                                 "business_network_cost")
+    feasible = record.get("feasible")
+    if feasible is False:
+        conclusion = (f"{name} has no feasible plan: the network cannot meet "
+                      f"the constraints this scenario imposes")
+    else:
+        conclusion = (f"{name} costs {cost_now} per period, {cost_change} "
+                      f"against the network as it runs today")
+
+    limitations = []
+    for item in (explanation.get("missing_information") or []):
+        text = item.get("reason") if isinstance(item, dict) else str(item)
+        if text:
+            limitations.append(str(text))
+    if record.get("reference_note"):
+        limitations.append(str(record["reference_note"]))
+    if not cap:
+        limitations.append(
+            "This scenario carries no per-site capacity account, so which "
+            "sites it fills is not established here.")
+    limitations.append(
+        "A scenario is an evaluation, not a decision. Opening or closing a "
+        "site is classified as a human decision by governance whatever the "
+        "economics say, and nothing in this document approves anything.")
+
+    provenance_block = record.get("provenance") or {}
+    provenance = (
+        f"Source: {provenance_block.get('engine') or 'netgravity MILP'}, "
+        f"read through {provenance_block.get('authoritative_source') or 'the KPI layer'}. "
+        f"Snapshot {record.get('snapshot_id') or 'unknown'}; "
+        f"execution {record.get('execution_id') or 'unknown'}.")
+    grounding = (explanation.get("grounding") or {}).get("warnings") or []
+    if grounding:
+        provenance += " Validation warnings: " + "; ".join(str(g) for g in grounding) + "."
+
+    return DerivationReport(
+        kind="Scenario analysis",
+        subject=f"{name}{f' — {project_name}' if project_name else ''}",
+        conclusion=conclusion,
+        summary=(str(card.get("headline") or "").strip()
+                 or "This document states what this scenario changed, what "
+                    "the solver did with it, and what follows from the result."),
+        method=(
+            "A scenario is evaluated by solving the network twice. The "
+            "baseline solve optimises the network exactly as uploaded. The "
+            "scenario solve applies the change listed below and re-optimises "
+            "with the same freedom — the same objective, the same "
+            "constraints, the same sites available to open or close. Every "
+            "figure in this document is the difference between those two "
+            "solved plans, read through the authoritative KPI layer. No "
+            "language model takes part in producing any figure here."),
+        steps=steps,
+        recommended_action=(
+            "; ".join(str(a.get("label")) for a in actions
+                      if a.get("key") != "NO_ACTION")
+            or (actions[0].get("reason") if actions else "")),
+        assumptions=[str(d) for d in (card.get("details") or [])],
+        limitations=limitations,
+        provenance=provenance,
+        generated_at="Generated "
+                     + datetime.now(timezone.utc).strftime("%d %B %Y, %H:%M UTC"),
+    )
+
+
 def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
                               url_prefix: str = "/api/scenarios"):
     bp = Blueprint("scenarios", __name__, url_prefix=url_prefix)
@@ -1011,6 +2268,20 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
         return project_id, snapshot_id
 
     # ------------------------------------------------------------------
+    def _gateway() -> Any:
+        """
+        The gateway every explanation on this blueprint shares.
+
+        `explanation_gateway()` rather than a fresh `LLMGateway()`: the budget
+        is cumulative and SHARED across every holder of the token — 100
+        requests a day for the whole product — so two clients each believing
+        they have the full allowance is how a shared limit gets exceeded
+        rather than respected.
+        """
+        from netgravity.orchestrator.explanation_llm import explanation_gateway
+
+        return explanation_gateway()
+
     @bp.route("", methods=["GET"])
     @require_auth
     def list_scenarios():
@@ -1076,6 +2347,31 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
 
         recommended = by_id.get(verdict["recommended_scenario_id"])
         caveats = list(verdict["caveats"])
+        # WHAT THE FIGURES DO NOT CONTAIN, before anything about what they say.
+        incomplete = [r for r in selected
+                      if (r.get("cost_completeness") or {}).get("complete") is False]
+        if incomplete:
+            caveats.insert(0, (
+                "These costs are incomplete: the upload states no fixed cost for "
+                "some sites, so their rent, lease and overhead are missing from "
+                "every figure compared, and closing, consolidating or expanding "
+                "them is priced on freight and handling alone."))
+        investing = [r for r in selected
+                     if ((r.get("investment") or {}).get("one_time_cost") or 0) > 0]
+        if investing:
+            caveats.append(
+                f"{len(investing)} of the scenarios compared "
+                f"{'requires' if len(investing) == 1 else 'require'} a one-time "
+                f"investment that is not in the cost ranking; it is reported "
+                f"beside each scenario.")
+        unstated = [r for r in selected
+                    if (r.get("investment") or {}).get("one_time_cost_stated") is False]
+        if unstated:
+            caveats.append(
+                f"{len(unstated)} of the scenarios compared "
+                f"{'states' if len(unstated) == 1 else 'state'} no one-time "
+                f"cost, so building or expanding is compared as though it cost "
+                f"nothing up front.")
         if recommended and recommended.get("reference_note"):
             caveats.append(recommended["reference_note"])
 
@@ -1087,10 +2383,19 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
         warning = _service_warning(best_row, recommended)
         figures = _comparison_figures(best_row, recommended)
 
+        # WHAT TO DO, per scenario, derived here from each solved record.
+        #
+        # Sent on the comparison rather than only on `/simulate` so a scenario
+        # solved before this existed still gets its actions — and so the list
+        # is recomputed against the record as it now stands, rather than
+        # replayed from whatever was true when it was first saved.
+        actions = {r.get("id"): _recommended_actions(r) for r in selected}
+
         return jsonify({
             "project_id": project_id,
             "baseline_kpis": baseline,
             "ranked": rows,
+            "recommended_actions": actions,
             "recommended_scenario_id": verdict["recommended_scenario_id"],
             "verdict": verdict["verdict"],
             "caveats": caveats,
@@ -1213,6 +2518,15 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
         demand_scale = number("demand_multiplier", "demand_scale")
         transport_mult = number("transport_cost_multiplier")
         sla_delta = number("sla_days_delta")
+        # What a capacity change moves and what it costs. See
+        # `ScenarioIntentSpec.capacity_limit` and the two expansion fields.
+        one_time = number("expansion_one_time_cost")
+        recurring = number("expansion_fixed_cost_per_year")
+        capacity_limit = str(body.get("capacity_limit") or "").strip().upper() or None
+        if capacity_limit not in (None, "BOTH", "HANDLING", "PRODUCTION"):
+            raise ValidationError(
+                "capacity_limit must be BOTH, HANDLING or PRODUCTION.",
+                context={"capacity_limit": capacity_limit})
 
         required = {
             ScenarioActionType.CHANGE_CAPACITY: (
@@ -1243,6 +2557,12 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             action=action,
             facility_ids=list(facility_ids),
             capacity_delta_units=cap_delta if action == ScenarioActionType.CHANGE_CAPACITY else None,
+            capacity_limit=(capacity_limit
+                            if action == ScenarioActionType.CHANGE_CAPACITY else None),
+            expansion_one_time_cost=(
+                one_time if action == ScenarioActionType.CHANGE_CAPACITY else None),
+            expansion_fixed_cost_per_year=(
+                recurring if action == ScenarioActionType.CHANGE_CAPACITY else None),
             demand_multiplier=demand_scale if action == ScenarioActionType.CHANGE_DEMAND else None,
             # Growth the client states for one region and/or one product
             # category. Empty string and missing are the same thing — no scope,
@@ -1388,6 +2708,12 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
                 "action": action_str,
                 "facility_ids": list(facility_ids),
                 "capacity_delta_units": cap_delta,
+                "capacity_limit": (capacity_limit
+                                   if action_str == "CHANGE_CAPACITY" else None),
+                "expansion_one_time_cost": (one_time
+                                            if action_str == "CHANGE_CAPACITY" else None),
+                "expansion_fixed_cost_per_year": (recurring
+                                                  if action_str == "CHANGE_CAPACITY" else None),
                 "demand_multiplier": demand_scale,
                 # WHERE the growth was applied. These reach the solver through
                 # `ScenarioIntentSpec` and were dropped from the record, so a
@@ -1408,6 +2734,15 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             # Sites this scenario introduces. Empty for every scenario that
             # only rearranges the existing footprint.
             "new_sites": _new_sites(engine, scenario_key, snapshot_id),
+            # What the capacity change was charged, and on what basis. See
+            # `_capacity_pricing`.
+            "capacity_pricing": _capacity_pricing(
+                engine, snapshot_id, action_str, list(facility_ids), cap_delta,
+                limit=capacity_limit, recurring_per_year=recurring),
+            # Whether the costs on this record are a fully priced network.
+            "cost_completeness": _cost_completeness(engine, snapshot_id),
+            # How many periods the costs cover, and what a period is.
+            "horizon": _horizon(engine, snapshot_id),
             "baseline_kpis": record_baseline_kpis,
             "scenario_kpis": record_scenario_kpis,
             "reference_kpis": reference_kpis,
@@ -1470,6 +2805,15 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
             },
         }
 
+        # What to DO about it, from the solved result. Written onto the record
+        # AFTER it is complete, because it reads the capacity response and the
+        # explanation that were just built.
+        # One-time investment, reported BESIDE the operating cost. Written
+        # before the recommendations, which do not read it, and after the
+        # KPIs, which it does.
+        record["investment"] = _investment(record)
+        record["recommended_actions"] = _recommended_actions(record)
+
         with _lock:
             _store.setdefault(project_id, []).append(record)
 
@@ -1520,6 +2864,73 @@ def create_scenario_blueprint(orchestrator: Optional[Orchestrator] = None,
         logger.info("scenario.deleted project_id=%s scenario_id=%s",
                     project_id, scenario_id)
         return jsonify({"deleted": scenario_id, "remaining": len(remaining)}), 200
+
+    @bp.route("/<scenario_id>/document", methods=["GET"])
+    @require_auth
+    @rate_limit("scenario.document", limit=30, window_seconds=60)
+    def scenario_document(scenario_id: str):
+        """
+        One scenario, as the document a decision gets taken from.
+
+        WHY THIS EXISTS. The recommendation card answers "what should I do?"
+        in a paragraph. The question that follows it, in the room where the
+        decision is actually made, is "what exactly did you change, what did
+        it move, and how do you know?" — and that is four tables and a method
+        note. It has to survive being forwarded to somebody who will never
+        open this application.
+
+        NOTHING IS SOLVED HERE. Every figure is one the MILP already produced
+        and this project already stored, printed through the same display rule
+        the screens use, so the file and the screen cannot disagree.
+
+        The writer is `netgravity.reporting`, the same one the insight and the
+        forecast documents use.
+        """
+        from netgravity.reporting import build_derivation_docx, narrate
+
+        project_id, _ = _project_scope()
+        _load_scenarios()
+        with _lock:
+            record = next((r for r in _store.get(project_id, [])
+                           if r.get("id") == scenario_id), None)
+        if record is None:
+            raise NotFoundError(
+                f"Scenario '{scenario_id}' is not in this project, so there "
+                f"is nothing to document.")
+
+        # Recomputed from the record as it now stands rather than replayed
+        # from whatever was saved with it, so the document and the card state
+        # the same recommendations.
+        actions = _recommended_actions(record)
+
+        project_name = ""
+        try:
+            project = project_registry.get(project_id,
+                                           user_id=g.current_user.user_id)
+            project_name = str(getattr(project, "name", "") or "")
+        except Exception:  # noqa: BLE001 — the title reads fine without it
+            project_name = ""
+
+        report = _scenario_derivation(record, project_name, actions)
+
+        # The model writes the joining-up and cannot add a figure: every
+        # number it quotes is checked against the figures already in the
+        # report, and any sentence quoting one that is not there is dropped.
+        narration = narrate(report, _gateway(), purpose="scenario_document")
+        report.narrative = list(narration.paragraphs)
+        report.narrative_note = (
+            narration.note
+            if (narration.paragraphs or narration.source == "rejected") else "")
+
+        document = build_derivation_docx(report)
+        out = make_response(document)
+        out.headers["Content-Type"] = (
+            "application/vnd.openxmlformats-officedocument"
+            ".wordprocessingml.document")
+        out.headers["Content-Disposition"] = (
+            f'attachment; filename="{report.filename()}"')
+        out.headers["Cache-Control"] = "no-store"
+        return out
 
     @bp.errorhandler(ApplicationError)
     def _scenario_error(exc: ApplicationError):

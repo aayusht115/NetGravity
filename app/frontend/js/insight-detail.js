@@ -46,13 +46,24 @@
  * wants to know what moving 12% of volume would cost can have that answered by
  * the MILP, which is what Scenario Planning is for.
  *
- * What this phase added back — and where each figure comes from
- * ------------------------------------------------------------
- * The page now carries the prototype's LAYOUT: a headline stat banner, a
- * two-column split with a chart on the left and the recommendation on the
- * right, a metric row, a "why this works" block, an action bar and a
- * progressive "why" reveal. Every one of those slots is filled from data the
- * backend actually computed, or is omitted:
+ * What the page reads as now, top to bottom
+ * -----------------------------------------
+ *   the headline          the conclusion, as the engine stated it
+ *   the lede              its own prose explaining that conclusion
+ *   the banner            the one figure the finding leads on
+ *   the visual            a chart, or a scale against the threshold
+ *   how this was reached  the figures in the order they were used
+ *   recommended action    the step, and the button that goes there
+ *
+ * The order is the argument. Before this, the prose sat under the chart in a
+ * footnote slot, the only thing between the figures and the recommendation
+ * was a table, and the one control that promised to explain the finding
+ * ("Why this finding?") was a disclosure toggle at the foot revealing the
+ * narrative already printed at the top.
+ *
+ * Where each figure comes from
+ * ----------------------------
+ * Every slot is filled from data the backend actually computed, or omitted:
  *
  *   * the chart plots either the facilities/lanes the finding was computed over
  *     (`record.entities`, ranked, sent by `/api/insights`), or — for a
@@ -62,11 +73,19 @@
  *     solver output, and is labelled as such on the axis title;
  *   * the threshold line is `NETWORK_RECOMMENDATION.thresholds`, imported from
  *     the module that owns `UTILIZATION_THRESHOLDS`, never a literal 90;
- *   * the metric tiles are the finding's own evidence rows, showing the value
- *     the engine computed and naming the engine that computed it;
+ *   * the reasoning chain is the finding's own evidence rows, each with the
+ *     value the engine computed, the role it played in reaching the finding,
+ *     and the engine that computed it;
  *   * the headline banner restates the finding's first evidence figure. It is
  *     NOT an "amount at risk": no engine in this system produces one, so that
- *     banner shows a measured figure or does not appear.
+ *     banner shows a measured figure or does not appear;
+ *   * the threshold scale draws a percentage against the configured
+ *     utilisation threshold, and only for the themes that threshold judges —
+ *     and only where no chart already carries the same comparison;
+ *   * the recommended action is the finding's own (`recommendedAction`), and
+ *     the button beside it resolves through `insightCta` — the same function
+ *     the Overview tile uses, so the tile and the page it opens cannot
+ *     disagree about what to do next.
  *
  * There is deliberately no "Actual vs Projected" pair on the trend chart. The
  * observed series is history; projecting it onto future utilisation would need
@@ -79,6 +98,13 @@ import {
   getFacilityById, PLANTS, DCS,
   HOME_ACTION_ITEMS, NOTIFICATION_RECIPIENTS, EMAIL_DELIVERY,
 } from './data.js';
+// The same two decisions the Overview's tile made about this finding: what
+// its description says once the headline is taken out, and which screen its
+// recommended action is asking the reader to open. Shared, because the tile
+// and this page disagreeing about either is the defect.
+import { insightCta, insightDescription } from './insight-presentation.js';
+// The node identities the Digital Twin's legend and both of its maps use.
+import { NODE_STYLE } from './twin-legend.js';
 
 /* ─── Icons ──────────────────────────────────────────────────── */
 const ICON = {
@@ -93,6 +119,7 @@ const ICON = {
   trendUp: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>`,
   sparkle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/></svg>`,
   gauge: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 1 8-8"/><line x1="12" y1="12" x2="16.5" y2="8.5"/></svg>`,
+  download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M4 17v2.2A1.8 1.8 0 0 0 5.8 21h12.4a1.8 1.8 0 0 0 1.8-1.8V17"/></svg>`,
   lock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>`,
 };
 
@@ -169,6 +196,86 @@ function utilisationThreshold() {
   return Number.isFinite(over) ? over : null;
 }
 
+/** The configured under-utilisation threshold, from the engine. Null when absent. */
+function underUtilisationThreshold() {
+  const t = NETWORK_RECOMMENDATION.thresholds || {};
+  const under = Number(t.utilization_under_pct);
+  return Number.isFinite(under) ? under : null;
+}
+
+/**
+ * What colour each bar is, and what that colour means.
+ *
+ * EVERY BAR WAS THE SAME PURPLE. The rule was: grey if the plan does not use
+ * the site, red if it is over the threshold, purple otherwise — so on a
+ * healthy network, which is most of them, all seven bars were identical and
+ * the chart carried no more information than a list of numbers would. There
+ * was no legend either, so the two colours that did exist were unexplained.
+ *
+ * The bands are the ENGINE'S OWN policy thresholds, read from
+ * `NETWORK_RECOMMENDATION.thresholds` — the same two numbers the reasoning
+ * agent judges utilisation by, and never a 90 or a 30 written into this file.
+ * A chart that invented its own bands would be drawing a judgement nobody
+ * made.
+ *
+ * Where the metric is not a percentage there is no band to apply, so the bars
+ * are coloured by what the node IS — plant or distribution centre, in the
+ * same two colours the Digital Twin's legend and maps use.
+ *
+ * Returns the per-bar colours and the classes actually present, so the legend
+ * below the chart lists only what the reader can see. A key with four entries
+ * for a chart showing two is a key that has to be read twice.
+ */
+function entityBarStyle(plan) {
+  const CLOSED = { key: 'closed', color: '#cbd5e1',
+                   label: 'Not used by this plan' };
+  const over = plan.threshold;
+  const under = underUtilisationThreshold();
+  const isPct = plan.unitSuffix === '%';
+
+  const classify = (e) => {
+    if (e.is_open === false) return CLOSED;
+    if (isPct && typeof e.value === 'number') {
+      if (over != null && e.value >= over) {
+        return { key: 'over', color: INSD_RED,
+                 label: `At or above the ${over}% threshold` };
+      }
+      if (under != null && e.value <= under) {
+        return { key: 'under', color: '#b45309',
+                 label: `At or below ${under}% \u2014 under-used` };
+      }
+      return { key: 'mid', color: INSD_PURPLE,
+               label: over != null && under != null
+                 ? `Between ${under}% and ${over}%` : 'Within policy' };
+    }
+    const role = String(e.role || '').toUpperCase();
+    if (role === 'PLANT' || role === 'SUPPLIER') {
+      return { key: 'plant', color: NODE_STYLE.plant.color, label: 'Plant' };
+    }
+    if (e.kind === 'LANE') {
+      return { key: 'lane', color: INSD_PURPLE, label: 'Lane' };
+    }
+    return { key: 'dc', color: NODE_STYLE.dc.color,
+             label: NODE_STYLE.dc.label };
+  };
+
+  const classes = new Map();
+  const colors = plan.entities.map((e) => {
+    const cls = classify(e);
+    const seen = classes.get(cls.key);
+    if (seen) seen.count += 1;
+    else classes.set(cls.key, { ...cls, count: 1 });
+    return cls.color;
+  });
+
+  // In the order they read on the chart: worst first, then the rest, then the
+  // sites the plan does not use.
+  const ORDER = ['over', 'under', 'mid', 'plant', 'dc', 'lane', 'closed'];
+  const legend = [...classes.values()]
+    .sort((a, b) => ORDER.indexOf(a.key) - ORDER.indexOf(b.key));
+  return { colors, legend };
+}
+
 function labelForMetric(metric) {
   return String(metric || '')
     .replace(/_/g, ' ')
@@ -198,6 +305,13 @@ function chartPlanFor(record) {
       entities,
       threshold: isPct ? utilisationThreshold() : null,
       unitSuffix: isPct ? '%' : '',
+      // WHAT THE AXES MEASURE, decided here beside the chart's own title so
+      // the two cannot say different things. The card title names the
+      // finding; the axis names the quantity, which is what a reader needs
+      // to read a value off the plot.
+      valueAxis: isPct ? 'Share of stated capacity used (%)'
+                       : labelForMetric(entities[0].metric),
+      categoryAxis: entities[0].kind === 'LANE' ? 'Corridor' : 'Facility',
       note: 'Every site this finding was computed over, ranked. Figures are the '
           + 'optimiser output for this solve.',
     };
@@ -215,6 +329,12 @@ function chartPlanFor(record) {
       points,
       threshold: utilisationThreshold(),
       unitSuffix: '%',
+      // Named here beside the title, like the two bar plans above, rather
+      // than left to the chart. This plan was the one that carried neither,
+      // so the deep dive's only time series had a bare "%" up one side and
+      // nothing at all along the bottom.
+      valueAxis: 'Share of stated capacity used (%)',
+      categoryAxis: 'Period',
       note: 'Your own recorded available and used capacity, period by period. '
           + 'This is measurement from your upload, not an output of the solve.',
     };
@@ -254,6 +374,8 @@ function chartPlanFor(record) {
         cited: group,
         threshold: pct ? utilisationThreshold() : null,
         unitSuffix: pct ? '%' : '',
+        valueAxis: pct ? 'Percentage' : 'Value, as the engine reported it',
+        categoryAxis: 'Figure',
         note: 'The values in the evidence table below, drawn to scale. '
             + 'Nothing here is derived from them.',
       };
@@ -263,6 +385,44 @@ function chartPlanFor(record) {
 }
 
 /** Draw the planned chart. A no-op when Chart.js is absent. */
+// Vertical room per bar on THIS screen. The deep dive's ticks are a point
+// larger than the KPI screen's, so it takes a point more room: 28px leaves a
+// clear half-row between one name and the next.
+const INSD_BAR_ROW_PX = 28;
+const INSD_BAR_CHROME_PX = 90;
+const INSD_BAR_MIN_PX = 200;
+const INSD_BAR_MAX_PX = 620;
+
+/**
+ * Give the deep-dive chart the height its categories need.
+ *
+ * `.insd-chart-canvas-wrap` is a flat 300px in the stylesheet, and the
+ * entities plan draws every facility or lane the finding was computed over
+ * with no cap — so a network with twenty sites over the threshold got 12px
+ * between ticks for 14px labels, and the names ran together.
+ *
+ * Written out here rather than imported from charts.js: app.js imports THIS
+ * module, so a dependency the other way would be a cycle.
+ */
+function sizeInsightChartHost(canvasId, categories) {
+  const canvas = document.getElementById(canvasId);
+  const host = canvas && canvas.parentElement;
+  if (!host || !host.classList.contains('insd-chart-canvas-wrap')) return;
+  const wanted = Math.round(Number(categories) || 0) * INSD_BAR_ROW_PX
+                 + INSD_BAR_CHROME_PX;
+  host.style.height =
+    `${Math.max(INSD_BAR_MIN_PX, Math.min(INSD_BAR_MAX_PX, wanted))}px`;
+}
+
+/** Hand the height back to the stylesheet, for the plans that are not bars. */
+function resetInsightChartHost(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  const host = canvas && canvas.parentElement;
+  if (host && host.classList.contains('insd-chart-canvas-wrap')) {
+    host.style.height = '';
+  }
+}
+
 function renderInsightChart(canvasId, plan) {
   if (insdCharts[canvasId]) {
     insdCharts[canvasId].destroy();
@@ -270,6 +430,12 @@ function renderInsightChart(canvasId, plan) {
   }
   const canvas = document.getElementById(canvasId);
   if (!canvas || !plan || typeof Chart === 'undefined') return;
+
+  // Both bar plans run their categories down the side; the observed plan is a
+  // time series and keeps the height the stylesheet gives it.
+  if (plan.kind === 'evidence') sizeInsightChartHost(canvasId, plan.cited.length);
+  else if (plan.kind === 'entities') sizeInsightChartHost(canvasId, plan.entities.length);
+  else resetInsightChartHost(canvasId);
 
   const grid = '#f3f4f6';
   let config = null;
@@ -315,9 +481,19 @@ function renderInsightChart(canvasId, plan) {
         },
         scales: {
           x: { beginAtZero: true,
+               title: { display: true, text: plan.valueAxis || 'Value',
+                        font: { size: 11, weight: '600' } },
                ticks: { callback: (v) => v + plan.unitSuffix },
                grid: { color: grid } },
-          y: { grid: { display: false } },
+          y: { grid: { display: false },
+               title: { display: true, text: plan.categoryAxis || '',
+                        font: { size: 11, weight: '600' } },
+               ticks: { autoSkip: false, callback(value) {
+                 // Evidence labels are metric names — "Highest single-site
+                 // exposure" — and at full length they take half the plot.
+                 const text = this.getLabelForValue(value);
+                 return text.length > 28 ? `${text.slice(0, 27)}…` : text;
+               } } },
         },
       },
     };
@@ -326,15 +502,9 @@ function renderInsightChart(canvasId, plan) {
     const datasets = [{
       label: labelForMetric(plan.entities[0].metric),
       data: plan.entities.map((e) => e.value),
-      // A closed site is drawn in grey: the same bar height means a different
-      // thing for a site the plan does not use, and colouring both alike
-      // invites a comparison that is not meaningful.
-      backgroundColor: plan.entities.map((e) => (
-        e.is_open === false
-          ? '#cbd5e1'
-          : (plan.threshold != null && e.value > plan.threshold)
-            ? INSD_RED
-            : INSD_PURPLE)),
+      // Banded by the engine's own policy thresholds, or by what the node is
+      // where the metric carries no band. See `entityBarStyle`.
+      backgroundColor: entityBarStyle(plan).colors,
       borderRadius: 4,
       maxBarThickness: 26,
     }];
@@ -355,21 +525,48 @@ function renderInsightChart(canvasId, plan) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        // BARS, NOT COLUMNS — the same way as every other chart on this page.
+        //
+        // This one drew its entities as vertical columns with the names along
+        // the foot at a 42-degree rotation, while the chart directly above it
+        // in the same panel drew its entities as horizontal bars with the
+        // names read straight. Two pictures of the same shape of finding, in
+        // two orientations, one of which needs the reader's head tilted.
+        //
+        // Horizontal is the right one of the two here: these labels are
+        // facility names, which are long and of uneven length, and a bar
+        // chart gives a name the whole width of the plot to be read across
+        // rather than a column's worth to be rotated into.
+        indexAxis: 'y',
         plugins: {
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: (c) => c.dataset.label + ': ' + c.parsed.y + plan.unitSuffix,
+              label: (c) => c.dataset.label + ': ' + c.parsed.x + plan.unitSuffix,
             },
           },
         },
         scales: {
-          y: {
+          // The VALUE axis is x now, and the category axis is y. Swapping
+          // `indexAxis` without swapping these leaves the ticks formatted for
+          // the wrong quantity — the unit suffix printed against the facility
+          // names instead of against their figures.
+          x: {
             beginAtZero: true,
+            title: { display: true, text: plan.valueAxis || 'Value',
+                     font: { size: 11, weight: '600' } },
             ticks: { callback: (v) => v + plan.unitSuffix },
             grid: { color: grid },
           },
-          x: { grid: { display: false }, ticks: { autoSkip: false, maxRotation: 42 } },
+          y: { grid: { display: false },
+               title: { display: true, text: plan.categoryAxis || 'Facility',
+                        font: { size: 11, weight: '600' } },
+               ticks: { autoSkip: false, callback(value) {
+                 // Site and corridor names, trimmed with the ellipsis that
+                 // says they were cut. The tooltip carries the whole name.
+                 const text = this.getLabelForValue(value);
+                 return text.length > 28 ? `${text.slice(0, 27)}…` : text;
+               } } },
         },
       },
     };
@@ -410,10 +607,30 @@ function renderInsightChart(canvasId, plan) {
           tooltip: { mode: 'index', intersect: false },
         },
         scales: {
-          y: { min: 0, max: 100, ticks: { callback: (v) => v + '%' },
-               grid: { color: grid } },
-          x: { grid: { display: false },
-               ticks: { autoSkip: true, maxTicksLimit: 12, maxRotation: 42 } },
+          y: {
+            min: 0,
+            max: 100,
+            ticks: { callback: (v) => v + '%' },
+            grid: { color: grid },
+            title: { display: true,
+                     text: plan.valueAxis || 'Share of stated capacity used (%)',
+                     font: { family: 'Inter', size: 11, weight: '600' } },
+          },
+          x: {
+            grid: { display: false },
+            ticks: {
+              autoSkip: true,
+              maxTicksLimit: 12,
+              // WAS 42 DEGREES. Angled labels are the thing that makes a
+              // chart read as unfinished, and on a period axis they buy
+              // nothing: "2026-03" is six characters and `maxTicksLimit`
+              // already drops enough of them to fit. Every other axis in the
+              // product is horizontal; this one was the exception.
+              maxRotation: 0,
+            },
+            title: { display: true, text: plan.categoryAxis || 'Period',
+                     font: { family: 'Inter', size: 11, weight: '600' } },
+          },
         },
       },
     };
@@ -472,28 +689,135 @@ function headlineBannerHtml(record) {
 }
 
 /**
- * The left column: the chart where one can be drawn, the narrative always.
+ * What the finding says, in the engine's own prose.
  *
- * When `chartPlanFor` returns nothing the card keeps its title and prose and
- * simply has no canvas. The prototype's equivalent branch drew a synthesised
- * seven-month trend for every finding regardless of whether one existed.
+ * THE LEDE, and it used to be a caption. The narrative was printed inside an
+ * `.insd-chart-note` under the canvas, beside a small trend icon, in the slot
+ * this file uses for provenance footnotes like "figures are the optimiser
+ * output for this solve". So the one paragraph explaining the finding was
+ * styled as a disclaimer about the picture above it, below the fold on a
+ * short window, and a reader who came here from a tile to find out what the
+ * headline MEANT had to read past a chart to reach it.
+ *
+ * `insightDescription` takes out whatever the headline already said, so the
+ * page does not open by repeating its own title — the same rule the Overview
+ * tile follows, from the same module.
+ */
+function descriptionHtml(record) {
+  const text = insightDescription(record, record.title);
+  if (!text) return '';
+  return `<p class="insd-lede">${insdEsc(text)}</p>`;
+}
+
+/**
+ * Where a percentage sits against the threshold it was judged by.
+ *
+ * A finding that says "97.2% against a 90% threshold" is two numbers a reader
+ * has to hold in their head and subtract. Drawn to scale it is one glance,
+ * and the thing being judged is visible as a distance rather than a
+ * difference.
+ *
+ * NOTHING IS COMPUTED. §9 — the frontend never calculates an authoritative
+ * figure. Both numbers are printed exactly as the engine formatted them
+ * (`display_value`, and the threshold from `NETWORK_RECOMMENDATION.thresholds`
+ * — never a 90 written into this file); the only arithmetic is turning a
+ * percentage into a bar width, which is a drawing instruction, not a reading.
+ * No derived number appears anywhere in the output.
+ *
+ * TWO GUARDS, and both are about not drawing a comparison the engine did not
+ * make:
+ *
+ *   * the only threshold this page has is the UTILISATION one, so the scale
+ *     is offered only to the themes it judges. A cost finding that happens to
+ *     cite a percentage would otherwise be drawn against a 90% utilisation
+ *     line, which is a comparison nobody made and every reader would read as
+ *     one that had been;
+ *   * a chart that already draws its own threshold line has made the
+ *     comparison. Drawing it twice, at two granularities, gives a reader two
+ *     places to look for one answer — so the scale fills the gap where there
+ *     is no chart, or where the chart is not about a threshold, and stays out
+ *     of the way otherwise.
+ */
+function thresholdScaleHtml(record, plan) {
+  if (!['Capacity', 'Utilisation'].includes(record.theme)) return '';
+  if (plan && plan.threshold != null) return '';
+
+  const threshold = utilisationThreshold();
+  if (threshold == null) return '';
+  const row = (record.evidence || []).find(
+    (e) => e && e.unit === 'percent' && typeof e.value === 'number'
+           && Number.isFinite(e.value));
+  if (!row) return '';
+
+  const clamp = (n) => Math.max(0, Math.min(100, n));
+  const over = row.value > threshold;
+  return `
+    <div class="insd-scale${threshold > 78 ? ' caption-left' : ''}">
+      <div class="insd-scale-head">
+        <span class="insd-scale-label">${insdEsc(row.label)}</span>
+        <span class="insd-scale-value${over ? ' is-over' : ''}">${insdEsc(row.display_value)}</span>
+      </div>
+      <div class="insd-scale-track">
+        <div class="insd-scale-fill${over ? ' is-over' : ''}"
+             style="width:${clamp(row.value)}%"></div>
+        <div class="insd-scale-mark" style="left:${clamp(threshold)}%"></div>
+        <!-- Inside the track, on the same offset as the mark, so the caption
+             stands under the position it names. -->
+        <div class="insd-scale-caption" style="left:${clamp(threshold)}%">
+          Threshold ${threshold}%</div>
+      </div>
+      <div class="insd-scale-foot">
+        <span>0%</span>
+        <span>100%</span>
+      </div>
+    </div>`;
+}
+
+/**
+ * The left column's visual: the chart where one can be drawn, and the scale.
+ *
+ * When `chartPlanFor` returns nothing the card keeps its title and simply has
+ * no canvas. The prototype's equivalent branch drew a synthesised seven-month
+ * trend for every finding regardless of whether one existed. When there is
+ * neither a chart nor a scale the card is omitted altogether, rather than
+ * standing empty over the word "chart".
  */
 function findingCardHtml(record, plan) {
+  const scale = thresholdScaleHtml(record, plan);
+  if (!plan && !scale) return '';
+
+  // THE KEY LISTS WHAT IS ON THE CHART, with how many bars carry it.
+  //
+  // It used to say "Solved plan" beside one purple swatch, whatever the
+  // chart was drawn in — so a chart with grey bars for the sites the plan
+  // does not use, and red for the sites over the threshold, had a key naming
+  // neither. `entityBarStyle` returns only the classes actually present, so
+  // the key never lists a colour the reader cannot find.
+  const bands = (plan && plan.kind === 'entities') ? entityBarStyle(plan).legend : [];
+  const bandKeys = bands.length
+    ? bands.map((b) => `
+          <span class="insd-legend-item">
+            <span class="insd-legend-swatch" style="background:${b.color}"></span>
+            ${insdEsc(b.label)}
+            <span class="insd-legend-count">${b.count}</span>
+          </span>`).join('')
+    : `<span class="insd-legend-item"><span class="insd-legend-swatch"></span>${
+        plan && plan.kind === 'observed' ? 'Recorded'
+          : plan && plan.kind === 'evidence' ? 'Cited figure' : 'Solved plan'}</span>`;
+
   const chart = plan
     ? `
       <div class="insd-chart-head">
         <div class="insd-chart-title">${insdEsc(plan.title)}</div>
-        <div class="insd-chart-legend">
-          <span class="insd-legend-item"><span class="insd-legend-swatch"></span>${
-            plan.kind === 'observed' ? 'Recorded'
-              : plan.kind === 'evidence' ? 'Cited figure' : 'Solved plan'}</span>
-          ${plan.threshold != null
-            ? `<span class="insd-legend-item"><span class="insd-legend-swatch dashed"></span>Threshold ${plan.threshold}%</span>`
-            : ''}
-        </div>
       </div>
-      <div class="insd-chart-canvas-wrap"><canvas id="insd-trend-chart"></canvas></div>`
-    : `<div class="insd-chart-head"><div class="insd-chart-title">What I found</div></div>`;
+      <div class="insd-chart-canvas-wrap"><canvas id="insd-trend-chart"></canvas></div>
+      <div class="insd-chart-legend">
+        ${bandKeys}
+        ${plan.threshold != null
+          ? `<span class="insd-legend-item"><span class="insd-legend-swatch dashed"></span>Threshold ${plan.threshold}%</span>`
+          : ''}
+      </div>`
+    : `<div class="insd-chart-head"><div class="insd-chart-title">Where this sits</div></div>`;
 
   const provenance = plan
     ? `<div class="insd-chart-note">${ICON.info}<span>${insdEsc(plan.note)}</span></div>`
@@ -502,88 +826,227 @@ function findingCardHtml(record, plan) {
   return `
     <div class="insd-card">
       ${chart}
-      <div class="insd-chart-note">${ICON.trendUp}<span>${
-        insdEsc(record.narrative || record.subtitle)}</span></div>
+      ${scale}
       ${provenance}
     </div>`;
 }
 
 /**
- * The metrics the finding cites, with their authoritative values.
+ * How the engine reached this, in the order it reached it.
  *
- * This is what a deep dive is for. Each row names the metric, the value the
- * deterministic layer computed, which engine computed it, and — new this phase
- * — the role it played: the measurement, what it was compared against, or the
- * driver behind it.
+ * THIS SECTION IS NEW, and it is the one a deep dive exists for. The page had
+ * the finding, a chart and a table of figures, and nothing that said how the
+ * second led to the first — a reader could see 97.2% and see the conclusion,
+ * and had to take the step between them on trust. "Why this finding?" was a
+ * disclosure toggle at the bottom that revealed the narrative they had
+ * already read at the top.
  *
- * Until this phase the table had never rendered a row in production. The API
- * has always resolved evidence; `toInsightRecord` dropped it, so every finding
- * fell through to the "cites no single figure" copy below — which is a false
- * statement about thirteen of the fourteen insight themes.
+ * Nothing here is written by this file. The chain is the engine's own
+ * evidence, which already carries the distinction that makes a chain: each
+ * figure is tagged with the ROLE it played — the measurement, the thing it
+ * was compared against, or the driver behind it. Those three lists were
+ * concatenated into one flat array for the table and the ordering thrown
+ * away. This reads them back out.
+ *
+ * A step with no figures is omitted rather than shown empty: a finding that
+ * cites no comparison did not make one, and printing the heading over a blank
+ * would suggest the engine had weighed something it did not.
  */
-function evidenceCardHtml(record) {
-  const ROLE = { metric: 'Measured', comparison: 'Compared against', driver: 'Driver' };
-  const rows = (record.evidence || []).map(e => `
-    <tr>
-      <td class="insd-detail-label">${insdEsc(e.label)}</td>
-      <td class="insd-detail-val">${insdEsc(e.display_value)}</td>
-      <td class="insd-detail-label">${insdEsc(ROLE[e.role] || 'Measured')}</td>
-      <td class="insd-detail-label">${insdEsc(e.source)}</td>
-    </tr>`).join('');
+function reasoningCardHtml(record) {
+  const ROLE_STEPS = [
+    { role: 'metric', title: 'What was measured',
+      blurb: 'The figures this finding reads, as the solve computed them.' },
+    { role: 'comparison', title: 'What it was compared against',
+      // Deliberately not "the threshold or baseline": `comparison_refs` also
+      // carries a plain counterpart figure — 5 sites open against 2 left
+      // closed — and calling that a threshold would describe the engine's
+      // reasoning as something stricter than it was.
+      blurb: 'What those figures were read against.' },
+    { role: 'driver', title: 'What is behind it',
+      blurb: 'The quantities moving the measurement above.' },
+  ];
 
-  const body = rows
-    ? `<table class="insd-table">
-         <thead><tr><th>Metric</th><th>Value</th><th>Role</th><th>Computed by</th></tr></thead>
-         <tbody>${rows}</tbody>
-       </table>`
-    : `<p class="insd-why-text">This finding is a statement about the plan's
-         structure rather than about one metric, so it cites no single figure.
-         The network KPIs it follows from are on the Home dashboard.</p>`;
+  // THIS IS ALSO THE EVIDENCE TABLE. There used to be one below it listing
+  // the same rows flat, with a Role column naming what the step headings
+  // here name and a "Computed by" column naming what `via …` names — and a
+  // third copy in tiles beside the recommendation. On a finding citing one
+  // figure, that figure appeared four times on the page counting the
+  // banner. The role and the engine travel with each figure here instead.
+
+  const evidence = (record.evidence || []).filter(
+    (e) => e && e.display_value && e.display_value !== 'Not available');
+
+  const steps = ROLE_STEPS
+    .map((step) => ({ ...step, rows: evidence.filter((e) => (e.role || 'metric') === step.role) }))
+    .filter((step) => step.rows.length);
+
+  // The magnitude behind each figure, drawn only where the figures are
+  // COMPARABLE — two or more sharing a unit — because a currency total and a
+  // percentage on one scale is a picture of nothing.
+  //
+  // Deliberately measured across the WHOLE finding rather than within a
+  // step: the comparison worth seeing is exactly the one that crosses them,
+  // 56.23% average against the 77.14% busiest site, 5 sites open against 2
+  // left closed. Bars drawn per step would put each of those alone on its
+  // own scale, at full width, saying nothing.
+  //
+  // §9 — the width is a drawing instruction, not a reading. No number
+  // derived from it is printed anywhere; `display_value` stays the only
+  // thing on this page a reader reads.
+  const peak = {};
+  evidence.forEach((e) => {
+    if (typeof e.value !== 'number' || !Number.isFinite(e.value)) return;
+    const u = e.unit || '';
+    peak[u] = peak[u] === undefined
+      ? { max: Math.abs(e.value), n: 1 }
+      : { max: Math.max(peak[u].max, Math.abs(e.value)), n: peak[u].n + 1 };
+  });
+  const barFor = (e) => {
+    const group = peak[e.unit || ''];
+    if (!group || group.n < 2 || !(group.max > 0)) return '';
+    if (typeof e.value !== 'number' || !Number.isFinite(e.value)) return '';
+    return `<span class="insd-bar" aria-hidden="true"><span class="insd-bar-fill"
+      style="width:${(Math.abs(e.value) / group.max) * 100}%"></span></span>`;
+  };
+
+  // A finding with no figures at all. It is rare and it is real — some
+  // findings are statements about the plan's STRUCTURE rather than about a
+  // metric — and it is stated rather than left as a heading over nothing.
+  if (!steps.length) {
+    return `
+      <div class="insd-card">
+        <div class="insd-why-title">${ICON.gauge}<span>How this was reached</span></div>
+        <p class="insd-why-text">This finding is a statement about the plan's
+          structure rather than about one metric, so it cites no single figure.
+          The network KPIs it follows from are on the Home dashboard.</p>
+      </div>`;
+  }
+
+  const stepsHtml = steps.map((step, i) => `
+    <li class="insd-reason-step">
+      <span class="insd-reason-index" aria-hidden="true">${i + 1}</span>
+      <div class="insd-reason-body">
+        <div class="insd-reason-title">${insdEsc(step.title)}</div>
+        <p class="insd-reason-blurb">${insdEsc(step.blurb)}</p>
+        <dl class="insd-reason-figures">
+          ${step.rows.map((e) => `
+            <div class="insd-reason-figure">
+              <dt>${insdEsc(e.label)}${barFor(e)}</dt>
+              <dd>${insdEsc(e.display_value)}
+                <span class="insd-reason-source">via ${insdEsc(e.source)}</span></dd>
+            </div>`).join('')}
+        </dl>
+      </div>
+    </li>`).join('');
+
+  // The conclusion those steps arrive at, as the last link. This is the
+  // headline verbatim — not a paraphrase, which would be this file writing a
+  // finding of its own.
+  const conclusion = `
+    <li class="insd-reason-step is-conclusion">
+      <span class="insd-reason-index" aria-hidden="true">${ICON.bulb}</span>
+      <div class="insd-reason-body">
+        <div class="insd-reason-title">And therefore</div>
+        <p class="insd-reason-conclusion">${insdEsc(record.title)}</p>
+      </div>
+    </li>`;
+
+  // What the ANALYSIS could not establish. Labelled as the analysis's, not
+  // this finding's: `limitation` is written across the whole briefing, and
+  // attaching it to one finding would claim the engine said something about
+  // this finding that it did not.
+  const rec = NETWORK_RECOMMENDATION;
+  const limitation = rec.limitation ? `
+    <p class="insd-chart-note">${ICON.info}<span>What this analysis does not
+      establish: ${insdEsc(rec.limitation)}</span></p>` : '';
+
+  // HOW, not just WHAT.
+  //
+  // The chain showed the steps and the figures and said nothing about where
+  // either came from — which is what makes a correct derivation still read as
+  // a black box. A reader can see 97.2% and see the conclusion and has no
+  // account of the move between them, nor of whether a language model made
+  // it. This is that account, and the distinction it draws is the one that
+  // matters most to somebody deciding how much to trust the number: the
+  // figures are deterministic, the sentence about them is not, and the
+  // sentence is checked back against the figures before it is published.
+  const method = `
+    <p class="insd-method">The figures below are computed by the optimiser and
+      the KPI engine from the solved plan &mdash; no model estimates any of
+      them. The reasoning layer then reads those figures, compares them with
+      the configured policy thresholds and states the conclusion, and every
+      number it quotes is checked back against the computed results before the
+      finding is published.</p>`;
+
+  // The whole derivation, as a file. A finding that has to survive being
+  // forwarded to somebody who will never open this application needs to leave
+  // it, and the sections a screen cannot hold — every record the finding was
+  // computed over, what the model was given, what it could not establish —
+  // are what that conversation asks for first.
+  const download = `
+    <button type="button" class="insd-download" id="insd-download-doc">
+      ${ICON.download}
+      <span>Download the full derivation</span>
+      <span class="insd-download-ext">DOCX</span>
+    </button>`;
 
   return `
     <div class="insd-card">
-      <div class="insd-why-title">${ICON.bulb}<span>Evidence</span></div>
-      ${body}
-    </div>`;
-}
-
-/** One metric tile. Mirrors the prototype's `.insd-metric`. */
-function metricTileHtml(icon, tone, label, value, sub) {
-  return `
-    <div class="insd-metric">
-      <div class="insd-metric-head"><span class="insd-metric-icon tone-${tone}">${icon}</span>${insdEsc(label)}</div>
-      <div class="insd-metric-val tone-${tone}">${insdEsc(value)}</div>
-      <div class="insd-metric-sub">${insdEsc(sub)}</div>
+      <div class="insd-why-title">${ICON.gauge}<span>How this was reached</span></div>
+      ${method}
+      <ol class="insd-reason-chain">${stepsHtml}${conclusion}</ol>
+      ${limitation}
+      ${download}
     </div>`;
 }
 
 /**
- * The right column: the engine's recommendation, and the figures behind it.
+ * The right column: what to do about this finding, and where to do it.
  *
- * The metric row is the prototype's three-tile strip, but each tile carries an
- * evidence row this finding actually cites rather than a hashed cost delta, a
- * hashed service gain and a risk band derived from them. Where the finding
- * cites fewer than three figures, fewer than three tiles are drawn — the row
- * is not padded to fill the grid.
+ * THE CTA IS THE FINDING'S OWN, and it was not. This card led with the right
+ * sentence and offered no way to act on it — the only buttons on the page
+ * were a generic "Test a change as a scenario" and "Open in Digital Twin" in
+ * a bar at the bottom, identical on every finding. So a capacity risk whose
+ * tile on the Overview said "Open KPIs", and an unserved-demand risk whose
+ * tile said "View affected demand", both arrived here offering the scenario
+ * planner. The tile and the page it opens now resolve the destination through
+ * the same function (`insightCta`), so they cannot disagree.
+ *
+ * The metric row carries evidence this finding actually cites rather than a
+ * hashed cost delta, a hashed service gain and a risk band derived from them.
+ * Where it cites fewer than three figures, fewer than three tiles are drawn —
+ * the row is not padded to fill the grid.
  */
-function recommendationCardHtml(record) {
+function recommendationCardHtml(record, cta) {
   const rec = NETWORK_RECOMMENDATION;
 
-  const tones = ['purple', 'green', 'amber'];
-  const tiles = (record.evidence || []).slice(0, 3).map((e, i) =>
-    metricTileHtml(ICON.gauge, tones[i] || 'purple', e.label, e.display_value,
-                   `via ${e.source}`)).join('');
-  const metricsRow = tiles ? `<div class="insd-metrics-row">${tiles}</div>` : '';
+  // THIS finding's own recommended action, when it has one.
+  //
+  // Every insight carries one now — written by the Reasoning Agent, or the
+  // theme-appropriate default `/api/insights` supplies — and it is the same
+  // sentence the Overview's tile for this finding printed. Showing the
+  // network-level recommendation instead meant a reader who pressed "View
+  // detailed finding" on a capacity risk was given the advice about the
+  // network's biggest cost component, which is a different subject.
+  //
+  // The network recommendation is not dropped: where the finding has none it
+  // is still what this card shows, under the caveat that says so.
+  const own = String(record.recommendedAction || '').trim();
 
-  if (!rec.text) {
+  if (!own && !rec.text) {
     return `
       <div class="insd-card">
         <div class="insd-rec-head">${ICON.sparkle}Recommended action</div>
         <p class="insd-why-text">No recommendation has been generated for this
           network yet.</p>
-        ${metricsRow}
       </div>`;
   }
+
+  const ctaHtml = `
+      <button type="button" class="insd-btn-primary insd-rec-cta" id="insd-rec-cta">
+        <span>${insdEsc(cta.label)}</span>
+        ${ICON.arrowRight}
+      </button>`;
 
   const drivers = (rec.keyDrivers || []).length
     ? `<div class="insd-why-stat" style="display:block">
@@ -592,49 +1055,73 @@ function recommendationCardHtml(record) {
            .map(d => `<li>${insdEsc(d)}</li>`).join('')}</ul>
        </div>`
     : '';
-  const limitation = rec.limitation
-    ? `<p class="insd-chart-note">${ICON.info}<span>Limitation: ${insdEsc(rec.limitation)}</span></p>`
-    : '';
+
+  // The wider advice, kept as context under the finding's own step. Where the
+  // finding has no step of its own, the network's IS the recommendation and
+  // leads the card — with the caveat that it was drawn from every finding.
+  const wider = (own && rec.text) ? `
+      <div class="insd-why-stat" style="display:block">
+        <span class="insd-why-stat-label">For the network as a whole</span>
+        <div class="insd-why-text" style="margin-top:6px">${insdEsc(rec.text)}</div>
+      </div>` : '';
 
   return `
     <div class="insd-card">
       <div class="insd-rec-head">${ICON.sparkle}Recommended action</div>
-      <p class="insd-rec-sentence">${insdEsc(rec.text)}</p>
-      ${metricsRow}
+      <p class="insd-rec-sentence">${insdEsc(own || rec.text)}</p>
+      ${ctaHtml}
       <div class="insd-why-row">
         <span class="insd-why-icon">${ICON.bulb}</span>
         <div style="flex:1;min-width:0">
           <div class="insd-why-title">Why this works</div>
-          <div class="insd-why-text">This is a network-level recommendation drawn
-            from every finding, not from this one alone.</div>
+          <div class="insd-why-text">${own
+            ? 'This step follows from this finding and the figures above it.'
+            : 'This is a network-level recommendation drawn from every finding, '
+              + 'not from this one alone.'}</div>
+          ${wider}
           ${drivers}
         </div>
       </div>
-      ${limitation}
     </div>`;
 }
 
 /**
- * The two things a reader can actually do.
+ * The other ways to act, after the finding's own.
  *
- * Both navigate. Neither claims to have changed anything: the previous version
+ * SECONDARY NOW, because the recommendation card above carries the step this
+ * finding is actually asking for. These are the two general things any
+ * finding can be taken into, and each is dropped when it would duplicate the
+ * button already on the page: sending a reader to the scenario planner twice,
+ * from two buttons with different labels, is two answers to one question.
+ *
+ * Neither claims to have changed anything. The previous version of this page
  * offered Approve / Reject buttons that only changed their own label, and an
  * "action taken" state that asserted an action had been taken when none had.
+ *
+ * The "Why this finding?" disclosure is gone with them. It revealed the
+ * narrative — which is now the lede at the top of the page — and the question
+ * it asked is answered at length by "How this was reached", in the body,
+ * where a reader does not have to know to press anything to see it.
  */
-function actionBarHtml(facilityId, whyText) {
-  const canOpenTwin = facilityId && facilityExists(facilityId);
-  const twinButton = canOpenTwin
-    ? `<button type="button" class="insd-btn-outline-purple" id="insd-open-twin">
-         ${ICON.cube}<span>Open in Digital Twin</span></button>`
-    : '';
+function actionBarHtml(facilityId, cta) {
+  const buttons = [];
+
+  if (cta.tab !== 'scenarios') {
+    buttons.push(`
+      <button type="button" class="insd-btn-secondary" id="insd-run-scenario">
+        ${ICON.play}<span>Test a change as a scenario</span></button>`);
+  }
+  if (cta.tab !== 'twin' && facilityId && facilityExists(facilityId)) {
+    buttons.push(`
+      <button type="button" class="insd-btn-outline-purple" id="insd-open-twin">
+        ${ICON.cube}<span>Open in Digital Twin</span></button>`);
+  }
+  if (!buttons.length) return '';
+
   return `
     <div class="insd-action-bar">
-      <button type="button" class="insd-btn-primary" id="insd-run-scenario">
-        ${ICON.play}<span>Test a change as a scenario</span></button>
-      ${twinButton}
-      <button type="button" class="insd-action-link" id="insd-why-btn">
-        ${ICON.info}<span>Why this finding?</span></button>
-      <div class="insd-why-reveal" id="insd-why-reveal">${insdEsc(whyText)}</div>
+      <span class="insd-action-bar-label">Or take it further</span>
+      ${buttons.join('')}
     </div>`;
 }
 
@@ -674,6 +1161,7 @@ function renderDeepDive() {
 
   const badge = SEVERITY_BADGE[record.severity] || SEVERITY_BADGE.INFORMATION;
   const plan = chartPlanFor(record);
+  const cta = insightCta(record.theme, record.severity);
   const facility = insdFlow.facilityId
     ? getFacilityById(insdFlow.facilityId)
     : null;
@@ -681,9 +1169,19 @@ function renderDeepDive() {
     ? `${insdEsc(record.theme)} · ${insdEsc(facility.name || facility.id)}`
     : `${insdEsc(record.theme)} · whole network`;
 
+  // THE ORDER IS THE ARGUMENT.
+  //
+  //   what it says      the headline, then the prose explaining it
+  //   what it rests on  the finding's own lead figure
+  //   how it was read   the chart and the scale
+  //   how it follows    the reasoning chain, then the evidence it cites
+  //   what to do        the recommendation and the button that goes there
+  //
+  // Previously the prose sat under the chart in a footnote slot and the only
+  // thing between the figures and the recommendation was a table.
   page.innerHTML = `
     <div class="insd-page">
-      <button type="button" class="insd-back-link" id="insd-back-btn">${ICON.arrowLeft}<span>Back to Home</span></button>
+      <button type="button" class="insd-back-link" id="insd-back-btn">${ICON.arrowLeft}<span>${insdOrigin.label}</span></button>
 
       <div class="insd-header-row">
         <h1 class="insd-title">${insdEsc(record.title)}</h1>
@@ -691,17 +1189,18 @@ function renderDeepDive() {
       </div>
       <p class="insd-subtitle">${scopeLine}</p>
 
+      ${descriptionHtml(record)}
       ${headlineBannerHtml(record)}
 
       <div class="insd-main-split">
         <div>
           ${findingCardHtml(record, plan)}
-          ${evidenceCardHtml(record)}
+          ${reasoningCardHtml(record)}
         </div>
-        ${recommendationCardHtml(record)}
+        ${recommendationCardHtml(record, cta)}
       </div>
 
-      ${actionBarHtml(insdFlow.facilityId, record.narrative || record.subtitle)}
+      ${actionBarHtml(insdFlow.facilityId, cta)}
       ${footerNoteHtml(record)}
     </div>`;
 
@@ -709,15 +1208,29 @@ function renderDeepDive() {
   // settle first: Chart.js sizes to the wrapper, and measuring it mid-paint
   // produced a chart one frame wide on a cold render.
   if (plan) requestAnimationFrame(() => renderInsightChart('insd-trend-chart', plan));
-  bindDeepDive();
+  bindDeepDive(cta);
 }
 
-function bindDeepDive() {
-  document.getElementById('insd-back-btn')?.addEventListener('click', backToHome);
+function bindDeepDive(cta) {
+  document.getElementById('insd-back-btn')?.addEventListener('click', backToOrigin);
 
-  document.getElementById('insd-why-btn')?.addEventListener('click', () => {
-    document.getElementById('insd-why-reveal')?.classList.toggle('open');
+  // The finding's own call to action. `tab: ''` is the unserved-demand case:
+  // the breakdown lives in a drawer app.js owns, not on a tab, and it is
+  // reached through the opener that module exposes rather than by this file
+  // importing it — app.js imports this one, so the dependency cannot run
+  // both ways.
+  document.getElementById('insd-rec-cta')?.addEventListener('click', () => {
+    if (!cta.tab) {
+      if (typeof window.openDemandShortfallDetail === 'function') {
+        window.openDemandShortfallDetail();
+      }
+      return;
+    }
+    if (typeof window.navigateToTab === 'function') window.navigateToTab(cta.tab);
   });
+
+  document.getElementById('insd-download-doc')?.addEventListener('click',
+    (e) => downloadDerivation(e.currentTarget));
 
   document.getElementById('insd-run-scenario')?.addEventListener('click', () => {
     if (typeof window.navigateToTab === 'function') window.navigateToTab('scenarios');
@@ -731,6 +1244,67 @@ function bindDeepDive() {
       window.navigateToTab('twin');
     }
   });
+}
+
+/**
+ * Fetch the finding's derivation and hand it to the browser to save.
+ *
+ * The button says what it is doing throughout: a document that takes a second
+ * to build behind a button that does not change is a button a reader presses
+ * twice. A failure says so ON the button rather than in a console nobody has
+ * open — this is a thing the reader just asked for, and silence is the worst
+ * answer to a click.
+ */
+async function downloadDerivation(button) {
+  if (!button || button.disabled) return;
+  const record = insdFlow.record;
+  if (!record) return;
+
+  const label = button.querySelector('span');
+  const original = label ? label.textContent : '';
+  button.disabled = true;
+  if (label) label.textContent = 'Preparing\u2026';
+  // A document takes a solve and, where the gateway is configured, a
+  // text-generation call — which the gateway allows itself a minute for. A
+  // button that says the same thing for that long reads as a hung one, so
+  // the wait names its slow half rather than growing silent.
+  const stage = setTimeout(() => {
+    if (label && button.disabled) label.textContent = 'Writing the explanation\u2026';
+  }, 5000);
+
+  try {
+    const mod = await import('./integration/services/insight-service.js');
+    // The record's own scope, so a facility finding asks for the facility
+    // briefing rather than the network one it is not in.
+    const { blob, filename } = await mod.insightService.downloadDerivation(
+      record.id, {
+        scope: record.scope || (insdFlow.facilityId ? 'FACILITY' : 'NETWORK'),
+        entityId: record.entity_id || insdFlow.facilityId || null,
+      });
+    // An object URL and a synthetic click: the only way to name a file the
+    // browser saves from a fetch. Revoked immediately after — the blob is
+    // held in memory until it is.
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'derivation.docx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (label) label.textContent = original;
+  } catch (err) {
+    if (label) label.textContent = 'Could not build the document';
+    button.classList.add('is-failed');
+    button.title = err && err.message ? err.message : '';
+    setTimeout(() => {
+      if (label) label.textContent = original;
+      button.classList.remove('is-failed');
+    }, 4000);
+  } finally {
+    clearTimeout(stage);
+    button.disabled = false;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1000,7 +1574,7 @@ function renderActionDetail() {
   const required = item.severity === 'REQUIRED';
   page.innerHTML = `
     <div class="insd-page">
-      <button type="button" class="insd-back-link" id="insd-back-btn">${ICON.arrowLeft}<span>Back to Home</span></button>
+      <button type="button" class="insd-back-link" id="insd-back-btn">${ICON.arrowLeft}<span>${insdOrigin.label}</span></button>
 
       <div class="insd-header-row">
         <h1 class="insd-title">${insdEsc(item.title)}</h1>
@@ -1048,7 +1622,7 @@ function renderActionDetail() {
 }
 
 function bindActionDetail() {
-  document.getElementById('insd-back-btn')?.addEventListener('click', backToHome);
+  document.getElementById('insd-back-btn')?.addEventListener('click', backToOrigin);
 
   document.getElementById('insd-why-btn')?.addEventListener('click', () => {
     document.getElementById('insd-why-reveal')?.classList.toggle('open');
@@ -1173,10 +1747,34 @@ async function sendRequest() {
  * gate now does, so this is that branch. An id matching neither store opens
  * nothing, rather than opening a page about the wrong thing.
  */
+/**
+ * The page the reader was on when they opened this one.
+ *
+ * "Back to Home" was literal: every route out of this page called
+ * `navigateToTab('home')`, so a reader who opened a finding from the Insights
+ * list was returned to the Overview and had to find their way back to the
+ * list, losing their filter on the way. Nielsen #3 — a way out that goes
+ * somewhere the reader did not come from is not an exit.
+ *
+ * Read off the DOM rather than passed in, because every caller would
+ * otherwise have to remember to pass it, and the one that forgot would be
+ * the bug this fixes.
+ */
+const INSD_ORIGINS = {
+  'tab-insights': { tab: 'insights', label: 'Back to Insights', nav: 'nav-item-insights' },
+  'tab-forecast': { tab: 'forecast', label: 'Back to Forecast', nav: 'nav-item-forecast' },
+};
+const INSD_ORIGIN_HOME = { tab: 'home', label: 'Back to Home', nav: 'nav-item-home' };
+let insdOrigin = INSD_ORIGIN_HOME;
+
 export function showInsightDetail(kind, id) {
   const action = (kind === 'action') ? findAction(id) : null;
   const hit = action ? null : findRecord(id);
   if (!action && !hit) return;
+
+  // Before any panel is switched, so it reads the page being left.
+  const from = document.querySelector('.tab-panel.active');
+  insdOrigin = (from && INSD_ORIGINS[from.id]) || INSD_ORIGIN_HOME;
 
   if (action) {
     insdAction.item = action;
@@ -1197,7 +1795,7 @@ export function showInsightDetail(kind, id) {
   if (page) page.classList.add('active');
 
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('nav-item-home')?.classList.add('active');
+  document.getElementById(insdOrigin.nav)?.classList.add('active');
 
   const subTopbar = document.getElementById('app-sub-topbar');
   if (subTopbar) subTopbar.style.display = 'none';
@@ -1211,14 +1809,16 @@ export function showInsightDetail(kind, id) {
   else window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function backToHome() {
+function backToOrigin() {
   // Chart.js keeps a live instance bound to a canvas this page is about to
   // discard. Destroying it here keeps one instance per canvas at most.
   Object.keys(insdCharts).forEach((id) => {
     insdCharts[id].destroy();
     delete insdCharts[id];
   });
-  if (typeof window.navigateToTab === 'function') window.navigateToTab('home');
+  if (typeof window.navigateToTab === 'function') {
+    window.navigateToTab(insdOrigin.tab);
+  }
 }
 
 export function initInsightDetail() {

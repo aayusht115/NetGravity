@@ -887,10 +887,11 @@ function finishIngestion() {
  * that was six lines and ~900 characters of run-on sentence above the fold,
  * and the figure a reader needed — 452,610 — sat in the middle of it.
  *
- * The message is now data, not markup: `renderOverviewAlert()` in app.js
- * renders the headline figure and one sentence, and the per-market detail
- * stays here on `detail` for whatever wants to show it. Nothing is lost; it
- * is no longer all shouted at once.
+ * The message is now data, not markup: `window.refreshNetworkNotice()` in
+ * app.js draws it into whichever elements report the state of the solve —
+ * the Overview's error banner and the Forecast page's alert — and the
+ * per-market detail stays here on `detail` for whatever wants to show it.
+ * Nothing is lost; it is no longer all shouted at once.
  */
 function showNetworkNotice(message, tone = 'info', detail = '') {
   if (typeof window !== 'undefined') {
@@ -899,7 +900,7 @@ function showNetworkNotice(message, tone = 'info', detail = '') {
   // Home may not be mounted yet (the loading overlay is still up on the first
   // run), so the card is drawn when it next renders as well as now.
   try {
-    if (typeof window.renderOverviewAlert === 'function') window.renderOverviewAlert();
+    if (typeof window.refreshNetworkNotice === 'function') window.refreshNetworkNotice();
   } catch (e) { /* the card renders on the next renderHome() */ }
 }
 
@@ -1226,6 +1227,8 @@ const SHEET_ROLE_LABELS = {
   lanes: 'Read as: lanes',
   products: 'Read as: products',
   demand_history: 'Read as: demand history',
+  uploaded_forecast: 'Read as: forecast supplied in this upload (a projection, '
+    + 'not observed demand)',
   capacity_history: 'Read as: capacity history',
   lane_rates: 'Read as: freight rates',
   signals: 'Read as: external signals',
@@ -1254,6 +1257,7 @@ const ROLE_NOUNS = {
   lanes: 'lanes',
   products: 'products',
   demand_history: 'demand history',
+  uploaded_forecast: 'a supplied forecast',
   capacity_history: 'capacity history',
   lane_rates: 'freight rates',
   signals: 'external signals',

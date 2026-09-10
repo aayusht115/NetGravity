@@ -135,6 +135,12 @@ class GreenfieldSiteSpec(BaseModel):
     capacity_units_per_period: float
     fixed_cost_per_year: float = 0.0
     handling_cost_per_unit: float = 0.0
+    #: One-time cost of building and opening the site: construction, fit-out,
+    #: launch. Reported beside the solve and NEVER inside its operating cost:
+    #: a twelve-month plan charged a twenty-year building would never open
+    #: anything. None means the caller did not state one, which the record
+    #: says rather than treating as free.
+    opening_cost: Optional[float] = None
     #: "DC" | "PLANT". Markets are demand, not capacity, and cannot be added
     #: this way — a new market is new demand, which is a data change.
     role: str = "DC"
@@ -183,6 +189,22 @@ class ScenarioIntentSpec(BaseModel):
     # guessing wrong changes the answer rather than degrading it. Mutually
     # exclusive with the other two — see ScenarioValidator.
     capacity_set_units: Optional[float] = None
+    #: WHICH LIMIT a capacity change moves. A plant has two: what it can handle
+    #: and what it can produce, and the MILP binds it at the smaller.
+    #:   None         — the ordinary case: handling moves, and production moves
+    #:                  with it where the two were one uploaded figure;
+    #:   "BOTH"       — both move;
+    #:   "HANDLING"   — handling only;
+    #:   "PRODUCTION" — production only (plants and suppliers).
+    capacity_limit: Optional[str] = None
+    #: One-time cost of the expansion — equipment, construction, commissioning.
+    #: Reported beside the solve, never inside its operating cost.
+    expansion_one_time_cost: Optional[float] = None
+    #: Recurring cost the added capacity carries, per year — staffing, lease,
+    #: maintenance. Added to the site's fixed cost. When omitted the added
+    #: capacity is charged pro rata to the site's existing fixed cost, and the
+    #: record says that is what was assumed.
+    expansion_fixed_cost_per_year: Optional[float] = None
     demand_multiplier: Optional[float] = None
     #: CHANGE_DEMAND scope. Growth is something a client STATES, and they state
     #: it the way their business is organised: "chilled is growing 20% in the
@@ -211,6 +233,17 @@ class ScenarioIntentSpec(BaseModel):
     label: Optional[str] = None
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("capacity_limit")
+    @classmethod
+    def _known_limit(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or not str(v).strip():
+            return None
+        value = str(v).strip().upper()
+        if value not in ("BOTH", "HANDLING", "PRODUCTION"):
+            raise ValueError(
+                f"capacity_limit must be BOTH, HANDLING or PRODUCTION, got {v!r}")
+        return value
 
     @property
     def capacity_operation(self) -> Optional[str]:

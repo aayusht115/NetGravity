@@ -71,10 +71,20 @@ class OptionalFieldSpec:
     unit: str
     what_it_unlocks: str
     content_type: ContentType
-    #: Alternate canonical key that also satisfies this field (e.g. a lane
-    #: emission override standing in for a facility-level factor). Checked
-    #: dataset-wide in addition to `canonical_key`.
-    alt_canonical_key: Optional[str] = None
+    #: A second sheet this field may legitimately arrive on, checked when the
+    #: primary one does not carry it.
+    #:
+    #: Some fields are not the property of one content type. A required fill
+    #: rate is a demand attribute in the tabular pipeline, which reads it off
+    #: the demand sheet — and a market attribute in the product’s own upload,
+    #: where the extractor reads it off the Markets sheet and there is no
+    #: separate demand sheet at all. Checking only the first spelling meant
+    #: the request went out to every client who had already answered it.
+    #:
+    #: This replaces an `alt_canonical_key` that no spec used any more, and
+    #: whose fallback searched lane rows for a facility field — machinery for
+    #: a case that no longer exists.
+    alt_content_type: Optional[ContentType] = None
     #: Special-cased: satisfied by contracts being present at all, not by a
     #: tabular column. See check_completeness(has_contracts=...).
     satisfied_by_contracts: bool = False
@@ -110,15 +120,31 @@ REQUIRED_FIELDS: List[RequiredFieldSpec] = [
 ]
 
 OPTIONAL_FIELDS: List[OptionalFieldSpec] = [
-    OptionalFieldSpec("carbon_emission_factor", "Carbon Emission Factor (kg CO₂/unit)",
-                      "kg CO₂/unit", "would let us include a carbon-impact KPI",
-                      ContentType.FACILITY, alt_canonical_key="emission_factor_override"),
+    # THE FIELD THIS ENGINE ACTUALLY READS, which was not the one being asked
+    # for. `carbon_emission_factor` appeared in exactly three places — this
+    # registry, the alias table, and one adapter’s key map — and in no schema,
+    # no record builder and no engine. A client who was emailed for that
+    # column, and sent it, would have had it read by nothing.
+    #
+    # The reason given was wrong twice over as well. Carbon is not an
+    # unavailable KPI awaiting this field: `CarbonModule` computes it for
+    # every solve from mode, distance and unit weight against the GLEC factor
+    # table. What a client can actually change is WHOSE factors it is computed
+    # on — `CarbonModule.get_emission_factor()` takes
+    # `LaneRecord.emission_factor_override` in preference to that table — and
+    # the unit is the table’s own, kg CO₂ per tonne-km, not per unit.
+    OptionalFieldSpec("emission_factor_override",
+                      "Lane Emission Factor (kg CO₂/tonne-km)",
+                      "kg CO₂/tonne-km",
+                      "would let us compute carbon on your own emission factors "
+                      "rather than the standard one for each transport mode",
+                      ContentType.LANE),
     OptionalFieldSpec("service_level", "Service Level Target (%)", "%",
                       "would let us score results against your target fill rate",
-                      ContentType.DEMAND),
+                      ContentType.DEMAND, alt_content_type=ContentType.MARKET),
     OptionalFieldSpec("sla_days", "Maximum Delivery Lead Time (days)", "days",
                       "would let us flag lanes that miss your delivery window",
-                      ContentType.MARKET, alt_canonical_key=None),
+                      ContentType.MARKET, alt_content_type=ContentType.DEMAND),
     OptionalFieldSpec("fuel_surcharge_pct", "Contract Rate Card / Surcharge Details", "",
                       "would let us price transport more precisely",
                       ContentType.LANE, satisfied_by_contracts=True),
@@ -292,14 +318,13 @@ def _check_optional(outcome, has_contracts: bool, missing: List[MissingField]) -
             rows = outcome.staging_rows.get(ContentType.HISTORICAL_VOLUME.value) or []
 
         found = any(_present(r, spec.canonical_key) for r in rows)
-        if not found and spec.alt_canonical_key:
-            found = any(_present(r, spec.alt_canonical_key) for r in rows)
-            if not found:
-                # The alt key may live on a different content type (e.g. a
-                # lane-level emission override standing in for the
-                # facility-level carbon factor).
-                lane_rows = outcome.network_rows.get(ContentType.LANE) or []
-                found = any(_present(r, spec.alt_canonical_key) for r in lane_rows)
+        if not found and spec.alt_content_type is not None:
+            alt_rows = outcome.network_rows.get(spec.alt_content_type) or []
+            found = any(_present(r, spec.canonical_key) for r in alt_rows)
+            # The field is present SOMEWHERE it is allowed to be, so the
+            # sheet it was found on is the one that counts for "did the
+            # client supply this".
+            rows = rows or alt_rows
 
         if not found and not rows and not spec.satisfied_by_contracts:
             missing.append(MissingField(

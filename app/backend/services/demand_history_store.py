@@ -292,10 +292,153 @@ class CapacityHistoryStore(_DurableByNetwork):
         }
 
 
+
+class UploadedForecastStore(_DurableByNetwork):
+    """
+    A forecast that ARRIVED WITH an upload, keyed by `network_id`.
+
+    Held beside the network for the same reason signals and capacity history
+    are, and kept out of `DemandHistoryStore` for a stronger one: that class
+    implements `for_snapshot()`, which is the `history_provider` contract the
+    orchestrator reads observed history through. This class deliberately does
+    not implement it, and must not gain it. A projection is not an observation,
+    nothing may be fitted to it, and it must be structurally unable to reach the
+    forecasting engines — not merely absent from the call that would take it
+    there.
+
+    Nothing here forecasts. `series()` groups rows the upload stated, orders
+    them by the upload's own period labels, and reports what it could not
+    reconcile.
+    """
+
+    def __init__(self) -> None:
+        self._by_network: Dict[str, List[Dict[str, Any]]] = {}
+        self._lock = threading.Lock()
+
+    def put(self, network_id: str, rows: Sequence[Dict[str, Any]]) -> None:
+        with self._lock:
+            self._by_network[network_id] = [dict(r) for r in rows]
+        self._write_through(network_id, rows)
+        logger.info("uploaded_forecast.stored network_id=%s rows=%d",
+                    network_id, len(rows))
+
+    def get(self, network_id: str) -> List[Dict[str, Any]]:
+        with self._lock:
+            return [dict(r) for r in self._by_network.get(network_id, [])]
+
+    def has(self, network_id: str) -> bool:
+        with self._lock:
+            return bool(self._by_network.get(network_id))
+
+    def clear(self, network_id: str) -> None:
+        """Forget this network's forecast — a re-upload without one replaces it."""
+        with self._lock:
+            existed = self._by_network.pop(network_id, None) is not None
+        self._write_through(network_id, [])
+        if existed:
+            logger.info("uploaded_forecast.cleared network_id=%s", network_id)
+
+    def periods(self, network_id: str) -> List[str]:
+        """Every period label the forecast states, ordered by the label itself."""
+        seen = {str(r.get("period") or "").strip() for r in self.get(network_id)}
+        return sorted(p for p in seen if p)
+
+    def series(self, network_id: str, horizon: Optional[int] = None,
+               ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        """
+        The stored rows grouped per market-product, in the upload's own
+        calendar order.
+
+        `period` is renumbered 1..N as an ORDERING INDEX, matching what
+        `ForecastPoint.period` means everywhere else in this codebase, and the
+        upload's own label is preserved on `timestamp` so no calendar is lost.
+
+        Returns `(series, warnings)`. Nothing is extrapolated: an upload stating
+        four periods against a horizon of six yields four points and a warning,
+        never two invented ones.
+        """
+        grouped: Dict[Tuple[str, str], Dict[str, Dict[str, Any]]] = {}
+        duplicates: List[str] = []
+        undated = 0
+
+        for row in self.get(network_id):
+            market = str(row.get("marketId") or "").strip()
+            label = str(row.get("period") or "").strip()
+            if not market or not label:
+                undated += 1
+                continue
+            product = str(row.get("productId") or "").strip() or "PROD_ALL"
+            bucket = grouped.setdefault((market, product), {})
+            if label in bucket:
+                duplicates.append(f"{market}/{product}@{label}")
+            # Last row for a period wins, and the collision is REPORTED.
+            # Summing would silently double a projection — which is what two
+            # rows for one period are not — and dropping it silently would lose
+            # a figure the upload stated. Note this is the opposite rule from
+            # `build_series_from_structure`, correctly: two observations of one
+            # month are two facts, two forecasts of one month are a
+            # contradiction.
+            bucket[label] = row
+
+        warnings: List[str] = []
+        if duplicates:
+            warnings.append(
+                f"{len(duplicates)} duplicate forecast period(s) in the upload "
+                f"({', '.join(duplicates[:5])}"
+                f"{'…' if len(duplicates) > 5 else ''}); the last row stated for "
+                f"each was used."
+            )
+        if undated:
+            warnings.append(
+                f"{undated} forecast row(s) name no period or no market and "
+                f"could not be placed on a series."
+            )
+
+        short: List[str] = []
+        out: List[Dict[str, Any]] = []
+        for (market, product), by_label in sorted(grouped.items()):
+            labels = sorted(by_label)
+            if horizon is not None:
+                if len(labels) > horizon:
+                    labels = labels[:horizon]
+                elif len(labels) < horizon:
+                    short.append(f"{market}/{product}")
+            points = []
+            for index, label in enumerate(labels, start=1):
+                row = by_label[label]
+                mean = row.get("mean")
+                p50 = row.get("p50")
+                points.append({
+                    "period": index,
+                    "timestamp": label,
+                    "mean": mean,
+                    "p10": row.get("p10"),
+                    # The upload's own median when it states one; the central
+                    # estimate otherwise. Never a value derived from the band.
+                    "p50": p50 if p50 is not None else mean,
+                    "p90": row.get("p90"),
+                    # Nothing adjusted this, so there is no prior estimate to
+                    # recover. Present so the shape matches an engine forecast.
+                    "baseline_mean": None,
+                })
+            out.append({"market_id": market, "product_id": product,
+                        "points": points})
+
+        if short and horizon is not None:
+            warnings.append(
+                f"{len(short)} series state fewer than the {horizon} period(s) "
+                f"requested ({', '.join(short[:5])}"
+                f"{'…' if len(short) > 5 else ''}); the shorter series is "
+                f"returned rather than extended."
+            )
+        return out, warnings
+
+
 #: One store per process, mirroring the other in-process registries.
 demand_history_store = DemandHistoryStore()
 uploaded_signal_store = UploadedSignalStore()
 capacity_history_store = CapacityHistoryStore()
+uploaded_forecast_store = UploadedForecastStore()
 
 
 def build_series_from_structure(
@@ -368,3 +511,98 @@ def build_series_from_structure(
             f"{'…' if len(too_short) > 5 else ''}."
         )
     return series, notes
+
+
+def build_uploaded_forecast(
+    structure: Dict[str, Any],
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    """
+    The extractor's `uploadedForecast` rows, validated for storage.
+
+    The counterpart of `build_series_from_structure`, and deliberately NOT that
+    function: it returns plain rows rather than `DemandTimeSeries`, because
+    `DemandTimeSeries` is the OBSERVED-history type and nothing holding a
+    projection may be constructible as one.
+
+    Returns `(rows, notes)`. Every row dropped is counted and named in the
+    notes; nothing is discarded silently and nothing is repaired invisibly.
+    """
+    rows = structure.get("uploadedForecast") or []
+    if not rows:
+        return [], []
+
+    kept: List[Dict[str, Any]] = []
+    notes: List[str] = []
+    dropped = crossed = negative = 0
+
+    for row in rows:
+        try:
+            mean = float(row.get("mean"))
+        except (TypeError, ValueError):
+            dropped += 1
+            continue
+        if mean != mean:  # NaN
+            dropped += 1
+            continue
+        if mean < 0:
+            # A negative forecast is not a small one. Dropped and counted
+            # rather than clamped to zero, which would be this build inventing
+            # a number to replace one it could not read.
+            negative += 1
+            continue
+        if not str(row.get("period") or "").strip():
+            dropped += 1
+            continue
+        if not str(row.get("marketId") or "").strip():
+            dropped += 1
+            continue
+
+        p10, p90 = row.get("p10"), row.get("p90")
+        if (isinstance(p10, (int, float)) and isinstance(p90, (int, float))
+                and p10 > p90):
+            # Reported, and the band is dropped rather than swapped: P10 above
+            # P90 almost always means the two columns were mapped the wrong way
+            # round, and silently reordering them hides the mapping error the
+            # review screen exists to catch.
+            p10 = p90 = None
+            crossed += 1
+
+        kept.append({
+            "period": str(row.get("period")).strip(),
+            "marketId": str(row.get("marketId")).strip(),
+            "productId": (str(row.get("productId")).strip()
+                          if row.get("productId") else None),
+            "mean": mean,
+            "p10": p10,
+            "p50": row.get("p50"),
+            "p90": p90,
+        })
+
+    if kept:
+        markets = {r["marketId"] for r in kept}
+        periods = {r["period"] for r in kept}
+        banded = sum(1 for r in kept
+                     if r["p10"] is not None and r["p90"] is not None)
+        notes.append(
+            f"{len(kept)} forecast row(s) stored for {len(markets)} market(s) "
+            f"across {len(periods)} period(s). {banded} state a P10-P90 band; "
+            f"{len(kept) - banded} state a central value only and are shown "
+            f"without a confidence band. No model was fitted to any of them."
+        )
+    if dropped:
+        notes.append(
+            f"{dropped} forecast row(s) named no period or market, or carried "
+            f"an unreadable quantity, and were not stored."
+        )
+    if negative:
+        notes.append(
+            f"{negative} forecast row(s) stated a negative quantity and were "
+            f"not stored. A negative forecast was not read as zero."
+        )
+    if crossed:
+        notes.append(
+            f"{crossed} forecast row(s) stated P10 above P90, so no band was "
+            f"kept for them - check that the two columns are mapped the right "
+            f"way round."
+        )
+    return kept, notes

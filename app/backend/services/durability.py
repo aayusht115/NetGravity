@@ -210,14 +210,19 @@ def _bind_upload_stores() -> None:
     Make the demand, capacity and signal stores write through.
 
     These hold what arrived with an upload — 36 months of demand history, 288
-    rows of capacity history, external signals. They are inputs the user
-    provided, not results, so losing them means the forecast and the "vs
-    recorded" column go quiet after a restart even though the network is still
-    bound.
+    rows of capacity history, external signals, and a forecast when the upload
+    carried one. They are inputs the user provided, not results, so losing them
+    means the forecast and the "vs recorded" column go quiet after a restart
+    even though the network is still bound.
+
+    An uploaded forecast is the one of the four that cannot be recomputed at
+    all: the others at worst cost a re-derivation, but a forecast this build
+    did not produce exists nowhere else once it is lost.
     """
     from app.backend.services.demand_history_store import (
         capacity_history_store,
         demand_history_store,
+        uploaded_forecast_store,
         uploaded_signal_store,
     )
 
@@ -235,6 +240,14 @@ def _bind_upload_stores() -> None:
         lambda nid, rows: persistence.guarded(persistence.save_network_data)(
             "capacity_history", nid, rows),
         lambda: persistence.load_network_data("capacity_history"),
+    )
+    # A forecast the upload brought with it. No schema change is needed for
+    # this: `network_data` is keyed by (kind, network_id) with no constraint on
+    # kind, so a new kind is a new row rather than a new table.
+    uploaded_forecast_store.bind_persistence(
+        lambda nid, rows: persistence.guarded(persistence.save_network_data)(
+            "uploaded_forecast", nid, rows),
+        lambda: persistence.load_network_data("uploaded_forecast"),
     )
 
     # What was uploaded to each project, how it was mapped, and what was
@@ -306,11 +319,13 @@ def install(orchestrator: Any) -> dict:
 
     _bind_upload_stores()
     from app.backend.services.demand_history_store import (
-        capacity_history_store, demand_history_store, uploaded_signal_store,
+        capacity_history_store, demand_history_store, uploaded_forecast_store,
+        uploaded_signal_store,
     )
     report["demand_history"] = demand_history_store.load()
     report["signals"] = uploaded_signal_store.load()
     report["capacity_history"] = capacity_history_store.load()
+    report["uploaded_forecast"] = uploaded_forecast_store.load()
     from app.backend.services.dataset_store import dataset_store
     report["datasets"] = dataset_store.load()
 

@@ -278,6 +278,57 @@ MIGRATIONS: List[Migration] = [
 SCHEMA_VERSION = MIGRATIONS[-1].version
 
 
+#: Every table the application owns, and the columns that identify a row in it.
+#:
+#: WHY THIS LIVES HERE. It is a fact about the SCHEMA, and the schema is this
+#: module — so a migration that adds a table and does not add it here is a
+#: change that fails its own test (see `test_postgres_migration.py`), rather
+#: than one that is noticed the first time somebody migrates a real store.
+#:
+#: It existed twice before, maintained by hand, and both copies were stale:
+#: `persistence.TABLES` had 13 entries and `scripts/migrate_to_postgres.py`
+#: had 9, against the 16 the migrations create. The four the migration script
+#: was missing are the ones it is worst to miss — `mfa_enrolments`,
+#: `mfa_recovery_codes`, `password_resets` and `login_attempts` — because a
+#: store that arrives on PostgreSQL without them has silently DISABLED every
+#: user's second factor rather than failing to copy something.
+#:
+#: `schema_migrations` is deliberately absent: it is the migration runner's own
+#: bookkeeping, it is written by `apply_migrations` on the target as the schema
+#: is built, and copying the source's rows over it would tell a fresh database
+#: that migrations had run which had not.
+APPLICATION_TABLES: List[tuple] = [
+    ("users",                ("user_id",)),
+    ("sessions",             ("token",)),
+    ("projects",             ("project_id",)),
+    ("snapshots",            ("snapshot_id",)),
+    ("scenario_networks",    ("scenario_id",)),
+    ("scenarios",            ("scenario_id",)),
+    ("network_data",         ("kind", "network_id")),
+    ("analyses",             ("snapshot_id",)),
+    ("app_state",            ("key",)),
+    # migration 2 — auth hardening
+    ("login_attempts",       ("identity",)),
+    ("password_resets",      ("token_hash",)),
+    # migration 3 — second factor. Credentials in their own right.
+    ("mfa_enrolments",       ("user_id",)),
+    ("mfa_recovery_codes",   ("user_id", "code_hash")),
+    # migration 4 — rate limiting shared across workers
+    ("rate_limit_windows",   ("bucket", "client")),
+    # migration 5 — execution traces
+    ("execution_traces",     ("execution_id",)),
+    # migration 6 — federated identity
+    ("federated_identities", ("issuer", "subject")),
+]
+
+#: Just the names, in dependency-free order — what `/api/status` reports on and
+#: what a test wipe empties.
+TABLE_NAMES = tuple(name for name, _ in APPLICATION_TABLES)
+
+#: The runner's own bookkeeping. Never copied between stores.
+MIGRATION_BOOKKEEPING_TABLE = "schema_migrations"
+
+
 def _migration_table(dialect: str) -> str:
     return (
         f"""CREATE TABLE IF NOT EXISTS schema_migrations (

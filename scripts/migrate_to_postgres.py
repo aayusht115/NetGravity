@@ -42,20 +42,41 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
-#: (table, primary key columns, every column) — mirrors `persistence._schema_statements`.
-TABLES = (
-    ("users", ("user_id",), ("user_id", "email", "document", "created_at")),
-    ("sessions", ("token",), ("token", "user_id", "expires_at")),
-    ("projects", ("project_id",), ("project_id", "owner_id", "document", "updated_at")),
-    ("snapshots", ("snapshot_id",), ("snapshot_id", "network_id", "document", "created_at")),
-    ("scenario_networks", ("scenario_id",),
-     ("scenario_id", "snapshot_id", "document", "created_at")),
-    ("scenarios", ("scenario_id",), ("scenario_id", "project_id", "document", "created_at")),
-    ("network_data", ("kind", "network_id"), ("kind", "network_id", "document")),
-    ("analyses", ("snapshot_id",),
-     ("snapshot_id", "data_version", "document", "computed_at")),
-    ("app_state", ("key",), ("key", "value")),
-)
+#: WHAT GETS COPIED — read from the schema, never listed here.
+#:
+#: THIS LIST USED TO BE WRITTEN OUT BY HAND, and it had fallen seven tables
+#: behind: it copied nine of the sixteen the migrations create. The seven it
+#: missed were `login_attempts`, `password_resets`, `mfa_enrolments`,
+#: `mfa_recovery_codes`, `rate_limit_windows`, `execution_traces` and
+#: `federated_identities`.
+#:
+#: Four of those are the worst possible omission. A store migrated to
+#: PostgreSQL arrived without `mfa_enrolments` or `mfa_recovery_codes` — so
+#: every user who had set up a second factor arrived with it SILENTLY GONE,
+#: and the migration reported success because it verified only the tables it
+#: had decided to copy. `federated_identities` is the same shape of failure for
+#: anyone signing in through SSO: the link between their provider identity and
+#: their account, not copied, is an account they can no longer reach.
+#:
+#: Reading `APPLICATION_TABLES` from the module that OWNS the schema is what
+#: stops this recurring: a migration that adds a table adds it there, and this
+#: script picks it up without being edited.
+def _tables():
+    from app.backend.services.migrations import APPLICATION_TABLES
+    return APPLICATION_TABLES
+
+
+def _columns(conn, table: str):
+    """
+    The table's real columns, from the source database.
+
+    Read rather than declared. The previous version carried a hand-written
+    column list per table and intersected it with the row keys, so a column
+    added by a migration and not added to that list was quietly dropped from
+    every row copied — a data loss that no count check can see, because the
+    row arrives.
+    """
+    return [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]  # noqa: S608
 
 
 def _source_tables(conn: sqlite3.Connection) -> set:
@@ -82,13 +103,30 @@ def migrate(sqlite_path: str, postgres_url: str, batch: int = 200) -> int:
     print(f"source : {source_file}")
     print(f"target : {target.path}\n")
 
+    # EVERY TABLE THE SOURCE HOLDS IS ACCOUNTED FOR, or the migration stops.
+    #
+    # A table present in the source and unknown to the schema list is either a
+    # migration nobody added to `APPLICATION_TABLES` or a table from a build
+    # this script does not understand. Both mean rows would be left behind
+    # silently, which is the failure this whole change is about — so it is
+    # refused rather than skipped with a line in a log.
+    known = {t for t, _ in _tables()} | {"schema_migrations"}
+    unknown = sorted(present - known - {"sqlite_sequence"})
+    if unknown:
+        raise SystemExit(
+            "The source database holds tables this migration does not know "
+            f"about: {', '.join(unknown)}.\n"
+            "Add them to APPLICATION_TABLES in app/backend/services/"
+            "migrations.py before migrating, or their rows will not arrive."
+        )
+
     copied = {}
-    for table, keys, columns in TABLES:
+    for table, keys in _tables():
         if table not in present:
             print(f"  {table:18} not in source, skipped")
             continue
         rows = list(source.execute(f"SELECT * FROM {table}"))  # noqa: S608 — fixed names
-        available = [c for c in columns if c in rows[0].keys()] if rows else list(columns)
+        available = _columns(source, table)
         placeholders = ",".join(["?"] * len(available))
         updates = ",".join(f"{c}=excluded.{c}" for c in available if c not in keys)
         conflict = ",".join(keys)
@@ -103,7 +141,7 @@ def migrate(sqlite_path: str, postgres_url: str, batch: int = 200) -> int:
     # ---- verify -------------------------------------------------------
     print("\nverifying...")
     problems = []
-    for table, keys, columns in TABLES:
+    for table, keys in _tables():
         if table not in copied:
             continue
         source_rows = {tuple(r[k] for k in keys): dict(r)
@@ -116,8 +154,29 @@ def migrate(sqlite_path: str, postgres_url: str, batch: int = 200) -> int:
             continue
         for key, src in source_rows.items():
             dst = target_rows[key]
-            for column in ("document", "value"):
-                if column in src and src[column] != dst.get(column):
+            # EVERY column, not just `document` and `value`.
+            #
+            # The check named two columns, so a secret, a hash or a timestamp
+            # that failed to copy verified clean. On `mfa_enrolments` the
+            # column that matters is `secret` and it was never compared.
+            #
+            # Timestamps are compared as floats: SQLite stores REAL and
+            # PostgreSQL DOUBLE PRECISION, and the two round-trip to values
+            # that are equal as numbers and unequal as objects.
+            for column, value in src.items():
+                other = dst.get(column)
+                if isinstance(value, float) or isinstance(other, float):
+                    if value is None or other is None:
+                        if value is not other:
+                            problems.append(
+                                f"{table}{key}: {column} differs after copy")
+                            break
+                        continue
+                    if abs(float(value) - float(other)) > 1e-6:
+                        problems.append(
+                            f"{table}{key}: {column} differs after copy")
+                        break
+                elif value != other:
                     problems.append(f"{table}{key}: {column} differs after copy")
                     break
         print(f"  {table:18} {len(source_rows):5} row(s) verified byte-for-byte")

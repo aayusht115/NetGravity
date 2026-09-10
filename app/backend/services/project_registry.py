@@ -362,6 +362,35 @@ class ProjectRegistry:
             )
         return record.snapshot_id
 
+    def network_id_for_snapshot(self, snapshot_id: str) -> str:
+        """
+        The network id the BOUND SNAPSHOT actually carries.
+
+        Not always the id the assembler was asked to build. `SnapshotManager`
+        addresses a snapshot by the content hash of its network
+        (`snap_{data_version[:12]}`), so two projects that upload networks with
+        identical content are handed the SAME snapshot — and it keeps the
+        network id of whichever registered first.
+
+        Anything stored per network at commit time must be keyed by this, not
+        by the id passed to `assemble_network_from_structure`: a reader
+        resolving a project's snapshot gets this id, and writing under the other
+        one puts the row somewhere nothing will ever look.
+
+        Returns "" when the snapshot cannot be read, so a caller can fall back
+        to what it built rather than lose the write entirely.
+        """
+        if self._orchestrator is None or not snapshot_id:
+            return ""
+        try:
+            snapshot = self._orchestrator.snapshots.get(snapshot_id)
+            return str(getattr(snapshot.network, "network_id", "") or "")
+        except Exception as exc:  # noqa: BLE001 — the caller has a fallback
+            logger.warning(
+                "project_registry.network_id_unresolved snapshot_id=%s error=%s",
+                snapshot_id, exc)
+            return ""
+
     # ------------------------------------------------------------------
     # Demo seeding
     # ------------------------------------------------------------------

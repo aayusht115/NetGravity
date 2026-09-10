@@ -41,10 +41,11 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify, make_response, request
 
 from app.backend.services.errors import (
     ApplicationError,
@@ -90,7 +91,31 @@ _ALLOWED_SCOPES = {"NETWORK", "FACILITY", "LANE"}
 #:   3  the SLA insight no longer describes unserved demand as "served late",
 #:      and a cost COMPONENT names the horizon it covers rather than being
 #:      labelled "per period" on a multi-period solve
-_PAYLOAD_VERSION = 3
+#:   4  every insight carries `recommended_action` — what to DO about the
+#:      finding — and `headline`/`narrative` are emitted in plain voice
+#:      ("Demand fill rate is 0.68") rather than the agent's first person
+#:      ("I see a demand fill rate of 0.68"), which is what the Overview's
+#:      insight tiles read
+#:   5  the deterministic template's headlines are conclusions rather than
+#:      labels — "Facility cost is the largest single component of what this
+#:      network costs", not "Facility cost as the largest cost line". A cached
+#:      entry is keyed on the network's `data_version`, which does not move
+#:      when the wording does, so without this every project that had already
+#:      loaded its insights would keep the old labels for ever.
+#:   6-8 further wording and shape changes: the structured `action` behind
+#:      each recommendation, and the strategic phrasing that replaced
+#:      "open the KPI page" throughout
+#:   9  a recommendation is derived per FINDING rather than per network.
+#:      Every capacity-family card used to call the ladder for its top rung
+#:      and print the same sentence — seven identical recommendations on a
+#:      loaded network, several of them contradicting the card above them.
+#:      A cached briefing carries those sentences in its body, and nothing
+#:      about the network changed, so without this bump every project that
+#:      had loaded its insights would keep them.
+#:  10  percentages print whole ("54%", not "54.00%") and a FACILITY-scoped
+#:      card answers about the facility rather than repeating the network
+#:      card's sentence word for word
+_PAYLOAD_VERSION = 10
 
 
 #: Theme -> the per-facility field that theme is ABOUT. A chart for a finding
@@ -285,9 +310,492 @@ def _resolve_evidence(refs: List[str], pack: Any,
     return out
 
 
+#: Themes whose finding is ABOUT the network's capacity, and which therefore
+#: get a real intervention derived from the solved per-site load rather than a
+#: sentence chosen by theme.
+#:
+#: These are the findings where "what should I do" has a defensible answer in
+#: the data: a site is full, a site is empty, demand is not being reached. The
+#: ladder in `strategic_actions` decides which rung applies.
+_CAPACITY_THEMES = frozenset({
+    "Capacity", "Utilisation", "Service", "Footprint", "Resilience",
+})
+
+#: What to DO about the findings the capacity ladder does not speak to, by
+#: theme, when the narrative layer wrote no action of its own.
+#:
+#: The Reasoning Agent writes `recommended_action` per insight when the LLM
+#: path is live (see `reasoning/prompts.py`). The deterministic template path
+#: — which is what a cached, un-prompted briefing uses, and therefore what
+#: most page loads see — writes prose and no action, and a tile headed
+#: "Recommended action" with nothing under it is worse than no tile.
+#:
+#: EVERY ONE OF THESE NAMES A CHANGE, NOT A SCREEN. They used to read "Open the
+#: KPI page to see which sites are over the threshold, then test a scenario
+#: that relieves them" — which tells a reader to go and do the analysis
+#: themselves, is identical on every network ever uploaded, and is the single
+#: thing a senior audience has no use for. What replaced them states the
+#: decision and leaves the evidence to the finding above it.
+#:
+#: None claims a saving, a magnitude or an outcome: nothing here has been
+#: solved. The scenario each one names is what produces those.
+_ACTION_BY_THEME = {
+    # ---- the capacity family --------------------------------------------
+    # These are reached only when the ladder produced nothing to say: a
+    # healthy network, or a briefing with no solved rows behind it. They are
+    # still DECISIONS — what to do about the finding — because "there is no
+    # site to name" is not a reason to fall back to telling a reader which tab
+    # to click.
+    ("Service", "RISK"):
+        "Put capacity near the demand this plan cannot reach, and price it "
+        "against this baseline before the next planning round.",
+    ("Service", "INFORMATION"):
+        "Hold this run as the service baseline every scenario is measured "
+        "against.",
+    ("Capacity", "RISK"):
+        "Relieve the sites that are over the threshold before demand grows "
+        "into them — the lead time on capacity is longer than the warning.",
+    ("Capacity", "OPPORTUNITY"):
+        "Move volume onto the sites with headroom before adding capacity "
+        "anywhere.",
+    ("Capacity", "INFORMATION"):
+        "Headroom is not a decision on its own. Put more volume through the "
+        "sites with room before adding any.",
+    ("Utilisation", "RISK"):
+        "Relieve the sites that are over the threshold before demand grows "
+        "into them.",
+    ("Utilisation", "OPPORTUNITY"):
+        "Consolidate the idle sites and price the saving against this "
+        "baseline.",
+    ("Utilisation", "INFORMATION"):
+        "Headroom is not a decision on its own. Put more volume through the "
+        "sites with room before adding any.",
+    ("Footprint", "RISK"):
+        "Decide on the sites this plan leaves unused before the footprint is "
+        "committed.",
+    ("Footprint", "OPPORTUNITY"):
+        "Open the unused candidate sites and price the cost and service "
+        "against this baseline.",
+    ("Footprint", "INFORMATION"):
+        "Treat this footprint as the baseline any change to it is measured "
+        "against.",
+    ("Resilience", "RISK"):
+        "Spread the exposure off the sites carrying it, and price the "
+        "alternative before it concentrates further.",
+    ("Resilience", "INFORMATION"):
+        "Keep the exposure this figure summarises inside its tolerance as the "
+        "footprint changes.",
+    # ---- everything the ladder does not speak to -------------------------
+    ("Cost", "OPPORTUNITY"):
+        "Price this against a changed footprint before committing to the "
+        "current one.",
+    ("Cost", "INFORMATION"):
+        "Hold this as the baseline every proposed change is measured against.",
+    ("Cost structure", "INFORMATION"):
+        "Target the largest component of this cost first — the smaller ones "
+        "cannot move the total far enough to matter.",
+    ("Cost structure", "OPPORTUNITY"):
+        "Take the largest cost component into a scenario and price the "
+        "alternative before committing.",
+    ("Carbon", "RISK"):
+        "Shorten the longest lanes, or move them to a lower-emitting mode, "
+        "and price the trade-off against cost.",
+    ("Carbon", "OPPORTUNITY"):
+        "Shorten the longest lanes and price the emissions saved against what "
+        "the re-route costs.",
+    ("Carbon", "INFORMATION"):
+        "Treat this as the emissions baseline any re-routing is measured "
+        "against.",
+    ("Scenario impact", "OPPORTUNITY"):
+        "Take this scenario to a decision, or park it — it has been priced "
+        "against the baseline and is waiting on a call.",
+    # The severity this one actually carries. It was emitted with the default
+    # (INFORMATION), missed both lookups above, and fell through to the
+    # severity fallback — so a card reading "this change raises what the
+    # network costs" carried the line "No decision is needed on this one."
+    ("Scenario impact", "INFORMATION"):
+        "Weigh this price against the operational benefit and take the "
+        "scenario to a decision, or park it.",
+    ("Scenario impact", "RISK"):
+        "Decide whether this price is worth paying before the change is "
+        "committed.",
+    # ---- comparisons -----------------------------------------------------
+    ("Trade-off", "OPPORTUNITY"):
+        "Commit to the option that wins on the terms that matter here, or "
+        "state which of them the business is willing to trade.",
+    ("Trade-off", "INFORMATION"):
+        "Choose between these on the basis they differ on — the cost gap "
+        "alone does not settle it.",
+    ("Not compared", "RISK"):
+        "Re-run the scenarios that returned no usable cost before the "
+        "ranking is relied on — they are absent from it, not behind in it.",
+    # ---- costs -----------------------------------------------------------
+    ("Cost", "RISK"):
+        "Decide which cost line is going to move, and price the change "
+        "against this baseline before the next planning round.",
+    ("Demand outlook", "INFORMATION"):
+        "Size the network against this outlook rather than against last "
+        "year's volume.",
+    ("Where the growth is", "INFORMATION"):
+        "Put capacity where this growth is landing, not where the current "
+        "footprint already sits.",
+    ("External signals", "INFORMATION"):
+        "Decide whether these signals belong in the planning assumption "
+        "before the next capacity round.",
+    ("History that changed", "INFORMATION"):
+        "Re-baseline the plan on the corrected history before acting on any "
+        "figure derived from it.",
+}
+
+#: The same theme, said to a reader looking at ONE SITE.
+#:
+#: The Insights feed merges two briefings — the network's, and one per facility
+#: — and each is computed in its own request, so neither can see what the other
+#: recommended. On the demo network that produced two cards a few rows apart
+#: carrying the same sentence word for word: "No open site reaches the 90%
+#: threshold" and "Central Distribution Centre is running at 54% of its stated
+#: capacity", both answered with "Headroom is not a decision on its own. Put
+#: more volume through the sites with room before adding any."
+#:
+#: De-duplicating that after the fact would be papering over it. The two
+#: findings are genuinely different — one is about the footprint, one is about
+#: a site — and the answers should differ because the findings do. A
+#: facility-scoped card speaks about the facility.
+_ACTION_BY_THEME_FACILITY = {
+    ("Capacity", "INFORMATION"):
+        "Put more volume through this site before any capacity is added "
+        "elsewhere in the network.",
+    ("Capacity", "RISK"):
+        "Relieve this site before demand grows into it — the lead time on "
+        "capacity is longer than the warning.",
+    ("Capacity", "OPPORTUNITY"):
+        "Move volume onto this site before adding capacity anywhere.",
+    ("Utilisation", "INFORMATION"):
+        "Judge this site on what it is asked to carry, not on the reading "
+        "alone — headroom is only worth having where demand can reach it.",
+    ("Utilisation", "RISK"):
+        "Relieve this site before demand grows into it.",
+    ("Utilisation", "OPPORTUNITY"):
+        "Price moving this site's volume onto sites with room.",
+    ("Service", "RISK"):
+        "Put capacity within reach of the demand this site cannot serve, and "
+        "price it against this baseline.",
+    ("Footprint", "OPPORTUNITY"):
+        "Price this site's cost against the routing it saves before the "
+        "footprint is committed.",
+    ("Resilience", "RISK"):
+        "Decide what covers this site's volume if it is lost, before the "
+        "exposure concentrates further.",
+    ("Cost", "INFORMATION"):
+        "Hold this site's cost as the baseline any change to it is measured "
+        "against.",
+}
+
+#: Findings that are not decisions and must not be given one.
+#:
+#: "Summary" is the briefing's own lead — the sentence the whole page is about.
+#: Any action under it is either the page's headline recommendation printed
+#: twice or a second, weaker one competing with it.
+_NO_ACTION_THEMES = frozenset({"Summary"})
+
+#: Last resort, by severity alone — a theme this map does not name yet. Still
+#: a decision, still not a place to look.
+_ACTION_BY_SEVERITY = {
+    "RISK": "Decide whether this is accepted or acted on, and price the "
+            "change before the next planning round.",
+    "OPPORTUNITY": "Price this change against the current baseline before "
+                   "committing either way.",
+    "INFORMATION": "No decision is needed on this one.",
+}
+
+
+#: WHICH RUNGS ANSWER WHICH FINDING, best first.
+#:
+#: This is the fix for the thing that made the recommendations useless: every
+#: capacity-family card called the ladder for its TOP rung and got the same
+#: sentence. Measured on a network with two sites over 90%, one idle site and
+#: one closed candidate, seven findings printed one recommendation between them
+#: — and it contradicted several of the cards it sat under. A card reporting
+#: idle sites recommended bringing more capacity online.
+#:
+#: A finding is not a network. "3 sites are above the threshold" is answered by
+#: relieving them; "3 sites run at 22%" is answered by taking one out; "demand
+#: is going unserved" is answered by whatever adds reach soonest. The rungs are
+#: the same ladder — this says which of them speak to which question.
+#:
+#: Order inside each tuple is preference, not alternatives: the first rung the
+#: data supports wins, the rest are what it falls to when it does not.
+#: `strategic_actions.build_actions` still decides whether a rung applies at
+#: all, so nothing here can recommend expanding a site that is not tight.
+_ACTIONS_BY_FINDING = {
+    # Sites at their ceiling. Expand the constraint first; build only where
+    # there is nothing to expand into and nothing closed to bring back.
+    ("Capacity", "RISK"):
+        ("ADD_CAPACITY", "REOPEN_FACILITY", "OPEN_NEW_FACILITY"),
+    ("Utilisation", "RISK"):
+        ("ADD_CAPACITY", "REOPEN_FACILITY", "OPEN_NEW_FACILITY"),
+    # Sites carrying full fixed cost for a fraction of their capacity. The one
+    # rung that answers this, and the one the network-wide call withheld
+    # whenever anything else was tight.
+    ("Capacity", "OPPORTUNITY"): ("CONSOLIDATE",),
+    ("Utilisation", "OPPORTUNITY"): ("CONSOLIDATE",),
+    # Demand the footprint cannot reach. Reopening beats expanding here
+    # because reach, not throughput, is what is short.
+    ("Service", "RISK"):
+        ("REOPEN_FACILITY", "OPEN_NEW_FACILITY", "ADD_CAPACITY"),
+    # Both directions are live under this theme, which is why the emit site
+    # sets `action_hint` — see `KPIInsight`. This is the fallback for a
+    # footprint finding that sets none.
+    ("Footprint", "OPPORTUNITY"): ("CONSOLIDATE", "REOPEN_FACILITY"),
+    ("Footprint", "RISK"): ("CONSOLIDATE", "REOPEN_FACILITY"),
+    # Exposure concentrated on one site. An alternative is what reduces it;
+    # making the exposed site bigger concentrates it further, so ADD_CAPACITY
+    # is deliberately absent.
+    ("Resilience", "RISK"): ("REOPEN_FACILITY", "OPEN_NEW_FACILITY"),
+}
+
+
+def _facility_rows(pack: Any) -> List[Dict[str, Any]]:
+    """
+    The solved per-site rows a recommendation is derived from.
+
+    Read off the evidence pack's own payload rather than re-fetched, because
+    the pack is built from exactly the state this briefing describes — a second
+    read could return a different solve and recommend a change for a network
+    the reader is not looking at.
+    """
+    payload = getattr(pack, "payload", None)
+    if not isinstance(payload, dict):
+        return []
+    rows = payload.get("facilities")
+    return list(rows) if isinstance(rows, list) else []
+
+
+def _unserved(pack: Any) -> Optional[float]:
+    payload = getattr(pack, "payload", None)
+    if not isinstance(payload, dict):
+        return None
+    return _finite((payload.get("network_state") or {}).get("unserved_demand"))
+
+
+def _strategic_action(pack: Any) -> Optional[Dict[str, Any]]:
+    """
+    The top rung of the ladder for this NETWORK, as a serialisable action.
+
+    This is the page's own headline recommendation — the single change that
+    ranks above the others — and it is the one place the top rung is still the
+    right answer. Per-finding recommendations go through
+    `_finding_action` instead; see `_ACTIONS_BY_FINDING` for why.
+
+    None when there are no solved rows to reason over — in which case the
+    caller falls back to the theme sentence, which claims nothing about sites
+    it cannot see.
+    """
+    from netgravity.orchestrator.reasoning.strategic_actions import build_actions
+
+    rows = _facility_rows(pack)
+    if not rows:
+        return None
+    actions = build_actions(rows, unserved_demand=_unserved(pack), limit=1)
+    if not actions or actions[0].key == "NO_ACTION":
+        return None
+    return actions[0].to_dict()
+
+
+def _subject_ids(insight: Any, rows: List[Dict[str, Any]]) -> List[str]:
+    """
+    The facilities THIS finding is about, by id.
+
+    Several findings name their site in the headline — "Nagpur DC is at 97.4%
+    in its busiest period", "Kochi DC is where losing a single site would cost
+    the most" — and the recommendation under them named whichever site was
+    busiest network-wide instead, which on a network with three tight sites is
+    the wrong one twice.
+
+    Matched against the AUTHORITATIVE name on the solved row, not parsed out of
+    the prose: the names in the sentence were interpolated from these same rows
+    by the layer that wrote it, so an exact match is a lookup rather than a
+    guess. Bounded by word edges, so "Central DC" does not claim "Central DC
+    North", and the result is empty for a network-wide finding — which is the
+    honest answer for one.
+    """
+    text = " ".join((
+        str(getattr(insight, "headline", "") or ""),
+        str(getattr(insight, "narrative", "") or ""),
+    ))
+    if not text.strip():
+        return []
+    # LONGEST NAME FIRST, and each match consumes the characters it used.
+    #
+    # Word edges alone are not enough: "Central DC" sits at both edges of its
+    # own mention inside "Central DC North", so a bounded match still let the
+    # shorter name claim the longer one's site — and on a network that names
+    # its sites that way the recommendation went to the wrong facility. A
+    # matched name is removed from the text before the shorter ones are
+    # offered it, which also leaves a genuine second mention still matchable.
+    candidates = []
+    for row in rows:
+        fid = str(row.get("facility_id") or "").strip()
+        for token in (str(row.get("facility_name") or "").strip(), fid):
+            # Two characters is not an identifier, it is a coincidence.
+            if len(token) >= 3:
+                candidates.append((fid, token))
+    candidates.sort(key=lambda pair: -len(pair[1]))
+
+    residue = text
+    hit = set()
+    for fid, token in candidates:
+        if not fid or fid in hit:
+            continue
+        pattern = (r"(?<![A-Za-z0-9])" + re.escape(token) + r"(?![A-Za-z0-9])")
+        if re.search(pattern, residue):
+            hit.add(fid)
+            residue = re.sub(pattern, " ", residue)
+
+    # Row order, so the same finding produces the same list every time.
+    out: List[str] = []
+    for row in rows:
+        fid = str(row.get("facility_id") or "").strip()
+        if fid in hit and fid not in out:
+            out.append(fid)
+    return out
+
+
+def action_identity(action: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    What makes two recommendations THE SAME recommendation.
+
+    Not the rung on its own. "Expand capacity at Western DC" and "Expand
+    capacity at Nagpur DC" are both ADD_CAPACITY and they are two different
+    decisions about two different sites — suppressing the second because the
+    first spent the rung would hide a real finding. What must not appear twice
+    is the same change at the same place.
+    """
+    target = action.get("target") or {}
+    where = str(target.get("facility_id") or target.get("region") or "")
+    return (str(action.get("key") or ""), where)
+
+
+def _finding_action(insight: Any, theme: str, severity: str, pack: Any,
+                    claimed: Optional[set] = None) -> Optional[Dict[str, Any]]:
+    """
+    The intervention that answers THIS finding, not this network.
+
+    Three things make it specific where `_strategic_action` is general:
+
+      * the rungs are chosen by what the finding says (`_ACTIONS_BY_FINDING`),
+        with the emit site's own `action_hint` ahead of them when it set one;
+      * the sites the finding NAMES rank first inside each rung, so the
+        recommendation is about the site the reader has just read about;
+      * a rung another card in this briefing has already used is excluded, so
+        one briefing cannot print one sentence six times.
+
+    None when no rung answers it — a legitimate outcome, and the caller falls
+    back to a decision sentence chosen by theme rather than inventing a change
+    the rows do not support.
+    """
+    from netgravity.orchestrator.reasoning.strategic_actions import (
+        ACTION_KEYS, build_actions,
+    )
+
+    rows = _facility_rows(pack)
+    if not rows:
+        return None
+
+    prefer: List[str] = []
+    hint = str(getattr(insight, "action_hint", "") or "").strip()
+    # The emit site wins, because it is the only thing that can separate two
+    # findings that share a theme and a severity and point opposite ways.
+    if hint in ACTION_KEYS:
+        prefer.append(hint)
+    for key in _ACTIONS_BY_FINDING.get((theme, severity), ()):
+        if key not in prefer:
+            prefer.append(key)
+    if not prefer:
+        return None
+
+    # Every rung that answers this finding, in preference order — not just the
+    # first. The pick below needs somewhere to fall to when the best answer is
+    # one another card has already given about the same site.
+    actions = build_actions(
+        rows,
+        unserved_demand=_unserved(pack),
+        limit=len(prefer),
+        focus_ids=_subject_ids(insight, rows),
+        prefer=prefer,
+    )
+    spent = claimed if claimed is not None else set()
+    for action in actions:
+        body = action.to_dict()
+        if action_identity(body) not in spent:
+            return body
+    return None
+
+
+def _recommended_action(insight: Any, theme: str, severity: str,
+                        pack: Any = None,
+                        claimed: Optional[set] = None,
+                        scope: str = "NETWORK"
+                        ) -> Tuple[str, Dict[str, Any]]:
+    """
+    The one decision to take about this finding, and the test that proves it.
+
+    Returns `(sentence, action)`. The sentence is what a card prints; `action`
+    is the structured intervention behind it — its key, the site or region it
+    is about, and the pre-filled scenario a reader presses to price it. `{}`
+    when the recommendation is advisory and has no scenario to open.
+
+    Order of preference:
+
+      1. THE NARRATIVE LAYER'S OWN LINE. It saw the evidence, so it wins
+         whenever it wrote one.
+      2. THE LADDER, for a capacity-family finding on a network with solved
+         rows. This is the one that can name a site.
+      3. THE THEME SENTENCE. A decision, not a destination.
+
+    `claimed` is the set of rungs the cards above this one have already used.
+    A briefing that recommends the same change five times has recommended it
+    once and wasted four cards — and the rungs it falls through to are the
+    other real answers to the same finding, not weaker phrasings of the first.
+
+    A finding a reader has to translate into a decision on their own is half a
+    finding — and on a screen read by people who do not run the model
+    themselves, half a finding is none.
+    """
+    written = str(getattr(insight, "recommended_action", "") or "").strip()
+    if written:
+        return written, {}
+
+    # The briefing's own lead card. It restates the whole finding set rather
+    # than making one, and a "Recommended action" tile under it either repeats
+    # the recommendation the page already carries at the top or invents a
+    # second one. Empty, and the card omits the tile.
+    if theme in _NO_ACTION_THEMES:
+        return "", {}
+
+    if theme in _CAPACITY_THEMES and severity != "INFORMATION":
+        action = _finding_action(insight, theme, severity, pack, claimed)
+        if action:
+            # The LABEL is the sentence. It is an imperative naming the
+            # intervention — "Expand capacity at Pune DC" — and the evidence
+            # for it is the finding the reader has just read, so repeating the
+            # reason underneath would say the same thing twice.
+            return action["label"], action
+
+    table = _ACTION_BY_THEME_FACILITY if scope == "FACILITY" else {}
+    sentence = (table.get((theme, severity))
+                or table.get((theme, "INFORMATION"))
+                or _ACTION_BY_THEME.get((theme, severity))
+                or _ACTION_BY_THEME.get((theme, "INFORMATION"))
+                or _ACTION_BY_SEVERITY.get(severity)
+                or _ACTION_BY_SEVERITY["INFORMATION"])
+    return sentence, {}
+
+
 def _serialise_insight(insight: Any, index: int, *, scope: str,
                        entity_id: Optional[str],
-                       pack: Any = None) -> Dict[str, Any]:
+                       pack: Any = None,
+                       claimed: Optional[set] = None) -> Dict[str, Any]:
     """
     One KPI insight, in the shape a feed can render.
 
@@ -296,13 +804,25 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
     feed that lets a user dismiss an item needs an id that survives a re-fetch,
     and a UUID per request would resurrect everything they had dismissed.
     """
+    from netgravity.orchestrator.reasoning.card import plain_voice
+
     theme = str(getattr(insight, "theme", "") or "GENERAL")
     slug = theme.upper().replace(" ", "_")
     entity = (entity_id or "NETWORK").replace(" ", "_")
     severity = getattr(insight, "severity", None)
+    severity_name = (severity.value if hasattr(severity, "value")
+                     else str(severity or "INFORMATION"))
     metric_refs = list(getattr(insight, "metric_refs", []) or [])
     comparison_refs = list(getattr(insight, "comparison_refs", []) or [])
     driver_refs = list(getattr(insight, "driver_refs", []) or [])
+    _action_pair = _recommended_action(insight, theme, severity_name, pack,
+                                       claimed, scope)
+    # Spend the rung, so the next card in this briefing reaches for a different
+    # one. `claimed` is per-briefing and is passed in by the loop below; a
+    # caller serialising one insight on its own passes None and nothing is
+    # spent.
+    if claimed is not None and _action_pair[1].get("key"):
+        claimed.add(action_identity(_action_pair[1]))
     return {
         # The theme alone is not unique within a scope: `_service_insights` can
         # emit two `theme="Service"` findings (unserved demand, and SLA), and
@@ -313,15 +833,37 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
         # dismissable feed needs, and what a UUID per request would destroy.
         "id": f"INS_{scope}_{entity}_{slug}_{_headline_digest(insight)}",
         "theme": theme,
-        "headline": getattr(insight, "headline", ""),
-        "narrative": getattr(insight, "narrative", ""),
+        # PLAIN VOICE, not the agent's own.
+        #
+        # The Reasoning Agent writes in the first person by contract — "I see
+        # 452,610 units of 1,435,985 units of demand left unserved" — because
+        # that is the voice its validator enforces and its grounding checks.
+        # A reader of the Overview is not having a conversation with the
+        # engine; they are reading a report about their network, and the extra
+        # actor in every sentence is what made the tiles read as machine
+        # output. `plain_voice` is the rule the explanation card already owns
+        # (netgravity/orchestrator/reasoning/card.py) — applied here, at the
+        # presentation boundary, so there is one definition of it and the
+        # briefing itself is untouched.
+        "headline": plain_voice(getattr(insight, "headline", "") or ""),
+        "narrative": plain_voice(getattr(insight, "narrative", "") or ""),
+        # What to DO about it. The narrative layer's own line when it wrote
+        # one; a theme-appropriate, figure-free default when it did not. A
+        # finding a reader has to translate into a decision on their own is
+        # half a finding.
+        "recommended_action": _action_pair[0],
+        # The intervention BEHIND the sentence: which rung of the ladder
+        # it is, the site or region it is about, and the pre-filled
+        # scenario that prices it. `{}` when the recommendation is
+        # advisory and has no scenario to open — a button that opens an
+        # empty form is worse than no button.
+        "action": _action_pair[1],
         # Stated by the engine, not inferred from the wording by the client.
         # The Home feed used to decide a card's colour, icon and priority by
         # searching its prose for "high impact" / "opportunity" / "positive",
         # so an insight phrased differently was rendered neutral whatever it
         # had found.
-        "severity": (severity.value if hasattr(severity, "value")
-                     else str(severity or "INFORMATION")),
+        "severity": severity_name,
         "metric_refs": metric_refs,
         "comparison_refs": comparison_refs,
         "driver_refs": driver_refs,
@@ -344,12 +886,219 @@ def _serialise_insight(insight: Any, index: int, *, scope: str,
         # write the prose, and dropped. A chart needs the rows.
         "entities": _resolve_entities(insight, pack),
         "rank": index + 1,
+        # THE SCOPE THIS FINDING WAS COMPUTED IN, carried so a client can ask
+        # for the same briefing back.
+        #
+        # Without it the deep dive's document download assumed NETWORK, and a
+        # facility-scoped finding — which the deep dive opens exactly as
+        # readily — answered 404 for an id the reader was looking at. A record
+        # that cannot say where it came from makes every consumer guess.
+        "scope": scope,
+        "entity_id": entity_id,
     }
+
+
+#: How each step of the working is introduced, keyed by the role the engine
+#: tagged its figures with. The screen prints the same three headings; this is
+#: the same distinction written out for a reader who is not looking at it.
+_STEP_ROLES = (
+    ("metric", "What was measured",
+     "The figures this finding reads, exactly as the solve computed them. "
+     "Nothing here is re-derived: each value is the one the named engine "
+     "produced for this run."),
+    ("comparison", "What it was compared against",
+     "The figures the measurement above was read against — a configured "
+     "policy threshold, a baseline, or the counterpart quantity that makes "
+     "the measurement mean something."),
+    ("driver", "What is behind it",
+     "The quantities moving the measurement. These are reported because the "
+     "engine cited them in reaching the conclusion, not because a correlation "
+     "was tested."),
+)
+
+_ROLE_LABEL = {"metric": "Measured", "comparison": "Compared against",
+               "driver": "Driver"}
+
+
+def _method_note(record: Dict[str, Any]) -> str:
+    """
+    How to read the working, in one paragraph.
+
+    The deep dive shows the steps and the figures and says nothing about how
+    they were arrived at, which is what makes a correct derivation still feel
+    like a black box: a reader can see 97.2% and see the conclusion and has
+    no account of the move between them.
+    """
+    theme = record.get("theme") or "this"
+    return (
+        f"This {theme.lower()} finding is produced in two stages. First the "
+        "deterministic layer solves the network and computes every KPI from "
+        "the solved plan — the optimiser's own flows, the facilities it "
+        "opened and the demand it served — and publishes them as a digital "
+        "twin state. No language model takes part in that stage, and no "
+        "figure below is estimated. Second, the reasoning layer reads that "
+        "state, selects the figures relevant to this theme, compares them "
+        "against the configured policy thresholds, and states the conclusion "
+        "in the section above. Every number it quotes is then checked back "
+        "against the computed results before the finding is published; the "
+        "outcome of that check is recorded under Provenance."
+    )
+
+
+def _derivation_for(record: Dict[str, Any], analysis: Dict[str, Any]) -> Any:
+    """
+    One serialised insight, as a `DerivationReport`.
+
+    Reads the SAME record the browser renders, so the document and the screen
+    cannot disagree: if the deep dive shows 97.20%, so does the table in the
+    file, because both print the identical `display_value` string.
+
+    `analysis` is the whole serialised briefing — the identical JSON object
+    `GET /api/insights` returned — rather than the live briefing, result and
+    twin state this used to take. That is not a tidying: the list response is
+    CACHED per network version and this route recomputed, so the two could
+    disagree about what findings exist. They did. A reader who opened a
+    finding and pressed Download got 404 "not a finding on this network's
+    current analysis" about the finding on their screen, because the fresh
+    reasoning pass had produced a slightly different headline and the id is a
+    digest of the headline. Reading both from one cached payload makes the
+    disagreement unrepresentable rather than unlikely.
+    """
+    from datetime import datetime, timezone
+
+    from netgravity.reporting import DerivationReport, DerivationStep, Figure
+
+    evidence = [e for e in (record.get("evidence") or [])
+                if e.get("display_value")
+                and e["display_value"] != "Not available"]
+
+    steps = []
+    for role, title, detail in _STEP_ROLES:
+        rows = [e for e in evidence if (e.get("role") or "metric") == role]
+        if not rows:
+            continue
+        steps.append(DerivationStep(
+            title=title,
+            detail=detail,
+            figures=tuple(
+                Figure(label=e.get("label") or e.get("ref") or "",
+                       value=e.get("display_value") or "",
+                       role=_ROLE_LABEL.get(e.get("role") or "metric", "Measured"),
+                       source=e.get("source") or "")
+                for e in rows),
+        ))
+
+    # The entities the finding was computed OVER, where it has them. This is
+    # the part a screen can only show as a chart and a reader most often wants
+    # as a list they can sort — which site, at what figure.
+    entities = record.get("entities") or []
+    if entities:
+        # The metric's own readable name, not its storage key: the document
+        # said "Ranked by utilization pct" where the table beside it already
+        # said "Average utilisation".
+        from netgravity.orchestrator.reasoning.evidence import metric_label
+        metric = metric_label(entities[0].get("metric") or "").lower()
+        steps.append(DerivationStep(
+            title="Every record this was computed over",
+            detail=(f"Ranked by {metric or 'the metric this theme is about'}, "
+                    "as the solve reported it for each one. The conclusion is "
+                    "a statement about this population, not about the "
+                    "single figure above."),
+            figures=tuple(
+                Figure(label=str(e.get("label") or e.get("entity_id") or ""),
+                       value=_format_entity_value(e),
+                       role=("Not used by this plan" if e.get("is_open") is False
+                             else "In this plan"),
+                       source=str(e.get("role") or e.get("kind") or ""))
+                for e in entities),
+        ))
+
+    limitations = []
+    limitation = str(analysis.get("limitation") or "").strip()
+    if limitation:
+        limitations.append(limitation)
+    completeness = str(analysis.get("evidence_completeness") or "")
+    if completeness and completeness != "COMPLETE":
+        limitations.append(
+            f"Evidence for this run is {completeness}: some analyses did not "
+            "produce a value, so those quantities are unknown rather than "
+            "zero.")
+
+    grounding_block = analysis.get("grounding") or {}
+    grounding = str(grounding_block.get("status") or "UNKNOWN")
+    warnings = [str(w) for w in (grounding_block.get("warnings") or [])]
+    provenance = (
+        f"Source: NetGravity reasoning over the solved network state "
+        f"{analysis.get('state_id') or 'unknown'}. "
+        f"Numeric grounding: {grounding}."
+    )
+    if grounding not in ("GROUNDED", "NO_CLAIMS"):
+        provenance += (" Not every figure quoted in the prose was verified "
+                       "against the deterministic results.")
+    if warnings:
+        provenance += " Validation warnings: " + "; ".join(warnings) + "."
+
+    return DerivationReport(
+        kind="Insight",
+        subject=f"{record.get('theme') or 'Network'} · "
+                + ("whole network" if not record.get("entity_id")
+                   else str(record.get("entity_id"))),
+        conclusion=record.get("headline") or "",
+        summary=record.get("narrative") or "",
+        method=_method_note(record),
+        steps=steps,
+        recommended_action=record.get("recommended_action") or "",
+        assumptions=[str(d) for d in (analysis.get("key_drivers") or [])],
+        limitations=limitations,
+        provenance=provenance,
+        generated_at="Generated "
+                     + datetime.now(timezone.utc).strftime("%d %B %Y, %H:%M UTC"),
+    )
+
+
+def _format_entity_value(entity: Dict[str, Any]) -> str:
+    """
+    One entity's figure, formatted the way the chart's axis formats it.
+
+    The entity rows carry raw numbers (they exist to be plotted), so unlike
+    every other figure in this document there is no `display_value` to copy.
+    The rule is the axis's own: a `_pct` metric reads as a percentage to two
+    places, anything else with thousands separators.
+    """
+    value = entity.get("value")
+    if not isinstance(value, (int, float)):
+        return "—"
+    metric = str(entity.get("metric") or "")
+    if metric.endswith("_pct"):
+        # ONE decimal on a percentage. The second is below the precision of
+        # every input this figure is derived from, and a column of "92.37%"
+        # against "88.41%" invites a comparison at a resolution the model does
+        # not have.
+        return f"{value:,.1f}%"
+    # Whole units above the rate threshold, decimals below it — the same rule
+    # `format_money` applies, so a figure keeps its shape across the product.
+    return f"{value:,.2f}" if abs(value) < 100 else f"{value:,.0f}"
 
 
 def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                               url_prefix: str = "/api/insights"):
     bp = Blueprint("insights", __name__, url_prefix=url_prefix)
+
+    def _gateway() -> Any:
+        """
+        The gateway the reasoning agent already holds.
+
+        Not a second `LLMGateway()`. The budget is cumulative and SHARED
+        across every holder of the token — 100 requests a day for the whole
+        product — and a second client keeps its own counters, so two objects
+        each believing they have the full allowance is how the limit gets
+        exceeded rather than respected. It also carries the per-execution
+        state `begin_execution` sets.
+        """
+        if orchestrator is None:
+            return None
+        agent = (orchestrator.services or {}).get("reasoning_agent")
+        return getattr(agent, "gateway", None)
 
     def _resolve_state(project_id: str, user_id: str) -> Any:
         """
@@ -545,6 +1294,8 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
         variant = f"insights:v{_PAYLOAD_VERSION}:{scope_arg}:{entity_id or ''}"
 
         def compute() -> Dict[str, Any]:
+            from netgravity.orchestrator.reasoning.card import plain_voice
+
             _, state = _resolve_state(project_id, user_id)
             try:
                 result, pack = _briefing_for(state, scope, entity_id, question,
@@ -556,6 +1307,10 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 raise NotFoundError(str(exc)) from exc
 
             briefing = result.briefing
+            # The rungs this briefing has already spent, filled in rank order
+            # as the cards are serialised. Shared across the whole list on
+            # purpose: it is what stops six cards printing one sentence.
+            claimed: set = set()
             return {
                 "project_id": project_id,
                 "snapshot_id": snapshot_id,
@@ -563,9 +1318,15 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 "scenario_id": state.scenario_id,
                 "scope": scope_arg,
                 "entity_id": entity_id,
+                # A comprehension, and ORDER MATTERS inside it: each card
+                # spends the rung it used, so the ones after it reach for a
+                # different one. Python evaluates this left to right, and the
+                # insights arrive already ranked, so the most important finding
+                # gets first pick.
                 "insights": [
                     _serialise_insight(item, i, scope=scope_arg,
-                                       entity_id=entity_id, pack=pack)
+                                       entity_id=entity_id, pack=pack,
+                                       claimed=claimed)
                     for i, item in enumerate(briefing.kpi_insights)
                 ],
                 # The policy constants a threshold line may be drawn at, so the
@@ -580,11 +1341,27 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
                 # The recommendation is ONE string chosen by the evidence, not a
                 # list of options. A list would imply the engine had ranked
                 # alternatives it has not evaluated.
-                "recommendation": briefing.recommendation,
-                "opening": briefing.opening,
-                "context": briefing.context,
-                "key_drivers": list(briefing.key_drivers),
-                "limitation": briefing.limitation,
+                #
+                # In plain voice, like the insights above it. It reaches the
+                # Insights page as the one recommendation that ranks the
+                # findings rather than following from any single one, and a
+                # page of reports with one paragraph of "I recommend" in the
+                # middle of it reads as two different documents.
+                "recommendation": plain_voice(briefing.recommendation or ""),
+                # THE CHANGE BEHIND THAT SENTENCE, when the solved rows justify
+                # one. The page's headline button read "Open scenario planner"
+                # — hardcoded in the browser, identical on every network, and a
+                # destination rather than a decision. With this it names the
+                # intervention and opens the scenario already filled in.
+                #
+                # The SENTENCE is still the engine's; this only says what the
+                # button under it does. `{}` on a network that needs no change,
+                # in which case the button falls back to the planner.
+                "action": _strategic_action(pack) or {},
+                "opening": plain_voice(briefing.opening or ""),
+                "context": plain_voice(briefing.context or ""),
+                "key_drivers": [plain_voice(d) for d in briefing.key_drivers],
+                "limitation": plain_voice(briefing.limitation or ""),
                 "suggested_questions": list(briefing.suggested_questions),
                 "missing_information": [m.model_dump(mode="json")
                                         for m in briefing.missing_information],
@@ -611,6 +1388,110 @@ def create_insights_blueprint(orchestrator: Optional[Orchestrator] = None,
             return body
         return analysis_service.get(
             snapshot_id, snapshot.data_version, compute, variant=variant)
+
+    # ------------------------------------------------------------------
+    @bp.route("/<insight_id>/document", methods=["GET"])
+    @require_auth
+    @rate_limit("insights.document", limit=30, window_seconds=60)
+    def insight_document(insight_id: str):
+        """
+        One finding, as a document somebody can take into a meeting.
+
+        WHY THIS EXISTS. The deep-dive page shows the conclusion, the figures
+        it cites and the role each played. That is the right amount for a
+        screen and the wrong amount for the conversation that follows it: the
+        first question asked of a capacity finding in a steering committee is
+        which figures it rests on and what the model could not see, and the
+        answer has to survive being forwarded to somebody who will never open
+        this application.
+
+        NOTHING IS COMPUTED HERE. Every figure is the `display_value` the
+        evidence pack already carries, written out verbatim — the same rule
+        the screens follow. The document restates the run; it does not
+        re-derive it.
+
+        The writer itself is `netgravity.reporting`, which knows nothing about
+        insights: the demand forecast is asked the same question ("which
+        series, which method, what history") and will build the same shape.
+        """
+        from netgravity.reporting import build_derivation_docx, narrate
+
+        project_id = str(request.args.get("project_id") or "").strip()
+        if not project_id:
+            raise ValidationError("A project_id is required.")
+
+        scope_arg = str(request.args.get("scope") or "NETWORK").strip().upper()
+        if scope_arg not in _ALLOWED_SCOPES:
+            raise ValidationError(
+                f"scope must be one of {', '.join(sorted(_ALLOWED_SCOPES))}.")
+        entity_id = str(request.args.get("entity_id") or "").strip() or None
+        if scope_arg in {"FACILITY", "LANE"} and not entity_id:
+            raise ValidationError(f"scope={scope_arg} requires an entity_id.")
+        scope = ReasoningScope(scope_arg)
+
+        # THE SAME CALL THE LIST ROUTE MAKES, cache and all.
+        #
+        # This route used to resolve the twin state and run its own reasoning
+        # pass. `GET /api/insights` does not: it is cached per network version,
+        # because a briefing is derived data about one version of one network.
+        # So the list a reader is looking at and the list this route searched
+        # were two different computations, and they diverged the moment a
+        # hydration published a fresher state — the reasoning pass wrote a
+        # slightly different headline, the id is a digest of the headline, and
+        # the download 404'd on the finding filling the screen.
+        #
+        # Going through `_briefing_analysis` means the record this document is
+        # built from IS the record the browser rendered, byte for byte.
+        analysis = _briefing_analysis(project_id, scope_arg, scope, entity_id,
+                                      "", False)
+
+        record = next((r for r in analysis.get("insights") or []
+                       if r.get("id") == insight_id), None)
+        if record is None:
+            raise NotFoundError(
+                f"'{insight_id}' is not a finding on this network's current "
+                f"analysis. Reload the page to pick up the current findings.")
+
+        report = _derivation_for(record, analysis)
+
+        # THE PART A MODEL IS ALLOWED TO WRITE.
+        #
+        # The tables above are the engine's and are complete; what they do not
+        # do is join up. A reader who was not in the room gets a correct
+        # derivation and still has to work out why three figures add to one
+        # conclusion, which is exactly the "black box" complaint a table of
+        # numbers does not answer.
+        #
+        # `narrate` verifies every figure it writes against the figures in the
+        # report and drops any sentence quoting one that is not there, so the
+        # worst case is a shorter passage rather than a fabricated number under
+        # a letterhead. It raises nothing: a gateway that is unconfigured, over
+        # budget or unreachable produces a document without this section, never
+        # a failed download.
+        narration = narrate(report, _gateway(), purpose="insight_document")
+        report.narrative = list(narration.paragraphs)
+        # The note is printed only when there is something for it to explain:
+        # a passage that was written, or one that was written and withheld. An
+        # unconfigured gateway is not a fact about this analysis, and a line
+        # about a missing service in a document about a network reads as a
+        # caveat on the network.
+        report.narrative_note = (
+            narration.note
+            if (narration.paragraphs or narration.source == "rejected") else "")
+
+        payload = build_derivation_docx(report)
+
+        response = make_response(payload)
+        response.headers["Content-Type"] = (
+            "application/vnd.openxmlformats-officedocument"
+            ".wordprocessingml.document")
+        # `attachment` because this is a file to keep, not a page to read. The
+        # filename is what the reader will look for in a downloads folder a
+        # week later, so it names the finding rather than the id.
+        response.headers["Content-Disposition"] = (
+            f'attachment; filename="{report.filename()}"')
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @bp.errorhandler(ApplicationError)
     def _insight_error(exc: ApplicationError):

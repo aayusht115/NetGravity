@@ -20,6 +20,7 @@
  */
 
 import { apiClient } from '../api-client.js';
+import { CONFIG } from '../config.js';
 import { getActiveProjectId } from '../project-context.js';
 
 export const insightService = {
@@ -40,6 +41,31 @@ export const insightService = {
     } catch (err) {
       return null;
     }
+  },
+
+  /**
+   * One finding, as a .docx a reader can take into a meeting.
+   *
+   * UNLIKE the other methods here this one THROWS. They return null because
+   * an insight feed is additive to a dashboard and a reasoning failure must
+   * not stop the KPIs rendering — but a download is something a person just
+   * asked for, and a button that silently does nothing is the worst possible
+   * answer to a click.
+   */
+  async downloadDerivation(insightId, options = {}) {
+    // SCOPE COMES FROM THE RECORD, not from an assumption here.
+    //
+    // This sent `scope: 'NETWORK'` unconditionally. The deep dive opens a
+    // facility-scoped finding as readily as a network one, and the server
+    // looks the id up inside the briefing for the scope it was asked for — so
+    // every download from a facility finding answered 404 about an id that
+    // was on the screen.
+    const scope = String(options.scope || 'NETWORK').toUpperCase();
+    return apiClient.download(`/api/insights/${encodeURIComponent(insightId)}/document`, {
+      project_id: options.projectId || getActiveProjectId(),
+      scope,
+      entity_id: (scope === 'NETWORK') ? undefined : (options.entityId || undefined),
+    }, { timeout: CONFIG.DOCUMENT_TIMEOUT_MS });
   },
 
   /** Insights scoped to one facility. Same failure contract as above. */

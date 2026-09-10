@@ -300,6 +300,22 @@ class FacilityRecord(BaseModel):
     # If left at 1e12, treated as unlimited (plant always satisfies supply)
     production_capacity_units_per_period: float = 1e12
 
+    # Capacity AVAILABLE in each modelled period, keyed by the period's key as
+    # a string ("1" … "12"). Unit: units/period.
+    #
+    # The optimiser models demand month by month and used to repeat the rated
+    # capacity above in every month, while the client's own capacity table —
+    # what was actually available in each month, after downtime, shift patterns
+    # and maintenance — was kept for reporting only. A seasonal restriction
+    # therefore never reached the plan. Empty means "no monthly figure stated",
+    # and every month binds at the rated capacity, which is what it always did.
+    #
+    # CAPPED AT THE RATED CAPACITY, never above it. Closures, disruptions and
+    # mode policies remove or shrink a site by setting `capacity_units_per_period`
+    # and nothing else; an uncapped monthly figure would let a site those paths
+    # had zeroed keep shipping at what the table said.
+    capacity_by_period: Dict[str, float] = Field(default_factory=dict)
+
     # Minimum throughput if facility is open
     # Unit: units/period — C3 constraint (optional, see config.minimum_throughput_enabled)
     min_throughput_per_period: float = 0.0
@@ -363,6 +379,10 @@ class FacilityRecord(BaseModel):
     # Metadata
     region:  Optional[str] = None
     country: Optional[str] = None
+    # Utilisation the client RECORDED, latest period of their capacity table
+    # (used over available). A measurement, not a solver output: it sits beside
+    # the simulated utilisation and is never substituted for it.
+    observed_utilization_pct: Optional[float] = None
     tags:    List[str]     = Field(default_factory=list)
 
     @field_validator("capacity_units_per_period", "production_capacity_units_per_period")
@@ -481,6 +501,47 @@ class FacilityRecord(BaseModel):
         if self.is_plant_or_supplier and self.production_capacity_units_per_period < 1e11:
             return self.production_capacity_units_per_period
         return self.capacity_units_per_period
+
+    def production_limit(self) -> Optional[float]:
+        """
+        A plant's production limit, where it is a SEPARATE limit.
+
+        None for anything that is not a plant or supplier, for a limit left at
+        the "not set" default, and for a production figure equal to the
+        throughput capacity: ingestion writes the one uploaded capacity into
+        both fields, and one figure written twice is one limit, not two.
+        """
+        if not self.is_plant_or_supplier:
+            return None
+        production = self.production_capacity_units_per_period
+        if production is None or production >= 1e11:
+            return None
+        handling = self.capacity_units_per_period
+        if abs(production - handling) <= 1e-6 * max(1.0, abs(handling)):
+            return None
+        return float(production)
+
+    def period_limit(self, period: Any) -> Tuple[float, str]:
+        """
+        The capacity that binds this site in one period, and which limit it is.
+
+        Returns `(units, limit)`, `limit` being "HANDLING" (the rated capacity),
+        "AVAILABLE" (the month's stated availability, where lower) or
+        "PRODUCTION" (a plant's separate production limit, where lower still).
+        The MILP bounds each period by `units`, and every utilisation figure is
+        reported against the same number — so a plant whose production limit
+        binds reads full, not two-thirds empty behind a throughput figure it
+        can never reach.
+        """
+        rated = float(self.capacity_units_per_period)
+        units, limit = rated, "HANDLING"
+        available = (self.capacity_by_period or {}).get(str(period))
+        if available is not None and float(available) < rated:
+            units, limit = max(float(available), 0.0), "AVAILABLE"
+        production = self.production_limit()
+        if production is not None and production < units:
+            units, limit = production, "PRODUCTION"
+        return units, limit
 
 
 # ---------------------------------------------------------------------------
@@ -987,7 +1048,15 @@ class CanonicalNetwork(BaseModel):
         """Compute a deterministic hash of input data for reproducibility."""
         payload = json.dumps(
             {
-                "facilities": [f.model_dump() for f in self.facilities],
+                # A field added later and left empty is dropped from the
+                # fingerprint, so every network uploaded before it keeps the
+                # identity it was registered under. A network that DOES state
+                # monthly capacity is a different network and hashes as one.
+                "facilities": [
+                    {k: v for k, v in f.model_dump().items()
+                     if not (k in ("capacity_by_period", "observed_utilization_pct")
+                             and v in (None, {}))}
+                    for f in self.facilities],
                 "products":   [p.model_dump() for p in self.products],
                 "demands":    [d.model_dump() for d in self.demands],
                 "lanes":      [ln.model_dump() for ln in self.lanes],

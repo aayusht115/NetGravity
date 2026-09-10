@@ -126,6 +126,87 @@ class ApiClient {
     return 'req_' + Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
   }
 
+  /**
+   * Fetch a FILE, with the same credentials every other call uses.
+   *
+   * `request()` reads the body as JSON or as text, so a .docx came back as a
+   * mangled string. This is the same transport — the session cookie, the
+   * request id, the timeout — returning the bytes and the name the server
+   * asked the browser to save them under.
+   *
+   * Deliberately not `window.open(url)`, which is the short way to do this
+   * and the wrong one: it cannot send the bearer token a harness uses, it
+   * loses the error body on a 4xx (the reader gets a blank tab instead of a
+   * reason), and a popup blocker eats it.
+   */
+  /**
+   * Fetch a file, with the server's own filename.
+   *
+   * `options.timeout` because the default request budget is 30 seconds and a
+   * document is not a request: building one runs a solve and, where the
+   * gateway is configured, a text-generation call the gateway itself allows
+   * 60 seconds for. Inheriting REQUEST_TIMEOUT_MS aborted the fetch while the
+   * server was still writing the file, and the reader saw "Could not build
+   * the document" for a document that was built.
+   */
+  async download(endpoint, params = {}, options = {}) {
+    const query = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== undefined && v !== null),
+    ).toString();
+    const url = this._buildUrl(endpoint) + (query ? `?${query}` : '');
+
+    const headers = new Headers();
+    if (this.token) headers.set('Authorization', `Bearer ${this.token}`);
+    headers.set('X-Request-ID', this._generateRequestId());
+
+    // A DOWNLOAD IS NOT ALWAYS A GET.
+    //
+    // This was hard-wired to GET, which is right for a document identified by
+    // its id and wrong for one built from a SELECTION: the KPI workbook is
+    // scoped by the list of facilities on screen, and a list that can run to
+    // every site in a large network does not belong in a query string. So the
+    // method and body are honoured, with the same double-submit CSRF token
+    // every other unsafe request on this client carries — without it the
+    // server refuses the POST and the button reports a failure that is really
+    // a missing header.
+    const method = (options.method || 'GET').toUpperCase();
+    let body;
+    if (options.body !== undefined && method !== 'GET') {
+      headers.set('Content-Type', 'application/json');
+      body = JSON.stringify(options.body);
+    }
+    if (UNSAFE_METHODS.has(method) && !headers.has(CSRF_HEADER)) {
+      const csrf = readCookie(CSRF_COOKIE);
+      if (csrf) headers.set(CSRF_HEADER, csrf);
+    }
+
+    const controller = new AbortController();
+    const budget = options.timeout || CONFIG.REQUEST_TIMEOUT_MS;
+    const timeout = setTimeout(() => controller.abort(), budget);
+    try {
+      const response = await fetch(url, {
+        method, headers, body, credentials: 'include', signal: controller.signal,
+      });
+      if (!response.ok) {
+        // The server's own reason, where it sent one, rather than "download
+        // failed".
+        let detail = null;
+        try { detail = await response.json(); } catch (e) { detail = null; }
+        throw ApplicationError.fromHttp(response.status, detail || {});
+      }
+      // `filename="…"` off the Content-Disposition the server set, so the
+      // file is named by whoever built it rather than by the URL.
+      const disposition = response.headers.get('content-disposition') || '';
+      const match = /filename="?([^"]+)"?/i.exec(disposition);
+      return {
+        blob: await response.blob(),
+        filename: match ? match[1] : 'download',
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async request(endpoint, options = {}) {
     const url = this._buildUrl(endpoint);
     const headers = new Headers(options.headers || {});

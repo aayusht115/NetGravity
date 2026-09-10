@@ -93,6 +93,19 @@ _CAPABILITY_WORDS = (
     "what kind of questions", "what sort of questions", "help me get started",
 )
 
+#: A message that is nothing but a greeting.
+#:
+#: Matched against the WHOLE message rather than searched for inside it, which
+#: is the difference between recognising "hi" and hijacking "which site is
+#: highest?". Trailing punctuation and a leading "hi there" are allowed; a
+#: greeting with a question attached is not a greeting, it is the question.
+_GREETING_RE = re.compile(
+    r"^(?:hi|hii+|hey+|hello+|hiya|howdy|yo|greetings|namaste"
+    r"|good\s+(?:morning|afternoon|evening|day))"
+    r"(?:\s+(?:there|netgravity|net\s*gravity|all|team))?$",
+    re.I,
+)
+
 _STATUS_WORDS = ("how many", "list the", "show me the list", "which facilities",
                  "what facilities", "count of", "number of", "do we have",
                  "inventory of", "which warehouses", "what warehouses")
@@ -102,8 +115,28 @@ _STATUS_WORDS = ("how many", "list the", "show me the list", "which facilities",
 #: transportation cost?" needs a solve, and answering it with a facility count
 #: would be answering a different question.
 _METRIC_WORDS = ("cost", "spend", "utilisation", "utilization", "sla",
+                 # The ADJECTIVE, not only the noun. "Which distribution centre
+                 # is most utilised?" is one of the six questions this product
+                 # suggests on the assistant's own opening screen, and it
+                 # classified as UNKNOWN whenever the model tier was not
+                 # available to catch it.
+                 "utilised", "utilized",
                  "service level", "fill rate", "carbon", "emission",
                  "throughput", "savings", "objective")
+
+#: "Which site is MOST utilised", "which scenario has the LOWEST cost".
+#:
+#: A superlative over a metric is a question about the current state as plainly
+#: as "what is the current cost" is — it just does not use any of the phrasings
+#: `_CURRENT_STATE_WORDS` lists. Both suggested questions that asked this way
+#: fell through every rule and reached the base agent as UNKNOWN.
+#:
+#: Only ever consulted alongside a metric word, so "which site is largest" —
+#: a question about the network's shape rather than its solved performance —
+#: is untouched.
+_SUPERLATIVE_WORDS = ("most ", "least ", "highest", "lowest", "largest",
+                      "smallest", "biggest", "worst", "best", "tightest",
+                      "busiest", "cheapest", "most expensive", "top ")
 
 #: Phrasing that asks about the CURRENT state of such a metric.
 _CURRENT_STATE_WORDS = ("current", "today", "right now", "at the moment",
@@ -134,7 +167,14 @@ _EXPLAIN_WORDS = ("why is", "why are", "why does", "why did", "explain",
 #: these needs the optimum, not the resilience registry — see `_classify`.
 _SOLVED_OUTCOME_WORDS = ("unserved", "unmet", "not served", "shortfall",
                          "stranded", "infeasible", "capacity breach",
-                         "open facilit", "closed facilit", "below 100")
+                         "open facilit", "closed facilit", "below 100",
+                         # The POSITIVE half of the same fact. How much demand
+                         # is served exists only in a solve, exactly as how
+                         # much is not does — and "How much of my demand is
+                         # served, and how much is not?" is another of the six
+                         # suggested questions that reached UNKNOWN.
+                         "demand is served", "demand served",
+                         "is my demand served", "demand fill")
 
 #: Words that point back at the previous turn, making a short message a genuine
 #: follow-up rather than a new request. See `_is_elliptical`.
@@ -187,6 +227,18 @@ _SCENARIO_LANGUAGE = (
     "decommission", "take offline", "offline", "mothball",
     *_AMBIGUOUS_CLOSURE_VERBS,
 )
+
+#: Intents that cannot be executed without a concrete scenario to run.
+#:
+#: Both of these hand the MILP a list of overrides. With no runnable spec there
+#: is nothing to override, and the workflow does not degrade gracefully — it
+#: solves the baseline and would label the answer hypothetical, or it fails in
+#: `scenario.create` and takes the whole execution down. Asking one question is
+#: the only outcome that helps the person who typed it.
+_SCENARIO_INTENTS_NEEDING_A_SPEC = frozenset({
+    Intent.SCENARIO_ANALYSIS,
+    Intent.SCENARIO_COMPARISON,
+})
 
 #: Phrasing that makes a request UNAMBIGUOUSLY a what-if about a named node.
 #: Deliberately much narrower than `_SCENARIO_LANGUAGE`: this list is used to
@@ -522,6 +574,20 @@ class ConversationalNLU:
         # you do?" carries no metric, status or forecast vocabulary and fell
         # through all of them to UNKNOWN; "what questions can I ask you?"
         # contains "ask" and reached EXPLANATION, which solves.
+        # A BARE GREETING, before anything else and for the same reason.
+        #
+        # "hello" carries no metric, status or scenario vocabulary, so it fell
+        # through every rule below to UNKNOWN — and the UNKNOWN reply opens
+        # "I could not work out what you would like me to do" and then lists
+        # every distribution centre with its internal id. That was the first
+        # thing a new user saw. A greeting is a request for orientation, and
+        # the orientation answer already exists.
+        if _GREETING_RE.match((text or "").strip().rstrip("!?.,")):
+            return (Intent.CAPABILITY_QUERY, [], "rules", 0.95,
+                    "A greeting. Answered with what this assistant can do, "
+                    "from the planner's workflow catalogue; no engine runs.",
+                    None, False)
+
         if any(w in lowered for w in _CAPABILITY_WORDS):
             return (Intent.CAPABILITY_QUERY, [], "rules", 0.95,
                     "A question about what this assistant can do. Answered "
@@ -572,8 +638,16 @@ class ConversationalNLU:
         # A metric question about current state genuinely needs the optimum.
         # Checked before delegating, because the base agent's state vocabulary
         # does not cover "what is the current transportation cost?".
+        #
+        # A SUPERLATIVE counts as asking about the current state. "Which
+        # distribution centre is most utilised?" names a metric and asks for
+        # the extreme of it, which is a solved quantity and nothing else — but
+        # it uses none of the "what is the / how much" phrasings, so it fell
+        # through to the model tier and returned UNKNOWN whenever that tier was
+        # unavailable.
         if (mentions_metric and not is_explanatory
-                and any(w in lowered for w in _CURRENT_STATE_WORDS)):
+                and (any(w in lowered for w in _CURRENT_STATE_WORDS)
+                     or any(w in lowered for w in _SUPERLATIVE_WORDS))):
             return (Intent.NETWORK_STATE_QUERY, [], "rules", 0.8,
                     "Question about a computed metric; requires an optimum.",
                     None, False)
@@ -596,6 +670,18 @@ class ConversationalNLU:
         #
         # Deliberately NARROW: feasibility vocabulary only, and risk vocabulary
         # still wins. Cost, utilisation and SLA explanations are unchanged.
+        # A solved outcome asked about PLAINLY, not explained. "How much of my
+        # demand is served, and how much is not?" asks for a figure that exists
+        # only in a solve and asks for it directly — no "why", so the
+        # explanatory branch below never saw it, and no metric word, so the
+        # branch above never did either. It fell between the two.
+        if (not is_explanatory and not mentions_risk
+                and any(w in lowered for w in _SOLVED_OUTCOME_WORDS)):
+            return (Intent.NETWORK_STATE_QUERY, [], "rules", 0.75,
+                    "A solved outcome asked about directly; the figure exists "
+                    "only in an optimum.",
+                    None, False)
+
         if (is_explanatory and not mentions_risk
                 and any(w in lowered for w in _SOLVED_OUTCOME_WORDS)):
             return (Intent.NETWORK_STATE_QUERY, [], "rules", 0.75,
@@ -763,24 +849,40 @@ class ConversationalNLU:
                 if not disambiguated:
                     return AmbiguityKind.AMBIGUOUS_INTENT
 
-            # A what-if with nothing to vary. "Reduce Delhi capacity" states no
-            # quantity; "Reduce it by 20%" states one but not what it applies
-            # to. Either way there is no override to give the MILP, and running
-            # a scenario workflow with an empty override list would analyse the
-            # baseline and label the answer hypothetical — a wrong answer
-            # dressed as a right one. The MILP needs a number and we will not
-            # invent one.
-            #
-            # A spec that names an action but no magnitude is in exactly the
-            # same position as no spec at all: there is still no override to
-            # give the MILP. "A major customer is expanding in Delhi" resolves
-            # to CHANGE_DEMAND with nothing to multiply by, and it used to pass
-            # this check because a spec existed — then failed three steps later
-            # inside `ScenarioBuilder` with "CHANGE_DEMAND requires a
-            # demand_multiplier", taking the whole execution to FAILED. The
-            # user needed one question, not a dead run.
-            if not scenarios or not any(s.is_runnable for s in scenarios):
-                return AmbiguityKind.MISSING_PARAMETER
+        # A WHAT-IF WITH NOTHING TO VARY, whether or not it named a site.
+        #
+        # "Reduce Delhi capacity" states no quantity; "Reduce it by 20%" states
+        # one but not what it applies to. Either way there is no override to
+        # give the MILP, and running a scenario workflow with an empty override
+        # list would analyse the baseline and label the answer hypothetical — a
+        # wrong answer dressed as a right one. The MILP needs a number and we
+        # will not invent one.
+        #
+        # A spec that names an action but no magnitude is in exactly the same
+        # position as no spec at all. "A major customer is expanding in Delhi"
+        # resolves to CHANGE_DEMAND with nothing to multiply by, and it used to
+        # pass this check because a spec existed — then failed three steps
+        # later inside `ScenarioBuilder` with "CHANGE_DEMAND requires a
+        # demand_multiplier", taking the whole execution to FAILED.
+        #
+        # It also lived inside the `resolved_ids` branch, so it only ever fired
+        # for a scenario that had already resolved a facility — and skipped
+        # exactly the scenarios that need it most. "Should I open a new
+        # distribution centre?" resolves nobody and specifies nothing: it went
+        # through with an empty spec list, `scenario.create` failed with "No
+        # scenario specification at index 0", the execution went to FAILED, the
+        # endpoint answered 500, and the assistant told the user it could not
+        # reach the analysis engine. Asking one question is a conversation; a
+        # failed execution is a dead end.
+        #
+        # AFTER the closure-verb check above, not before. That check produces a
+        # strictly better diagnosis when it applies: "what if we close it
+        # instead?" has no runnable spec either, but the system knows the
+        # subject and needs only to know WHICH operation — which it can ask as
+        # three concrete options rather than as an open question.
+        if intent in _SCENARIO_INTENTS_NEEDING_A_SPEC and not any(
+                s.is_runnable for s in scenarios):
+            return AmbiguityKind.MISSING_PARAMETER
 
         # A resolved node with no recognisable operation: "Delhi.", "Do
         # something about Delhi." Previously these returned UNKNOWN with
@@ -1134,6 +1236,30 @@ class ConversationalNLU:
                 ],
             )
             clarity = IntentClarity.AMBIGUOUS
+        elif not resolved_ids:
+            # A WHAT-IF ABOUT THE WHOLE NETWORK, with nothing concrete to run.
+            #
+            # "Should I open a new distribution centre?" and "what if things
+            # get worse?" name no site, so every branch below — all of which
+            # are written about `target` — would have asked "What change to
+            # that facility should I model?" about a question that mentioned no
+            # facility at all. The reader is then answering a question they did
+            # not ask, and the options offered are the wrong ones.
+            #
+            # The examples are the network-wide changes the scenario engine
+            # actually models, so an answer to this question is runnable.
+            clarification = ClarificationRequest(
+                kind=kind,
+                question=(
+                    "What change should I model? I can test a demand change "
+                    "(\"demand grows 20%\"), a freight-rate change (\"freight "
+                    "up 10%\"), a change to the delivery promise (\"one day "
+                    "tighter\"), or a change at a named site — closing it, "
+                    "changing its capacity, or opening it."
+                ),
+                missing_parameter="scenario_override",
+            )
+            clarity = IntentClarity.INSUFFICIENT_INFORMATION
         elif mentions_capacity:
             clarification = ClarificationRequest(
                 kind=kind,

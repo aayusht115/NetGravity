@@ -17,7 +17,7 @@ the snapshot store.
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from netgravity.schemas.network import (
     CanonicalNetwork,
@@ -33,6 +33,98 @@ from netgravity.orchestrator.schemas.requests import ScenarioActionType, Scenari
 logger = logging.getLogger(__name__)
 
 MARKET_ROLES = {NodeRole.MARKET, NodeRole.CUSTOMER}
+
+
+#: The schema's "no capacity stated" default is 1e12, and production capacity
+#: treats anything at or above 1e11 as "not set". Neither is a size, so neither
+#: can anchor a price per unit of capacity.
+_UNSTATED_CAPACITY = 1e11
+
+
+def capacity_fixed_cost(fixed_cost_per_year: float, current_capacity: float,
+                        new_capacity: float) -> float:
+    """
+    A site's annual fixed cost once its capacity has changed.
+
+    WHY THIS EXISTS
+    ---------------
+    A capacity scenario used to change the ceiling and nothing else, so on the
+    model's terms capacity was free. Measured on a complete upload: +20,000
+    units at a DC carrying C$38.4M a year left a C$701,441,045.37 network at
+    C$701,441,045.37, to the cent. More room can only ever let the solver find
+    a plan at least as cheap, so every capacity scenario read as "costs
+    nothing, may save something" — which no expansion does.
+
+    THE ASSUMPTION, stated rather than hidden
+    ------------------------------------------
+    Added capacity costs what the site's existing capacity costs per unit: the
+    fixed cost scales pro rata with the new ceiling. That is the linear
+    fixed-cost-per-unit-of-capacity reading of a capacitated site, and it is
+    the only price the upload itself supports; nothing in it states a separate
+    expansion rate.
+
+    A REDUCTION KEEPS ITS COST. Capacity lost to a disruption, a lease still
+    being paid, or a line down for maintenance does not hand its fixed cost
+    back, so the cheaper reading is not assumed on the client's behalf.
+
+    A site with no fixed cost in the upload stays at zero. The caller reports
+    that as unpriced; it is never presented as a price.
+    """
+    fixed = float(fixed_cost_per_year or 0.0)
+    current = float(current_capacity or 0.0)
+    new = float(new_capacity or 0.0)
+    if (fixed <= 0.0 or current <= 0.0 or current >= _UNSTATED_CAPACITY
+            or new <= current):
+        return fixed
+    return fixed * (new / current)
+
+
+def planned_capacity(fac: Any, *, multiplier: Optional[float] = None,
+                     delta_units: Optional[float] = None,
+                     set_units: Optional[float] = None,
+                     limit: Optional[str] = None) -> Tuple[float, float]:
+    """
+    `(handling_after, production_after)` for one site — the one definition the
+    builder applies, the validator checks and the API prices.
+
+    A plant has two limits, and the uploaded capacity is written into both. So:
+
+      * the ORDINARY change moves handling, and moves production with it where
+        the two were that one uploaded figure — otherwise the minimum never
+        moved and a plant expansion changed nothing;
+      * "BOTH" moves both, "HANDLING" only handling, "PRODUCTION" only
+        production (a plant with no production figure of its own takes its
+        handling capacity as the starting point).
+    """
+    def apply(current: float) -> float:
+        if multiplier is not None:
+            return current * multiplier
+        if set_units is not None:
+            return float(set_units)
+        return current + float(delta_units or 0.0)
+
+    kind = (limit or "").strip().upper() or None
+    handling = float(getattr(fac, "capacity_units_per_period", 0.0) or 0.0)
+    raw = getattr(fac, "production_capacity_units_per_period", None)
+    production = float(raw) if raw is not None else 1e12
+    stated = bool(getattr(fac, "is_plant_or_supplier", False)) and production < _UNSTATED_CAPACITY
+    same = stated and abs(production - handling) <= 1e-6 * max(1.0, abs(handling))
+
+    if kind == "PRODUCTION":
+        return handling, apply(production if stated else handling)
+    if kind == "HANDLING":
+        return apply(handling), production
+    if kind == "BOTH":
+        return apply(handling), (apply(production) if stated else production)
+    return apply(handling), (apply(production) if same else production)
+
+
+def usable_capacity(fac: Any, handling: float, production: float) -> float:
+    """What a site can actually ship per period given both of its limits."""
+    if (bool(getattr(fac, "is_plant_or_supplier", False))
+            and production < _UNSTATED_CAPACITY):
+        return min(handling, production)
+    return handling
 
 
 class ScenarioBuilder:
@@ -69,6 +161,8 @@ class ScenarioBuilder:
             working, overrides = self._change_capacity(
                 working, spec.facility_ids, spec.capacity_multiplier,
                 spec.capacity_delta_units, spec.capacity_set_units,
+                limit=spec.capacity_limit,
+                recurring_cost_per_year=spec.expansion_fixed_cost_per_year,
             )
         elif spec.action == ScenarioActionType.CHANGE_DEMAND:
             working, overrides = self._change_demand(
@@ -262,17 +356,29 @@ class ScenarioBuilder:
         multiplier: Optional[float],
         delta_units: Optional[float] = None,
         set_units: Optional[float] = None,
+        *,
+        limit: Optional[str] = None,
+        recurring_cost_per_year: Optional[float] = None,
     ) -> Tuple[CanonicalNetwork, List[str]]:
         """
-        Scale capacity by a ratio, shift it by units, or set it outright.
+        Scale capacity by a ratio, shift it by units, or set it outright — at
+        the limit the caller names, at the price the caller states.
 
-        The three are kept distinct all the way down. "Reduce by 2,000" and
-        "set to 2,000" coincide only by accident, and collapsing one into the
-        other requires knowing the current capacity — so a wrong guess changes
-        the answer rather than degrading it.
+        The three forms are kept distinct all the way down. "Reduce by 2,000"
+        and "set to 2,000" coincide only by accident, and collapsing one into
+        the other requires knowing the current capacity — so a wrong guess
+        changes the answer rather than degrading it.
+
+        WHAT MOVES: see `planned_capacity`. WHAT IT COSTS: a stated recurring
+        cost is added to the site's fixed cost as stated; otherwise the capacity
+        the site can actually USE is priced pro rata to its existing fixed cost
+        (`capacity_fixed_cost`) — so raising a limit that does not bind costs
+        nothing and buys nothing, and the description says which limit binds.
+        MONTHLY AVAILABILITY moves with the handling capacity, in proportion, so
+        an expansion is not held at last year's available figure.
 
         Exactly one form applies; `ScenarioValidator` has already rejected
-        several and none, and has already refused a delta that would go
+        several and none, and has already refused a change that would go
         negative.
         """
         supplied = [v for v in (multiplier, delta_units, set_units) if v is not None]
@@ -290,26 +396,65 @@ class ScenarioBuilder:
             )
 
         targets = set(facility_ids)
+        kind = (limit or "").strip().upper() or None
 
-        def new_capacity(current: float) -> float:
-            if multiplier is not None:
-                return current * multiplier
-            if set_units is not None:
-                return float(set_units)
-            return current + float(delta_units)  # type: ignore[arg-type]
+        def changed(fac: FacilityRecord) -> FacilityRecord:
+            handling = fac.capacity_units_per_period
+            production = fac.production_capacity_units_per_period
+            new_handling, new_production = planned_capacity(
+                fac, multiplier=multiplier, delta_units=delta_units,
+                set_units=set_units, limit=kind)
+            before = usable_capacity(fac, handling, production)
+            after = usable_capacity(fac, new_handling, new_production)
+            if recurring_cost_per_year is not None:
+                fixed = float(fac.fixed_cost_per_year) + float(recurring_cost_per_year)
+            else:
+                fixed = capacity_fixed_cost(fac.fixed_cost_per_year, before, after)
+            update: Dict[str, Any] = {
+                "capacity_units_per_period": new_handling,
+                "production_capacity_units_per_period": new_production,
+                "fixed_cost_per_year": fixed,
+            }
+            if fac.capacity_by_period and handling > 0 and new_handling != handling:
+                ratio = new_handling / handling
+                update["capacity_by_period"] = {
+                    k: max(float(v) * ratio, 0.0)
+                    for k, v in fac.capacity_by_period.items()}
+            return fac.model_copy(update=update)
 
-        facilities = [
-            fac.model_copy(update={
-                "capacity_units_per_period": new_capacity(fac.capacity_units_per_period),
-            }) if fac.id in targets else fac
-            for fac in network.facilities
-        ]
+        before = {fac.id: fac for fac in network.facilities}
+        facilities = [changed(fac) if fac.id in targets else fac
+                      for fac in network.facilities]
+        after = {fac.id: fac for fac in facilities}
+
         def describe(fid: str) -> str:
             if multiplier is not None:
-                return f"CHANGE_CAPACITY {fid} x{multiplier}"
-            if set_units is not None:
-                return f"CHANGE_CAPACITY {fid} = {float(set_units):,.0f} units/period"
-            return f"CHANGE_CAPACITY {fid} {float(delta_units):+,.0f} units/period"
+                text = f"CHANGE_CAPACITY {fid} x{multiplier}"
+            elif set_units is not None:
+                text = f"CHANGE_CAPACITY {fid} = {float(set_units):,.0f} units/period"
+            else:
+                text = f"CHANGE_CAPACITY {fid} {float(delta_units):+,.0f} units/period"
+            if kind:
+                text += f" ({kind.lower()} limit)"
+            was, now = before.get(fid), after.get(fid)
+            if was is None or now is None:
+                return text
+            if now.fixed_cost_per_year != was.fixed_cost_per_year:
+                basis = ("as stated" if recurring_cost_per_year is not None
+                         else "pro rata to capacity")
+                text += (f"; fixed cost {was.fixed_cost_per_year:,.0f} -> "
+                         f"{now.fixed_cost_per_year:,.0f} per year, {basis}")
+            separate = now.production_limit()
+            if separate is not None and separate < now.capacity_units_per_period:
+                text += (f"; production capacity {separate:,.0f} "
+                         f"units/period still limits it")
+            elif separate is not None and separate > now.capacity_units_per_period:
+                text += (f"; handling capacity "
+                         f"{now.capacity_units_per_period:,.0f} units/period "
+                         f"still limits it")
+            if now.capacity_by_period != was.capacity_by_period:
+                text += "; monthly available capacity scaled in proportion"
+            return text
 
         overrides = [describe(fid) for fid in facility_ids]
         return network.model_copy(update={"facilities": facilities}), overrides

@@ -155,6 +155,24 @@ class TestAConfiguredServerThatRejectedIsNotAnUnconfiguredOne:
 
 class TestAnOperatorCanSeeThisBeforeSomebodyPressesSend:
 
+    @pytest.fixture(autouse=True)
+    def _no_ambient_smtp_config(self, monkeypatch):
+        """
+        These tests build a config to assert what it SAYS about itself, so the
+        machine's own mail settings must not fill in the gaps they are about.
+
+        `ActionAgentConfig` defaults every SMTP field from the environment, so
+        on a developer's machine with `.env` populated the "unauthenticated
+        relay" below silently acquired a real username, became fully
+        configured, and reported no reason — the test failed while the code
+        was right. It passed in CI only because CI has no mail configured,
+        which is the worst way for a test to pass.
+        """
+        for var in ("NETGRAVITY_SMTP_HOST", "NETGRAVITY_SMTP_PORT",
+                    "NETGRAVITY_SMTP_USERNAME", "NETGRAVITY_SMTP_PASSWORD",
+                    "NETGRAVITY_SMTP_FROM", "NETGRAVITY_SMTP_USE_TLS"):
+            monkeypatch.delenv(var, raising=False)
+
     def test_the_sender_describes_itself(self, unconfigured):
         state = EmailSender(unconfigured).describe()
         assert state["channel"] == "none"

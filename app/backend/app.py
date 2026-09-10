@@ -184,11 +184,21 @@ try:
         logger.warning("rate limit counters remain per-process: %s", exc)
 
     if _database.kind == "sqlite":
+        # NOT REFUSED, deliberately. `persistence.require_supported_store()`
+        # exists and would refuse to serve on a file; it is not called, because
+        # the PostgreSQL move is deferred and the only thing it could do today
+        # is stop the application starting. Wire it into this block on the day
+        # a Postgres URL exists to move to.
+        _STORAGE["supported"] = False
         logger.warning(
-            "Running on SQLite (%s). It has one writer: fine for a single "
-            "process, wrong for two. Set NETGRAVITY_DATABASE_URL for PostgreSQL.",
+            "Running on SQLite (%s). This is not the supported configuration: "
+            "SQLite has one writer, so two application processes serialise "
+            "behind a file lock and eventually collide. Set "
+            "NETGRAVITY_DATABASE_URL for PostgreSQL.",
             _database.path,
         )
+    else:
+        _STORAGE["supported"] = True
 except Exception as exc:  # noqa: BLE001
     _STORAGE = {"engine": None, "error": f"{type(exc).__name__}: {exc}"}
     logger.error("STORAGE UNAVAILABLE — %s", exc)

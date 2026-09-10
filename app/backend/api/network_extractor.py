@@ -125,6 +125,43 @@ def _has(cols_lower: Dict[str, Any], *names: str) -> bool:
     return any(n in cols_lower for n in names)
 
 
+#: Fixed-cost column names that state a YEAR, and ones that state a MONTH.
+#:
+#: The extractor accepted all of these into one field and the assembler
+#: multiplied every one of them by twelve, on the convention that these
+#: workbooks quote a monthly figure. For a column literally named
+#: `annual_fixed_cost` that is a TWELVEFOLD OVERSTATEMENT — and the
+#: assumption line it wrote said so out loud without noticing: "fixed cost
+#: read as ₹30,000,000/month and annualised to ₹360,000,000/year", for a
+#: column whose header was the word annual.
+#:
+#: On a single-period solve the effect lands whole: the year's fixed cost is
+#: charged as one month's, so opening one distribution centre on a network
+#: costing ₹23M a month added ₹31M and the screen reported +134%.
+_FIXED_COST_YEARLY = ("annual_fixed_cost", "fixed_cost_per_year",
+                      "fixed_cost_annual", "yearly_fixed_cost",
+                      "fixed_cost_yearly")
+_FIXED_COST_MONTHLY = ("fixed_cost_monthly", "fixed_cost_per_month",
+                       "monthly_fixed_cost")
+
+
+def _fixed_cost_basis(column: Any) -> str:
+    """
+    'year', 'month', or 'unknown' — what the header itself claims.
+
+    UNKNOWN IS NOT A GUESS. A bare `fixed_cost` states no period, and the
+    convention in these workbooks is a monthly figure, so it is still
+    annualised; the difference is that the assumption line says the header
+    named no period, which is the sentence that gets the column renamed.
+    """
+    name = str(column or "").strip().lower().replace(" ", "_")
+    if name in _FIXED_COST_YEARLY or "year" in name or "annual" in name:
+        return "year"
+    if name in _FIXED_COST_MONTHLY or "month" in name:
+        return "month"
+    return "unknown"
+
+
 #: Column aliases, kept in one place so a new client dialect is a one-line
 #: change rather than an edit scattered through the parsing branches.
 FACILITY_ID_COLS = ("facility_id", "plant_id", "dc_id", "site_id", "node_id", "warehouse_id")
@@ -154,8 +191,88 @@ MODE_COLS = ("transport_mode", "mode", "transportation_mode", "shipping_mode",
 HANDLING_COLS = ("handling_cost_per_unit", "handling_cost", "variable_cost_per_unit",
                  "cost_per_unit_handled", "handling_rate")
 COST_TYPE_COLS = ("cost_type", "cost_category", "expense_type")
+#: Where the client says how a cost line BEHAVES. Overrides the reading of the
+#: line's name in `_cost_behaviour`.
+COST_BEHAVIOUR_COLS = ("cost_behaviour", "cost_behavior", "fixed_or_variable",
+                       "cost_nature", "cost_class", "fixed_variable")
+
+#: How a warehouse cost line behaves when the table does not say.
+#:
+#: FIXED lines are paid whether or not a unit moves — the site's rent, lease,
+#: insurance, the 3PL management fee, planned maintenance. VARIABLE lines move
+#: with volume — labour, utilities, packaging. Maintenance and utilities are
+#: semi-fixed in practice; the reading chosen here is stated in the notes every
+#: time it is applied, and a Cost_Behaviour column overrides it.
+_FIXED_COST_LINES = frozenset({
+    "RENT", "LEASE", "DEPRECIATION", "INSURANCE", "PROPERTY_TAX", "RATES",
+    "SECURITY", "MAINTENANCE", "3PL_MANAGEMENT", "MANAGEMENT", "MANAGEMENT_FEE",
+    "OVERHEAD", "ADMIN", "IT", "FACILITY",
+})
+_VARIABLE_COST_LINES = frozenset({
+    "LABOR", "LABOUR", "UTILITIES", "ENERGY", "POWER", "PACKAGING",
+    "CONSUMABLES", "HANDLING", "PICKING", "FUEL", "TEMP_LABOR", "TEMP_LABOUR",
+})
+
+
+def _cost_behaviour(line: str, stated: str = "") -> str:
+    """"FIXED", "VARIABLE" or "UNCLASSIFIED" for one warehouse cost line."""
+    said = str(stated or "").strip().upper()
+    if said.startswith("FIX"):
+        return "FIXED"
+    if said.startswith("VAR"):
+        return "VARIABLE"
+    name = str(line or "").strip().upper().replace(" ", "_").replace("-", "_")
+    if name in _FIXED_COST_LINES:
+        return "FIXED"
+    if name in _VARIABLE_COST_LINES:
+        return "VARIABLE"
+    return "UNCLASSIFIED"
 EFFECTIVE_DATE_COLS = ("effective_date", "valid_from", "effective_from", "as_of")
 CURRENCY_COLS = ("currency", "ccy", "rate_currency", "currency_code")
+
+#: A forecast that ARRIVED WITH THE UPLOAD, rather than one this build
+#: produced. Deliberately disjoint from `DEMAND_COLS`: a projection read as an
+#: observation becomes the network's current demand and is then solved against
+#: as if it had already happened.
+#:
+#: `Forecast_Units` matched no alias at all, so a forecast sheet fell past every
+#: branch of `classify_sheet` to "markets" — and its rows overwrote the real
+#: market master, replacing stated names, SLAs and uploaded coordinates with a
+#: bare market id and a hash-grid position. A sheet headed `Quantity`, `Units`
+#: or `Volume` was worse: those ARE demand aliases, so the projection was read
+#: as observed history, set every market's current demand from a future period,
+#: and was handed to the forecasting engine as the history to fit.
+FORECAST_COLS = ("forecast_units", "forecast_quantity", "forecast",
+                 "forecast_demand", "forecast_volume", "forecast_qty",
+                 "projected_demand", "projected_units", "projected_volume",
+                 "planned_demand", "planned_units")
+#: The band, when the upload states one. Absent is absent: a forecast with no
+#: stated bounds is drawn as a line, never as a band this build invented for it.
+FORECAST_P10_COLS = ("forecast_p10", "p10", "forecast_low", "forecast_lower",
+                     "low", "lower_bound")
+FORECAST_P50_COLS = ("forecast_p50", "p50", "forecast_median", "median")
+FORECAST_P90_COLS = ("forecast_p90", "p90", "forecast_high", "forecast_upper",
+                     "high", "upper_bound")
+
+#: Words in a SHEET NAME that say the table is a projection, and words that say
+#: it is not. Used only to break one tie: a sheet whose quantity column is
+#: named `Quantity`, `Units` or `Volume` is identical to demand history in its
+#: column signature, and nothing else can separate the two.
+#:
+#: Columns decide everywhere else, and that stays true — this fires only when
+#: the columns have already been read as `demand_history`. It is a deliberate
+#: trade between two failure modes. Reading a forecast as history is silent and
+#: corrupts the solve: it sets every market's current demand from a future
+#: period and hands the projection to the forecaster as the history to fit.
+#: Reading history as a forecast is loud — the screen says "uploaded forecast"
+#: and the model reports no history — so it is caught in seconds. The decision
+#: is recorded as a note either way, so it is never silent in either direction.
+_FORECAST_NAME_WORDS = ("forecast", "projection", "projected", "plan",
+                        "planned", "outlook", "budget")
+#: Beats the words above: a sheet named `Actual_vs_Forecast` states both, and a
+#: table holding actuals must never be reclassified off its own column meaning.
+_OBSERVED_NAME_WORDS = ("actual", "history", "historic", "observed", "vs",
+                        "versus")
 
 #: ISO 4217 codes this build recognises when a header names its unit, e.g.
 #: `Monthly_Cost_USD`. Deliberately a closed list: a three-letter suffix that
@@ -361,7 +478,24 @@ def infer_geography(nodes: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def classify_sheet(df: "pd.DataFrame") -> str:
+def names_a_forecast(sheet_name: str) -> bool:
+    """
+    True when a sheet's NAME says it holds a projection and nothing says
+    otherwise.
+
+    Both lists must be consulted: `Actual_vs_Forecast` contains "forecast" and
+    is not a forecast table, and a sheet that states both is exactly the one
+    whose columns must be trusted instead.
+    """
+    text = str(sheet_name or "").lower()
+    if not text:
+        return False
+    if any(w in text for w in _OBSERVED_NAME_WORDS):
+        return False
+    return any(w in text for w in _FORECAST_NAME_WORDS)
+
+
+def classify_sheet(df: "pd.DataFrame", sheet_name: str = "") -> str:
     """
     Decide what one sheet *is*, from its column signature.
 
@@ -374,13 +508,39 @@ def classify_sheet(df: "pd.DataFrame") -> str:
 
     Order matters: the time-series sheets are checked before the master sheets
     they share an id column with.
+
+    `sheet_name` is consulted for exactly one decision — see
+    `_FORECAST_NAME_WORDS` — and is optional, so every existing caller keeps
+    working and every sheet is still identified by its columns first.
     """
     cols = {str(c).strip().lower() for c in df.columns}
     has = lambda *n: any(x in cols for x in n)  # noqa: E731
 
     # --- time series first (they share id columns with the master tables) ---
     if has(*PERIOD_COLS):
+        # An UPLOADED forecast is checked before demand history, and only when
+        # the sheet states no demand column. The two share Period and Market_ID
+        # entirely, so nothing but the quantity column tells them apart.
+        #
+        # A sheet carrying both states actuals and a projection side by side. It
+        # stays `demand_history` — the observed half must never be lost to the
+        # forecast branch — and the forecast pass in
+        # `build_network_from_dataframes` reads the extra column off it, so
+        # neither half is discarded.
+        if has(*MARKET_ID_COLS) and has(*FORECAST_COLS) and not has(*DEMAND_COLS):
+            return "uploaded_forecast"
         if has(*MARKET_ID_COLS) and has(*DEMAND_COLS):
+            # `Period | Market_ID | Quantity` is what a forecast looks like
+            # when its quantity column happens to be named with a demand
+            # alias. The columns cannot separate the two; the sheet's own name
+            # can, and only when it says one thing unambiguously.
+            #
+            # A sheet stating a forecast column AND a demand column is exempt:
+            # it has already said it is both, and no name may collapse it to
+            # one. `Demand_Plan` reads as a projection to the name test, which
+            # would have discarded the actuals sitting in the column beside it.
+            if not has(*FORECAST_COLS) and names_a_forecast(sheet_name):
+                return "uploaded_forecast"
             return "demand_history"
         if has(*FACILITY_ID_COLS):
             return "capacity_history"
@@ -492,6 +652,15 @@ _COLUMN_ROLES: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
         ("Product ID", PRODUCT_ID_COLS),
         ("Demand quantity", DEMAND_COLS),
     ),
+    "uploaded_forecast": (
+        ("Period", PERIOD_COLS),
+        ("Market ID", MARKET_ID_COLS),
+        ("Product ID", PRODUCT_ID_COLS),
+        ("Forecast quantity", FORECAST_COLS),
+        ("Forecast P10", FORECAST_P10_COLS),
+        ("Forecast P50", FORECAST_P50_COLS),
+        ("Forecast P90", FORECAST_P90_COLS),
+    ),
     "capacity_history": (
         ("Facility ID", FACILITY_ID_COLS),
         ("Period", PERIOD_COLS),
@@ -508,6 +677,7 @@ _COLUMN_ROLES: Dict[str, Tuple[Tuple[str, Tuple[str, ...]], ...]] = {
     "warehouse_costs": (
         ("Facility ID", FACILITY_ID_COLS),
         ("Cost type", COST_TYPE_COLS),
+        ("Cost behaviour", COST_BEHAVIOUR_COLS),
         ("Handling cost per unit", HANDLING_COLS),
         ("Monthly facility cost", ("monthly_cost", "monthly_cost_usd", "monthly_cost_inr",
                                    "cost_per_month", "monthly_amount")),
@@ -534,6 +704,7 @@ SHEET_TEMPLATE_NAMES: Dict[str, str] = {
     "lanes": "Lanes",
     "products": "Products",
     "demand_history": "Demand_History",
+    "uploaded_forecast": "Forecast",
     "capacity_history": "Capacity_History",
     "lane_rates": "Lane_Rates",
     "warehouse_costs": "Warehouse_Costs",
@@ -718,6 +889,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
     products: List[Dict[str, Any]] = []
     demand_history: List[Dict[str, Any]] = []
     capacity_history: List[Dict[str, Any]] = []
+    uploaded_forecast: List[Dict[str, Any]] = []
     signals: List[Dict[str, Any]] = []
     notes: List[str] = []
 
@@ -728,8 +900,15 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
     # Classify every sheet up front so each is read exactly once, in an order
     # that lets later passes join onto earlier ones.
     by_role: Dict[str, List[Tuple[str, pd.DataFrame]]] = {}
+    #: Sheets whose NAME, not their columns, decided they were a forecast.
+    #: Recorded so the decision appears in the notes rather than being taken
+    #: silently — it is the one place a name overrides a column signature.
+    named_as_forecast: List[str] = []
     for sheet_name, df in tables.items():
-        by_role.setdefault(classify_sheet(df), []).append((sheet_name, df))
+        role = classify_sheet(df, sheet_name)
+        if role == "uploaded_forecast" and classify_sheet(df) == "demand_history":
+            named_as_forecast.append(str(sheet_name))
+        by_role.setdefault(role, []).append((sheet_name, df))
 
     def sheets(role: str):
         return by_role.get(role, [])
@@ -809,6 +988,10 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 # plants together came to more than twice the fixed cost the
                 # network reported. Both stay None when the column is absent.
                 "fixedCost": _num(row, fixed_col),
+                # WHAT PERIOD THAT FIGURE IS FOR, from the column's own name.
+                # Carried rather than inferred downstream, because the
+                # assembler cannot see the header this came out of.
+                "fixedCostBasis": _fixed_cost_basis(fixed_col),
                 "handlingCost": _num(row, handling_col),
                 # One-time cost to open, for a site that is not open yet. None
                 # when the sheet states none — NOT zero, which the solver would
@@ -832,6 +1015,15 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         city_col = _pick(cl, "city", "location", "town")
         sla_col = _pick(cl, "service_sla_days", "sla_days", "sla", "service_level_days")
         demand_col = _pick(cl, *DEMAND_COLS)
+        # The required fill rate for this market. `DemandRecord.service_level`
+        # has always existed and defaults to 0.95, and the service module
+        # scores the plan against it — but this path never read the column, so
+        # every market on every upload was scored against 0.95 whether or not
+        # the workbook stated its own target. Deliberately NOT matched against
+        # the "service_level_days" spelling above: that is an SLA in days and
+        # is already claimed by `sla_col`.
+        svc_col = _pick(cl, "service_level", "csl", "service_level_pct",
+                        "service_level_target", "target_fill_rate", "fill_rate")
 
         for idx, row in df.iterrows():
             m_id = _text(row, id_col)
@@ -854,6 +1046,11 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 # from that history below, never defaulted.
                 "demand": _num(row, demand_col),
                 "slaDays": _num(row, sla_col),
+                # None when the sheet does not state one, so the record keeps
+                # its documented default rather than being given a target the
+                # client never set. The completeness gate reads the same
+                # absence and asks for it.
+                "serviceLevel": _num(row, svc_col),
                 "priority": None,
                 "region": region,
                 "coordsExact": exact,
@@ -882,6 +1079,12 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         dest_type_col = _pick(cl, "destination_type", "dest_type", "to_type")
         active_col = _pick(cl, "active", "is_active", "status")
         cap_col = _pick(cl, "capacity_units", "lane_capacity", "max_units")
+        # The client’s own emission factor for this corridor.
+        # `CarbonModule.get_emission_factor()` takes it in preference to the
+        # GLEC table it otherwise uses for the lane’s mode, so this is the one
+        # carbon input an upload can actually change.
+        ef_col = _pick(cl, "emission_factor_override", "emission_factor",
+                       "carbon_factor", "co2_factor", "kg_co2_per_tonne_km")
 
         for _, row in df.iterrows():
             f_id, t_id = _text(row, from_col), _text(row, to_col)
@@ -921,6 +1124,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 "cost": _num(row, rate_col),
                 "leadTime": _num(row, lead_col),
                 "capacity": _num(row, cap_col),
+                "emissionFactor": _num(row, ef_col),
                 # Flow is a solver OUTPUT, not an input.
                 "flow": None,
                 # The uploaded mode, or None. This was the literal "ROAD" for
@@ -968,17 +1172,31 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
     #: formatting slip; it was the wrong unit on an authoritative figure.
     currency: Optional[str] = None
     currency_basis: str = ""
+    #: Every fuel surcharge the rates table stated, one entry per priced row.
+    surcharges: List[float] = []
     for _, df in sheets("lane_rates"):
         cl = {str(c).strip().lower(): c for c in df.columns}
         lane_col = _pick(cl, *LANE_ID_COLS)
         prod_col = _pick(cl, *PRODUCT_ID_COLS)
         rate_col = _pick(cl, *RATE_COLS)
         currency_col = _pick(cl, *CURRENCY_COLS)
+        surcharge_col = _pick(cl, "fuel_surcharge_pct", "fuel_surcharge",
+                              "surcharge_pct", "surcharge")
         for _, row in df.iterrows():
             lid, rate = _text(row, lane_col), _num(row, rate_col)
             if not lid or rate is None:
                 continue
             rates_by_lane.setdefault(lid, {})[_text(row, prod_col) or "*"] = rate
+            # Recorded because it is what the completeness gate’s "Contract
+            # Rate Card / Surcharge Details" field asks about. It is not
+            # applied to any rate here: `CostEngine` carries one
+            # network-level `fuel_surcharge_pct`, and quietly folding a
+            # per-row percentage into a lane rate would change the optimal
+            # answer on an assumption nobody made.
+            if surcharge_col is not None:
+                pct = _num(row, surcharge_col)
+                if pct is not None:
+                    surcharges.append(pct)
             if currency_col is not None:
                 ccy = _text(row, currency_col).upper()
                 if ccy:
@@ -1027,6 +1245,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 "labelled with a unit the data does not support."
             )
 
+    rate_card_priced = 0
     if rates_by_lane:
         priced = 0
         for lane in lanes:
@@ -1037,6 +1256,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
             if lane.get("cost") is None:
                 lane["cost"] = sum(per_product.values()) / len(per_product)
             priced += 1
+        rate_card_priced = priced
         notes.append(
             f"Freight rates joined from a separate rates table for {priced} of "
             f"{len(lanes)} lane(s), keyed by lane id."
@@ -1059,8 +1279,33 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
     #
     # So rows are reduced to one per (facility, cost type), keeping the latest
     # effective date, before anything is added up.
+    # FIXED OR VARIABLE, DECIDED ONCE PER LINE.
+    #
+    # Each line in this table states the same money twice: what it costs a
+    # month, and that monthly figure spread over the units handled — rent of
+    # 164,667 a month is also "2.63 per unit". Every line used to be charged at
+    # its per-unit figure, rent included, and the monthly figures were read and
+    # never used. So a network whose only fixed costs were in this table was
+    # assembled with a fixed cost of zero at every site: closing a DC saved
+    # nothing but freight, and adding capacity cost nothing at all.
+    #
+    # Charging both halves would be the opposite error — the same rent twice.
+    # Each line is therefore classified, from a cost-behaviour column where the
+    # table has one and otherwise from its name (`_cost_behaviour`), and counted
+    # exactly once:
+    #
+    #   * a FIXED line is fixed cost at its monthly figure, and its per-unit
+    #     figure is not charged;
+    #   * a VARIABLE line is charged per unit handled, and its monthly figure is
+    #     not charged — it is that rate times some past month's volume;
+    #   * a line neither settles is charged per unit, as before, and named in
+    #     the notes so the client can classify it.
+    #
+    # A fixed cost on the FACILITIES sheet is the client's own consolidated
+    # figure and wins; the table's fixed lines are then not added to it.
     handling_by_facility: Dict[str, Dict[str, Tuple[str, float]]] = {}
     monthly_by_facility: Dict[str, Dict[str, Tuple[str, float]]] = {}
+    stated_behaviour: Dict[str, str] = {}
     wc_rows = 0
     for _, df in sheets("warehouse_costs"):
         cl = {str(c).strip().lower(): c for c in df.columns}
@@ -1070,6 +1315,7 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         monthly_col = _pick(cl, "monthly_cost", "monthly_cost_usd", "monthly_cost_inr",
                             "cost_per_month", "monthly_amount")
         date_col = _pick(cl, *EFFECTIVE_DATE_COLS)
+        behaviour_col = _pick(cl, *COST_BEHAVIOUR_COLS)
         for _, row in df.iterrows():
             fid = _text(row, fac_col)
             if not fid:
@@ -1077,6 +1323,9 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
             wc_rows += 1
             # A table with no cost-type column states one line per site.
             line = _text(row, type_col).upper() or "TOTAL"
+            said = _text(row, behaviour_col)
+            if said:
+                stated_behaviour[line] = said
             eff = _text(row, date_col)  # ISO dates sort lexicographically
             per_unit = _num(row, unit_col)
             monthly = _num(row, monthly_col)
@@ -1089,32 +1338,95 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 if prev_m is None or eff >= prev_m[0]:
                     monthly_by_facility[fid][line] = (eff, monthly)
 
-    if handling_by_facility:
-        applied = 0
+    def behaviour(line: str) -> str:
+        return _cost_behaviour(line, stated_behaviour.get(line, ""))
+
+    if handling_by_facility or monthly_by_facility:
+        handling_sites = 0
+        fixed_sites = 0
+        fixed_on_sheet: List[str] = []
+        consolidated_handling: List[str] = []
+        classes: Dict[str, set] = {"FIXED": set(), "VARIABLE": set(),
+                                   "UNCLASSIFIED": set()}
         for node in plants + dcs:
-            lines = handling_by_facility.get(node["id"])
-            if not lines:
+            fid = node["id"]
+            per_unit = handling_by_facility.get(fid) or {}
+            monthly = monthly_by_facility.get(fid) or {}
+            if not per_unit and not monthly:
                 continue
-            # Only fills a gap. A handling cost stated on the facilities sheet
-            # is the client's own consolidated figure and wins.
-            if node.get("handlingCost") is None:
-                node["handlingCost"] = round(sum(v for _d, v in lines.values()), 4)
-                node["handlingCostLines"] = {k: v for k, (_d, v) in lines.items()}
-                applied += 1
-        if applied:
-            notes.append(
-                f"Handling cost per unit for {applied} site(s) built from the "
-                f"warehouse cost table: the sum of its cost lines "
-                f"({', '.join(sorted({l for v in handling_by_facility.values() for l in v}))[:120]}), "
-                f"taking the latest effective date where a line is restated. "
-                f"{wc_rows} row(s) were read."
-            )
-    if monthly_by_facility:
-        for node in plants + dcs:
-            lines = monthly_by_facility.get(node["id"])
-            if lines:
+            for line in set(per_unit) | set(monthly):
+                classes[behaviour(line)].add(line)
+            fixed_lines = {line: v for line, (_d, v) in monthly.items()
+                           if behaviour(line) == "FIXED"}
+            # Per unit: every line that is not fixed, plus a fixed line the
+            # table states ONLY per unit — with no monthly figure it cannot be
+            # a fixed cost, and dropping it would drop the money.
+            unit_lines = {line: v for line, (_d, v) in per_unit.items()
+                          if behaviour(line) != "FIXED" or line not in monthly}
+            if unit_lines and node.get("handlingCost") is None:
+                node["handlingCost"] = round(sum(unit_lines.values()), 4)
+                node["handlingCostLines"] = dict(unit_lines)
+                handling_sites += 1
+            elif node.get("handlingCost") is not None and fixed_lines:
+                consolidated_handling.append(fid)
+            if fixed_lines:
+                if node.get("fixedCost") is None:
+                    node["fixedCost"] = round(sum(fixed_lines.values()), 2)
+                    node["fixedCostBasis"] = "month"
+                    node["fixedCostSource"] = "warehouse_costs"
+                    node["fixedCostLines"] = dict(fixed_lines)
+                    fixed_sites += 1
+                else:
+                    fixed_on_sheet.append(fid)
+            if monthly:
                 node["operatingCostPerMonth"] = round(
-                    sum(v for _d, v in lines.values()), 2)
+                    sum(v for _d, v in monthly.values()), 2)
+
+        def listed(lines: set) -> str:
+            return ", ".join(sorted(lines))[:160]
+
+        notes.append(
+            "Warehouse cost lines were classified once, so no line is charged "
+            f"twice: fixed at their monthly figure ({listed(classes['FIXED']) or 'none'}) "
+            f"and variable per unit handled ({listed(classes['VARIABLE']) or 'none'}). "
+            "A line's per-unit figure and its monthly figure state the same money, "
+            f"so only one of them is used. {wc_rows} row(s) were read, taking the "
+            "latest effective date where a line is restated."
+        )
+        if classes["UNCLASSIFIED"]:
+            notes.append(
+                f"Cost line(s) {listed(classes['UNCLASSIFIED'])} do not say whether "
+                "they are fixed or variable and their names do not settle it, so "
+                "they are charged per unit handled. Add a Cost_Behaviour column "
+                "stating FIXED or VARIABLE to classify them."
+            )
+        if handling_sites:
+            notes.append(
+                f"Handling cost per unit for {handling_sites} site(s) is the sum of "
+                "their variable cost lines per unit handled."
+            )
+        if fixed_sites:
+            notes.append(
+                f"Fixed cost for {fixed_sites} site(s) is the sum of their fixed "
+                "cost lines per month in the warehouse cost table; the per-unit "
+                "figures of those lines are an allocation of the same money and are "
+                "not charged."
+            )
+        if fixed_on_sheet:
+            notes.append(
+                f"{len(fixed_on_sheet)} site(s) state a fixed cost on the facilities "
+                "sheet as well as fixed lines in the warehouse cost table. The "
+                "facilities figure is used and the table's fixed lines are not added "
+                f"to it: {', '.join(sorted(fixed_on_sheet))[:200]}."
+            )
+        if consolidated_handling:
+            notes.append(
+                f"{len(consolidated_handling)} site(s) state a handling cost per unit "
+                "on the facilities sheet and fixed lines in the warehouse cost table. "
+                "Both are used; if the facilities figure already includes those "
+                "lines, they are counted twice: "
+                f"{', '.join(sorted(consolidated_handling))[:200]}."
+            )
 
     # ---- Demand history ----------------------------------------------
     # The client's demand is a monthly series per market and product. The
@@ -1199,6 +1511,73 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
                 "available": _num(row, avail_col),
                 "used": _num(row, used_col),
             })
+
+    # ---- Uploaded forecast -------------------------------------------
+    # A forecast the upload BROUGHT WITH IT, kept strictly apart from the
+    # observed history above. Read after it, so `current` demand has already
+    # been taken from the latest OBSERVED period and cannot be reached from
+    # here.
+    #
+    # Read from `uploaded_forecast` sheets and from any `demand_history` sheet
+    # that also carries a forecast column, so a table stating actuals and a
+    # projection side by side loses neither half to the other's role.
+    for _, df in sheets("uploaded_forecast") + sheets("demand_history"):
+        cl = {str(c).strip().lower(): c for c in df.columns}
+        qty_col = _pick(cl, *FORECAST_COLS)
+        if qty_col is None:
+            continue
+        period_col = _pick(cl, *PERIOD_COLS)
+        mkt_col = _pick(cl, *MARKET_ID_COLS)
+        prod_col = _pick(cl, *PRODUCT_ID_COLS)
+        p10_col = _pick(cl, *FORECAST_P10_COLS)
+        p50_col = _pick(cl, *FORECAST_P50_COLS)
+        p90_col = _pick(cl, *FORECAST_P90_COLS)
+        for _, row in df.iterrows():
+            m_id, qty = _text(row, mkt_col), _num(row, qty_col)
+            if not m_id or qty is None:
+                continue
+            uploaded_forecast.append({
+                "period": _text(row, period_col),
+                "marketId": m_id,
+                "productId": _text(row, prod_col) or None,
+                "mean": qty,
+                # None, never widened and never invented. A band the upload
+                # does not state is a claim about uncertainty nobody made.
+                "p10": _num(row, p10_col),
+                "p50": _num(row, p50_col),
+                "p90": _num(row, p90_col),
+            })
+
+    if named_as_forecast:
+        notes.append(
+            "These sheets state a demand-shaped quantity column but are named "
+            "as a projection, so they were read as a forecast rather than as "
+            "observed history: " + ", ".join(named_as_forecast[:6]) + ". Rename "
+            "the sheet, or head the column 'Forecast_Units', if that is wrong."
+        )
+
+    if uploaded_forecast:
+        fc_periods = sorted({r["period"] for r in uploaded_forecast if r["period"]})
+        span = f" ({fc_periods[0]} to {fc_periods[-1]})" if fc_periods else ""
+        notes.append(
+            f"{len(uploaded_forecast)} forecast row(s) across "
+            f"{len(fc_periods)} period(s){span} were read as a PROJECTION. They "
+            f"set no market's current demand, are not part of the observed "
+            f"history, and no model was fitted to them."
+        )
+        # A forecast period that is also an observed period restates something
+        # already measured. Reported, and neither value is dropped: the
+        # observation stays the observation and the forecast stays the forecast.
+        observed_labels = {d["period"] for d in demand_history if d["period"]}
+        overlap = sorted(set(fc_periods) & observed_labels)
+        if overlap:
+            notes.append(
+                f"{len(overlap)} forecast period(s) also appear in the demand "
+                f"history ({', '.join(overlap[:5])}"
+                f"{'…' if len(overlap) > 5 else ''}). The observed value is kept "
+                f"as the observation and the forecast as the forecast; neither "
+                f"was overwritten."
+            )
 
     # ---- External signals --------------------------------------------
     for _, df in sheets("signals"):
@@ -1294,12 +1673,28 @@ def build_network_from_dataframes(tables: Dict[str, pd.DataFrame]) -> Dict[str, 
         "lanes": lanes,
         "products": products,
         "demandHistory": demand_history,
+        #: A forecast that arrived WITH the upload. Deliberately a separate
+        #: key from `demandHistory`: nothing downstream may read a projection
+        #: as an observation, and one shared key is how that happens.
+        "uploadedForecast": uploaded_forecast,
         "capacityHistory": capacity_history,
         "signals": signals,
         "notes": notes,
         #: The money unit, from the upload. None when nothing states one.
         "currency": currency,
         "currencyBasis": currency_basis,
+        #: What the upload carried by way of a contract rate card, which is
+        #: the thing the completeness gate’s "Contract Rate Card / Surcharge
+        #: Details" field asks about. It used to look for `contracts` or
+        #: `laneRates` on this structure — two keys nothing has ever written
+        #: — so that request fired on every upload ever made, including the
+        #: ones whose workbook carried a full rates sheet with a surcharge
+        #: column. `pricedLanes` is how many lanes took a rate from it, and
+        #: `statesSurcharge` whether the sheet quoted one at all.
+        "rateCard": {
+            "pricedLanes": rate_card_priced,
+            "statesSurcharge": bool(surcharges),
+        },
         #: Where the network is, inferred from its own coordinates.
         "geography": geography,
         #: Cross-sheet foreign keys that point at nothing. Reported before
@@ -1315,6 +1710,8 @@ _FOREIGN_KEYS: Tuple[Tuple[str, Tuple[str, ...], str, str], ...] = (
     ("lane_rates", PRODUCT_ID_COLS, "products", "product"),
     ("demand_history", MARKET_ID_COLS, "markets", "market"),
     ("demand_history", PRODUCT_ID_COLS, "products", "product"),
+    ("uploaded_forecast", MARKET_ID_COLS, "markets", "market"),
+    ("uploaded_forecast", PRODUCT_ID_COLS, "products", "product"),
     ("capacity_history", FACILITY_ID_COLS, "facilities", "facility"),
     ("warehouse_costs", FACILITY_ID_COLS, "facilities", "facility"),
     ("signals", MARKET_ID_COLS, "markets", "market"),
@@ -1354,7 +1751,7 @@ def _check_referential_integrity(
 
     problems: List[Dict[str, Any]] = []
     for label, df in tables.items():
-        role = classify_sheet(df)
+        role = classify_sheet(df, label)
         cl = {str(c).strip().lower(): c for c in df.columns}
         for fk_role, id_cols, target, noun in _FOREIGN_KEYS:
             if role != fk_role:

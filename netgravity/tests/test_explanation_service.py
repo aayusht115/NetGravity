@@ -29,6 +29,7 @@ from netgravity.orchestrator.agents.reasoning_agent import ReasoningAgent
 from netgravity.orchestrator.explanation_service import ExplanationService
 from netgravity.orchestrator.explanations import (
     KIND_SCENARIO,
+    KINDS,
     ExplanationStore,
     SavedExplanation,
     fingerprint,
@@ -284,3 +285,57 @@ class TestItDegradesRatherThanFails:
         assert saved is not None
         assert saved.content["missing_data"] == extras["missing_data"]
         assert saved.content["suggestions"] == extras["suggestions"]
+
+
+class TestAKindIsAPathSegment:
+    """
+    Every kind was a bare word until one carried a chart's name after a colon
+    — `kpi_chart:peak_vs_average`. A colon cannot appear in a Windows path, so
+    `put` raised `NotADirectoryError`, the service swallowed it as a non-fatal
+    write failure, and the record was never written.
+
+    NOTHING FAILED VISIBLY, which is what made it worth a test. The
+    explanation was produced and returned, the next view reported an honest
+    miss, and the screen spent a model request every single time it was
+    opened — out of a budget shared by the whole product.
+    """
+
+    def test_a_compound_kind_round_trips(self, store):
+        kind = "kpi_chart:peak_vs_average"
+        store.put(SavedExplanation(
+            subject_id="proj1", kind=kind, result_fingerprint="fp1",
+            content={"card": {"headline": "Two sites have no room in the peak"}},
+        ))
+        saved = store.get("proj1", kind, "fp1")
+        assert saved is not None, "the write was swallowed and never landed"
+        assert saved.content["card"]["headline"].startswith("Two sites")
+
+    def test_two_charts_of_one_analysis_are_two_records(self, store):
+        """
+        The suffix is what separates them. Stripping unsafe characters instead
+        of replacing them would still be path-safe and would still be wrong
+        the moment two kinds collapsed onto one name.
+        """
+        peak = store._key("proj1", "kpi_chart:peak_vs_average")
+        stock = store._key("proj1", "kpi_chart:stock_held")
+        assert peak != stock
+        assert ":" not in peak
+
+    def test_the_kinds_that_already_existed_are_untouched(self, store):
+        """
+        A sanitiser that rewrote the plain kinds would orphan every
+        explanation already in the store.
+        """
+        for kind in KINDS:
+            if ":" in kind:
+                continue
+            assert store._key("proj1", kind) == \
+                f"orchestrator/explanations/{kind}/proj1.json"
+
+    def test_a_kind_with_nothing_usable_in_it_is_refused(self, store):
+        """
+        Silently writing to `explanations/___/` would put two unrelated kinds
+        in one file. The subject id is already refused this way.
+        """
+        with pytest.raises(ValueError):
+            store._key("proj1", "///")

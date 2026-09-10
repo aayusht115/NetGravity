@@ -918,11 +918,46 @@ class TestLLMBoundary:
         assert extract_json_value('Signals:\n[{"x": 1}]\ndone') == [{"x": 1}]
 
     def test_extract_json_still_refuses_what_is_not_json(self):
-        """No repair, no prose acceptance, no closing of truncated structures."""
+        """No prose acceptance, no repair of anything that was never an object."""
         for bad in ("not json at all", "", "42", '"a string"', "true",
-                    '{"a": 1', '{"a": 1, "b":', "{'a': 1}"):
+                    '{"a": 1', "{'a': 1}"):
             assert extract_json(bad) is None, bad
             assert extract_json_value(bad) is None, bad
+
+    def test_an_array_is_still_not_an_object(self):
+        """
+        The contract `extract_json` is written to, unchanged: every caller
+        calls `.get()` on the result immediately, so handing one a list raises
+        AttributeError deep inside an agent instead of taking the fallback
+        path it is written to take.
+        """
+        assert extract_json("[1, 2, 3]") is None
+        assert extract_json_value("[1, 2, 3]") == [1, 2, 3]
+
+    def test_a_reply_cut_off_mid_object_keeps_the_members_that_arrived(self):
+        """
+        THE ONE REPAIR, and why it is not "closing truncated structures".
+
+        The backing model bills its internal deliberation to the same
+        2,000-token output allowance it writes with, so a long deliberation
+        leaves the JSON cut off part-way. Every field that HAD arrived was
+        then discarded and the reasoning layer degraded to its template — for
+        the whole life of the deployment, invisibly, because a silent fallback
+        is what the fallback is for. It is how a scenario card came to be
+        labelled "Rule-based" on a build with a working gateway.
+
+        What is recovered is only what was COMPLETE: the trailing fragment is
+        dropped, never guessed at. A single member with no comma after it is
+        still refused, because nothing marks it as finished.
+        """
+        assert extract_json('{"a": 1, "b":') == {"a": 1}
+        assert extract_json('{"summary":"x","key_drivers":["p","q'
+                            ) == {"summary": "x", "key_drivers": ["p"]}
+        # Not a repair of a value — a boundary between two of them.
+        assert extract_json('{"a": 1, "b": 2') == {"a": 1}
+        # The best-effort reader underneath is unchanged: the repair belongs to
+        # `extract_json`, which is the one an agent calls.
+        assert extract_json_value('{"a": 1, "b":') is None
 
     def test_extract_json_refuses_a_truncated_object(self):
         """
@@ -1041,7 +1076,7 @@ class TestLLMBoundary:
                 {"network_state": {"business_network_cost": 1000.0}},
                 provenance={"business_network_cost": "milp"}, allow_llm=True)
             assert result.source == "llm", f"{label} fell back to template"
-            assert "1,000.00" in result.summary, label
+            assert "1,000" in result.summary, label
             assert result.grounding_status == "GROUNDED", (label, result.grounding_status)
             assert result.grounded_claims, label
 
@@ -1153,7 +1188,7 @@ class TestLLMBoundary:
         result = agent.reason({"network_state": {"business_network_cost": 1000.0,
                                                  "is_feasible": True}})
         assert result.source == "template"
-        assert "1,000.00" in result.summary
+        assert "1,000" in result.summary
         # The template only states values from the payload, so it must ground.
         assert result.grounding_status in ("GROUNDED", "NO_CLAIMS")
         assert result.is_grounded

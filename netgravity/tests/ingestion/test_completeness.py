@@ -53,15 +53,68 @@ def test_complete_dataset_has_no_missing_required():
 def test_complete_dataset_reports_all_optional_fields_missing():
     report = check_completeness(_complete_outcome())
     labels = {m.display_label for m in report.missing_optional}
-    assert "Carbon Emission Factor (kg CO₂/unit)" in labels
+    assert "Lane Emission Factor (kg CO₂/tonne-km)" in labels
     assert "Service Level Target (%)" in labels
     assert "Contract Rate Card / Surcharge Details" in labels
+
+
+def test_no_field_asks_for_something_nothing_reads():
+    """
+    Every field this gate asks a client for must be read by something.
+
+    It asked for `carbon_emission_factor` — a key that existed in exactly
+    three places: this registry, the alias table, and one adapter’s key map.
+    All three name the field; none reads it. No schema carried it, no record
+    builder set it and no engine consumed it, so a client who received that
+    email and sent the column would have had it read by nothing. The reason
+    given ("would let us include a carbon-impact KPI") described a KPI the
+    network already reports, computed from mode, distance and unit weight.
+
+    The check is deliberately the crude one that would have caught it: the
+    key has to appear in some source file that is not one of the three that
+    merely name it. This walks the registry rather than naming one field, so
+    the next spec added has to point at something real too.
+    """
+    import pathlib
+    from netgravity.ingestion.completeness import OPTIONAL_FIELDS, REQUIRED_FIELDS
+
+    root = pathlib.Path(__file__).resolve().parents[3]
+    naming_only = {"completeness.py", "field_aliases.py", "completeness_adapter.py"}
+    sources = [
+        path for base in ("netgravity", "app")
+        for path in (root / base).rglob("*.py")
+        if "tests" not in path.parts and path.name not in naming_only
+    ]
+    assert sources, root
+    corpus = {p: p.read_text(encoding="utf-8", errors="ignore") for p in sources}
+
+    for spec in [*REQUIRED_FIELDS, *OPTIONAL_FIELDS]:
+        readers = [p.name for p, text in corpus.items() if spec.canonical_key in text]
+        assert readers, (
+            f"{spec.display_label!r} asks a client for {spec.canonical_key!r}, "
+            f"which nothing outside the registry, the alias table and the "
+            f"adapter key map mentions — so sending it would change nothing")
 
 
 def test_has_contracts_suppresses_contract_rate_card_gap():
     report = check_completeness(_complete_outcome(), has_contracts=True)
     labels = {m.display_label for m in report.missing_optional}
     assert "Contract Rate Card / Surcharge Details" not in labels
+
+
+def test_a_field_on_the_other_sheet_it_may_live_on_counts_as_supplied():
+    """
+    A required fill rate is a demand attribute in this pipeline and a market
+    attribute in the product’s own upload, where there is no separate demand
+    sheet at all. Checking only the first spelling sent the request to every
+    client who had already answered it.
+    """
+    outcome = _complete_outcome()
+    outcome.network_rows[ContentType.MARKET][0]["service_level"] = 0.98
+
+    report = check_completeness(outcome)
+    labels = {m.display_label for m in report.missing_optional}
+    assert "Service Level Target (%)" not in labels
 
 
 def test_missing_dc_fixed_cost_is_reported_against_the_named_dc():

@@ -367,7 +367,7 @@ class TestPromptInjection:
         ))
 
         assert response.grounding_status == "GROUNDING_FAILED"
-        assert "99,999.00" not in response.reply
+        assert "99,999" not in response.reply
         assert response.results["network"]["business_network_cost"] == pytest.approx(
             1200.0, abs=1e-6
         )

@@ -66,6 +66,19 @@ DEFAULT_DB_PATH = "data/netgravity.db"
 _URL_ENV_VARS = ("NETGRAVITY_DATABASE_URL", "DATABASE_URL")
 
 
+def _sqlite_explicitly_allowed() -> bool:
+    """
+    Whether somebody has asked for a file, in so many words.
+
+    One variable, and it has to be set deliberately. The point is not to make
+    SQLite hard to reach — it is to make reaching it a DECISION that appears in
+    a deployment's configuration, where it can be reviewed, rather than the
+    thing that happens when a URL is missing.
+    """
+    value = (os.environ.get("NETGRAVITY_ALLOW_SQLITE") or "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
 def configured_database_url() -> Optional[str]:
     """The PostgreSQL URL this process should use, or None for SQLite."""
     for var in _URL_ENV_VARS:
@@ -150,10 +163,18 @@ def _legacy_schema_statements(dialect: str) -> List[str]:
 
 #: Every table the application owns, in dependency-free order. Used for
 #: reporting on /api/status and for wiping a test database.
-TABLES = ("users", "sessions", "projects", "snapshots", "scenario_networks",
-          "scenarios", "network_data", "analyses", "app_state",
-          "login_attempts", "password_resets", "mfa_enrolments",
-          "mfa_recovery_codes")
+#:
+#: IMPORTED, not restated. This was a hand-maintained tuple and it had fallen
+#: three tables behind the schema — `rate_limit_windows`, `execution_traces`
+#: and `federated_identities` were all created by migrations and named nowhere
+#: here, so `/api/status` under-reported what the store held and a test wipe
+#: left rows behind. The schema owns the list; see `migrations.py`.
+def _application_tables() -> tuple:
+    from app.backend.services.migrations import TABLE_NAMES
+    return TABLE_NAMES
+
+
+TABLES = _application_tables()
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +375,15 @@ class Database:
                     f"be reached: {type(exc).__name__}: {exc}"
                 ) from exc
         else:
+            # A FILE, and the application decides separately whether it is
+            # willing to SERVE on one — see `require_supported_store()`, which
+            # `app.py` calls at startup.
+            #
+            # The refusal is not here because this module ends with
+            # `database = Database()`, a handle built at import so the stores
+            # can bind to it. Raising in this constructor took down every
+            # import of the module, including the test suite and the migration
+            # script whose entire purpose is to read a SQLite file.
             self._backend = _SQLiteBackend(
                 path or os.environ.get("NETGRAVITY_DB_PATH", DEFAULT_DB_PATH))
             self.kind = "sqlite"
@@ -445,6 +475,44 @@ def _close_on_exit() -> None:
         database.close()
     except Exception:  # noqa: BLE001 — shutdown must not raise
         pass
+
+
+def require_supported_store(db: Optional[Database] = None) -> None:
+    """
+    Refuse to SERVE on a store this application is not supported on.
+
+    NetGravity runs on PostgreSQL. SQLite has one writer, which is fine for one
+    process and wrong for anything else: two instances behind a load balancer,
+    or a background worker beside the web process, serialise behind a file lock
+    and eventually collide — and concurrent solves already hold write
+    transactions open for tens of seconds.
+
+    Called from `app.py` at startup rather than from `Database.__init__`. The
+    library opens what it is told to open; deciding what is fit to serve on is
+    the application's job, and putting it in the constructor took down every
+    import of this module.
+
+    `NETGRAVITY_ALLOW_SQLITE=1` is the one way past it. It exists so a
+    demonstration or a developer's laptop can run without a server — and it is
+    a variable somebody has to set on purpose, which means the decision appears
+    in a deployment's configuration where it can be reviewed, instead of being
+    what happens when a URL is missing.
+    """
+    store = db if db is not None else database
+    if store.kind == "postgresql":
+        return
+    if _sqlite_explicitly_allowed():
+        return
+    raise RuntimeError(
+        "No PostgreSQL database is configured, and NetGravity is not supported "
+        "on SQLite.\n"
+        "  Set NETGRAVITY_DATABASE_URL (or DATABASE_URL) to "
+        "postgresql://user:pass@host:5432/netgravity\n"
+        "  Migrate an existing store first: "
+        "python scripts/migrate_to_postgres.py --postgres <url>\n"
+        "  To run on a local file anyway — one writer, not the supported "
+        "configuration — set NETGRAVITY_ALLOW_SQLITE=1."
+    )
 
 
 def reset_database(path: Optional[str] = None, url: Optional[str] = None) -> Database:

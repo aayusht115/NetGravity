@@ -40,7 +40,9 @@ from werkzeug.utils import secure_filename
 from app.backend.services.demand_history_store import (
     capacity_history_store,
     build_series_from_structure,
+    build_uploaded_forecast,
     demand_history_store,
+    uploaded_forecast_store,
     uploaded_signal_store,
 )
 from app.backend.services.completeness_adapter import check_structure
@@ -242,7 +244,10 @@ def upload_and_parse():
             # column with no sheet context made `Capacity_Units` ambiguous
             # between a facility's capacity and a lane's, and resolved it to
             # neither.
-            sheet_role = classify_sheet(df)
+            # The sheet's NAME is passed as well as its frame: it breaks
+            # exactly one tie, between a forecast and observed history whose
+            # column signatures are identical. See `classify_sheet`.
+            sheet_role = classify_sheet(df, sheet_name)
             for col in df.columns:
                 detected += 1
                 mapped, status, confidence = classify_column_name(col, sheet_role)
@@ -416,11 +421,41 @@ def commit_preview():
     if capacity_rows:
         capacity_history_store.put(network.network_id, capacity_rows)
 
+    # A forecast the UPLOAD brought with it.
+    #
+    # Read from the parse here; WRITTEN below, after the network is bound.
+    # `assemble_network_from_structure` has already built the network from
+    # observed demand alone, and none of this may change a number in it.
+    forecast_rows, forecast_notes = build_uploaded_forecast(structure)
+
     snapshot_id = project_registry.bind_network(
         project_id, network,
         user_id=g.current_user.user_id,
         label=f"{project.name} — uploaded",
     )
+
+    # Keyed by the network id the BOUND SNAPSHOT carries, which is not always
+    # the one we just asked the assembler to build.
+    #
+    # `SnapshotManager` addresses snapshots by the content hash of the network,
+    # so two projects uploading networks with identical content share one
+    # snapshot — and it keeps the network id of whichever registered first.
+    # `/api/forecast` resolves its project's snapshot and reads
+    # `snapshot.network.network_id`, so writing under the id passed to the
+    # assembler put the rows where nothing would ever look: an upload carrying
+    # a forecast served the engine's forecast instead, and an upload carrying
+    # none was served the forecast of whichever project owned the shared
+    # snapshot.
+    bound_network_id = (project_registry.network_id_for_snapshot(snapshot_id)
+                        or network.network_id)
+    if forecast_rows:
+        uploaded_forecast_store.put(bound_network_id, forecast_rows)
+    else:
+        # Cleared when an upload carries none, so re-uploading without a
+        # forecast sheet returns the project to its own model rather than
+        # leaving the previous upload's projection bound to a network it no
+        # longer describes.
+        uploaded_forecast_store.clear(bound_network_id)
 
     # The audit record: what was uploaded, how it was read, what was assumed,
     # and which snapshot it produced. Written here rather than derived later,
@@ -435,16 +470,23 @@ def commit_preview():
             "lanes": len(network.lanes),
             "products": len(network.products),
             "demand_history_series": len(series),
+            "uploaded_forecast_rows": len(forecast_rows),
+            # The one field that answers "is the forecast screen showing a
+            # model's answer or the one this upload supplied?".
+            "forecast_source": "uploaded" if forecast_rows else "model",
             "data_version": network.data_version,
             "currency": getattr(network, "currency", None),
         },
-        assumptions=assumptions + list(structure.get("notes") or []) + history_notes,
+        assumptions=(assumptions + list(structure.get("notes") or [])
+                     + history_notes + forecast_notes),
         issues=issues,
     )
 
     logger.info(
-        "ingestion.committed project_id=%s snapshot_id=%s facilities=%d history_series=%d",
+        "ingestion.committed project_id=%s snapshot_id=%s facilities=%d "
+        "history_series=%d forecast_rows=%d",
         project_id, snapshot_id, len(network.facilities), len(series),
+        len(forecast_rows),
     )
     return jsonify({
         "status": "BOUND",
@@ -456,10 +498,13 @@ def commit_preview():
             "lanes": len(network.lanes),
             "products": len(network.products),
             "demand_history_series": len(series),
+            "uploaded_forecast_rows": len(forecast_rows),
+            "forecast_source": "uploaded" if forecast_rows else "model",
             "data_version": network.data_version,
         },
         # Every default this assembly had to apply, in words. Shown, not hidden.
-        "assumptions": assumptions + list(structure.get("notes") or []) + history_notes,
+        "assumptions": (assumptions + list(structure.get("notes") or [])
+                        + history_notes + forecast_notes),
         "issues": issues,
         "message": (
             "Your network is bound to this project. All KPIs, scenarios and "

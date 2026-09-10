@@ -39,7 +39,8 @@ A fourth principle runs through everything: **missing is not zero.** When exposu
 | Orchestrator control plane (planning, dependencies, governance, audit) | Complete |
 | Orchestrator ↔ deterministic core integration | Complete — see [§6](#6-integration-phases) |
 | Conversational layer (chatbot → NLU → orchestrator) | Complete — see [§6](#6-integration-phases) |
-| Forecasting agent | **Not built** — requests are recognised and honestly declined |
+| Forecasting agent | Complete — per-series forecasts with uncertainty ranges, uploaded-sheet ingestion, and grounded explanations |
+| KPI analytics workspace | Complete — network / DC / plant / freight lenses, scoped filters, facility drill-downs, PDF export and on-demand chart explanations |
 | Interactive web cockpit | Demonstration build on a synthetic Case-16 fixture |
 | Authentication / multi-process persistence | **Not built** — see [§9](#9-known-limitations) |
 

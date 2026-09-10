@@ -369,16 +369,43 @@ def assemble_network_from_structure(
 
         fixed = _as_float(raw.get("fixedCost"))
         if fixed is not None and fixed > 0:
-            # The engine wants an annual figure. A monthly cost is the common
-            # convention in these workbooks, so anything that looks like a
-            # monthly figure is annualised — and either way the interpretation
-            # is stated, because reading a yearly cost as monthly would
-            # overstate fixed cost twelvefold.
-            record.fixed_cost_per_year = fixed * 12.0
-            assumptions.append(
-                f"{fid}: fixed cost read as {_money(fixed)}/month and annualised "
-                f"to {_money(record.fixed_cost_per_year)}/year."
-            )
+            # THE ENGINE WANTS AN ANNUAL FIGURE, AND THE COLUMN SAYS WHICH IT
+            # GAVE.
+            #
+            # This multiplied every fixed cost by twelve on the convention
+            # that these workbooks quote a monthly figure — including columns
+            # named `annual_fixed_cost` and `fixed_cost_per_year`, which the
+            # extractor accepts into the same field. That is a twelvefold
+            # overstatement, and on a single-period solve it lands whole: the
+            # year's fixed cost is charged as one month's, so opening one
+            # distribution centre on a network costing ₹23M a month added
+            # ₹31M and the comparison reported +134%.
+            #
+            # The basis comes from the header the figure was read out of. A
+            # header that states no period is still annualised — that IS the
+            # convention — but the assumption says so, which is the sentence
+            # that gets the column renamed.
+            basis = str(raw.get("fixedCostBasis") or "unknown").lower()
+            if basis == "year":
+                record.fixed_cost_per_year = fixed
+                assumptions.append(
+                    f"{fid}: fixed cost read as {_money(fixed)}/year, as the "
+                    f"column states, and used unchanged."
+                )
+            else:
+                record.fixed_cost_per_year = fixed * 12.0
+                if raw.get("fixedCostSource") == "warehouse_costs":
+                    stated = ("the sum of its fixed cost lines in the warehouse "
+                              "cost table, which are monthly")
+                else:
+                    stated = ("the column states a monthly figure" if basis == "month"
+                              else "the column names no period, so the monthly "
+                                   "convention for these workbooks is applied")
+                assumptions.append(
+                    f"{fid}: fixed cost read as {_money(fixed)}/month "
+                    f"({stated}) and annualised to "
+                    f"{_money(record.fixed_cost_per_year)}/year."
+                )
         facilities.append(record)
 
     for p in plants:
@@ -387,6 +414,26 @@ def assemble_network_from_structure(
         add_facility(d, NodeRole.DC)
     for m in markets:
         add_facility(m, NodeRole.MARKET)
+
+    # COST COMPLETENESS, said once where the network is built.
+    #
+    # A site with no fixed cost is not a free site: it is a site whose rent,
+    # lease and overhead the upload did not give. Every cost figure built on it
+    # is short by that amount, and that amount is what decides a closure or an
+    # expansion. The scenario planner reads the same fact off the network and
+    # marks its figures incomplete rather than presenting a priced network.
+    in_scope = [f for f in facilities
+                if f.role != NodeRole.MARKET and f.status != FacilityStatus.CLOSED]
+    unpriced_sites = [f.id for f in in_scope if f.fixed_cost_per_year <= 0]
+    if unpriced_sites:
+        assumptions.append(
+            f"Cost is incomplete: {len(unpriced_sites)} of {len(in_scope)} site(s) "
+            f"carry no fixed cost, because the upload states none for them — "
+            f"neither on the facilities sheet nor as fixed lines in a warehouse "
+            f"cost table. Their rent, lease and overhead are missing from every "
+            f"cost figure, so closing, consolidating or expanding them is priced "
+            f"on freight and handling alone: {', '.join(unpriced_sites)[:240]}."
+        )
 
     if missing_status:
         assumptions.append(
@@ -509,6 +556,61 @@ def assemble_network_from_structure(
         str(i + 1): label for i, label in enumerate(modelled_periods)
     }
 
+    # ---- Monthly available capacity, and what was recorded ------------
+    #
+    # The optimiser models these periods one by one, and used to bind every one
+    # of them at the facilities sheet's rated capacity. The capacity table —
+    # what was actually AVAILABLE in each month, and what was USED — went to a
+    # reporting store and nowhere else, so a seasonal restriction the client
+    # had recorded never reached a plan.
+    #
+    # Available capacity now binds its own month, up to the rated capacity
+    # (`FacilityRecord.period_limit`); a modelled month the table does not
+    # cover binds at the rated capacity. The latest recorded utilisation is
+    # kept as a measurement beside the simulated one, never in place of it.
+    capacity_rows = structure.get("capacityHistory") or []
+    if capacity_rows:
+        monthly: Dict[str, Dict[str, float]] = {}
+        recorded: Dict[str, Tuple[str, float]] = {}
+        for row in capacity_rows:
+            fid = str(row.get("facilityId") or "").strip()
+            label = str(row.get("period") or "").strip()
+            available = _as_float(row.get("available"))
+            used = _as_float(row.get("used"))
+            if not fid or not label:
+                continue
+            if label in period_index and available is not None and available >= 0:
+                monthly.setdefault(fid, {})[str(period_index[label])] = available
+            if available is not None and available > 0 and used is not None:
+                previous = recorded.get(fid)
+                if previous is None or label >= previous[0]:
+                    recorded[fid] = (label, used / available * 100.0)
+        applied = 0
+        for record in facilities:
+            if record.role == NodeRole.MARKET:
+                continue
+            months = monthly.get(record.id)
+            if months:
+                record.capacity_by_period = dict(months)
+                applied += 1
+            if record.id in recorded:
+                record.observed_utilization_pct = round(recorded[record.id][1], 2)
+        if applied:
+            assumptions.append(
+                f"Available capacity for {applied} site(s) is taken month by month "
+                f"from the capacity table for the {len(period_index)} modelled "
+                f"period(s): each month binds at what was available in it, up to "
+                f"the rated capacity on the facilities sheet. A modelled month the "
+                f"table does not cover binds at the rated capacity."
+            )
+        if recorded:
+            assumptions.append(
+                f"Observed utilisation for {len(recorded)} site(s) is the latest "
+                f"period in the capacity table, used over available. It is a "
+                f"measurement of what happened, reported beside the utilisation "
+                f"the plan would run at, and the two are not the same figure."
+            )
+
     # Demand variability, for the safety-stock term the inventory module already
     # owns. `DemandRecord.std_dev` defaults to 0.0, and a sigma of zero means no
     # safety stock at all — so a network with 36 months of observed demand
@@ -539,13 +641,29 @@ def assemble_network_from_structure(
     markets_without_demand: List[str] = []
     markets_held_flat: List[str] = []
     sigma_pairs: set[Tuple[str, str]] = set()
+    service_levels_read: set[str] = set()
 
     def add_demand(mid: str, pid: str, qty: float, period: int,
-                   sla: float | None) -> None:
+                   sla: float | None, service_level: float | None = None) -> None:
         record = DemandRecord(
             market_id=mid, product_id=pid, quantity=qty, period=period)
         if sla is not None and sla > 0:
             record.sla_days = sla
+        # The market’s own required fill rate, where the sheet states one.
+        # `DemandRecord.service_level` has always existed and the service
+        # module scores against it, but nothing on this path ever set it, so
+        # every market on every upload was held to the schema default of 0.95
+        # — including the ones whose workbook named a different target.
+        #
+        # A percentage is accepted as a percentage. The field is a fraction
+        # and its validator rejects anything above 1.0, so a workbook saying
+        # 98 would have thrown; 98 means 98%, and there is no network whose
+        # required fill rate is 9800%.
+        if service_level is not None and service_level > 0:
+            csl = service_level / 100.0 if service_level > 1.0 else service_level
+            if csl <= 1.0:
+                record.service_level = csl
+                service_levels_read.add(mid)
         # Variability describes the market-product PAIR, so the same sigma
         # travels with every period's row for that pair. It is not a property
         # of one month.
@@ -560,6 +678,7 @@ def assemble_network_from_structure(
         if not mid:
             continue
         sla = _as_float(m.get("slaDays"))
+        csl = _as_float(m.get("serviceLevel"))
 
         # Every period this market appears in, at the quantity it recorded.
         # A pair absent from a period contributes no row for it, which is what
@@ -571,7 +690,7 @@ def assemble_network_from_structure(
             for (mkt, pid), qty in by_period[label].items():
                 if mkt != mid or qty is None or qty <= 0:
                     continue
-                add_demand(mid, pid, qty, period_index[label], sla)
+                add_demand(mid, pid, qty, period_index[label], sla, csl)
                 observed_rows += 1
 
         if observed_rows:
@@ -587,9 +706,16 @@ def assemble_network_from_structure(
             continue
         for label in (modelled_periods or [""]):
             add_demand(mid, product_ids[0], qty,
-                       period_index.get(label, 1), sla)
+                       period_index.get(label, 1), sla, csl)
         if modelled_periods and len(modelled_periods) > 1:
             markets_held_flat.append(mid)
+
+    if service_levels_read:
+        assumptions.append(
+            f"{len(service_levels_read)} market(s) state their own required "
+            f"fill rate, and are scored against it. Every other market is held "
+            f"to the model default of 95%."
+        )
 
     if modelled_periods and len(modelled_periods) > 1:
         assumptions.append(
@@ -673,6 +799,7 @@ def assemble_network_from_structure(
     unsupported_modes: Dict[str, int] = {}
     lanes_without_mode = 0
     lanes_without_distance = 0
+    lanes_with_own_ef = 0
     converted_from_miles = 0
 
     for lane in lanes_in:
@@ -737,7 +864,23 @@ def assemble_network_from_structure(
         cap = _as_float(lane.get("capacity"))
         if cap is not None and cap > 0:
             record.lane_capacity = cap
+        # The client’s own emission factor for this corridor.
+        # `CarbonModule.get_emission_factor()` has always preferred this to
+        # its GLEC mode table, and nothing on this path ever set it — so a
+        # network that supplied measured factors was still costed on the
+        # standard ones for its modes.
+        ef = _as_float(lane.get("emissionFactor"))
+        if ef is not None and ef > 0:
+            record.emission_factor_override = ef
+            lanes_with_own_ef += 1
         lanes.append(record)
+
+    if lanes_with_own_ef:
+        assumptions.append(
+            f"{lanes_with_own_ef} lane(s) carry their own emission factor from "
+            f"the upload, and their carbon is computed on it rather than on "
+            f"the standard factor for their transport mode."
+        )
 
     if lanes_skipped_unknown_node:
         assumptions.append(

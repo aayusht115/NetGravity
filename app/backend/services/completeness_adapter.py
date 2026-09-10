@@ -60,7 +60,11 @@ _FACILITY_KEYS = {
     "capacity": "capacity_units_per_period",
     "fixedCost": "fixed_cost_per_year",
     "handlingCost": "handling_cost_per_unit",
-    "carbonFactor": "carbon_emission_factor",
+    # `carbonFactor` is gone from this map because the registry key it
+    # translated to — `carbon_emission_factor` — was read by nothing in this
+    # system. See the note on the optional-field registry: the carbon input an
+    # upload can actually change is the lane’s own emission factor, which is
+    # in `_LANE_KEYS` below.
 }
 
 _MARKET_KEYS = {
@@ -161,10 +165,29 @@ def check_structure(structure: Dict[str, Any]) -> CompletenessReport:
     """
     Run the one completeness implementation against an extractor structure.
 
-    `has_contracts` is read from the structure itself rather than passed in:
-    the extractor records contract rules on the structure when a rate card
-    was uploaded, and that is the same fact the optional-field registry asks
-    about ("Contract Rate Card / Surcharge Details").
+    `has_contracts` answers the optional registry’s "Contract Rate Card /
+    Surcharge Details" field, which is satisfied by a rate card being present
+    rather than by any one column.
+
+    IT USED TO ANSWER NO, ALWAYS. This read `structure["contracts"]` and
+    `structure["laneRates"]`, and the extractor writes neither key — it never
+    has. So the request went out on every upload this product has ever
+    processed, including the ones whose workbook carried a full
+    Transportation_Rates sheet, priced two hundred lanes from it, and quoted
+    a fuel surcharge on every row. Asking a client to send a rate card they
+    have already sent is worse than not asking: the next real request is
+    read as more of the same.
+
+    The extractor now records what it found — how many lanes it priced from
+    a rates table, and whether that table stated a surcharge — and this
+    reads that. `laneRates` is still honoured for any caller building a
+    structure by hand.
     """
-    has_contracts = bool(structure.get("contracts") or structure.get("laneRates"))
+    rate_card = structure.get("rateCard") or {}
+    has_contracts = bool(
+        rate_card.get("pricedLanes")
+        or rate_card.get("statesSurcharge")
+        or structure.get("contracts")
+        or structure.get("laneRates")
+    )
     return check_completeness(rows_from_structure(structure), has_contracts=has_contracts)

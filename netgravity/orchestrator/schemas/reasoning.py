@@ -85,6 +85,34 @@ class KPIInsight(BaseModel):
     theme: str = Field(max_length=60)
     headline: str = Field(max_length=140)
     narrative: str = Field(max_length=700)
+    #: What to DO about this finding — one plain-English step, no figures.
+    #:
+    #: A finding without an action is a fact a reader has to translate into a
+    #: decision on their own, and the Overview's insight tiles are read by
+    #: people who want the decision. It is deliberately prose-only: the model
+    #: writes no numbers anywhere (see `reasoning/card.py`), so this line
+    #: cannot drift from the authoritative figures beside it, and numeric
+    #: grounding has nothing here to redact.
+    #:
+    #: Optional, and empty is a legitimate value: the deterministic template
+    #: path does not write one, and the presentation layer supplies a
+    #: theme-appropriate default rather than leaving the tile mute.
+    recommended_action: str = Field(default="", max_length=200)
+    #: WHICH KIND of intervention answers this finding — one of
+    #: ``strategic_actions.ACTION_KEYS``, or empty.
+    #:
+    #: The presentation layer derives a real, site-named recommendation from
+    #: the solved rows (see `app/backend/api/insights.py`), and it chooses the
+    #: rung of the ladder from the finding's theme and severity. That is enough
+    #: for almost every theme and not enough for two of them: a "Footprint"
+    #: opportunity is either "a candidate site is going unused" — answered by
+    #: opening one — or "an open site costs more than the routing it saves" —
+    #: answered by closing one. Same theme, same severity, opposite decisions.
+    #:
+    #: Set it only where the theme does not already imply the answer. Empty is
+    #: the normal value, and the LLM path never sets it: a model choosing the
+    #: intervention is the thing the deterministic ladder exists to prevent.
+    action_hint: str = Field(default="", max_length=32)
     severity: InsightSeverity = InsightSeverity.INFORMATION
     metric_refs: List[str] = Field(default_factory=list, max_length=6)
     comparison_refs: List[str] = Field(default_factory=list, max_length=4)
@@ -121,7 +149,8 @@ class ExecutiveBriefing(BaseModel):
         """All prose that can reach a UI, in display order."""
         values = [self.opening, self.context]
         for insight in self.kpi_insights:
-            values.extend((insight.headline, insight.narrative))
+            values.extend((insight.headline, insight.narrative,
+                           insight.recommended_action))
         values.extend(self.key_drivers)
         values.extend((self.recommendation, self.limitation))
         for item in self.missing_information:

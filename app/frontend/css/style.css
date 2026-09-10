@@ -1916,7 +1916,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   padding: 20px 22px;
   box-shadow: 0 4px 18px rgba(107, 47, 160, 0.08);
   position: sticky;
-  top: 16px;
+  /* BELOW THE BAR, not behind it.
+     `.app-global-topbar` is sticky at `top: 0` in this same scroll container,
+     so a card pinned at 16px pinned sixteen pixels from the top of the
+     SCROLLPORT — underneath it. The card's heading and the first line of the
+     verdict scrolled under the bar and stayed there.
+     `--global-topbar-h` is measured on every navigation (see
+     `publishTopBarHeight`); the fallback is the bar's height at the default
+     type scale, so the card is right even if the measurement never runs. */
+  top: calc(var(--global-topbar-h, 52px) + 12px);
 
   /* THE CARD SCROLLS, not the page past it.
      It is `position: sticky`, so once its content is taller than the viewport
@@ -1927,7 +1935,10 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
      whole reason the card exists — permanently out of reach.
      Bounded to the viewport and given its own scrollbar instead. The last
      16px matches `top`, so the card never touches the bottom edge. */
-  max-height: calc(100vh - 32px);
+  /* And bounded by what is left of the window under that bar, rather than by
+     the whole window — which is what made the card taller than the space it
+     had and pushed its foot off the bottom while its head was under the top. */
+  max-height: calc(100vh - var(--global-topbar-h, 52px) - 28px);
   overflow-y: auto;
   /* A wheel that reaches the end of this card stops there rather than
      carrying on and scrolling the page underneath it. */
@@ -1941,6 +1952,22 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+
+  /* PINNED INSIDE THE CARD, which is itself a scroll container.
+     The card runs to about 1,500px against a viewport of 1,000, so a reader
+     three sections down had scrolled the title off and was looking at a
+     paragraph and a list of sites with nothing saying what they belonged to.
+     A scrolled panel that has lost its own heading is the commonest way a
+     dense screen becomes unreadable (Nielsen #1).
+     The negative margins and the padding let the opaque strip run to the
+     card's own edges, so text passing underneath is covered rather than
+     showing through beside it. */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -20px -22px 12px;
+  padding: 14px 22px 10px;
+  background: linear-gradient(180deg, #faf5ff 0%, #faf5ff 72%, rgba(250, 245, 255, 0) 100%);
 }
 
 .scn-take-icon { font-size: 16px; }
@@ -1965,6 +1992,15 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   line-height: 1.55;
   margin-bottom: 16px;
 }
+
+/* Which scenarios the paragraph is about, inline rather than as a bold lead.
+   As `<strong>` on its own line it broke the wrap early: a four-line
+   paragraph whose longest line used half the column. */
+.scn-take-scope {
+  font-weight: 700;
+  color: var(--text-1);
+}
+.scn-take-scope::after { content: ':'; }
 
 .scn-take-section-title {
   font-size: 11.5px;
@@ -2234,6 +2270,34 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 /* Recommended actions. Each one performs something this application actually
    does; none of them approves a change. The label is the verb, the line under
    it says what will happen — so nothing here is a leap of faith. */
+/* WHOSE FORECAST THIS IS, said before its figures rather than under them.
+   Purple rather than green or amber: it is a statement of origin, not a
+   warning and not a pass — the reader is being told where the numbers came
+   from so they can repeat it accurately. */
+.fc-attn-provenance {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 14px;
+  margin-bottom: 14px;
+  border-radius: var(--r-md);
+  background: var(--primary-light, #f5f3ff);
+  border: 1px solid var(--purple-200, #ddd6fe);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-1);
+}
+
+.fc-attn-provenance-icon {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  color: var(--primary);
+}
+
+.fc-attn-provenance-icon svg { width: 100%; height: 100%; }
+
 .scn-take-actions {
   display: flex;
   flex-direction: column;
@@ -2289,6 +2353,157 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   line-height: 1.45;
   margin-top: 2px;
 }
+
+/* A recommendation in the drawer: the same wording as the card, laid out for
+   reading rather than for pressing. Nothing here opens a form — the reader
+   came for the basis of the recommendation, and a control competing with the
+   card's would leave two places to act on one decision. */
+/* THE DETAIL DRAWER'S TABLES.
+   ──────────────────────────────
+   Four columns in a 460px column, at the shared table's 14px cell padding —
+   112px of the width was padding, and the figures were squeezed into what was
+   left. Two consequences, both visible on any scenario that moved volume:
+
+     * the Shift column wrapped between the arrow and the number, so "↑ 2,100"
+       was drawn as "↑" above "2,100" — a quantity separated from its own sign
+       in the one column whose job is to say how much moved;
+     * rows came out at different heights depending on whether their corridor
+       name wrapped, so a column of figures no longer scanned as a column.
+
+   Tighter padding buys back 48px, which is more than the numbers needed. The
+   numeric cells then refuse to wrap at all, and the corridor — the only cell
+   with a natural break in it — takes whatever is left and wraps at its arrow.
+   `table-layout: auto` still sizes the columns to their content; this only
+   says what may not be broken. */
+#scenario-drawer .scn-drawer-table th,
+#scenario-drawer .scn-drawer-table td {
+  padding: 8px 9px;
+}
+
+#scenario-drawer .scn-drawer-table th:first-child,
+#scenario-drawer .scn-drawer-table td:first-child {
+  padding-left: 2px;
+}
+
+#scenario-drawer .scn-drawer-table th:last-child,
+#scenario-drawer .scn-drawer-table td:last-child {
+  padding-right: 2px;
+}
+
+/* A figure and its sign are one token. `&nbsp;` in the markup holds them
+   together; this holds the thousands separators together too. */
+#scenario-drawer .scn-drawer-table .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The one cell that MAY wrap, and only where it reads as a continuation —
+   after the arrow, never inside an identifier. */
+#scenario-drawer .scn-drawer-table .scn-corridor-cell {
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
+}
+
+.scn-drawer-action {
+  border-left: 3px solid var(--primary);
+  background: var(--bg-subtle, #f8fafc);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  padding: 9px 12px;
+  margin-bottom: 8px;
+}
+
+.scn-drawer-action.is-statement { border-left-color: var(--border-light); }
+
+.scn-drawer-action-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-1);
+  line-height: 1.35;
+}
+
+.scn-drawer-action-reason {
+  font-size: 11.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+  margin-top: 3px;
+}
+
+.scn-drawer-download { margin-top: 0; flex: 1; }
+
+/* A recommendation that is a FINDING rather than a control.
+   "No network change is indicated" is an answer to "what should I do", and
+   the worst thing to do with it is leave the space blank — but it must not
+   look pressable either, because there is nothing behind it. Same block,
+   no hover, no cursor, and a flat ground so it reads as prose. */
+.scn-take-action.is-statement {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--bg-subtle, #f8fafc);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--r-md);
+  padding: 9px 11px;
+  cursor: default;
+}
+
+/* What pressing it does, said on the control (Nielsen #2: the system's
+   language, not ours). Without it "Increase capacity at Western DC" reads as
+   a claim that capacity HAS been increased. */
+.scn-take-action-go {
+  display: block;
+  margin-top: 5px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  color: var(--primary);
+}
+
+.scn-take-action.primary .scn-take-action-go { color: rgba(255, 255, 255, 0.95); }
+
+/* The ways INTO the analysis, under the recommendations and visibly not among
+   them. Quieter than an action, because reading the detail is not a decision. */
+.scn-take-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--purple-100, #e9d5ff);
+}
+
+.scn-take-secondary {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-1);
+  background: transparent;
+  border: 1px solid var(--border-light);
+  border-radius: var(--r-md);
+  padding: 8px 11px;
+  cursor: pointer;
+  transition: border-color var(--t-fast), background var(--t-fast);
+}
+
+.scn-take-secondary:hover { border-color: var(--purple-300); background: #ffffff; }
+.scn-take-secondary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+.scn-take-secondary-sub {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--text-3);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* Borrowed from the deep dive rather than restyled: the same control doing
+   the same job, so a reader who has pressed one recognises this (Nielsen #4). */
+.scn-take-download { margin-top: 0; font-size: 12px; }
 
 /* The technical account, collapsed. The conclusion above is said once; this
    is where the caveats and the working live. */
@@ -2392,6 +2607,22 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   display: flex;
   flex-direction: column;
   gap: 20px;
+  min-width: 0;
+}
+
+/* THE COLUMN THE CARD STICKS INSIDE, given something to stick inside.
+
+   `.scn-single-2col` is `align-items: start`, so this column was exactly as
+   tall as the card in it. A sticky element travels within its own containing
+   block and no further, so with zero travel the card did not stick at all: it
+   scrolled up with the page, under the top bar, and out of the window —
+   while its own `max-height` and internal scrollbar made it look as though it
+   were pinned.
+
+   Stretched to the row, so the card stays pinned for as long as the
+   comparison table beside it is on screen. */
+.scn-single-right {
+  align-self: stretch;
   min-width: 0;
 }
 
@@ -2520,7 +2751,12 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
      two thousand miles of empty Atlantic. A taller box brings the zoom up and
      the network fills the frame — and the space it takes was empty page
      underneath it anyway. */
-  height: clamp(360px, 46vh, 520px);
+  /* Declared once and read by the key inside it. A Leaflet control sits in a
+     chain of auto-height ancestors, so a `max-height: 100%` on it resolves
+     against nothing and is dropped — the key stayed 456px tall in a 360px map
+     and `overflow: hidden` below simply cut its top off. */
+  --scn-map-h: clamp(360px, 46vh, 520px);
+  height: var(--scn-map-h);
   border-radius: var(--r-md);
   overflow: hidden;
   position: relative;
@@ -3295,42 +3531,315 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 /* ─── 3D Twin Legend (node types + DC utilisation color key) ──── */
-.twin3d-legend {
-  position: absolute;
-  bottom: 16px;
-  right: 16px;
-  z-index: 10;
-  background: rgba(255, 255, 255, 0.97);
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 10px;
-  padding: 11px 14px;
-  /* 12px, up from 10. The key to the whole map was set two steps below the
-     application's smallest body size, which made the one thing on screen
-     that explains the picture the hardest thing on it to read. */
-  font-size: 12px;
-  line-height: 1.75;
-  color: var(--text-2);
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
-  pointer-events: none;
+/* ═══════════════════════════════════════════════════════════
+   THE TWIN'S LEGEND — one key, both views
+   ═══════════════════════════════════════════════════════════
+   There were two: `.twin3d-legend`, written out in index.html, and a block
+   of inline styles inside map.js's `addLegend`. Two hand-maintained copies
+   of the same key on a page whose two views the reader switches between with
+   one button — and they had already drifted, the 2D one keying the DC ring
+   in #dc2626/#f59e0b/#22c55e and the 3D one keying the identical bands in
+   #b91c1c/#b45309/#047857.
+
+   Both are now written by `twinLegendHtml()` (js/twin-legend.js) into this
+   one set of rules. `.tw-legend-2d` is the Leaflet control, `.tw-legend-3d`
+   the absolutely-positioned panel over the canvas.
+   ═══════════════════════════════════════════════════════════ */
+
+/* ═══════════════════════════════════════════════════════════
+   THE DIGITAL TWIN'S STAGE
+   ═══════════════════════════════════════════════════════════
+   The map WAS the screen and did not behave like it. A toolbar row, a
+   recommendation strip, a fixed-height card and a strip of per-facility
+   figures underneath meant the twin itself got about half the window, on the
+   one screen in the product whose entire content is a picture.
+
+   The stage is what is left, and it takes the height that is there. The
+   measured `--global-topbar-h` is the same variable the scenario card pins
+   against, so the two screens agree about where the page starts. */
+.twin-stage {
+  position: relative;
+  height: calc(100vh - var(--global-topbar-h, 63px) - var(--twin-stage-gap, 96px));
+  min-height: 420px;
 }
 
-.twin3d-legend-row {
+.twin-stage .twin-view-panel {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  height: 100%;
+}
+
+.twin-stage .map-container,
+.twin-stage .twin3d-container {
+  height: 100% !important;
+}
+
+/* The 2D/3D pair, on the page title's own line. */
+.sub-topbar-actions {
+  margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 7px;
-  white-space: nowrap;
+  gap: var(--space-md);
 }
 
-.twin3d-legend-dot {
-  width: 9px;
-  height: 9px;
+/* ─── The key, docked ───────────────────────────────────────
+   Bottom-anchored, so the panel above the bar grows UPWARD: the handle is at
+   the bottom edge, and a drawer that opened downward would leave it pointing
+   out of the card. */
+.tw-legend-dock {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(560px, calc(100% - 28px));
+}
+
+/* The handle. Reads as one control, not as a card with a title. */
+.tw-legend-dock-bar {
+  appearance: none;
+  font-family: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.10);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+
+.tw-legend-dock-bar:hover { border-color: var(--purple-200); color: var(--text-1); }
+
+/* The three glyphs, at a glance, without opening anything. */
+.tw-legend-dock-peek {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.tw-legend-dock-chevron { transition: transform .18s ease; }
+.tw-legend-dock-bar[aria-expanded="true"] .tw-legend-dock-chevron {
+  transform: rotate(180deg);
+}
+
+/* THE SCENARIO KEY IS BOUNDED BY ITS OWN MAP, not by the window.
+   Its stage is `--scn-map-h` tall and clips what overflows, so the viewport
+   height the twin's dock is measured against is the wrong ruler here: a panel
+   sized to the window would have its top cut off by the map wrap.
+
+   It keeps `tw-legend-below`'s column layout inside the dock, because it
+   carries FOUR groups to the twin's three — as one narrow column it would be
+   taller than the map it sits in. */
+#scn-legend-dock .tw-legend-dock-panel {
+  max-height: calc(var(--scn-map-h, 420px) - 84px);
+  max-width: min(720px, calc(100% - 4px));
+  /* The dock spaces its own children; the below-the-map margin would push the
+     panel off the bar it belongs to. */
+  margin-top: 0;
+}
+
+/* Open, it is the same key the 3D panel carried — bounded to the stage so a
+   short window scrolls it rather than running it off the top. */
+.tw-legend-dock-panel {
+  order: -1;
+  max-height: calc(100vh - var(--global-topbar-h, 63px) - 190px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  max-width: 100%;
+}
+
+.tw-legend {
+  background: rgba(255, 255, 255, 0.97);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 11px;
+  padding: 12px 14px;
+  /* 12px, up from the 10px this was set at. The key to the whole map was two
+     steps below the application's smallest body size, which made the one
+     thing on screen that explains the picture the hardest to read. */
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-2);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+  max-width: 232px;
+}
+
+/* The scenario key's LAYOUT: four groups across, not down.
+   ─────────────────────────────────────────────────────
+   It carries the twin's three groups plus the encodings only a scenario map
+   has, and as a single column that is taller than the map it belongs to. Laid
+   out as equal columns it is about a fifth of the height.
+
+   It now lives INSIDE the dock (`#scn-legend-dock`), opened by the same "Key"
+   bar the Digital Twin uses — see index.html. It was a permanently-expanded
+   strip below the map, which is a fifth of a panel spent on a key the reader
+   has already met on the twin. This class is the layout only; the dock owns
+   where it sits and when it is shown. */
+.tw-legend-below {
+  /* A GRID, NOT A FLEX ROW.
+     `flex: 1 1 165px` sized each column to its own content, so the four came
+     out at four different widths — the scenario group, which carries the
+     longest sentences, got the narrowest share and its labels ran off the
+     card. Equal tracks that wrap as whole columns is what the strip was
+     always meant to be. */
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  align-items: start;
+  gap: 0;
+  /* `.tw-legend` caps at 232px for a floating panel. This one is the width of
+     the card. */
+  max-width: none;
+  margin-top: 10px;
+  padding: 10px 4px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  /* Part of the card it sits in, not a panel floating over a map. */
+  background: var(--bg-subtle, #f8fafc);
+  box-shadow: none;
+  border-color: var(--border-light);
+}
+
+/* Each group is a column. `flex: 1` with a floor rather than a fixed width:
+   the flow-band group's labels are as long as the network's largest corridor
+   is wide ("100,000 – 500,000"), and a fixed column wrapped them. */
+.tw-legend-below .tw-legend-group {
+  min-width: 0;
+  padding: 0 14px;
+}
+
+/* EVERY COLUMN'S ROWS START ON THE SAME LINE.
+   Two of the four headings carry a parenthetical unit that wraps to a second
+   line — "Flow volume (units/month)", "Distribution centre load (its ring…)"
+   — and two do not. So two columns' first rows sat a line lower than the
+   others, and a strip of four aligned lists read as four lists at random
+   heights. Reserving the second line in every heading costs one line of the
+   two that do not need it and lines the whole strip up. */
+.tw-legend-below .tw-legend-title {
+  min-height: 2.5em;
+}
+
+/* The stacked key separates groups with a rule above each. Side by side, the
+   rule belongs between the columns. */
+.tw-legend-below .tw-legend-group + .tw-legend-group {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+  border-left: 1px solid var(--border-light);
+}
+
+.tw-legend-below .tw-legend-row { gap: 7px; }
+
+/* THE LABELS WRAP; THE BAND FIGURES DO NOT.
+   A blanket `nowrap` kept the short rows tidy and pushed the scenario group's
+   sentences — "Corridor this plan moves volume on" — straight off the edge of
+   the card. Those are sentences and should wrap like sentences. A flow band's
+   range is a quantity and must not break across lines, so it keeps the rule,
+   selected by the swatch that precedes it. */
+.tw-legend-below .tw-legend-label { white-space: normal; }
+.tw-legend-below .tw-legend-line + .tw-legend-label { white-space: nowrap; }
+.tw-legend-below .tw-legend-row { align-items: flex-start; }
+/* A flex item's default `min-width: auto` refuses to shrink below its content,
+   so a long label pushed out of the column instead of wrapping inside it. */
+.tw-legend-below .tw-legend-label { min-width: 0; overflow-wrap: break-word; }
+.tw-legend-below .tw-legend-swatch { flex: 0 0 auto; }
+
+
+.tw-legend-group + .tw-legend-group {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid #eef0f3;
+}
+
+/* Each group names the question it answers. The previous version's heading
+   was the word "Network" over three coloured dots, which tells a reader what
+   the panel is filed under rather than what it keys — Nielsen #6. */
+.tw-legend-title {
+  font-weight: 800;
+  font-size: 10.5px;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 5px;
+}
+
+.tw-legend-unit {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.tw-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  min-height: 20px;
+}
+
+/* The marker glyph itself, at the size it is drawn on the map, so the key is
+   recognised rather than decoded. */
+.tw-legend-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
   border-radius: 50%;
+  border: 1.5px solid transparent;
+  font-size: 10px;
   flex-shrink: 0;
+}
+
+/* A rule at the weight the corridor is actually drawn at. A swatch of colour
+   cannot key a thickness. */
+.tw-legend-line {
+  display: inline-block;
+  width: 30px;
+  border-radius: 999px;
+  background: #94a3b8;
+  opacity: 0.75;
+  flex-shrink: 0;
+}
+
+/* And a ring, because what the map colours on a DC is its ring, not its
+   fill — the old key showed a filled dot for a thing that is an outline. */
+.tw-legend-ring {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 3px solid currentColor;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.tw-legend-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tw-legend-note {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-3);
+  white-space: normal;
 }
 
 /* The count sits at the end of its row, right-aligned so the three numbers
    form a column the eye can compare without reading the labels again. */
-.twin3d-legend-count,
+.tw-legend-count,
 .map-legend-count {
   margin-left: auto;
   padding-left: 10px;
@@ -3339,19 +3848,79 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   color: var(--text-1);
 }
 
-.twin3d-legend-title {
-  font-weight: 700;
-  font-size: 10.5px;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 3px;
+/* ─── The name on the node, with its id in it ───────────────
+   Both views. Every facility name used to live in a hover tooltip, so
+   reading the map meant pointing at one site at a time; and no view ever
+   showed the id, which is the column the reader's own workbook is keyed on.
+
+   `pointer-events: none` throughout: the label names the node, it is not a
+   second thing to click, and a pill sitting over a marker would otherwise
+   eat the click that opens the facility panel. */
+.map-node-label,
+/* The node's own mark, on the 3D scene, at the size the map draws it and the
+   key prints it. Sized inline from `NODE_STYLE` so there is one number.
+
+   `pointer-events: none` deliberately: the badge sits over the node, and the
+   scene picks nodes by raycasting the canvas underneath. A badge that took
+   the pointer would make a node unhoverable by covering it. */
+.twin3d-node-glyph {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  line-height: 1;
+  pointer-events: none;
+  will-change: transform;
+  text-shadow: 0 1px 2px rgba(15, 23, 42, 0.35);
 }
 
-.twin3d-legend-divider {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid #eee;
+.twin3d-node-label {
+  position: absolute;
+  pointer-events: none;
+  white-space: nowrap;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-1, #1a1a2e);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 6px;
+  padding: 1px 6px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+/* 2D: under the marker, centred on it. */
+.map-node-label {
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, 4px);
+  z-index: 2;
+}
+
+.map-node-label.is-closed {
+  color: var(--text-3, #94a3b8);
+  text-decoration: line-through;
+}
+
+/* 3D: positioned per frame by `updateNodeLabels()`, which writes its own
+   transform — so this sets everything except the position. */
+.twin3d-label-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  overflow: hidden;
+}
+
+.twin3d-node-label {
+  top: 0;
+  left: 0;
+  will-change: transform;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -3385,8 +3954,17 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
    it is also the honest way to say how tall this card should be: taller than
    the ~460px it used to get, and the same on every screen of a given size. */
 #tab-twin .twin-view-panel {
+  /* THE STAGE IS THE DEFINITE HEIGHT NOW.
+     This was `clamp(420px, 58vh, 660px)` — a number, chosen to break the
+     feedback loop described above by giving the WebGL container something
+     definite to resolve `height: 100%` against. `.twin-stage` does that job
+     instead, and does it better: it is the height that is actually left on
+     the screen rather than a fraction of the viewport that leaves a band of
+     empty card underneath the map. The panels are `position: absolute;
+     inset: 0` inside it, which is as definite as a number and follows the
+     window. */
   flex: 0 0 auto;
-  height: clamp(420px, 58vh, 660px);
+  height: 100%;
 }
 
 #tab-twin .twin-view-panel .twin3d-container,
@@ -3396,41 +3974,140 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
   min-height: 0;
 }
 
-/* The three boxes below the map.
-   They used to be as tall as their own row count — 34 markets beside 4 plants
-   meant one box four times the height of its neighbour and a page that
-   scrolled past the map to reach the bottom of it. Now every box is the same
-   stated height and each scrolls inside itself, so the row is level and the
-   page below the map does not move. */
-#tab-twin .grid-3 {
+/* ═══════════════════════════════════════════════════════════
+   THE FIGURES BELOW THE MAP
+   ═══════════════════════════════════════════════════════════
+   This was three cards holding three tables — Plants, Distribution Centres,
+   Demand Markets — each scrolling inside a stated height so the row stayed
+   level. They listed every node in the network and ignored the Facility and
+   Period controls at the top of the screen completely.
+
+   One band now, about the site the reader has selected, in the period they
+   have selected. It takes the height its own figures need, so nothing on
+   this page scrolls inside itself any more.
+   ═══════════════════════════════════════════════════════════ */
+
+.tw-metrics {
   flex: 0 0 auto;
-  align-items: stretch;
-  margin-bottom: 0;
-}
-
-#tab-twin .grid-3 > .card {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-}
-
-#tab-twin .grid-3 > .card > .card-table-scroll {
-  flex: 1 1 auto;
-  /* Deeper than the 150-250px it was: at the low end only three rows of a
-     twelve-row table were visible at once, which is a scrollbar pretending to
-     be a list. Still a STATED height, so all three boxes stay level whatever
-     they hold. */
-  height: clamp(240px, 34vh, 380px);
-  overflow: auto;
-}
-
-/* A header that scrolls away leaves the reader looking at four unlabelled
-   columns (Nielsen #6). */
-#tab-twin .grid-3 .ng-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  margin-top: 14px;
   background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border, #eef0f3);
+  border-radius: 14px;
+  padding: 15px 18px 17px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.tw-metrics:empty { display: none; }
+
+.tw-metrics-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 13px;
+}
+
+.tw-metrics-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 800;
+  color: var(--text-1, #1a1a2e);
+  line-height: 1.3;
+}
+
+.tw-metrics-scope {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  color: var(--text-2, #5a5a72);
+}
+
+.tw-metrics-hint {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-3, #94a3b8);
+}
+
+/* The site's status, and the way into everything else known about it. */
+.tw-metrics-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.tw-metrics-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border: 1px solid var(--purple-200, #d4bfe8);
+  border-radius: 8px;
+  background: var(--bg-card, #ffffff);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary, #6B2FA0);
+  cursor: pointer;
+  transition: background var(--transition, .2s ease);
+}
+
+.tw-metrics-cta:hover { background: var(--purple-50, #f5f0fa); }
+.tw-metrics-cta:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* Auto-fit rather than a fixed column count: the facility band has five
+   figures and the network band four, and neither should leave an empty cell
+   at the end of its row. */
+.tw-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.tw-metric {
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: var(--bg-subtle, #fafafa);
+  border: 1px solid #f1f1f4;
+  min-width: 0;
+}
+
+.tw-metric-value {
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--text-1, #1a1a2e);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The utilisation band, in the same three colours the DC's ring on the map
+   uses and the legend keys — so the figure and the node agree at a glance. */
+.tw-metric-value.is-critical { color: #dc2626; }
+.tw-metric-value.is-stress   { color: #b45309; }
+.tw-metric-value.is-healthy  { color: #15803d; }
+
+.tw-metric-label {
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-1, #1a1a2e);
+}
+
+.tw-metric-sub {
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: var(--text-3, #94a3b8);
+  line-height: 1.35;
+}
+
+.tw-metrics-note {
+  margin: 11px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-3, #94a3b8);
+}
+
+@media (max-width: 900px) {
+  .tw-metrics-head { flex-direction: column; gap: 6px; }
 }
 
 /* ════════════════════════════════════════════════════════
@@ -3840,86 +4517,144 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 }
 
 /* ─── Dynamic 3D HUD Tooltip (Light Theme) ───────────────── */
+/* ─── The card that appears over a hovered node ─────────────
+   Two things were wrong with it, and the first made the second invisible.
+
+   `pointer-events: none` meant the card could never be reached: it was a
+   picture of a control, not a control. Its footer read "Click node to inspect
+   full diagnostics →", which looks like a link, is positioned like a link,
+   and did nothing when clicked — the reader had to work out that the sentence
+   was describing the NODE behind it.
+
+   And it was torn away on the journey. The card sits above the node, so every
+   route to it crosses a few pixels of empty canvas where the raycast misses,
+   and the card was hidden the instant that happened. See `scheduleHudHide`.
+   ───────────────────────────────────────────────────────── */
 .twin3d-node-tooltip {
   position: absolute;
   z-index: 25;
-  pointer-events: none;
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  /* Reachable. The card is over a WebGL canvas the reader drags to rotate, so
+     it takes the pointer only while it is actually shown — `.hidden` below
+     puts it back to `none`. */
+  pointer-events: auto;
+  background: rgba(255, 255, 255, 0.98);
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 12px;
-  padding: 12px 16px;
+  padding: 11px 13px 12px;
   color: var(--text-1);
-  min-width: 220px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.04);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  width: 244px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14), 0 2px 6px rgba(15, 23, 42, 0.05);
+  transition: opacity 0.12s ease;
 }
 
 .twin3d-node-tooltip.hidden {
   opacity: 0;
   pointer-events: none;
-  transform: scale(0.95);
 }
 
+/* The name and its badge, on a baseline rather than centred: a two-line name
+   beside a one-line badge was centring the badge against the middle of the
+   name, which read as though it belonged to the second line. */
 .hud-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
   border-bottom: 1px solid var(--border-light);
-  padding-bottom: 6px;
+  padding-bottom: 7px;
+}
+
+.hud-headtext { min-width: 0; }
+
+/* The id above the name, not in front of it. "F006 · Brampton National
+   Distribution Hub" wrapped to three lines on a 220px card and pushed the
+   badge onto a fourth. */
+.hud-id {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
 }
 
 .hud-title {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 800;
+  line-height: 1.3;
   color: var(--text-1);
 }
 
 .hud-badge {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 8px;
+  flex-shrink: 0;
+  font-size: 8.5px;
+  font-weight: 800;
+  padding: 2px 7px;
   border-radius: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
-.hud-badge.plant { background: #f5f3ff; color: #7c3aed; border: 1px solid #ddd6fe; }
-.hud-badge.dc { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
-.hud-badge.market { background: #f0f9ff; color: #0284c7; border: 1px solid #bae6fd; }
+
+/* Keyed to the same three node colours the legend and both maps use. The DC
+   badge was amber, which is the utilisation "Stress" colour on the very same
+   screen — so a healthy DC carried a warning-coloured chip. */
+.hud-badge.plant  { background: #f3ecfa; color: #6B2FA0; border: 1px solid #ddc9ef; }
+.hud-badge.dc     { background: #eff4ff; color: #2563eb; border: 1px solid #c7d7fe; }
+.hud-badge.market { background: #ecfaff; color: #0891b2; border: 1px solid #b6e6f3; }
 
 .hud-body {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 8px;
+  gap: 5px;
+  margin-bottom: 10px;
 }
 
+/* Label left, figure right, on one row with the figures in a column the eye
+   can run down. They were `justify-content: space-between` with no minimum on
+   the label, so a long label pushed its figure out of alignment with the one
+   above it. */
 .hud-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
+  gap: 12px;
   font-size: 11px;
   color: var(--text-2);
 }
+
+.hud-row span { min-width: 0; }
+
 .hud-row strong {
+  flex-shrink: 0;
   color: var(--text-1);
-  font-weight: 700;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
-.hud-footer {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--primary);
-  text-align: right;
-  border-top: 1px solid var(--border-light);
-  padding-top: 5px;
+/* The route into the facility panel — the same one the node's own click and
+   the metrics band below the map both take. */
+.hud-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--purple-200, #d4bfe8);
+  border-radius: 8px;
+  background: var(--purple-50, #f5f0fa);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--primary, #6B2FA0);
+  cursor: pointer;
+  transition: background var(--transition, .2s ease);
 }
 
-
-
+.hud-btn:hover { background: #ede0f7; }
+.hud-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.hud-btn svg { width: 13px; height: 13px; }
 
 
 /* ═══════════════════════════════════════════════════════════
@@ -3992,7 +4727,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 .facility-panel-overlay.visible .facility-panel {
   transform: translateX(0) !important;
 }
-
 
 
 /* ═══════════════════════════════════════════════════════════
@@ -4303,54 +5037,24 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 /* Each one opens the scenario builder filled in. None of them runs anything:
    a forecast is a projection, and testing the network against it is a
    decision a person makes. */
-.fc-attn-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
+/* "How did it reach that number?", as a file.
 
-.fc-attn-action {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: left;
-  padding: 9px 11px;
-  border-radius: var(--r-md);
-  border: 1px solid var(--purple-100);
-  background: rgba(255, 255, 255, 0.72);
-  cursor: pointer;
-  font-family: inherit;
-  transition: border-color .18s ease, background .18s ease;
-}
-
-.fc-attn-action:hover {
-  border-color: var(--purple-200);
-  background: #ffffff;
-}
-
-.fc-attn-action.primary {
-  border-color: var(--primary);
-  background: var(--purple-50);
-}
-
-.fc-attn-action:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.fc-attn-action-label {
+   Borrows `.insd-download` wholesale rather than restyling it: this is the
+   same control, doing the same thing, and a reader who has pressed one on the
+   deep dive should not have to work out that this is the other. Only the
+   spacing differs, because it sits inside a card rather than at the end of a
+   page (Nielsen #4 — consistency). */
+.fc-attn-download {
+  margin-top: 14px;
   font-size: 12px;
-  font-weight: 800;
-  color: var(--text-1);
 }
 
-.fc-attn-action-detail {
-  font-size: 10.5px;
-  line-height: 1.45;
-  color: var(--text-3);
-}
+.fc-attn-download span:first-of-type { text-align: left; }
 
+/* The forecast card's actions are the Scenario Planner's: same class, same
+   shape, same "Set this up →" affordance. Seven rules describing a second
+   button that looked almost but not quite like it lived here — which is how
+   two screens come to disagree about what a recommendation looks like. */
 
 /* The figures behind a refused scenario.
 
@@ -4396,22 +5100,6 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
    nothing here introduces a colour the reader has not already learned
    somewhere else in the product. */
 
-/* One site that needs attention, named with the reason. The left border
-   carries the band, so the row is scannable without reading the tag. */
-.wh-attention-row {
-  display: flex; align-items: flex-start; gap: var(--space-md);
-  padding: 12px 16px; background: var(--bg-card);
-  border: 1px solid var(--border); border-left-width: 4px;
-  border-radius: var(--r-md); margin-bottom: var(--space-sm);
-}
-.wh-attention-row.band-critical  { border-left-color: var(--red); }
-.wh-attention-row.band-tight     { border-left-color: var(--amber); }
-.wh-attention-row.band-underused { border-left-color: var(--blue); }
-.wh-attention-name { font-size: 13.5px; font-weight: 700; color: var(--text-1); }
-.wh-attention-why  { font-size: 12.5px; color: var(--text-2); line-height: 1.55; margin-top: 2px; }
-.wh-attention-fig  { font-size: 20px; font-weight: 800; margin-left: auto; text-align: right; flex-shrink: 0; }
-.wh-attention-fig small { display: block; font-size: 11px; font-weight: 600; color: var(--text-3); }
-
 /* A section that is empty because an INPUT is missing, not because there is
    nothing to report. Deliberately not styled as an error: nothing has gone
    wrong, something has not been stated yet. */
@@ -4433,3 +5121,417 @@ input, select, textarea { font-family: inherit; font-size: inherit; }
 
 /* A cell whose value is absent rather than zero. */
 .wh-absent { color: var(--text-3); }
+
+/* ── KPI SCREEN: THE THREE TIERS ──────────────────────────────
+   The scorecard is the whole network; the domain bar picks a lens; the filter
+   bar narrows it. The visual weight follows that order — the bar that changes
+   the most is the one that looks most like a control. */
+
+/* Tier 0's caption. Small, but it is the line that stops a reader reading the
+   scorecard as the filtered subset below it. */
+.kpi-scorecard-note {
+  color: var(--text-3); margin: var(--space-sm) 0 var(--space-lg);
+}
+
+/* Tier 1 — the lens. Underline rather than a pill row: these switch what the
+   screen is ABOUT, and reading as a segmented control would make them look
+   like three ways of drawing one thing. */
+.kpi-domain-bar {
+  display: flex; gap: 2px; border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-md);
+}
+/* THE FOUR LENSES SPAN THE BAR.
+   Sized to their labels they occupied about a third of it, and the remaining
+   two thirds of a full-width rule read as a row that had run out rather than
+   a complete set of choices. Equal shares also make them equal-weight, which
+   they are: no lens is the sub-option of another. */
+.kpi-domain-tab {
+  appearance: none; background: none; border: 0; cursor: pointer;
+  flex: 1 1 0; min-width: 0; text-align: center;
+  padding: 11px 12px; font-size: 13px; font-weight: 600; color: var(--text-2);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  white-space: nowrap; font-family: inherit;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.kpi-domain-tab:hover { color: var(--text-1); }
+.kpi-domain-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* Tier 2 — how far in.
+   ON THE BAR, not behind a button. These were an elevated panel opened from a
+   "Filters" trigger and committed with Apply — two clicks and a decision in
+   front of the only question this bar answers, and with the panel shut the
+   screen's scope was a number on a chip. At most three controls per lens fit
+   on one line, so they are on it. */
+.kpi-filter-bar {
+  display: flex; align-items: flex-end; gap: var(--space-lg); flex-wrap: wrap;
+  padding: 0 0 14px; margin-bottom: var(--space-lg);
+  border-bottom: 1px solid var(--border);
+}
+
+.kpi-filter-row {
+  display: flex; align-items: flex-end; gap: 14px 18px; flex-wrap: wrap;
+}
+
+/* An author `display` BEATS the browser's own `[hidden] { display: none }`,
+   so anything toggled by the attribute needs this. Written once for the file
+   rather than per component. */
+[hidden] { display: none !important; }
+
+.kpi-filter { display: flex; flex-direction: column; gap: 6px; min-width: 170px; }
+.kpi-filter > span {
+  font-size: 11px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.kpi-filter .control-select {
+  width: 100%; min-width: 0; padding: 9px 12px;
+  border-radius: var(--r-sm); border: 1px solid var(--border);
+  background: var(--bg-card); font-size: 13px;
+}
+.kpi-filter .control-select:focus {
+  outline: none; border-color: var(--primary);
+}
+
+/* It undoes rather than does, so it must not look like the controls beside
+   it, which are what change the screen. */
+.kpi-filter-reset {
+  appearance: none; background: none; border: 0; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; color: var(--text-3);
+  padding: 9px 0;
+}
+.kpi-filter-reset:hover { color: var(--text-1); text-decoration: underline; }
+
+/* What is on screen, in words. */
+.kpi-showing {
+  margin-left: auto; font-size: 12.5px; color: var(--text-2); font-weight: 600;
+}
+
+/* The three bands of the screen: capacity, then cost, then the detail. */
+.kpi-section-head {
+  font-size: 11.5px; font-weight: 700; color: var(--text-3);
+  text-transform: uppercase; letter-spacing: .06em;
+  margin: 0 0 var(--space-sm);
+}
+
+/* The rest of the exceptions, folded away. */
+
+
+/* Where the reader is, and the way back out. */
+.kpi-breadcrumb {
+  display: flex; align-items: center; gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+.kpi-crumb-back {
+  appearance: none; cursor: pointer; font-family: inherit;
+  font-size: 12.5px; font-weight: 600; color: var(--text-2);
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 6px 12px;
+}
+.kpi-crumb-back:hover { color: var(--text-1); border-color: var(--text-3); }
+.kpi-crumb-trail { font-size: 13px; color: var(--text-2); }
+.kpi-crumb-trail strong { color: var(--text-1); }
+.kpi-crumb-sep { margin: 0 8px; color: var(--text-3); }
+
+/* Every row of the health table opens that site. The pointer is the only
+   affordance the table needs — an extra "view" column would repeat in nine
+   rows what one hover states. */
+.wh-health-row { cursor: pointer; }
+.wh-health-row:hover { background: var(--bg-elevated); }
+
+/* A ranked corridor, and a mode with its share. Deliberately a list and not a
+   chart: both answer "which is biggest", which a sorted list answers faster
+   than any drawing of it. */
+.kpi-lane-row {
+  display: flex; align-items: center; gap: var(--space-md);
+  padding: 10px 4px; border-bottom: 1px solid var(--border);
+}
+.kpi-lane-row:last-child { border-bottom: 0; }
+.kpi-lane-row-name {
+  position: relative; font-size: 13px; font-weight: 600; color: var(--text-1);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.kpi-lane-row-fig {
+  margin-left: auto; text-align: right; flex-shrink: 0;
+  font-size: 14px; font-weight: 700; color: var(--text-1);
+}
+.kpi-lane-row-fig small {
+  display: block; font-size: 11px; font-weight: 600; color: var(--text-3);
+}
+/* The share, drawn behind the mode's name rather than beside it — the bar is
+   the same length as the thing it measures, and costs no column. */
+.kpi-mode-bar {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  height: 22px; background: var(--primary-light); border-radius: var(--r-sm);
+  z-index: 0;
+}
+/* The name is wrapped rather than left as a bare text node: a text node
+   cannot be raised above the bar, and the first version of this drew a
+   purple box where the word "Road" should have been. */
+.kpi-mode-label { position: relative; z-index: 1; padding-left: 8px; }
+
+/* ── AI EXPLAIN ───────────────────────────────────────────────
+   A quiet secondary action in the chart header. The chart is the answer;
+   this offers a reading of it. */
+.kpi-explain-btn {
+  appearance: none; cursor: pointer; font-family: inherit;
+  /* READABLE FROM ACROSS THE CARD. It was primary-on-primary-light with a
+     transparent border, which at 12px sat so close to the card that a reader
+     scanning the header did not register a control at all. Same purple, more
+     of it: a stated border, a heavier weight, and text at full strength. */
+  font-size: 12px; font-weight: 700; color: var(--primary-hover);
+  background: var(--primary-light); border: 1px solid var(--purple-200);
+  border-radius: var(--r-sm); padding: 5px 11px; margin-left: 10px;
+  white-space: nowrap; flex-shrink: 0;
+  position: relative; overflow: hidden;
+}
+.kpi-explain-btn:hover:not(:disabled) {
+  border-color: var(--primary); background: var(--bg-hover);
+  color: var(--primary);
+}
+.kpi-explain-btn:disabled { opacity: .75; cursor: progress; }
+.kpi-explain-btn.is-open { background: var(--bg-elevated); color: var(--text-2); }
+
+/* ONE reflection across the button when the screen first appears.
+   The feature is otherwise a small control in a chart header on a screen of
+   eleven cards, and a reader has little reason to look for it. One pass says
+   "this is here"; a control that pulses forever says it over and over, which
+   is what makes a dashboard tiring. It stops for good on first click. */
+@keyframes kpi-explain-shimmer {
+  from { transform: translateX(-120%); }
+  to   { transform: translateX(220%); }
+}
+.kpi-explain-btn.is-shimmering::after {
+  content: ""; position: absolute; inset: 0 auto 0 0; width: 45%;
+  background: linear-gradient(100deg, transparent,
+              rgba(255, 255, 255, .95), transparent);
+  animation: kpi-explain-shimmer 1.15s ease-in-out 2;
+  pointer-events: none;
+}
+/* A reader who has asked for less motion gets none. */
+@media (prefers-reduced-motion: reduce) {
+  .kpi-explain-btn.is-shimmering::after { animation: none; content: none; }
+}
+
+/* THE OVERLAY, drawn over the chart it explains.
+   Out of flow, deliberately: the chart card's height and its neighbour's
+   position are identical whether or not anything has been explained, where
+   the expanding panel this replaced made a chart move to explain itself. */
+.card.has-ai-overlay { position: relative; }
+.kpi-ai-overlay {
+  /* THE CHART STAYS READABLE. It spanned the full width of the card and sat
+     over the plot area, so a reader had the explanation OR the picture but
+     never both — and the sentence is about the picture. Anchored to the top
+     right and sized to a column, it leaves the chart beside it visible. */
+  position: absolute; right: 14px; top: 58px; z-index: 5;
+  /* A SHARE of the card, not a fixed width. 320px is a corner on a wide card
+     and most of a narrow one — on the facility detail it covered the plot it
+     was describing. Capped at 44% so at least half the chart stays visible
+     whatever the card is, with a floor so the text never becomes a column of
+     two words. */
+  width: clamp(220px, 44%, 300px);
+  max-height: calc(100% - 74px); overflow-y: auto;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--r-md); padding: 13px 15px;
+  box-shadow: var(--shadow-lg);
+}
+.kpi-ai-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--space-md); margin-bottom: 8px;
+}
+.kpi-ai-label {
+  font-size: 11px; font-weight: 700; color: var(--primary);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.kpi-ai-close {
+  appearance: none; background: none; border: 0; cursor: pointer;
+  font-size: 20px; line-height: 1; color: var(--text-3); padding: 0 2px;
+  font-family: inherit;
+}
+.kpi-ai-close:hover { color: var(--text-1); }
+.kpi-ai-headline {
+  font-size: 13px; font-weight: 700; color: var(--text-1);
+  line-height: 1.4; margin-bottom: 5px;
+}
+.kpi-ai-text {
+  font-size: 12px; color: var(--text-2); line-height: 1.55; margin: 0;
+}
+
+/* ── EXPORT ───────────────────────────────────────────────────
+   Two exports behind one control: a PDF is what a reader circulates, a CSV is
+   what they open in a spreadsheet, and one button could only be one of them. */
+.kpi-export { position: relative; flex-shrink: 0; }
+.kpi-export-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40;
+  min-width: 262px; padding: 6px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r-md); box-shadow: var(--shadow-lg);
+}
+.kpi-export-menu button {
+  display: block; width: 100%; text-align: left;
+  appearance: none; background: none; border: 0; cursor: pointer;
+  font-family: inherit; font-size: 12.5px; color: var(--text-1);
+  padding: 9px 10px; border-radius: var(--r-sm);
+}
+.kpi-export-menu button:hover { background: var(--bg-hover); }
+
+/* ── THE PRINTED COPY ─────────────────────────────────────────
+   The page IS the export: the same canvases the reader is looking at, with
+   the application chrome taken away. A renderer that re-drew the charts could
+   drift from what is on screen, which is the class of bug this screen has
+   been spent removing. */
+.kpi-print-head { display: none; }
+
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+
+  /* Everything that is not the report. The global top bar carries the
+     project switcher and an Upload button — controls, on a page nobody can
+     click. The basis line goes too: the print header already states the
+     horizon, and printing both says it twice. */
+  .sidebar, .app-global-topbar, #app-sub-topbar, .topbar-controls,
+  .chatbot-panel, .chatbot-fab, .kpi-export, .kpi-explain-btn,
+  .kpi-ai-overlay, .kpi-filter-reset,
+  .facility-toolbar, .kpi-crumb-back, #landing-page {
+    display: none !important;
+  }
+
+  html, body, .app-shell, .main-content {
+    height: auto !important; overflow: visible !important;
+    background: #ffffff !important;
+  }
+  /* THE PAGE MUST FIT THE PAGE. The app lays out against a viewport wider
+     than A4 landscape, so without this the right-hand card of every row was
+     sliced down its edge. */
+  .main-content {
+    padding: 0 !important; display: block !important;
+    width: 100% !important; max-width: 100% !important;
+  }
+  .grid-2, .grid-3, .grid-4 { gap: 8px !important; }
+  .card { padding: 10px !important; }
+  .chart-wrap { height: 210px !important; }
+  /* Charts are canvases sized in device pixels; let them shrink with the
+     page rather than keeping their on-screen width. */
+  .chart-wrap canvas { max-width: 100% !important; height: auto !important; }
+  .ng-table { font-size: 9.5px !important; }
+  /* Only the KPI screen prints, whatever else is mounted. */
+  .tab-panel { display: none !important; }
+  .tab-panel#tab-facility-dashboard { display: block !important; }
+
+  /* WHAT PRODUCED THIS PAGE. A PDF that does not name the project, the
+     horizon and the filters behind its numbers cannot be checked later. */
+  .kpi-print-head {
+    display: flex !important; align-items: flex-start;
+    justify-content: space-between; gap: 18px;
+    padding-bottom: 10px; margin-bottom: 14px;
+    border-bottom: 1.5px solid #9218EA;
+  }
+  .kpi-print-brand { display: flex; align-items: center; gap: 10px; }
+  .kpi-print-title { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+  .kpi-print-title span { font-weight: 600; color: #5a5a72; font-size: 11px; }
+  .kpi-print-sub { font-size: 11.5px; color: #5a5a72; }
+  .kpi-print-meta {
+    display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0;
+    font-size: 10px; color: #5a5a72; text-align: right;
+  }
+  .kpi-print-meta dt { font-weight: 700; color: #8e8ea0; display: inline; }
+  .kpi-print-meta dd { display: inline; margin: 0 0 0 4px; color: #1a1a2e; }
+
+  /* A card split across a page break loses the half that explains it. */
+  .card, .dash-metric-card {
+    break-inside: avoid; page-break-inside: avoid;
+    box-shadow: none !important;
+  }
+  .kpi-section-head { break-after: avoid; page-break-after: avoid; }
+  /* Selects print as their chosen value rather than as a control. */
+}
+
+/* A stated absence. Smaller and quieter than a figure, so a column of them
+   does not read as data — but a word, because an em dash where a number
+   should be is indistinguishable from zero. */
+.wh-absent-label {
+  font-size: 11.5px; font-style: normal; color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* Find within the corridor table. The selects above scope the lens; this
+   only narrows these rows. */
+/* POSITIONED, so the visually-hidden label inside it cannot escape.
+   `.sr-only` is `position: absolute` with no offsets, which resolves against
+   the nearest POSITIONED ancestor — and this label had none, so the span's
+   containing block was the page itself. Sitting inside `.main-content`'s own
+   scroller, it landed at document y≈1150 on an 824px viewport and made the
+   ROOT scrollable by 326px: scrolling past the corridor table dragged the
+   whole 100vh app shell up the window and left a band of empty page beneath
+   it, which reads as the screen breaking rather than as the page scrolling.
+   One property contains it; nothing moves visually. */
+.kpi-table-search { display: flex; align-items: center; flex-shrink: 0;
+                    position: relative; }
+.kpi-table-search input {
+  font-family: inherit; font-size: 12.5px; color: var(--text-1);
+  padding: 6px 10px; min-width: 240px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.kpi-table-search input:focus {
+  outline: none; border-color: var(--primary);
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* STICKY COLUMN HEADERS. A corridor table runs to fifty rows, and a reader
+   scrolled into the middle of it was reading unlabelled numbers. */
+.table-wrap-sticky { max-height: 460px; overflow-y: auto; }
+.table-wrap-sticky thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--bg-elevated);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+@media print {
+  .table-wrap-sticky { max-height: none; overflow: visible; }
+  .kpi-table-search { display: none !important; }
+}
+
+/* ── A LEGEND IN THE DOM ──────────────────────────────────────
+   A canvas legend is drawn text: it cannot ellipsise to the space it has and
+   it clips whatever does not fit, which cut the AMOUNT off — the half of the
+   row a reader came for. As DOM the name flexes and the value is reserved. */
+.ng-chart-with-legend {
+  display: flex; align-items: center; gap: var(--space-md); min-width: 0;
+}
+.ng-chart-with-legend > .chart-wrap {
+  flex: 1 1 55%; min-width: 0; height: 100%;
+}
+.ng-legend {
+  flex: 1 1 45%; min-width: 0; max-height: 100%; overflow-y: auto;
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.ng-legend-row {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 11.5px; color: var(--text-2); min-width: 0;
+}
+.ng-legend-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+}
+/* The name gives way; the value does not. */
+.ng-legend-name {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ng-legend-value {
+  flex: 0 0 auto; font-weight: 700; color: var(--text-1);
+}
+
+/* The part of the cost that belongs to no facility. Quiet — it is a caveat on
+   the scorecard, not a finding of its own. */
+/* A caption INSIDE the spend card now, not a loose line above the filters.
+   The negative top margin was pulling it up under the scorecard it used to
+   follow; inside a card it needs ordinary spacing and the card's own width. */
+.kpi-cost-note {
+  color: var(--text-3);
+  margin: 10px 0 0;
+  max-width: 100%;
+  line-height: 1.5;
+}

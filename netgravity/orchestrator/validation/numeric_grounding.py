@@ -237,6 +237,49 @@ _FACT_SPEC: Dict[str, Tuple[ClaimKind, str]] = {
     "fill_gap_vs_recommended_pts": (ClaimKind.PERCENTAGE, "kpi_engine"),
     "n_compared":                (ClaimKind.COUNT, "kpi_engine"),
     "n_not_comparable":          (ClaimKind.COUNT, "kpi_engine"),
+    # ── One KPI chart ───────────────────────────────────────────────────
+    #
+    # A chart explanation is read BESIDE the chart, so a sentence carrying no
+    # quantities says less than the picture under it. These are the values a
+    # chart briefing is allowed to cite, and they are declared HERE rather
+    # than trusted from the payload: `build_authoritative_facts` only admits
+    # keys named in this table, which is what stops a model quoting a number
+    # nobody computed.
+    #
+    # Every one is produced by `reasoning/kpi_chart_evidence.py` from the
+    # backend's own solved `WarehouseHealthKPI` rows — the same records the
+    # chart drew — so a figure in the sentence and a bar above it come from
+    # one source and cannot disagree.
+    "peak_utilization_pct":      (ClaimKind.PERCENTAGE, "kpi_chart"),
+    "threshold_pct":             (ClaimKind.PERCENTAGE, "kpi_chart"),
+    #: A gap between two percentages, in points rather than per cent.
+    "peak_above_average_pts":    (ClaimKind.PERCENTAGE, "kpi_chart"),
+    "points":                    (ClaimKind.PERCENTAGE, "kpi_chart"),
+    "rated_capacity_per_period": (ClaimKind.UNITS, "kpi_chart"),
+    "avg_throughput_units":      (ClaimKind.UNITS, "kpi_chart"),
+    "peak_throughput_units":     (ClaimKind.UNITS, "kpi_chart"),
+    "used_in_peak_period":       (ClaimKind.UNITS, "kpi_chart"),
+    "headroom_units":            (ClaimKind.UNITS, "kpi_chart"),
+    "total_headroom_units":      (ClaimKind.UNITS, "kpi_chart"),
+    "headroom_in_peak_period_units": (ClaimKind.UNITS, "kpi_chart"),
+    "avg_inventory_units":       (ClaimKind.UNITS, "kpi_chart"),
+    "peak_inventory_units":      (ClaimKind.UNITS, "kpi_chart"),
+    "peak_above_average_units":  (ClaimKind.UNITS, "kpi_chart"),
+    "peak_to_average_ratio":     (ClaimKind.RATIO, "kpi_chart"),
+    "seasonal_ratio_threshold":  (ClaimKind.RATIO, "kpi_chart"),
+    "flat_ratio_threshold":      (ClaimKind.RATIO, "kpi_chart"),
+    # Counts. `_is_policeable` ignores a bare count as a claim; declared so
+    # that when one appears beside a measured figure it reads as sourced.
+    "n_sites":                   (ClaimKind.COUNT, "kpi_chart"),
+    "n_at_or_above_threshold_in_peak": (ClaimKind.COUNT, "kpi_chart"),
+    "n_below_threshold_on_average_but_not_in_peak": (ClaimKind.COUNT, "kpi_chart"),
+    "n_tight_in_every_period":   (ClaimKind.COUNT, "kpi_chart"),
+    "n_reporting_stock":         (ClaimKind.COUNT, "kpi_chart"),
+    "n_not_reporting_stock":     (ClaimKind.COUNT, "kpi_chart"),
+    "n_building_for_a_season":   (ClaimKind.COUNT, "kpi_chart"),
+    "n_holding_a_flat_buffer":   (ClaimKind.COUNT, "kpi_chart"),
+    "tight_periods":             (ClaimKind.COUNT, "kpi_chart"),
+    "periods_observed":          (ClaimKind.COUNT, "kpi_chart"),
     # Forecasting engine
     #
     # A projection, not a measurement — and citable for exactly the same reason
@@ -543,6 +586,23 @@ def extract_numeric_claims(
             # amount (1,000.00). Left UNKNOWN so it is compared against every
             # fact kind rather than mis-typed and wrongly reported unsupported.
             kind = ClaimKind.RATIO if abs(float(token.replace(",", ""))) <= 1.0 else ClaimKind.UNKNOWN
+        elif "," in token:
+            # A GROUPED NUMBER IS NOT A BARE COUNT.
+            #
+            # This branch exists because money stopped carrying cents. While
+            # every amount was printed as "216,594,606.26" the dot sent it to
+            # the UNKNOWN case above and it was policed; the moment the cents
+            # came off for readability the same figure fell through to COUNT,
+            # which `_is_policeable` deliberately ignores — so a model could
+            # assert "the cost is 216,594,606" and nothing checked it. The
+            # narrative came back NO_CLAIMS, which reads like a clean result
+            # and is actually the validator having been switched off.
+            #
+            # The exclusion that branch is FOR is bare small integers —
+            # "three facilities", "2 scenarios", "2026". None of those carries
+            # a thousands separator. A number that does is a quantity, and it
+            # is policed as UNKNOWN so it is compared against every fact kind.
+            kind = ClaimKind.UNKNOWN
         else:
             kind = ClaimKind.COUNT
 

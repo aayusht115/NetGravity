@@ -19,8 +19,10 @@ import {
   getActiveCurrency, FORECAST_CATALOGUE, selectForecastSeries, withCurrency,
   FORECAST_BRIEFING, recommendedNetworkChanges, DEMAND_SHORTFALL
 } from './data.js';
+// The twin's legend and the encoding it describes, shared with both views.
+import { twinLegendHtml, facilityLabel, NODE_STYLE } from './twin-legend.js';
 import { initMap, invalidateMapSize, refreshAllMaps,
-         revealMap, renderMapLegendCounts } from './map.js';
+         revealMap, renderMapLegendCounts, refreshTwinMapLegend } from './map.js';
 import { initTwin3D, resizeTwin3D } from './twin3d.js';
 import { networkCountryLabel } from './world-basemap.js';
 import {
@@ -29,7 +31,7 @@ import {
 } from './charts.js';
 import { initScenarios } from './scenarios.js';
 import { renderWarehouseDashboard, clearWarehouseState,
-         warehouseHealthCsvLines } from './warehouse.js';
+         warehouseRow, recordWarehouseDrawn } from './warehouse.js';
 import { mountAgentLoading } from './agent-loading.js';
 import {
   beginAnalysisLoading, endAnalysisLoading, reportAnalysisStage,
@@ -37,6 +39,10 @@ import {
 import { initAgent } from './agent.js';
 import { initLandingPage } from './landing.js';
 import { initInsightDetail } from './insight-detail.js';
+// The two presentation decisions the tiles here and the deep-dive page
+// both make about a finding. Shared so they cannot disagree — see the
+// module header.
+import { insightCta, insightDescription } from './insight-presentation.js';
 import { initAuth } from './auth.js';
 import { initProjects, loadProjects, openProjectById } from './projects.js';
 import { initIngestion } from './ingestion.js';
@@ -48,7 +54,8 @@ import { getActiveProjectId, setActiveProject } from './integration/project-cont
 import { loadIdentity, getCurrentUser } from './identity.js';
 import { kpiService } from './integration/services/kpi-service.js';
 import { twinService } from './integration/services/twin-service.js';
-import { mapNetworkKPIsToCards } from './integration/mappers/kpi-mapper.js';
+import { initKpiView, renderKpiView, currentKpiView } from './kpi-view.js';
+import { clearKpiExplainCache } from './kpi-explain.js';
 import { mapTwinStateToFrontend } from './integration/mappers/twin-mapper.js';
 
 // ─── State ──────────────────────────────────────────────────
@@ -66,17 +73,22 @@ const state = {
   // Set from the bound network's own demand periods; there is no default
   // quarter, because no upload has ever stated one.
   selectedPeriod: null,
+  // Which band of findings the Insights page is showing — 'all', a severity,
+  // or 'action'. Held here rather than read back off the DOM so a re-render
+  // triggered by a late briefing keeps the reader's selection.
+  insightsFilter: 'all',
 };
 
 // Insights actioned via the deep-dive page (insight-detail.js) are dropped
-// from Home's feed on the next render — see window.markAttentionItemResolved.
+// from the Overview's tiles and the Insights page on the next render — see
+// window.markAttentionItemResolved.
 //
 // Declared here, above the window exports, because those exports make
 // renderHome() callable immediately: hydrate.js invokes it as soon as the
 // authoritative data lands, which can be before module evaluation reaches the
 // bottom of this file. With the declaration further down, that call hit the
 // temporal dead zone and threw "Cannot access 'resolvedInsightIds' before
-// initialization", leaving Home's attention feed blank.
+// initialization", leaving Home's findings blank.
 const resolvedInsightIds = new Set();
 
 // Expose globally on window
@@ -87,6 +99,14 @@ if (typeof window !== 'undefined') {
   // Called by ingestion.js the moment an analysis finishes, which can be
   // before Home has ever rendered.
   window.renderOverviewAlert = renderOverviewAlert;
+  // Every screen that reports the state of the solve, in one call. The
+  // notice reaches TWO elements now — the Overview's error-only banner and
+  // the Forecast page's full alert — and ingestion.js has no business
+  // knowing either id.
+  window.refreshNetworkNotice = () => {
+    renderOverviewAlert('ov-notice', { errorsOnly: true });
+    renderOverviewAlert('fc-alert');
+  };
   // Exposed so the authoritative hydration can refresh the twin once solved
   // figures arrive. Without this its re-render call was a silent no-op, and
   // the Digital Twin kept showing pre-solve utilisation.
@@ -96,7 +116,6 @@ if (typeof window !== 'undefined') {
   // the loaded network rather than from the spelling of its id.
   window.__ngFacilityRole = facilityRole;
 }
-
 // ─── Boot ───────────────────────────────────────────────────
 function bootApp() {
   try { initProjects(); } catch (e) { console.error('initProjects error:', e); }
@@ -112,6 +131,46 @@ function bootApp() {
   // means every entry point that raises a loading state finds it there.
   try { mountAgentLoading(); } catch (e) { console.error('agent loading mount:', e); }
   try { initHomeSelectors(); } catch (e) { console.error('initHomeSelectors error:', e); }
+  // The KPI screen's tabs, filters and drill-down. The two hooks are the
+  // things it cannot do itself: set the application's selected facility, and
+  // draw that facility's detail — both of which live here.
+  try {
+    initKpiView({
+      selectEntity: (facilityId) => {
+        state.selectedFacility = facilityId;
+        const sel = document.getElementById('sel-facility');
+        if (sel && [...sel.options].some((o) => o.value === facilityId)) {
+          sel.value = facilityId;
+        }
+      },
+      renderEntity: () => renderFacilityDashboard(),
+      // The period control, filled and read exactly as the top bar's was.
+      // One list, one selected period, one `renderForSelection()` — the KPI
+      // screen did not get a period of its own, it got the one that already
+      // existed, on the screen that describes it.
+      populatePeriods: (select) => populatePeriodSelect(select),
+      selectPeriod: (value) => {
+        state.selectedPeriod = value;
+        const sel = document.getElementById('sel-period');
+        if (sel && [...sel.options].some((o) => o.value === value)) sel.value = value;
+        renderForSelection();
+      },
+      // The KPI screen's Network lens shows the Overview's four figures, and
+      // shows them by calling the Overview's OWN renderer. One source, so the
+      // two screens cannot report different numbers for one network — a
+      // second copy of this arithmetic here is exactly how they would.
+      renderNetworkScorecard: (rowId) => renderHomeKpiStrip(rowId),
+      // The network's inventory cost, from the same authoritative baseline the
+      // scorecard above it reads — so the gap the KPI screen names and the
+      // total it is measured against come from one source.
+      networkInventoryCost: () => {
+        const base = getOptimizedBaseCase() || {};
+        const v = (base.baseline || {}).inventoryCost;
+        return (typeof v === 'number' && Number.isFinite(v)) ? v : null;
+      },
+    });
+  } catch (e) { console.error('initKpiView error:', e); }
+  try { initTwinLegendDock(); } catch (e) { console.error('twin legend dock:', e); }
   try { renderHome(); } catch (e) { console.error('renderHome error:', e); }
   try { renderTwinTables(); } catch (e) { console.error('renderTwinTables error:', e); }
   try { initScenarios(); } catch (e) { console.error('initScenarios error:', e); }
@@ -250,12 +309,24 @@ function renderForecastSummary() {
 
   const mase = meta.accuracy && typeof meta.accuracy.mase === 'number'
     ? meta.accuracy.mase : null;
-  set('fc-model', meta.engine || 'Not reported');
+  // A forecast that arrived with the upload was not produced here, and every
+  // field on this card that describes a model has to say so. Reporting an
+  // engine name, a horizon "modelled" and an accuracy for numbers nothing was
+  // fitted to would attribute the upload's own projection to this build.
+  const supplied = meta.source === 'uploaded';
+  set('fc-model', supplied
+    ? 'Supplied with this upload — not recalculated'
+    : (meta.engine || 'Not reported'));
   set('fc-horizon', `${FORECAST.months.length} periods`);
   // MASE < 1 means the model beats a naive seasonal forecast; the comparison
   // is stated because the bare number means nothing to most readers.
-  set('fc-accuracy', mase === null ? 'Not reported'
-    : `${mase.toFixed(2)} (${mase < 1 ? 'better' : 'worse'} than naive)`);
+  //
+  // "Not applicable" rather than "Not reported" when nothing was fitted: a
+  // measurement that could not exist is a different fact from one that was not
+  // taken, and this row is read as a quality claim either way.
+  set('fc-accuracy', supplied ? 'Not applicable — no model was fitted'
+    : (mase === null ? 'Not reported'
+       : `${mase.toFixed(2)} (${mase < 1 ? 'better' : 'worse'} than naive)`));
   // The series ACTUALLY plotted, which changes when the picker changes.
   // `meta.shown` is written once at hydration, so the title kept naming the
   // default series after the user selected a different one.
@@ -267,14 +338,28 @@ function renderForecastSummary() {
   set('fc-series-count', `${meta.series} market-product pair(s)`);
   // The chart's title IS the series picker (see #fc-series-select), so there
   // is no separate title string to write; the picker names the series.
-  set('fc-chart-tag', meta.status === 'OK' ? 'Observed + forecast' : meta.status);
+  set('fc-chart-tag', supplied ? 'Supplied forecast'
+    : (meta.status === 'OK' ? 'Observed + forecast' : meta.status));
+  // The band is named only when there is one to name. A supplied forecast
+  // without stated bounds is drawn as a line, and promising a p10–p90 band
+  // beside it would describe a shape that is not on the chart.
+  const banded = FORECAST.upper.length && FORECAST.lower.length;
   set('fc-chart-subtitle',
     `${DEMAND_HISTORY.months.length} observed periods + `
-    + `${FORECAST.months.length}-period forecast · p10–p90 band`);
-  set('fc-method-prov',
-    'Produced by netgravity.forecasting, routed through the orchestrator '
-    + 'capability "forecast.demand". No language model is involved in the '
-    + 'figures on this chart.');
+    + `${FORECAST.months.length}-period forecast`
+    + (banded ? ' · p10–p90 band' : ' · no confidence band was supplied')
+    + (meta.uncovered
+      ? ` · ${meta.uncovered} market-product pair(s) in this network are not in `
+        + 'the upload and have no forecast' : ''));
+  set('fc-method-prov', supplied
+    ? 'Supplied with this upload and shown exactly as received. No forecasting '
+      + 'engine ran against these figures: no ETS or quantile model, no '
+      + 'intermittent-demand model, no structural-break detection, no '
+      + 'rolling-origin backtest, and no external signal was applied. The '
+      + 'periods on the axis are the ones the upload states.'
+    : 'Produced by netgravity.forecasting, routed through the orchestrator '
+      + 'capability "forecast.demand". No language model is involved in the '
+      + 'figures on this chart.');
   renderForecastSeriesSelect();
   renderForecastAxisNote();
   renderForecastCapacityKey();
@@ -287,10 +372,9 @@ function renderForecastSummary() {
 /**
  * Draw the whole Forecast screen.
  *
- * The left column is the Overview's alert and attention card, rendered by the
- * SAME two functions into this page's containers — `renderOverviewAlert` and
- * `renderHomeAttentionFeed` both take the element they draw into. Nothing on
- * this page computes a finding, a figure or a recommendation of its own.
+ * The left column is the Overview's alert — `renderOverviewAlert` takes the
+ * element it draws into — above this page's OWN attention card. Nothing here
+ * computes a finding, a figure or a recommendation of its own.
  *
  * On the recommendation: the reasoning agent has no FORECAST scope
  * (netgravity/orchestrator/schemas/reasoning.py lists NETWORK, FACILITY,
@@ -303,9 +387,10 @@ function renderForecastSummary() {
  */
 function renderForecastPage() {
   renderOverviewAlert('fc-alert');
-  // NOT `renderHomeAttentionFeed`. That drew Home's NETWORK-scoped card into
-  // a second container — the same finding, twice, on two screens. This screen
-  // asks a different question and now has its own grounded answer.
+  // This page's own card, about the forecast. The Overview's network-scoped
+  // feed used to be drawn here as well — the same finding, twice, on two
+  // screens, one of them asking a different question. That feed is gone
+  // entirely now; this screen has its own grounded answer.
   renderForecastAttention('fc-attn-body');
   renderHomeSignals('fc-signals-row');
   renderAnalysisTimestamp();
@@ -313,6 +398,90 @@ function renderForecastPage() {
   renderDataIntelligence();
   wireForecastPage();
   requestAnimationFrame(() => sizePageToWindow('.fc-main', '--fc-main-top'));
+}
+
+/**
+ * "How did it reach that number?", as a file.
+ *
+ * ONLY WHERE THERE IS A DERIVATION TO GIVE. A forecast supplied with the
+ * upload was not calculated here, so there is no calculation to explain and
+ * this build cannot account for how the supplier arrived at it. Offering the
+ * button anyway would promise a derivation that cannot exist — the same
+ * failure as the twin's hover card, which described a control it did not have
+ * (Nielsen #1: the system's state is what the screen shows, and a control is a
+ * statement that something can be done).
+ *
+ * The uploaded case is not left silent: the provenance line under this card
+ * already says the figures were supplied and not recalculated, which is the
+ * answer to the question the button would have been pressed to ask.
+ */
+function forecastDownloadHtml() {
+  const meta = window.__ngForecastMeta || {};
+  if (meta.source === 'uploaded') return '';
+  if (!FORECAST.months.length) return '';
+  return `
+    <button type="button" class="insd-download fc-attn-download"
+            id="fc-download-doc">
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor"
+           stroke-width="1.9" aria-hidden="true">
+        <path d="M10 3v9m0 0 3.5-3.5M10 12 6.5 8.5M4 15.5h12"/>
+      </svg>
+      <span>Download how this forecast was calculated</span>
+      <span class="insd-download-ext">DOCX</span>
+    </button>`;
+}
+
+/**
+ * Fetch the forecast's derivation and hand it to the browser to save.
+ *
+ * The same contract as the deep dive's download, deliberately: the button
+ * says what it is doing throughout, and a failure says so ON the button
+ * rather than in a console nobody has open.
+ */
+async function downloadForecastDerivation(button) {
+  if (!button || button.disabled) return;
+  const label = button.querySelector('span');
+  const original = label ? label.textContent : '';
+  button.disabled = true;
+  if (label) label.textContent = 'Preparing\u2026';
+  // A document takes a solve and, where the gateway is configured, a
+  // text-generation call — which the gateway allows itself a minute for. A
+  // button that says the same thing for that long reads as a hung one, so
+  // the wait names its slow half rather than growing silent.
+  const stage = setTimeout(() => {
+    if (label && button.disabled) label.textContent = 'Writing the explanation\u2026';
+  }, 5000);
+
+  try {
+    const mod = await import('./integration/services/forecast-service.js');
+    const { blob, filename } = await mod.forecastService.downloadDerivation({
+      // Off `FORECAST`, which the series picker rewrites — not off the
+      // hydration-time meta, which names the series the screen opened on.
+      marketId: FORECAST.marketId || null,
+      productId: FORECAST.productId || null,
+      horizon: FORECAST.months.length || null,
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || 'forecast-derivation.docx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (label) label.textContent = original;
+  } catch (err) {
+    if (label) label.textContent = 'Could not build the document';
+    button.classList.add('is-failed');
+    button.title = err && err.message ? err.message : '';
+    setTimeout(() => {
+      if (label) label.textContent = original;
+      button.classList.remove('is-failed');
+    }, 4000);
+  } finally {
+    clearTimeout(stage);
+    button.disabled = false;
+  }
 }
 
 /**
@@ -367,64 +536,82 @@ function renderForecastAttention(listId = 'fc-attn-body') {
        <span class="fc-attn-delta up">+${r.growth_pct.toFixed(0)}%</span>`).join('<br>')]);
   }
 
-  if (outlook && outlook.n_structural_breaks) {
-    rows.push(['History that changed',
-      `${outlook.n_structural_breaks} series changed level partway through, so the
-       forecast for ${outlook.n_structural_breaks === 1 ? 'it is' : 'those are'}
-       built from the period after the break rather than the whole history.`]);
-  }
-
-  const signals = FORECAST_BRIEFING.signals;
-  if (signals && typeof signals.attached === 'number' && signals.attached) {
-    rows.push(['External signals',
-      signals.series_adjusted
-        ? `${signals.attached} supplied · <strong>${signals.series_adjusted}
-           series moved</strong> by them`
-        : `${signals.attached} supplied · none changed a forecast — the router
-           applies a signal only where it names something this network contains`]);
-  }
+  // TWO FACTS, NOT FOUR.
+  //
+  // "History that changed" and "External signals" came off this card. Both are
+  // true and neither is a DECISION: they describe how the forecast was made,
+  // which is what the page below this card is for. On a card a leader reads to
+  // answer "is our network big enough for what is coming", rows of methodology
+  // sit between the demand figure and the button that tests it.
+  //
+  // What is left is what the decision turns on: how much demand is coming, and
+  // where it is landing.
 
   const actions = forecastActions(outlook);
 
+  // WHOSE FORECAST THIS IS, BEFORE ANY OF ITS FIGURES.
+  //
+  // It was one muted sentence at the foot of the card, under the numbers,
+  // the actions and the download. A reader who takes a growth rate off this
+  // card and repeats it in a meeting has to know whether this application
+  // produced it or simply added up a column somebody handed it — and that is
+  // the first thing they need to know, not the last.
+  const uploaded = (window.__ngForecastMeta || {}).source === 'uploaded';
+
   list.innerHTML = `
+    ${uploaded ? `
+      <div class="fc-attn-provenance">
+        <span class="fc-attn-provenance-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 9l5-5 5 5M12 4v12"/>
+          </svg>
+        </span>
+        <span><strong>This forecast was uploaded with your data.</strong>
+          NetGravity has not modelled, adjusted or recalculated any of it —
+          the figures below are read from the sheet you supplied.</span>
+      </div>` : ''}
     ${card && card.headline
       ? `<div class="ov-attn-lead"><div class="ov-attn-section">
-           <div class="ov-attn-section-label tone-why">What the projection says</div>
+           <div class="ov-attn-section-label tone-why">${uploaded
+             ? 'What the supplied forecast says' : 'What the projection says'}</div>
            <div class="ov-attn-section-text">${escapeInsightText(card.headline)}</div>
          </div></div>` : ''}
     ${rows.length ? `<dl class="fc-attn-facts">
       ${rows.map(([label, value]) => `<dt>${label}</dt><dd>${value}</dd>`).join('')}
     </dl>` : ''}
-    ${card && card.meaning
-      ? `<div class="ov-attn-section"><div class="ov-attn-section-label tone-impact">
-           What it means</div>
-         <div class="ov-attn-section-text">${escapeInsightText(card.meaning)}</div>
-       </div>` : ''}
     ${card && card.warning
       ? `<div class="fc-attn-warning">${escapeInsightText(card.warning)}</div>` : ''}
-    ${card && card.next_step ? `
-      <div class="ov-attn-next">
-        <span class="ov-attn-next-icon">${OV_ICONS.chart}</span>
-        <div class="ov-attn-next-text">
-          <div class="ov-attn-section-label tone-next">Recommended next step</div>
-          <div class="ov-attn-next-sub">${escapeInsightText(card.next_step)}</div>
-        </div>
-      </div>` : ''}
+    <!-- "Recommended next step" WAS HERE, above "Recommended actions".
+         Two recommendation blocks, one after the other: when they agreed the
+         card said the same thing twice, and when they did not the reader had
+         two recommendations and no way to choose. The actions win — they name
+         a change AND open the scenario that prices it, where the next step was
+         a sentence. Same defect the scenario card was fixed for. -->
     ${actions.length ? `
-      <div class="fc-attn-actions">
+      <div class="scn-take-section-title" style="margin-top:14px">Recommended actions</div>
+      <div class="scn-take-actions">
         ${actions.map((a, i) => `
-          <button type="button" class="fc-attn-action${a.primary ? ' primary' : ''}"
+          <button type="button" class="scn-take-action${a.primary ? ' primary' : ''}"
                   data-fc-action="${i}">
-            <span class="fc-attn-action-label">${escapeInsightText(a.label)}</span>
-            <span class="fc-attn-action-detail">${escapeInsightText(a.detail)}</span>
+            <span class="scn-take-action-label">${escapeInsightText(a.label)}</span>
+            <span class="scn-take-action-detail">${escapeInsightText(a.detail)}</span>
+            <span class="scn-take-action-go">${escapeInsightText(
+              a.cta || 'Test this')} in the scenario planner →</span>
           </button>`).join('')}
       </div>` : ''}
+    ${forecastDownloadHtml()}
     <div class="text-xs text-muted" style="margin-top:10px;line-height:1.5">
-      ${card && card.source === 'llm'
-        ? 'Written by the model from the forecaster\'s own output.'
-        : 'Written by the deterministic template from the forecaster\'s own output.'}
-      Every figure here is the forecasting engine's.
+      ${uploaded
+        ? 'Every figure here is summed from that sheet, and from nothing else.'
+        : `${card && card.source === 'llm'
+            ? 'Written by the model from the forecaster\'s own output.'
+            : 'Written from the forecaster\'s own output without a model.'}
+           Every figure here is the forecasting engine's.`}
     </div>`;
+
+  document.getElementById('fc-download-doc')?.addEventListener('click',
+    (e) => downloadForecastDerivation(e.currentTarget));
 
   list.querySelectorAll('[data-fc-action]').forEach((btn) => {
     const item = actions[Number(btn.dataset.fcAction)];
@@ -451,9 +638,15 @@ function forecastActions(outlook) {
     const pct = growth.toFixed(0);
     actions.push({
       label: `Test the network at ${growth > 0 ? '+' : ''}${pct}% demand`,
-      detail: 'Opens the scenario builder with this forecast\'s own growth rate '
-        + 'filled in. The forecast says what is coming; only a solve says '
-        + 'whether the current footprint carries it.',
+      // ONE LINE. It was three sentences explaining what the button does,
+      // under a label that already says it. A leader reading a
+      // recommendation needs the reason, not the mechanism.
+      detail: 'The forecast says what is coming; only a solve says whether '
+        + 'the current footprint carries it.',
+      // The verb names THIS change, like every other recommendation in the
+      // product. A demand test is not a capacity change, so it does not
+      // borrow the capacity ladder's wording.
+      cta: 'Test the network at this rate',
       primary: true,
       run: () => openScenarioFromForecast({ pct: Number(pct) }),
     });
@@ -478,10 +671,10 @@ function forecastActions(outlook) {
     if (region) {
       actions.push({
         label: `Test ${region} alone, at +${row.growth_pct.toFixed(0)}%`,
-        detail: `${where} grows fastest in this projection, at `
-          + `+${row.growth_pct.toFixed(0)}%. Growth stated for the whole network `
-          + `loads every site; scoping it to ${region} loads the ones that will `
-          + 'actually feel it.',
+        detail: `${where} grows fastest here. Growth stated for the whole `
+          + `network loads every site; scoping it to ${region} loads the `
+          + 'ones that will actually feel it.',
+        cta: `Test ${region} on its own`,
         run: () => openScenarioFromForecast({
           pct: Number(row.growth_pct.toFixed(0)), region }),
       });
@@ -533,7 +726,16 @@ function renderForecastAxisNote() {
   }
   note.hidden = false;
   if (histEl) histEl.style.flexGrow = String(hist);
-  if (foreEl) foreEl.style.flexGrow = String(fore);
+  if (foreEl) {
+    foreEl.style.flexGrow = String(fore);
+    // Name the right-hand half for what it actually is. "Forecast" alone reads
+    // as this build's forecast on a chart where it is not.
+    const label = foreEl.lastChild;
+    if (label && label.nodeType === 3) {
+      label.textContent = (window.__ngForecastMeta || {}).source === 'uploaded'
+        ? 'Forecast (supplied)' : 'Forecast';
+    }
+  }
 }
 
 /**
@@ -752,6 +954,10 @@ window.addEventListener('networkDataLoaded', (e) => {
   // report cached against the id alone would survive its own network.
   try {
     clearWarehouseState();
+    // The saved chart briefings go with it. They are about the network that
+    // produced them, and a paragraph about the previous upload sitting under
+    // a chart of the new one is worse than having none.
+    clearKpiExplainCache();
     if (state.activeTab === 'facility-dashboard') renderWarehouseDashboard();
   } catch (err) { }
   try { initHomeSelectors(); } catch (err) { }
@@ -802,18 +1008,70 @@ function updateTopBarLayout(tab) {
   // and a user who had just set a facility on Home looking for it in the
   // wrong row on the Digital Twin.
   //
-  // Scenario Planning is the one exception, and by request: a scenario is
-  // solved over the whole network for the horizon it was built with, so a
-  // facility or period picker there would be a control that changes nothing.
-  // Hiding it is more honest than showing a dead one.
-  const scopeApplies = (tab !== 'scenarios');
+  // Two screens are exceptions, both because the pair would be dead there.
+  //
+  // Scenario Planning: a scenario is solved over the whole network for the
+  // horizon it was built with, so neither control changes anything.
+  //
+  // Forecast: a demand forecast is per market-product SERIES, and the screen
+  // has its own picker for that (`#fc-series-select`) — a facility does not
+  // narrow it, because a forecast is about demand and demand belongs to
+  // markets. Nor does the period: the horizon is the forecast's own and is
+  // stated on the card. Two controls that look like scope and move nothing
+  // are worse than none: a reader who sets a facility and sees the chart
+  // unchanged has to work out whether the control is broken or the network
+  // is. Hiding a dead control is more honest than showing it.
+  // THE PAIR IS GONE FROM THE TOP BAR, on every screen.
+  //
+  // It was hidden one screen at a time as each was found not to use it —
+  // Scenario Planning, then Forecast, then the KPI screen — and the remaining
+  // three were no better. The Overview reports the whole network by
+  // definition; the Digital Twin is a map of every site, narrowed by clicking
+  // one; Insights are findings about the network, each naming its own
+  // facility. On all three the control moved nothing a reader could see,
+  // which teaches them that scope on this product does not work.
+  //
+  // Scope now lives on the screen that HAS one, in the words of that screen:
+  // the KPI page's own lens dropdowns, the Forecast's series picker, the
+  // twin's node selection. `#sel-facility` / `#sel-period` in the hidden
+  // sub-topbar row remain the application's source of truth and are
+  // untouched — this removes a control, not the state behind it.
   const topScope = document.getElementById('home-top-controls');
   if (topScope) {
-    topScope.style.display = scopeApplies ? 'flex' : 'none';
+    topScope.style.display = 'none';
   }
+
+  // The KPI screen owns its own Facility control, inside the filter bar that
+  // states what the whole screen is showing. The global picker cannot be left
+  // beside it: it lists distribution centres only, so drilling into a PLANT
+  // left it naming a different site than the one on screen — a reader seeing
+  // "Delhi" above Bengaluru's numbers with nothing to say which was wrong,
+  // which is the exact failure the breadcrumb exists to prevent.
+  //
+  // AND NEITHER CAN PERIOD STAY, for the reason Scenario Planning hides both.
+  //
+  // This screen reports the whole solved horizon: "12 periods, 2025-09 to
+  // 2026-08", with peak figures taken from the busiest single period of it.
+  // Nothing on it is scoped to one month — not the scorecard, not the four
+  // charts, not the health table, and not the facility drill-down either. The
+  // control was there and moving it changed nothing, including when a period
+  // OUTSIDE the modelled horizon was picked; the label it used to feed
+  // (`dash-period-label`) is not in the markup any more.
+  //
+  // So it goes, on the rule stated above: hiding a dead control is more
+  // honest than showing one. It is untouched on the Digital Twin, the
+  // Forecast and the Overview, which do scope by period. If the KPI cards are
+  // ever given per-period figures, deleting this branch brings it back.
 
   // Home carries its own page head ("Overview · Your network health…"), so it
   // does not need the generic title row. Every other page does.
+  // The 2D/3D pair describes how the twin is drawn and means nothing
+  // anywhere else, so it appears on the title row of exactly one screen.
+  const twinActions = document.getElementById('sub-topbar-actions');
+  if (twinActions) {
+    twinActions.style.display = (tab === 'twin') ? 'flex' : 'none';
+  }
+
   const subTopbar = document.getElementById('app-sub-topbar');
   if (subTopbar) {
     subTopbar.style.display = isHomeOverview ? 'none' : 'flex';
@@ -829,7 +1087,10 @@ function updateTopBarLayout(tab) {
       mainTitle.innerHTML = 'Insights';
       subTitle.textContent = '· AI-generated observations from your network';
     } else if (tab === 'facility-dashboard') {
-      mainTitle.innerHTML = 'Facility KPIs & Analytics';
+      // "Facility KPIs" named one of four lenses. The screen opens on the
+      // whole network and carries corridors as well as sites, so a title
+      // naming only facilities described a quarter of it.
+      mainTitle.innerHTML = 'Network KPIs &amp; Analytics';
       subTitle.textContent = '· Telemetry & cost breakdown';
     } else if (tab === 'forecast') {
       mainTitle.innerHTML = 'Demand Forecast';
@@ -886,12 +1147,14 @@ if (typeof window !== 'undefined') window.scrollPageToTop = scrollPageToTop;
 // ─── Tab Routing & Sub-Navigation ───────────────────────────
 export function navigateToTab(tab) {
   updateTopBarLayout(tab);
+  // After the bar has been laid out for this tab: its height changes with
+  // what it carries, and anything pinned below it has to know.
+  requestAnimationFrame(publishTopBarHeight);
 
-  // Sidebar is flat (Home, KPIs, Digital Twin, Forecast, Scenario
-  // Planning). Insights/Recommendations pages are gone — an insight card
-  // on Home opens a full-page deep dive instead (see insight-detail.js),
-  // which is not itself a sidebar destination and manages its own nav
-  // highlighting/panel display independent of this function.
+  // Overview, then Baseline (Digital Twin / KPIs / Insights), then Forecast
+  // and Scenarios. The full-page insight deep dive is NOT a sidebar
+  // destination — it is opened from a tile, a row or a card, and manages its
+  // own nav highlighting and panel display independently of this function.
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   const navKey = (tab === 'overview') ? 'home' : tab;
   document.querySelector(`.nav-item[data-tab="${navKey}"]`)?.classList.add('active');
@@ -916,7 +1179,11 @@ export function navigateToTab(tab) {
   if (tab === 'facility-dashboard') {
     document.getElementById('tab-facility-dashboard')?.classList.add('active');
     state.activeTab = 'facility-dashboard';
-    renderFacilityDashboard();
+    // Always the whole network first. A reader arriving from the Overview
+    // arrives with a network-level question, so the screen opens on the
+    // network rather than on whichever site a previous visit left selected —
+    // `renderKpiView()` clears the drill-down and draws the roll-up.
+    renderKpiView();
     // Not awaited, and deliberately so: the facility band is already hydrated
     // and renders immediately, while the warehouse band fetches a report the
     // backend has already computed and cached per network version. Blocking
@@ -928,7 +1195,17 @@ export function navigateToTab(tab) {
     return;
   }
 
-  // 3. Other Top Tabs (Digital Twin, Scenario Planning, Forecasting)
+  // 3. Insights — every finding about the baseline, not just the three
+  //    that lead on Home.
+  if (tab === 'insights') {
+    document.getElementById('tab-insights')?.classList.add('active');
+    state.activeTab = 'insights';
+    renderInsightsPage();
+    scrollPageToTop();
+    return;
+  }
+
+  // 4. Other Top Tabs (Digital Twin, Scenario Planning, Forecasting)
   const panel = document.getElementById('tab-' + tab);
   if (panel) panel.classList.add('active');
 
@@ -957,8 +1234,7 @@ export function navigateToTab(tab) {
         renderTwinTables();
         // A scenario solved since the last render changes what is recommended,
         // and this is the screen that states it.
-        renderRecommendedChangeNote();
-      } catch (err) {
+            } catch (err) {
         console.error('Twin initialization warning:', err);
       }
       window.dispatchEvent(new Event('resize'));
@@ -1134,9 +1410,11 @@ function syncNavGroups() {
 }
 
 function initTabs() {
-  // Primary nav items (flat: Home, KPIs, Digital Twin, Forecast, Scenario
-  // Planning — see navigateToTab for how Insights/Recommendations, which
-  // no longer have their own sidebar entry, still route correctly).
+  // Every sidebar entry that names a tab: Overview, Baseline's two (Digital
+  // Twin, KPI Dashboard) and Opportunities' three (Insights, Forecasting,
+  // Scenario Builder). A group HEAD is deliberately not one of them — it
+  // carries `data-group-tab` instead, so it opens its first child without
+  // competing with that child for the active mark.
   document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
     item.addEventListener('click', () => {
       const tab = item.dataset.tab;
@@ -1638,19 +1916,117 @@ function populateFacilitySelector() {
 /**
  * Tell a page's body grid how much window is left for it.
  *
- * The Overview's `.ov-main` and the Forecast page's `.fc-main` are both sized
- * to fill the rest of the FIRST screen, so the row below each of them — the
- * signals — begins below the fold. Each needs the distance from the top of
- * the window down to its own top edge: the global top bar, the page-title row
- * where there is one, the page's padding and the head row. Those vary with
- * the viewport and with which page is showing, and none of them can be
+ * The Forecast page's `.fc-main` is sized to fill the rest of the FIRST
+ * screen, so the row below it — the signals — begins below the fold. It needs
+ * the distance from the top of the window down to its own top edge: the global
+ * top bar, the page-title row, the page's padding and the head row. Those vary
+ * with the viewport and with which page is showing, and none of them can be
  * expressed in CSS from inside the grid, so the distance is measured once per
  * render and written back as a custom property.
+ *
+ * The Overview had a `.ov-main` sized the same way. It does not any more: with
+ * the twin gone that page is four rows that flow, and a page that flows needs
+ * no measurement.
  *
  * Reading the top of the element whose height we are about to set is not
  * circular: its top is fixed by what comes BEFORE it, and nothing before it
  * depends on its height.
  */
+/**
+ * The height of the in-page top bar, published for anything that has to sit
+ * clear of it.
+ *
+ * `.app-global-topbar` is `position: sticky; top: 0` inside `.main-content`,
+ * which is the scroll container. Anything else sticky in that container pins
+ * to the same scrollport — so the scenario recommendation card, at
+ * `top: 16px`, pinned SIXTEEN PIXELS FROM THE TOP OF THE SCROLLPORT, which is
+ * behind the bar. Its heading and the first line of the verdict scrolled
+ * underneath and stayed there.
+ *
+ * Measured rather than written as a constant: the bar's height is its own
+ * padding plus a row of controls whose size follows the type scale, and it
+ * changes with the project-name button's line count on a narrow window.
+ */
+/**
+ * The key's dock: the glyphs it shows shut, and opening it.
+ *
+ * The peek is built from `NODE_STYLE`, which is the same source the markers,
+ * the 3D badges and the key's own rows are drawn from — so the three symbols
+ * on the handle are the three symbols on the map, by construction rather than
+ * by a second list that would drift.
+ */
+/**
+ * One legend dock, wired for whichever stage asks for it.
+ *
+ * ONE IMPLEMENTATION, TWO STAGES. The Digital Twin's key is a dock at the foot
+ * of its card: a "Key" bar that opens the legend UPWARD over the map and
+ * closes when the reader touches the network underneath. The scenario
+ * planner's twin card had the same key permanently expanded below its map
+ * instead — the same rows, taking a fifth of a panel whose whole job is to
+ * show a network, on a screen where the reader has already learned the key
+ * from the twin.
+ *
+ * The two are now the same control with the same behaviour, because they
+ * describe the same encodings; a key that behaves differently on the second
+ * screen is a second thing to learn (Nielsen #4).
+ *
+ * `stageId` is what the key gets out of the way FOR: a click on the network is
+ * a click on the thing the key describes.
+ */
+function initLegendDock({ toggleId, panelId, peekId, dockId, stageId }) {
+  const toggle = document.getElementById(toggleId);
+  const panel = document.getElementById(panelId);
+  const peek = peekId ? document.getElementById(peekId) : null;
+  if (!toggle || !panel) return;
+
+  if (peek && !peek.textContent) {
+    peek.textContent = ['plant', 'dc', 'market']
+      .map((k) => (NODE_STYLE[k] || {}).glyph || '').join('');
+  }
+
+  toggle.addEventListener('click', () => {
+    const open = panel.hidden;
+    panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  // A click on the map is a click on the thing the key describes, so the key
+  // gets out of the way rather than staying open over it.
+  document.getElementById(stageId)?.addEventListener('click', (e) => {
+    if (panel.hidden) return;
+    if (dockId && document.getElementById(dockId)?.contains(e.target)) return;
+    panel.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+  });
+}
+
+function initTwinLegendDock() {
+  initLegendDock({
+    toggleId: 'twin-legend-toggle', panelId: 'twin3d-legend',
+    peekId: 'twin-legend-peek', dockId: 'twin-legend-dock',
+    stageId: 'twin-stage',
+  });
+  initLegendDock({
+    toggleId: 'scn-legend-toggle', panelId: 'scenario-map-legend',
+    peekId: 'scn-legend-peek', dockId: 'scn-legend-dock',
+    stageId: 'scenario-map-wrap',
+  });
+}
+
+function publishTopBarHeight() {
+  const bar = document.querySelector('.app-global-topbar');
+  const shell = document.querySelector('.main-content');
+  if (!bar || !shell) return;
+  const h = Math.round(bar.getBoundingClientRect().height);
+  if (Number.isFinite(h) && h > 0) {
+    shell.style.setProperty('--global-topbar-h', `${h}px`);
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', publishTopBarHeight);
+}
+
 function sizePageToWindow(selector, varName) {
   const el = document.querySelector(selector);
   if (!el || el.offsetParent === null) return;
@@ -1660,51 +2036,48 @@ function sizePageToWindow(selector, varName) {
   if (shell) shell.style.setProperty(varName, top + 'px');
 }
 
+/**
+ * Keep Home's bottom rows clear of the fixed "Ask Netgravity" button.
+ *
+ * SUPERSEDED, and deliberately kept as one function rather than deleted: this
+ * used to size a fixed-height body grid (`.ov-main`) to the first screen, and
+ * to measure the KPI strip so four figures landed above the fold. Neither is
+ * needed any more — the grid is gone with the twin, and the strip is the FIRST
+ * row of the page. Both variables are cleared here so a cached stylesheet
+ * cannot go on subtracting a height nobody is writing.
+ *
+ * What is left is the one measurement this page still needs. "Ask Netgravity"
+ * is `position: fixed` at the bottom right of the VIEWPORT, and Home's last
+ * two rows — the data requests and the "last analysed" line — are what end up
+ * underneath it. `--ov-fab-reserve` is the width to keep clear on their right.
+ *
+ * Measured rather than reserved as a constant: the button's width is its
+ * label's width, which follows the type scale, and it is hidden outright until
+ * a user is signed in (`display: none`, so there is no rect at all).
+ *
+ * Visibility is read from the rect, not from `offsetParent`: that property is
+ * null for EVERY `position: fixed` element, visible or not, so the obvious
+ * test reports the button hidden and reserves nothing. A hidden button has a
+ * zero-width rect, which is the thing actually being asked.
+ */
 function sizeOverviewToWindow() {
-  sizePageToWindow('#tab-home.active .ov-main', '--ov-main-top');
-  // SUPERSEDED: this also measured the KPI strip and wrote `--ov-strip-h`,
-  // which `.ov-main` subtracted so the strip landed on the first screen.
-  // The findings are what this page is for, and buying the strip 95px cost
-  // the attention card the height its recommendation needed. The strip is
-  // now the first thing below the fold; nothing measures it any more, and
-  // the stale variable is cleared so a cached stylesheet cannot keep
-  // subtracting a height nobody is writing.
-  const strip = document.querySelector('#tab-home.active .home2-kpi-strip');
   const shell = document.querySelector('.main-content');
-  if (!shell) return;
-  shell.style.removeProperty('--ov-strip-h');
-  if (!strip) return;
-  const box = strip.getBoundingClientRect();
+  if (shell) {
+    shell.style.removeProperty('--ov-strip-h');
+    shell.style.removeProperty('--ov-main-top');
+  }
 
-  // How much of the strip's right end the "Ask Netgravity" button covers.
-  //
-  // That button is `position: fixed` at the bottom-right of the VIEWPORT and
-  // the strip is the bottom row of the page, so the two share a band of
-  // screen whatever the layout does. "View all KPIs" is the strip's
-  // rightmost element, and it is what ends up underneath.
-  //
-  // Measured rather than reserved as a constant: the button's width is its
-  // label's width, which follows the type scale, and it is hidden outright
-  // until a user is signed in — `display: none`, so there is no rect at all.
-  //
-  // Visibility is read from the rect, not from `offsetParent`: that property
-  // is null for EVERY `position: fixed` element, visible or not, so the
-  // obvious test reports the button hidden and reserves nothing. A hidden
-  // button has a zero-width rect, which is the thing actually being asked.
+  const page = document.querySelector('#tab-home.active');
+  if (!page) return;
+  const box = page.getBoundingClientRect();
+
   const fab = document.getElementById('floating-chatbot-fab');
   const fabBox = fab ? fab.getBoundingClientRect() : null;
-  // No vertical test any more. It used to check whether the two currently
-  // share a band of screen, which was true when the strip was on the first
-  // screen and is false the moment it is measured below the fold — so the
-  // gutter came out 0 and the button landed under the chat bubble as soon
-  // as the reader scrolled down to it. The chat button is fixed to the
-  // bottom of the VIEWPORT and the strip is the last row of the page:
-  // scrolling to one always brings the other alongside. What is left to
-  // measure is how much of the strip's right end it covers.
   const reserve = (fabBox && fabBox.width > 0)
     ? Math.max(0, Math.round(box.right - fabBox.left) + 16) : 0;
-  strip.style.setProperty('--ov-fab-reserve', reserve + 'px');
+  page.style.setProperty('--ov-fab-reserve', reserve + 'px');
 }
+
 
 if (typeof window !== 'undefined') {
   let sizingFrame = null;
@@ -1723,16 +2096,27 @@ if (typeof window !== 'undefined') {
 }
 
 // ─── Render Full Home ───────────────────────────────────────
+// Four rows, in the order the page is read: the figures, the findings, the
+// data the analysis did not have, and when it last ran.
+//
+// `renderOverviewAlert` is NOT called here for the whole state of the solve —
+// only for the one state a tile cannot express, an infeasible network. The
+// attention feed that used to sit beside it is gone: the three insight tiles
+// say the same things with the recommendation on screen rather than behind an
+// internal scroller.
+//
+// Nor is `renderHomeDigitalTwin`. The twin preview is gone from this page; it
+// is one click away under Baseline, and it is the same scene.
 function renderHome() {
   renderSidebarMeta();
-  renderOverviewAlert();
-  renderHomeForecast();
-  renderHomeDigitalTwin();
-  renderHomeAttentionFeed();
+  renderOverviewAlert('ov-notice', { errorsOnly: true });
   renderHomeKpiStrip();
+  renderHomeInsightTiles();
+  renderHomeDataStrip();
+  renderHomeForecast();
   renderAnalysisTimestamp();
-  // After the head row has its final text, so the measurement is of the head
-  // that is actually on screen.
+  // After the rows have their final content, so the measurement is of the
+  // page that is actually on screen.
   requestAnimationFrame(sizeOverviewToWindow);
 }
 
@@ -1766,10 +2150,28 @@ function renderHome() {
  * link to the rows behind it. The per-market detail is not deleted — it is
  * what the linked view is for.
  */
-function renderOverviewAlert(elId = 'ov-alert') {
+// Default is the FORECAST page's element. Home carried this card until the
+// insight tiles replaced it; `#ov-alert` is not in the markup any more, so a
+// default naming it would make every bare call a silent no-op — including
+// ingestion.js's, which is how the shortfall notice reaches a screen at all.
+function renderOverviewAlert(elId = 'fc-alert', { errorsOnly = false } = {}) {
   const el = document.getElementById(elId);
   if (!el) return;
   const notice = window.__ngNetworkNotice || null;
+
+  // ERRORS ONLY, for the Overview's notice slot. That page states an unserved
+  // shortfall as a finding — the first insight tile — so repeating it in a
+  // banner above the figures would be the same conclusion twice. What a tile
+  // cannot state is that there is no plan at all: an infeasible network
+  // produces no briefing, so the tiles would render "no findings have been
+  // generated yet" over a genuine engine failure. That case, and only that
+  // case, needs a banner.
+  if (errorsOnly && !(notice && notice.tone === 'error')) {
+    el.hidden = true;
+    el.innerHTML = '';
+    return;
+  }
+  el.hidden = false;
   const base = getOptimizedBaseCase()?.baseline || {};
   const unserved = (typeof base.unservedDemand === 'number') ? base.unservedDemand : null;
   const total = (typeof base.totalDemand === 'number') ? base.totalDemand : null;
@@ -1982,9 +2384,16 @@ export function renderFacilityDashboard() {
   const period = PERIODS.find(p => p.id === state.selectedPeriod);
   // Role comes from the loaded network, not from the id's spelling.
   const isDC = isDCFacility(state.selectedFacility);
-  const utilPct = isDC ? fac.utilPct
+  // ONE DECIMAL, both branches. A DC's stored `utilPct` carried the solver's
+  // full precision and printed "34.32%" beside a plant's "82.7%" — two
+  // precisions for one metric on one screen, which reads as two different
+  // kinds of measurement rather than one rounded two ways.
+  const utilRaw = isDC ? fac.utilPct
     : (fac.throughput != null && fac.capacity
-        ? ((fac.throughput / fac.capacity) * 100).toFixed(1) : null);
+        ? (fac.throughput / fac.capacity) * 100 : null);
+  const utilPct = (utilRaw === null || utilRaw === undefined
+                   || Number.isNaN(Number(utilRaw)))
+    ? null : Number(utilRaw).toFixed(1);
   const utilColor = getUtilColor(utilPct);
   // Peak-period utilisation, from the solver. Null unless a multi-period solve
   // reported one that is genuinely above the average — on a single-period solve
@@ -2038,7 +2447,38 @@ export function renderFacilityDashboard() {
   const carbonUnits = laneFlow.length ? laneFlow.reduce((a, b) => a + b, 0) : 0;
   const carbonPerUnit = (carbonTotal !== null && carbonUnits > 0)
     ? carbonTotal / carbonUnits : null;
-  const dash = (v) => (v === null || v === undefined || Number.isNaN(v)) ? '—' : v;
+  // A FIGURE THE SOLVE DID NOT PRODUCE, IN WORDS.
+  //
+  // An em dash where a number should be reads as "nothing" or, worse, as
+  // zero, and the reader has no way to tell which. These cards each carry one
+  // figure, so there is room to say it — the dense health table is the one
+  // place a dash still earns its keep.
+  const absent = (reason = 'Not reported') =>
+    `<span class="wh-absent wh-absent-label">${reason}</span>`;
+  const dash = (v) => (v === null || v === undefined || Number.isNaN(v)) ? absent() : v;
+
+  // The authoritative facility cost, from the same warehouse report row the
+  // health table and the spend donut read.
+  const whRow = warehouseRow(state.selectedFacility);
+  const rawFacilityCost = whRow ? Number(whRow.total_facility_cost) : NaN;
+  const facilityCost = Number.isFinite(rawFacilityCost) ? rawFacilityCost : null;
+
+  // THE STOCK THIS SITE HOLDS, from that same row.
+  //
+  // `null` and `0` are different answers and stay different: the engine
+  // reports no inventory decisions as absence WITH a reason, and a solved
+  // zero as zero. `Number(null)` is 0, so each is tested before it is read.
+  const stockFigure = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const out = Number(value);
+    return Number.isFinite(out) ? out : null;
+  };
+  const stockAvg = whRow ? stockFigure(whRow.avg_inventory_units) : null;
+  const stockPeak = whRow ? stockFigure(whRow.peak_inventory_units) : null;
+  // The engine's own words for why there is nothing, rather than a second,
+  // vaguer copy of them written here.
+  const stockReason = (whRow && whRow.inventory_status && whRow.inventory_status.reason)
+    || 'Not reported by this solve';
 
   // 6 Executive Metric Cards
   const metricsGrid = document.getElementById('dash-metrics-grid');
@@ -2063,40 +2503,76 @@ export function renderFacilityDashboard() {
         </div>`}
       </div>
 
+      <!-- THE SERVICE-LEVEL CARD IS GONE FROM HERE, DELIBERATELY.
+
+           It showed the NETWORK's demand-served figure on a card headed by a
+           facility's name, in a grid where every other card is about that one
+           site. Captioning it "Network-wide" did not fix that: a reader
+           scanning six cards about Atlanta reads the fifth as Atlanta's too.
+
+           Service level is a property of demand, not of a building, and this
+           model does not decompose it per site — so this is not a figure
+           waiting to be built, it is one that does not exist at this level.
+           It belongs to the Network lens's scorecard at the top of the
+           screen, where it describes the thing it is actually about. -->
+
       <div class="dash-metric-card">
-        <div class="dash-metric-title">Demand Served Within SLA</div>
-        <div class="dash-metric-val" style="color:var(--green)">${dash(kpis?.sla?.value)}%</div>
+        <div class="dash-metric-title">Facility Cost</div>
+        <!-- ONE FACILITY-COST METRIC, and this is it.
+             This card read kpis.totalCost, which the per-facility endpoint
+             never produces — it returns utilisation, throughput, capacity and
+             is_open, and no cost at all — so it was blank on every real
+             network while the table beside it showed a figure. Not two
+             definitions disagreeing: one real metric, and one card reading a
+             field nobody fills.
+             It now reads the SAME total_facility_cost the health table and
+             the spend donut read, so the three cannot disagree, and it names
+             what that figure covers rather than leaving the reader to assume
+             it is everything.
+             (No backticks in this comment: it sits inside a template literal,
+             and one would end the template. See warehouse.js's header.) -->
+        <div class="dash-metric-val" style="color:var(--primary)">${
+          facilityCost === null ? '<span class="wh-absent wh-absent-label">Not reported</span>'
+                                : formatCurrency(facilityCost)}</div>
         <div class="dash-metric-sub">
-          <span>Target: <strong>≥95.0%</strong></span>
-          <!-- Was "↑ 1.8% vs last period". There is no last period: a solve is
-               one point in time and this build stores no prior run. -->
-          <span class="text-muted">Network-wide · no prior solve to compare</span>
+          <span>Handling: <strong>${fac.handlingCost == null
+            ? 'Not reported' : formatCurrencyExact(fac.handlingCost) + '/unit'}</strong></span>
+          <span class="text-muted">Fixed, opening, handling and holding — transport excluded</span>
         </div>
       </div>
 
       <div class="dash-metric-card">
-        <div class="dash-metric-title">Total Operating Cost</div>
-        <div class="dash-metric-val" style="color:var(--primary)">${formatCurrency(kpis?.totalCost?.value ?? null)}</div>
+        <div class="dash-metric-title">Stock Held on Site</div>
+        <!-- IT READS THE ROW THE TABLE READS.
+             This card was headed "Inventory Supply Coverage" and showed
+             kpis.inventoryDays — a field FACILITY_KPIS seeds as null and
+             nothing ever fills — over two hardcoded "Not reported" strings.
+             So Columbus Regional DC read "Not reported" three times while the
+             health table two panels away reported 415 average and 2,117 peak
+             units for that same site: one screen, two answers to "does this
+             site hold stock".
+             Days of coverage is NOT computed here and is not implied. It
+             needs a demand rate and a period length in days, and the solve
+             states neither — so the card reports the quantity the solve did
+             produce, and the coverage line says what is missing rather than
+             printing a number nobody measured.
+             A measured 0 stays 0: a site holding none is not a site nobody
+             measured, and the engine's own inventory_status keeps them
+             apart. -->
+        <div class="dash-metric-val">${stockPeak === null ? absent('Not reported')
+          : `${formatNumber(stockPeak)} <span style="font-size:16px;color:var(--text-3);font-weight:600">units</span>`}</div>
         <div class="dash-metric-sub">
-          <span>Handling: <strong>${fac.handlingCost == null ? '—' : formatCurrencyExact(fac.handlingCost) + '/unit'}</strong></span>
-          <!-- Was "↓ 3.2% vs budget". No budget is loaded anywhere in this build. -->
-          <span class="text-muted">Not attributed per facility</span>
-        </div>
-      </div>
-
-      <div class="dash-metric-card">
-        <div class="dash-metric-title">Inventory Supply Coverage</div>
-        <div class="dash-metric-val">${dash(kpis?.inventoryDays?.value)} <span style="font-size:16px;color:var(--text-3);font-weight:600">days</span></div>
-        <div class="dash-metric-sub">
-          <!-- Were "₹3.4L avg" and "140%", neither computed anywhere. -->
-          <span>Holding value: <strong>—</strong></span>
-          <span>Safety buffer: <strong>—</strong></span>
+          <span>Average held: <strong>${stockAvg === null
+            ? absent('Not reported') : formatNumber(stockAvg)}</strong></span>
+          <span class="text-muted">${stockPeak === null
+            ? escAttr(stockReason)
+            : 'Peak across the horizon · days of coverage not reported by this solve'}</span>
         </div>
       </div>
 
       <div class="dash-metric-card">
         <div class="dash-metric-title">Average Transit Lead Time</div>
-        <div class="dash-metric-val">${avgLead === null ? '—' : avgLead.toFixed(1)} <span style="font-size:16px;color:var(--text-3);font-weight:600">days</span></div>
+        <div class="dash-metric-val">${avgLead === null ? absent('Not reported') : `${avgLead.toFixed(1)} <span style="font-size:16px;color:var(--text-3);font-weight:600">days</span>`}</div>
         <div class="dash-metric-sub">
           <!-- From the transit times on this facility's own lanes. The card
                read a fixed "1.2 days · Fastest 0.3d · Slowest 3.5d" for every
@@ -2110,24 +2586,19 @@ export function renderFacilityDashboard() {
 
       <div class="dash-metric-card">
         <div class="dash-metric-title">Carbon on Connected Corridors</div>
-        <div class="dash-metric-val">${carbonPerUnit === null ? '—' : carbonPerUnit.toFixed(2)} <span style="font-size:16px;color:var(--text-3);font-weight:600">kg CO₂e/u</span></div>
+        <div class="dash-metric-val">${carbonPerUnit === null ? absent('Not reported') : `${carbonPerUnit.toFixed(2)} <span style="font-size:16px;color:var(--text-3);font-weight:600">kg CO₂e/u</span>`}</div>
         <div class="dash-metric-sub">
           <!-- Summed from the solver's per-lane carbon for the lanes attached
                to this facility, and labelled as that rather than as the
                facility's own footprint. Was a fixed "0.42 kg CO2e/u,
                14.8t CO2e/mo, down 2.1% YoY". -->
-          <span>Total: <strong>${carbonTotal === null ? '—' : formatNumber(Math.round(carbonTotal)) + ' kg'}</strong></span>
+          <span>Total: <strong>${carbonTotal === null ? absent('Not reported') : formatNumber(Math.round(carbonTotal)) + ' kg'}</strong></span>
           <span class="text-muted">${carbonTotal === null ? 'no solved flow' : 'inbound + outbound lanes'}</span>
         </div>
       </div>
     `;
   }
 
-  // Tags on Charts
-  const utilTag = document.getElementById('dash-util-tag');
-  if (utilTag) utilTag.textContent = `${utilPct}% Utilisation`;
-  const costTag = document.getElementById('dash-total-cost-tag');
-  if (costTag) costTag.textContent = kpis ? `${formatCurrency(kpis.totalCost.value)} / period` : '— / period';
 
   // Connected Lanes calculation
   const connectedLanes = LANES.filter(l => l.from === state.selectedFacility || l.to === state.selectedFacility).map(l => {
@@ -2141,24 +2612,92 @@ export function renderFacilityDashboard() {
     };
   });
 
-  const laneCountTag = document.getElementById('dash-lane-count-tag');
-  if (laneCountTag) laneCountTag.textContent = `${connectedLanes.length} Active Corridors`;
 
   // Render the 3 Charts
   setTimeout(() => {
-    renderFacilityThroughputChart('chart-dash-throughput', fac);
-    renderFacilityCostBreakdownChart('chart-dash-costs', fac);
-    renderFacilityLaneFlowsChart('chart-dash-lanes', connectedLanes, state.selectedFacility);
+    // The solved per-period series for THIS site — the same record the
+    // explanation beside it reads, so the picture and the sentence cannot
+    // state different throughputs.
+    //
+    // RECORDED ON THE LINE THAT DRAWS IT, like the three network charts. The
+    // chart returns whether it had a series to plot, and "explain this chart"
+    // reads that — so a site the solve gave no per-period figures for is a
+    // chart with nothing on it to explain, rather than a selected facility
+    // that gets explained anyway.
+    recordWarehouseDrawn('throughput_horizon',
+      renderFacilityThroughputChart('chart-dash-throughput', whRow)
+        ? [state.selectedFacility] : []);
+    // The engine's own components for THIS site — the same four that sum to
+    // the Facility Cost card above. It used to be handed the facility and
+    // invent five figures from constants.
+    renderFacilityCostBreakdownChart('chart-dash-costs', whRow);
+    // Returns how many corridors it drew against how many the site has: the
+    // chart stops at twelve so its labels stay apart, and the caption below
+    // has to say so rather than let a reader count nine bars under a sentence
+    // promising nineteen.
+    const drawn = renderFacilityLaneFlowsChart(
+      'chart-dash-lanes', connectedLanes, state.selectedFacility);
+    captionCorridorChart(drawn);
   }, 60);
 
+  // WHAT THIS SITE'S CORRIDORS ACTUALLY ARE, in the vocabulary of its role.
+  //
+  // The caption was one fixed sentence — "Inbound supply from plants &
+  // Outbound dispatches to demand markets" — printed above every facility.
+  // On a plant it names an inbound flow a plant does not have; on a DC with
+  // no outbound solved it promises dispatches the chart does not show.
+  //
+  // Counted from the corridors actually attached to this site, so the caption
+  // and the bars below it cannot disagree.
+  function captionCorridorChart(drawn) {
+    const laneSubtitle = document.getElementById('dash-lanes-subtitle');
+    if (!laneSubtitle) return;
+    const inbound = connectedLanes.filter((l) => l.direction === 'Inbound').length;
+    const outbound = connectedLanes.length - inbound;
+    const parts = [];
+    if (inbound) {
+      parts.push(`${inbound} inbound ${inbound === 1 ? 'corridor' : 'corridors'}`
+        + (isDC ? ' carrying supply into this site' : ' feeding this plant'));
+    }
+    if (outbound) {
+      parts.push(`${outbound} outbound ${outbound === 1 ? 'corridor' : 'corridors'}`
+        + (isDC ? ' dispatching to the markets it serves'
+                : ' shipping production onward'));
+    }
+    // Only when the chart is genuinely holding some back.
+    const held = drawn && drawn.total > drawn.shown
+      ? ` · the ${drawn.shown} busiest are charted, all ${drawn.total} are in `
+        + 'the table below'
+      : '';
+    laneSubtitle.textContent = parts.length
+      ? parts.join(' · ') + held
+      : 'This site carries no corridor in the solved plan.';
+  }
+  // Called again once the chart has drawn and can say how much it showed; this
+  // first call fills the caption immediately so the card is never blank while
+  // the 60ms chart timer runs.
+  captionCorridorChart(null);
+
   // Corridor Summary Narrative
-  const totalFlow = connectedLanes.reduce((sum, l) => sum + (l.flow || 0), 0);
+  // Only corridors that reported a volume. `l.flow || 0` counted an absent
+  // reading as zero and folded it into a total presented as the site's whole
+  // throughput.
+  const reportedFlows = connectedLanes
+    .map((l) => (l.flow === null || l.flow === undefined ? null : Number(l.flow)))
+    .filter((v) => v !== null && Number.isFinite(v));
+  const totalFlow = reportedFlows.reduce((sum, v) => sum + v, 0);
   const avgCost = connectedLanes.length > 0 ? (connectedLanes.reduce((sum, l) => sum + (l.cost || 0), 0) / connectedLanes.length).toFixed(1) : 0;
   const summaryEl = document.getElementById('dash-corridor-summary');
   if (summaryEl) {
     summaryEl.innerHTML = `
       <div style="font-weight:700;color:var(--text-1);margin-bottom:6px">Corridor Network Health</div>
-      <div>• <strong>${connectedLanes.length} active transportation corridors</strong> handle a collective flow of <strong>${formatNumber(totalFlow)} ${perPeriodLabel()}</strong>.</div>
+      <div>• <strong>${connectedLanes.length} active transportation corridors</strong>${
+        reportedFlows.length
+          ? ` handle a collective flow of <strong>${formatNumber(totalFlow)} ${perPeriodLabel()}</strong>`
+            + (reportedFlows.length < connectedLanes.length
+                ? `, across the ${reportedFlows.length} that report a volume`
+                : '')
+          : ', none of which reports a solved volume'}.</div>
       <div class="mt-xs">• Weighted average transportation rate across all active arcs is <strong>${formatCurrencyExact(avgCost)} / unit</strong>.</div>
       <!-- Was "on-time transit confidence of 98.2%", a figure nothing in this
            build measures. Replaced with a fact the corridor set does carry. -->
@@ -2175,11 +2714,17 @@ export function renderFacilityDashboard() {
       <tr>
         <td><strong>${l.peerName}</strong></td>
         <td><span class="tag ${l.direction === 'Inbound' ? 'tag-primary' : 'tag-muted'}">${l.direction}</span></td>
-        <td class="num">${formatNumber(l.flow)} ${perPeriodLabel()}</td>
-        <td class="num">${formatNumber(l.distance)} km</td>
-        <td class="num font-bold">${l.cost == null ? '—' : formatCurrencyExact(l.cost)}</td>
-        <td class="num">${l.leadTime} days</td>
-        <td><span class="tag tag-success">${l.mode}</span></td>
+        <td class="num">${l.flow === null || l.flow === undefined
+          ? absent('Not reported')
+          : `${formatNumber(l.flow)} ${perPeriodLabel()}`}</td>
+        <td class="num">${l.distance == null
+          ? absent('Not reported') : `${formatNumber(l.distance)} km`}</td>
+        <td class="num font-bold">${l.cost == null
+          ? absent('Not reported') : formatCurrencyExact(l.cost)}</td>
+        <td class="num">${l.leadTime == null
+          ? absent('Not reported') : `${l.leadTime} days`}</td>
+        <td>${l.mode ? `<span class="tag tag-muted">${l.mode}</span>`
+          : absent('Not reported')}</td>
       </tr>
     `).join('');
   }
@@ -2284,58 +2829,15 @@ function renderHomeForecast() {
   }, 40);
 }
 
-// ─── Home Digital Twin Map Preview (3D — same engine as the Digital
-//     Twin tab, re-parented into Home's preview container) ──────────
-function renderHomeDigitalTwin() {
-  setTimeout(() => {
-    try {
-      // initTwin3D re-parents/resumes the existing scene when already
-      // initialised, so it's safe to call every time Home renders.
-      initTwin3D('home-map-twin');
-      window.dispatchEvent(new Event('resize'));
-    } catch (e) {
-      console.warn('Home 3D twin init:', e);
-    }
-  }, 50);
-  renderHomeTwinCallout();
-}
-
-// Floating "key info" card on the Digital Twin preview — whichever
-// facility is selected in the topbar (Facility selector) surfaces its
-// utilisation snapshot directly on the map, matching
-// Dump/Updated Home Page.png's "Insight context" callout.
-function renderHomeTwinCallout() {
-  const el = document.getElementById('home-twin-callout');
-  if (!el) return;
-
-  const fac = state.selectedFacility && state.selectedFacility !== 'ALL'
-    ? getFacilityById(state.selectedFacility) : null;
-
-  if (!fac) {
-    el.innerHTML = '';
-    el.classList.remove('visible');
-    return;
-  }
-
-  // Utilisation is a solver output. Until a solve has produced one it is
-  // absent, and absent must read as "—" — it used to interpolate straight
-  // into the template and render the literal text "undefined%".
-  const hasUtil = typeof fac.utilPct === 'number' && Number.isFinite(fac.utilPct);
-  const utilLabel = hasUtil ? getUtilLabel(fac.utilPct) : null;
-  const tone = utilLabel === 'Critical' ? 'red' : utilLabel === 'Stress' ? 'amber'
-             : utilLabel ? 'green' : 'muted';
-
-  el.innerHTML = `
-    <div class="home-twin-callout-head">
-      <span class="home-twin-callout-icon">✨</span>
-      <span>Facility snapshot</span>
-    </div>
-    <div class="home-twin-callout-name">${fac.name} utilization</div>
-    <div class="home-twin-callout-value tone-${tone}">${hasUtil ? fac.utilPct + '%' : '—'}</div>
-    <div class="home-twin-callout-sub">${formatNumber(fac.throughput)} / ${formatNumber(fac.capacity)} ${perPeriodLabel()} capacity</div>
-  `;
-  el.classList.add('visible');
-}
+// The Home twin preview and its facility callout are GONE, renderers and all.
+//
+// They drew the 3D scene into `#home-map-twin` and a utilisation snapshot into
+// `#home-twin-callout`, neither of which is in the markup any more. Leaving
+// the two functions behind would be a second, unreachable copy of the Digital
+// Twin's own view — which is how a screen ends up with two versions of one
+// scene that disagree. The scene itself is untouched: `initTwin3D` is called
+// by the Digital Twin tab (see navigateToTab), which is where it belongs, and
+// the facility snapshot is on that tab and on the KPI page.
 
 // ─── Home Numbered Insights (Right Rail) ─────────────────────
 // ─── Attention feed categorisation ───────────────────────────
@@ -2376,23 +2878,41 @@ function categorizeAttentionLabel(text) {
 // loop: the response fires `insightsLoaded`, which re-renders, which fetches.
 const requestedFacilityInsights = new Set();
 
-function renderHomeAttentionFeed(listId = 'ov-attn-body') {
-  const list = document.getElementById(listId);
-  if (!list) return;
-
-  // A scoped briefing costs a reasoning pass, so it is fetched for the facility
-  // actually being looked at rather than for all of them at load time. The
-  // response re-renders this feed through the `insightsLoaded` listener below.
+/**
+ * Ask for the selected facility's own briefing, once.
+ *
+ * A scoped briefing costs a reasoning pass, so it is fetched for the facility
+ * actually being looked at rather than for all of them at load time. The
+ * response re-renders every consumer through the `insightsLoaded` listener
+ * below.
+ *
+ * Shared by the Overview's insight tiles, the Insights page and the Forecast
+ * page's attention card, so that whichever of them a reader lands on first is
+ * what triggers the request — and the other two get it for nothing.
+ */
+function ensureFacilityInsights() {
   const selected = state.selectedFacility;
-  if (selected && selected !== 'ALL' && !requestedFacilityInsights.has(selected)) {
-    requestedFacilityInsights.add(selected);
-    // Dynamically imported, matching how this file already reaches hydrate.js:
-    // a static import would pull the whole integration layer into the initial
-    // bundle for a feature that only fires once a facility is chosen.
-    import('./integration/hydrate.js')
-      .then((m) => m.loadFacilityInsights(selected))
-      .catch(() => { /* the feed renders without the facility's own findings */ });
-  }
+  if (!selected || selected === 'ALL') return;
+  if (requestedFacilityInsights.has(selected)) return;
+  requestedFacilityInsights.add(selected);
+  // Dynamically imported, matching how this file already reaches hydrate.js:
+  // a static import would pull the whole integration layer into the initial
+  // bundle for a feature that only fires once a facility is chosen.
+  import('./integration/hydrate.js')
+    .then((m) => m.loadFacilityInsights(selected))
+    .catch(() => { /* the screens render without the facility's own findings */ });
+}
+
+/**
+ * Every finding about what is on screen, most serious first.
+ *
+ * ONE ranking, read by three screens — the Overview's tiles, the Insights
+ * page and the Forecast page's attention card. It was inlined in the feed,
+ * so the tiles would have had to re-derive "which finding leads" and the two
+ * answers would have drifted the first time either changed.
+ */
+function rankedAttentionInsights() {
+  ensureFacilityInsights();
 
   // Network findings first, then the selected facility's own.
   //
@@ -2436,9 +2956,15 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
     return s !== 0 ? s : (a.rank || 0) - (b.rank || 0);
   });
 
-  const insightItems = insights.map(ins => ({
+  return insights.map(ins => ({
     kind: 'insight',
     id: ins.id,
+    // The record itself, so a consumer that needs more than the feed's five
+    // fields — the evidence rows, the theme, the recommended action — reads
+    // them off the finding rather than being handed a copy that can go stale.
+    record: ins,
+    theme: ins.theme || '',
+    severity: ins.severity || 'INFORMATION',
     // The chip's words. An insight's chip has always shown its severity;
     // actions need their own vocabulary in the same slot, so both carry it
     // explicitly rather than one of them being inferred at render time.
@@ -2453,23 +2979,31 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
     headline: (ins.evidence && ins.evidence[0])
       ? ins.evidence[0].display_value : '',
   }));
+}
 
-  // Action items are not findings. Nothing was solved to produce them — the
-  // completeness gate read the upload and reported a column that is not
-  // there — so they carry their own category and their own label rather
-  // than borrowing the severity vocabulary the Reasoning Agent's findings
-  // use. A missing column presented as a RISK the engine identified would
-  // be this application claiming an analysis it did not run.
-  //
-  // The record shape changed with the store: `expectedImpact` was a
-  // prototype field describing a cost and an SLA delta for a demo action,
-  // and no engine produces either for a missing column. The server sends a
-  // title and a sentence built from the gap itself; both are used as sent.
+/**
+ * What the completeness gate needs a PERSON to supply, most urgent first.
+ *
+ * Action items are not findings. Nothing was solved to produce them — the
+ * completeness gate read the upload and reported a column that is not there
+ * — so they carry their own category and their own label rather than
+ * borrowing the severity vocabulary the Reasoning Agent's findings use. A
+ * missing column presented as a RISK the engine identified would be this
+ * application claiming an analysis it did not run.
+ *
+ * The record shape changed with the store: `expectedImpact` was a prototype
+ * field describing a cost and an SLA delta for a demo action, and no engine
+ * produces either for a missing column. The server sends a title and a
+ * sentence built from the gap itself; both are used as sent.
+ */
+function attentionActionItems() {
   const actionItems = HOME_ACTION_ITEMS
     .filter(act => !resolvedInsightIds.has(act.id))
     .map(act => ({
       kind: 'action',
       id: act.id,
+      record: act,
+      required: act.severity === 'REQUIRED',
       category: act.severity === 'REQUIRED' ? 'RISK' : 'OPPORTUNITY',
       label: act.severity === 'REQUIRED' ? 'DATA NEEDED' : 'OPTIONAL DATA',
       title: act.title,
@@ -2484,158 +3018,33 @@ function renderHomeAttentionFeed(listId = 'ov-attn-body') {
   // about the network and an action is a request to a person — and the feed
   // is read top-down.
   actionItems.sort((a, b) => (a.category === 'RISK' ? 0 : 1) - (b.category === 'RISK' ? 0 : 1));
-
-  const items = [...insightItems, ...actionItems];
-
-  // An empty feed means no insight has been generated for this network — it
-  // does NOT mean the network is healthy. The old copy ("network is
-  // performing within target") asserted a clean bill of health from the
-  // absence of evidence, which is the one conclusion absence cannot support.
-  if (!items.length) {
-    list.innerHTML = `<div class="ov-attn-empty">No insights have been generated
-      for this network yet.</div>`;
-    return;
-  }
-
-  // The top-ranked finding, in full. The feed used to be a scrolling list of
-  // every finding at equal weight, which asks the reader to trade off six
-  // things before doing one — and the recommendation, rendered into a separate
-  // block below it, overlapped the third card.
-  //
-  // The rest are not dropped: they are listed underneath, and every one still
-  // opens its own deep dive.
-  //
-  // ACTIONS COME FIRST in that list, ahead of the remaining findings. A
-  // finding is something to read; an action is something only a person can
-  // do, and it is holding up an analysis until they do it. Ordered the other
-  // way round — findings, then actions, which is where they landed when the
-  // two lists were simply concatenated — the four data requests on a real
-  // upload sat seventh to tenth inside a scrolling card, below the fold. A
-  // request nobody scrolls to has not been raised.
-  //
-  // The LEAD stays the top-ranked finding when there is one: it is the
-  // engine's own answer to "what should I look at", and an action item is
-  // not ranked against it by anything.
-  const lead = insightItems[0] || actionItems[0] || items[0];
-  const rest = [...actionItems, ...insightItems].filter((it) => it !== lead);
-  const rec = getNetworkRecommendation();
-
-  // What the algorithm recommends CHANGING, as distinct from what it
-  // recommends doing next. `rec` is the engine's prose; this is the concrete
-  // move — close this, open that, reroute those — read from the plans that
-  // were actually solved. Quiet here: a reader on Home who has run no plan is
-  // not owed a line saying so, and the Digital Twin states it for the reader
-  // who goes looking.
-  const change = recommendedChangeSummary({ quietWhenNothing: true });
-  const changeHtml = change ? `
-    <div class="ov-attn-next">
-      <span class="ov-attn-next-icon">${OV_ICONS.chart}</span>
-      <div class="ov-attn-next-text">
-        <div class="ov-attn-section-label tone-next">Recommended change</div>
-        <div class="ov-attn-next-sub">${change.html}</div>
-      </div>
-    </div>` : '';
-
-  /* The finding's figure and its sentence, without saying the figure twice.
-     An insight's `subtitle` usually restates its own headline evidence — "I
-     see 452,610 units of 1,435,985 units of demand left unserved" already
-     contains "452,610" — so printing the headline in front of it produced
-     "452,610 units I see 452,610 units of ... left unserved". */
-  /* "3 further findings" was true when the feed held only findings. It now
-     holds two different kinds of thing — conclusions the engine reached, and
-     requests it needs a person to make — and counting an action as a finding
-     asserts an analysis that did not happen. Both are named, or neither is. */
-  function restSummary(list) {
-    const actions = list.filter((it) => it.isAction).length;
-    const findings = list.length - actions;
-    const parts = [];
-    if (findings) parts.push(`${findings} further finding${findings === 1 ? '' : 's'}`);
-    if (actions) parts.push(`${actions} action${actions === 1 ? '' : 's'} to take`);
-    return parts.join(' \u00b7 ');
-  }
-
-  function impactHtml(item) {
-    const head = (item.headline || '').trim();
-    const sub = (item.subtitle || '').trim();
-    if (!head && !sub) return '';
-    const restated = head && sub
-      && sub.replace(/[\s,]/g, '').includes(head.replace(/[\s,]/g, '').replace(/units$/i, ''));
-    const body = restated
-      ? escapeInsightText(sub)
-      : [head ? `<strong>${escapeInsightText(head)}</strong>` : '',
-         escapeInsightText(sub)].filter(Boolean).join('<br>');
-    return `
-      <div class="ov-attn-section">
-        <div class="ov-attn-section-label tone-impact">Impact</div>
-        <div class="ov-attn-section-text">${body}</div>
-      </div>`;
-  }
-
-  list.innerHTML = `
-    <div class="ov-attn-lead" data-kind="${lead.kind}" data-id="${lead.id}">
-      <div class="ov-attn-section">
-        <div class="ov-attn-section-label tone-why">Why it matters</div>
-        <div class="ov-attn-section-text">${escapeInsightText(lead.title)}</div>
-      </div>
-      ${impactHtml(lead)}
-      <button type="button" class="ov-attn-more-link" data-open-lead>
-        <span>${lead.isAction ? 'Open this action' : 'View the full finding'}</span>
-        <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
-      </button>
-    </div>
-
-    ${changeHtml}
-
-    ${rec ? `
-    <div class="ov-attn-next">
-      <span class="ov-attn-next-icon">${OV_ICONS.chart}</span>
-      <div class="ov-attn-next-text">
-        <div class="ov-attn-section-label tone-next">Recommended next step</div>
-        <div class="ov-attn-next-title">${escapeInsightText(rec.headline)}</div>
-        <div class="ov-attn-next-sub">${escapeInsightText(rec.text)}</div>
-        ${rec.limitation ? `<div class="ov-attn-next-limit">${escapeInsightText(rec.limitation)}</div>` : ''}
-      </div>
-    </div>
-    <button type="button" class="ov-attn-cta">
-      <span>${escapeInsightText(rec.cta)}</span>
-      <svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
-    </button>` : ''}
-
-    ${rest.length ? `
-    <!-- Open. The card is as tall as the column beside the twin now, and a
-         collapsed summary in a card with 200px of white space under it is
-         asking the reader to click to find out whether there is anything
-         there. It still closes. -->
-    <details class="ov-attn-rest" open>
-      <summary>${restSummary(rest)}</summary>
-      <div class="ov-attn-rest-list">
-        ${rest.map((it) => `
-          <button type="button" class="ov-attn-rest-item"
-                  data-kind="${it.kind}" data-id="${it.id}">
-            <span class="ov-attn-rest-cat cat-${(it.category || 'info').toLowerCase()}${it.isAction ? ' is-action' : ''}">${escapeInsightText(it.label || it.category || '')}</span>
-            <span class="ov-attn-rest-title">${escapeInsightText(it.title)}</span>
-          </button>`).join('')}
-      </div>
-    </details>` : ''}`;
-
-  const open = (kind, id) => {
-    if (typeof window.showInsightDetail === 'function') {
-      window.showInsightDetail(kind, id);
-    }
-  };
-  list.querySelector('[data-open-lead]')?.addEventListener('click', () => {
-    open(lead.kind, lead.id);
-  });
-  list.querySelectorAll('.ov-attn-rest-item').forEach((el) => {
-    el.addEventListener('click', () => open(el.dataset.kind, el.dataset.id));
-  });
-  list.querySelector('.ov-attn-cta')?.addEventListener('click', () => {
-    if (typeof window.navigateToTab === 'function') window.navigateToTab('scenarios');
-  });
+  return actionItems;
 }
+
+// The Home attention feed is GONE, renderer and all.
+//
+// It drew one scrolling card — the lead finding with a heading, a "why it
+// matters" block, an impact block, a recommended change, a recommended next
+// step and a collapsed list of everything else — into `#ov-attn-body`. That
+// element is not in the markup any anymore: the Overview shows three insight
+// tiles instead, and every finding it used to hide behind "3 further
+// findings" is on the Insights page.
+//
+// It had no second caller. The Forecast page looks like it shares this card
+// and does not: `renderForecastAttention` draws the FORECAST's own briefing
+// into `#fc-attn-body`, and pointing this renderer at that element would put
+// the network's finding under the forecast's question — the exact defect
+// that function was written to fix. Keeping a dead renderer aimed at a live
+// container is how that comes back.
 
 if (typeof window !== 'undefined') {
   window.markAttentionItemResolved = id => resolvedInsightIds.add(id);
+  // The unserved-demand breakdown, reachable from the deep-dive page as
+  // well as from the tile. The drawer lives here because the markets and
+  // the relaxation note it reads are this module's stores; exposing the
+  // opener is how insight-detail.js reaches it without app.js and it
+  // importing each other.
+  window.openDemandShortfallDetail = openDemandShortfallDetail;
 
   // A briefing that arrives after the first paint — the network one during
   // hydration, or a facility one fetched on selection — redraws the feed and
@@ -2643,12 +3052,24 @@ if (typeof window !== 'undefined') {
   // simply never shown until the next unrelated re-render.
   window.addEventListener('insightsLoaded', () => {
     try {
-      // The recommendation is part of the attention card now, so redrawing
-      // the feed redraws it too — on both pages that show that card.
-      renderHomeAttentionFeed();
-      renderOverviewAlert();
-      renderHomeAttentionFeed('fc-attn-body');
+      // Everything that draws a finding. Home's tiles and the Insights page
+      // read the same ranking the Forecast page's attention card does, so a
+      // briefing that lands after first paint reaches all three or none.
+      renderHomeInsightTiles();
+      renderHomeDataStrip();
+      renderInsightsPage();
+      renderOverviewAlert('ov-notice', { errorsOnly: true });
       renderOverviewAlert('fc-alert');
+    } catch (e) { /* a redraw must never break the page */ }
+  });
+
+  // The completeness gate's own answer, which arrives on its own request.
+  // Without this the data strip rendered once, before the actions existed,
+  // and stayed empty on a network that had four outstanding requests.
+  window.addEventListener('actionsLoaded', () => {
+    try {
+      renderHomeDataStrip();
+      renderInsightsPage();
     } catch (e) { /* a redraw must never break the page */ }
   });
 
@@ -2717,17 +3138,27 @@ function escAttr(value) {
  * Returns null when there is nothing worth putting in front of the reader on
  * a screen that did not ask — Home takes this branch, the twin does not.
  */
-function recommendedChangeSummary({ quietWhenNothing = false } = {}) {
+function recommendedChangeSummary({ quietWhenNothing = false,
+                                    onTwin = true } = {}) {
   const change = recommendedNetworkChanges();
 
   if (change.status === 'CHANGES') {
     const plans = change.plans.map(escAttr).join(', ');
+    // The closing sentence is about WHERE THE READER IS. "The twin
+    // below" is true on the Digital Twin and false anywhere else, and
+    // it was rendered verbatim on Home for as long as that page carried
+    // this line — pointing at a drawing that was not below it.
+    const where = onTwin
+      ? 'The twin below is the network as it runs today \u2014 test the '
+        + 'change as a scenario to see it drawn.'
+      : 'This is a plan that was solved, not a change that has been '
+        + 'made \u2014 open the Digital Twin to see the network it would '
+        + 'replace.';
     return {
       quiet: false,
       html: `<div><strong>The recommended plan would</strong>
         <span class="twin-change-what">${escAttr(change.summary)}</span>.
-        From ${plans}. The twin below is the network as it runs today \u2014 test
-        the change as a scenario to see it drawn.</div>`,
+        From ${plans}. ${where}</div>`,
     };
   }
   if (quietWhenNothing) return null;
@@ -2741,21 +3172,6 @@ function recommendedChangeSummary({ quietWhenNothing = false } = {}) {
   };
 }
 
-/**
- * The recommended change, above the twin that draws it.
- *
- * Always on screen here, in both states. "No change is recommended" is a
- * finding: a reader who cannot see it has to guess whether the engine had
- * nothing to say or was never asked, and those are different things.
- */
-function renderRecommendedChangeNote() {
-  const node = document.getElementById('twin-change-note');
-  if (!node) return;
-  const summary = recommendedChangeSummary();
-  node.hidden = false;
-  node.classList.toggle('is-quiet', summary.quiet);
-  node.innerHTML = summary.html;
-}
 
 function renderTwinStats() {
   const nodeCount = PLANTS.length + DCS.length + MARKETS.length;
@@ -2785,11 +3201,22 @@ function renderTwinStats() {
       : '';
   });
 
-  renderRecommendedChangeNote();
 
-  // "How many plants / DCs / markets" is answered on the legend itself, at
-  // the bottom-right corner of the map, rather than only by the three tables
-  // further down the page.
+  // BOTH LEGENDS, from one function, on every refresh.
+  //
+  // The 3D legend was written out in the markup and the 2D one in map.js, so
+  // there were two hand-maintained copies of the same key. They had drifted:
+  // the 2D one keyed the DC ring in #dc2626/#f59e0b/#22c55e and the 3D one
+  // keyed the identical bands in #b91c1c/#b45309/#047857, on a page whose
+  // two views the reader switches between with one button.
+  //
+  // The redraw is not decorative either. The flow bands are derived from the
+  // loaded lanes, and both legends are first built before any network exists
+  // — so without this they would carry the "no corridor states a volume"
+  // copy for the rest of the session.
+  const legend3d = document.getElementById('twin3d-legend');
+  if (legend3d) legend3d.innerHTML = twinLegendHtml(perPeriodLabel());
+  refreshTwinMapLegend();
   renderMapLegendCounts();
 
   [['map2d-node-count', nodeCount], ['twin3d-node-count', nodeCount],
@@ -2855,79 +3282,37 @@ function openStatusTag(node) {
     : '<span class="tag tag-muted">Not solved</span>';
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   THE TWIN'S OWN FIGURES, for the facility and period selected
+   ═══════════════════════════════════════════════════════════════
+   The page carried three tables — Plants, Distribution Centres, Demand
+   Markets — listing every node in the network with four columns each. They
+   ignored the Facility and Period controls at the top of the screen
+   completely: a reader who selected one DC got the same three full tables,
+   and nothing acknowledged the selection.
+
+   This answers the question those controls ask. Every figure is read from
+   `getKpisForFacility(id, period)` — the same accessor the KPI screen uses,
+   so the two screens cannot report different numbers for the same site — or
+   from the authoritative base case for the whole network. Nothing is
+   computed here (§9), and a figure the solve did not produce renders as a
+   dash with the solver's own reason on it, never as a zero.
+   ═══════════════════════════════════════════════════════════════ */
+
+
+
+
+/**
+ * Everything on the Digital Twin that is not the scene itself.
+ *
+ * Still called `renderTwinTables` because `window.renderTwinTables` is the
+ * name projects.js and the hydration path already call, and renaming it
+ * would be a change to four other files for no reader's benefit. What it
+ * draws is the stats overlay, the legend and the metrics band; the three
+ * asset tables it used to fill are gone.
+ */
 function renderTwinTables() {
   renderTwinStats();
-
-  // Plants
-  const plantBody = document.querySelector('#table-plants tbody');
-  if (plantBody) {
-    // Status is the SOLVER's open/closed decision, not a fixed green tag. This
-    // printed "Active" on every plant unconditionally — including the two the
-    // optimiser had closed in the very solve the throughput column beside it
-    // came from.
-    plantBody.innerHTML = PLANTS.map(p => `
-      <tr class="clickable-row" data-id="${p.id}">
-        <td>${p.name}</td>
-        <td class="num">${formatNumber(p.capacity)}</td>
-        <td class="num">${formatNumber(p.throughput)}</td>
-        <td>${openStatusTag(p)}</td>
-      </tr>
-    `).join('');
-  }
-
-  // DCs
-  const dcBody = document.querySelector('#table-dcs tbody');
-  if (dcBody) {
-    // Utilisation is a solver output. Until a solve produces one it is absent,
-    // and absent must render as "—" — interpolating it straight into the
-    // template printed the literal text "undefined%" for every DC whenever the
-    // network had no feasible solution.
-    dcBody.innerHTML = DCS.map(d => {
-      const hasUtil = typeof d.utilPct === 'number' && Number.isFinite(d.utilPct);
-      const color = hasUtil ? getUtilColor(d.utilPct) : 'var(--text-3)';
-      // `d.isOpen === false` is the solver's decision not to use this site. It
-      // runs at 0%, which the utilisation bands read as "Healthy" — a green
-      // tag saying a facility performs well on a facility that is not
-      // operating. Operating status and utilisation health are different
-      // facts and get different answers.
-      // A proposed site the optimiser declined is not "Not selected" in the
-      // sense an existing DC is — it does not exist yet. Same distinction the
-      // map and the facility panel now make.
-      const isCand = String(d.status || '').toUpperCase() === 'CANDIDATE';
-      const notTaken = d.isOpen === false || !hasUtil;
-      const label = (isCand && notTaken) ? 'Proposed — not opened'
-        : hasUtil ? getUtilLabel(d.utilPct, d.isOpen) : 'Not solved';
-      const tagClass = (isCand && notTaken) ? 'tag-info'
-        : hasUtil ? getUtilTagClass(d.utilPct, d.isOpen) : 'tag-muted';
-      return `
-        <tr class="clickable-row" data-id="${d.id}">
-          <td>${d.name}</td>
-          <td class="num">${formatNumber(d.capacity)}</td>
-          <td class="num"><span style="color:${color};font-weight:700">${hasUtil ? d.utilPct + '%' : '—'}</span></td>
-          <td><span class="tag ${tagClass}">${label}</span></td>
-        </tr>
-      `;
-    }).join('');
-  }
-
-  // Markets
-  const mktBody = document.querySelector('#table-markets tbody');
-  if (mktBody) {
-    mktBody.innerHTML = MARKETS.map(m => `
-      <tr>
-        <td>${m.name}</td>
-        <td class="num">${formatNumber(m.demand)}</td>
-        <td>${m.slaDays == null ? '—' : m.slaDays + 'd'}</td>
-        <td><span class="tag ${m.priority === 'High' ? 'tag-danger' : m.priority === 'Medium' ? 'tag-warning' : 'tag-muted'}">${m.priority || '—'}</span></td>
-      </tr>
-    `).join('');
-  }
-
-  // Clickable rows to open facility panel
-  document.querySelectorAll('.clickable-row').forEach(row => {
-    row.style.cursor = 'pointer';
-    row.addEventListener('click', () => openFacilityPanel(row.dataset.id));
-  });
 }
 
 // ─── Facility Panel ─────────────────────────────────────────
@@ -3175,6 +3560,12 @@ function escapeInsightText(value) {
  * Returns null when no recommendation has been produced. Absence is not a
  * clean bill of health, and the caller renders nothing rather than reassurance.
  */
+/** "Test the reopening" -> "test the reopening", for use mid-sentence. */
+function lowerFirst(text) {
+  const t = String(text || '');
+  return t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+}
+
 function getNetworkRecommendation() {
   const rec = NETWORK_RECOMMENDATION;
   if (!rec.text) return null;
@@ -3201,20 +3592,35 @@ function getNetworkRecommendation() {
       + 'above as unverified.');
   }
 
+  // WHAT THE BUTTON DOES, from the intervention the engine derived.
+  //
+  // It read "Open scenario planner" on every network ever loaded — a
+  // destination, hardcoded here, under a paragraph that had just told the
+  // reader what the engine concluded. Where the ladder produced a change, the
+  // button names it and opens the scenario already filled in with it; where it
+  // did not, the planner is still the honest answer, because a reader who
+  // wants to test something of their own goes there.
+  const action = rec.action && rec.action.scenario
+                 && Object.keys(rec.action.scenario).length ? rec.action : null;
   return {
     headline,
     text: body || (rec.keyDrivers || []).join(' · '),
     limitation: caveats.join(' '),
-    cta: 'Open scenario planner',
+    // The change, then what pressing it does. "Test the capacity increase:
+    // Expand capacity at Pune DC" says the same thing twice, so the label
+    // leads and the verb follows it.
+    cta: action ? `${action.label} — ${lowerFirst(action.cta)}`
+                : 'Open scenario planner',
+    action,
   };
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   OVERVIEW — row 2: the network's three headline figures
+   OVERVIEW — row 1: the network's headline figures
    ═══════════════════════════════════════════════════════════════ */
 
 /**
- * The three figures that describe this network, and nothing derived.
+ * The figures that describe this network, and nothing derived.
  *
  * Every value is read from `getOptimizedBaseCase().baseline`, which hydration
  * writes straight from the authoritative KPI layer. This function does no
@@ -3240,6 +3646,21 @@ const HOME_KPI_TILES = [
     name: 'Average utilisation',
     format: (v) => `${v.toFixed(1)}%`,
     icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 16.8a9 9 0 1 1 16.8 0"/><path d="M12 16.4 16.2 10"/><circle cx="12" cy="16.8" r="1.3" fill="currentColor"/></svg>`,
+  },
+  {
+    // The fifth figure, and the one the strip was missing.
+    //
+    // Cost, utilisation, service level and carbon say what the plan costs,
+    // how hard it works, how much of it lands in time and what it emits.
+    // None of them says how much of the demand is served AT ALL — a network
+    // can hit 100% of its service level on the demand it chooses to serve
+    // and strand the rest, and on this build's own test network it does
+    // exactly that. `demand_fill_rate` is the KPI engine's own answer, and
+    // it is the figure the first insight tile is about.
+    key: 'fillRate',
+    name: 'Demand fill rate',
+    format: (v) => `${v.toFixed(1)}%`,
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3.6 7.4 12 3.2l8.4 4.2v9.2L12 20.8 3.6 16.6z"/><path d="M3.6 7.4 12 11.6l8.4-4.2M12 11.6v9.2"/></svg>`,
   },
   {
     key: 'sla',
@@ -3289,6 +3710,694 @@ function renderHomeKpiStrip(rowId = 'ov-kpi-strip-row') {
         </div>
       </div>`;
   }).join('');
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   OVERVIEW — row 2: the three findings that need a decision
+   ═══════════════════════════════════════════════════════════════
+   Three tiles, side by side, each saying the same four things in the same
+   order (Nielsen #4 — consistency):
+
+     1. the conclusion, in bold, with the figure it turns on;
+     2. why it matters, in figures the engine reported;
+     3. what to do about it, with a button that goes there;
+     4. the way into the full finding.
+
+   This replaces a single scrolling "Needs your attention" card. That card
+   gave the lead finding a heading, a "why it matters" block, an "impact"
+   block, a recommended change, a recommended next step and a collapsed list
+   of everything else — six sections in a 500px column with an internal
+   scroller, so on a 1050px window 204px of it, including the recommendation,
+   sat below its own bottom edge. Three tiles put three findings on one screen
+   with nothing hidden, and the rest are on the Insights page.
+
+   COLOUR IS CARRIED BY ONE TILE. Only a RISK is tinted. A palette applied to
+   every tile distinguishes nothing, and a green "opportunity" beside a red
+   "unserved demand" invites a reader to weigh them against each other as two
+   sides of one choice — which they are not.
+   ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * How a finding of each severity reads on a tile.
+ *
+ * `tone` is a class, not a colour: the values live in home-overview.css with
+ * the rest of the palette, so a change of brand does not mean a change of
+ * JavaScript.
+ */
+const OV_TILE_SEVERITY = {
+  RISK: {
+    tone: 'tone-risk',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>`,
+  },
+  OPPORTUNITY: {
+    tone: 'tone-opportunity',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 16.5 9 9.6 13 13.2 21 4.6"/><polyline points="16.4 4.6 21 4.6 21 9.2"/></svg>`,
+  },
+  INFORMATION: {
+    tone: 'tone-information',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><line x1="12" y1="11" x2="12" y2="16.4"/><line x1="12" y1="7.6" x2="12" y2="7.61"/></svg>`,
+  },
+};
+
+/**
+ * The finding's own figures, as label/value pairs a reader can check.
+ *
+ * "Why it matters, numerically" is not a sentence this file writes. It is the
+ * evidence the engine attached to the finding — the metric, and whatever it
+ * was compared against — printed with the engine's own formatting.
+ * `display_value` is authoritative for anything a person reads, so the figure
+ * on the tile and the figure in the sentence beside it cannot disagree.
+ *
+ * `skipRef` drops the row already shown as the tile's headline figure, so a
+ * tile never prints the same number twice.
+ */
+function tileEvidenceRows(record, skipRef, limit = 2) {
+  return (record.evidence || [])
+    .filter((e) => e && e.ref !== skipRef && e.display_value
+                   && e.display_value !== 'Not available')
+    .slice(0, limit);
+}
+
+/**
+ * One insight tile.
+ *
+ * Everything on it is read off the record. Nothing is computed here: §9 — a
+ * screen that derives a business figure is a second, unverified KPI engine,
+ * and a screen that writes its own recommendation is a second, unverified
+ * reasoning agent.
+ */
+function insightTileHtml(item, isLead = false) {
+  const rec = item.record || {};
+  const sev = OV_TILE_SEVERITY[item.severity] || OV_TILE_SEVERITY.INFORMATION;
+  const cta = insightCta(item.theme, item.severity);
+
+  // The headline figure: the first metric the finding cites, with the engine's
+  // own label under it. A finding that cites none simply has no figure line —
+  // never a zero, and never a dash dressed up as a reading.
+  const lead = (rec.evidence || []).find((e) => e && e.display_value
+                                                && e.display_value !== 'Not available');
+  const figureHtml = lead ? `
+      <div class="ov-tile-figure">
+        <span class="ov-tile-figure-value">${escapeInsightText(lead.display_value)}</span>
+        <span class="ov-tile-figure-label">${escapeInsightText(lead.label || '')}</span>
+      </div>` : '';
+
+  // WHAT THE FINDING SAYS, in the engine's own prose and before any figure
+  // is asked to speak for it. The headline alone is a conclusion with no
+  // working; a reader who has not seen this network before cannot act on
+  // "The plan leaves 2 candidate sites unused" without the sentence under it.
+  const description = insightDescription(rec, item.title);
+  const descriptionHtml = description ? `
+      <p class="ov-tile-description">${escapeInsightText(description)}</p>` : '';
+
+  // WHY IT MATTERS — the figures the finding rests on, each with the engine's
+  // own label and formatting, so the number in the prose above and the number
+  // in this list cannot drift apart.
+  const rows = tileEvidenceRows(rec, lead ? lead.ref : null);
+  const rowsHtml = rows.length ? `
+        <dl class="ov-tile-evidence">
+          ${rows.map((e) => `
+            <div class="ov-tile-evidence-row">
+              <dt>${escapeInsightText(e.label || e.ref || '')}</dt>
+              <dd>${escapeInsightText(e.display_value)}</dd>
+            </div>`).join('')}
+        </dl>` : '';
+  const whyHtml = rowsHtml ? `
+      <div class="ov-tile-section">
+        <div class="ov-tile-section-label">Why it matters</div>
+        ${rowsHtml}
+      </div>` : '';
+
+  // RECOMMENDED ACTION. Never composed in the browser: `recommendedAction` is
+  // what `/api/insights` sent, which is the Reasoning Agent's line when it
+  // wrote one and the theme's own default when it did not. An empty one drops
+  // the whole block rather than printing an empty heading.
+  const action = (rec.recommendedAction || '').trim();
+  const actionHtml = action ? `
+      <div class="ov-tile-section ov-tile-action">
+        <div class="ov-tile-section-label">Recommended action</div>
+        <p class="ov-tile-section-text">${escapeInsightText(action)}</p>
+        <button type="button" class="ov-tile-cta" data-cta-tab="${escapeInsightText(cta.tab)}">
+          <span>${escapeInsightText(cta.label)}</span>
+          <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+        </button>
+      </div>` : '';
+
+  // THE TINT GOES ON ONE TILE, and only when that tile is a risk.
+  //
+  // Not on every risk. A network with two of them would put two red cards
+  // beside one white one, and a reader scanning three cards for the one to
+  // start with would be given two answers — which is the same as none. The
+  // findings are already ranked; the leftmost is the lead, and the tint says
+  // so. Every other tile still states its own severity, in its icon and in
+  // the eyebrow above the figure, so nothing is hidden by not being red.
+  const tinted = isLead && item.severity === 'RISK' ? ' is-lead' : '';
+
+  // A finding that cites no figure, carries no narrative and has no step is
+  // rare — `/api/insights` supplies an action for every theme — but it is
+  // reachable from a record whose evidence refs the pack could not resolve.
+  // The tile stretches to its neighbours either way, so the choice is between
+  // a stated absence and 200px of nothing. The absence is stated.
+  const bodyHtml = (whyHtml || actionHtml)
+    ? `${whyHtml}${actionHtml}`
+    : `<p class="ov-tile-bare">This finding cites no figure of its own, and no
+        step has been recorded against it.</p>`;
+  // The description sits between the headline and the figures, so it is
+  // outside the body's own `flex: 1` — the body stretches to keep the three
+  // tiles' calls to action level, and prose that stretched with it would
+  // leave a gap under a short sentence.
+
+  return `
+    <article class="ov-tile ${sev.tone}${tinted}" data-kind="insight" data-id="${escapeInsightText(item.id)}">
+      <div class="ov-tile-head">
+        <span class="ov-tile-icon" aria-hidden="true">${sev.icon}</span>
+        <span class="ov-tile-eyebrow">${escapeInsightText(item.category || item.theme || '')}</span>
+      </div>
+      ${figureHtml}
+      <!-- THE HEADING is the conclusion, not the category above it. The
+           eyebrow is a label — "Capacity Risk" — and a screen reader
+           tabbing the headings of this page would otherwise be read three
+           category names and none of the three findings. -->
+      <h3 class="ov-tile-highlight">${escapeInsightText(item.title || '')}</h3>
+      ${descriptionHtml}
+      <div class="ov-tile-body">
+        ${bodyHtml}
+      </div>
+      <button type="button" class="ov-tile-detail" data-open-detail>
+        <span>View detailed finding</span>
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+      </button>
+    </article>`;
+}
+
+/**
+ * The three findings that lead, as tiles.
+ *
+ * RISK first, because `rankedAttentionInsights()` ranks them that way — so
+ * the leftmost tile is the tinted one whenever anything is wrong, and is not
+ * tinted when nothing is. The tint follows the finding; it is not a slot.
+ */
+function renderHomeInsightTiles(containerId = 'ov-tiles') {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  const items = rankedAttentionInsights();
+
+  // An empty list means no insight has been generated for this network — it
+  // does NOT mean the network is healthy, and this copy has never said so.
+  if (!items.length) {
+    el.innerHTML = `
+      <div class="ov-tiles-empty">
+        <p>No findings have been generated for this network yet.</p>
+        <p class="ov-tiles-empty-sub">Upload a network dataset, or re-run the
+          analysis, and the Reasoning Agent's conclusions appear here.</p>
+      </div>`;
+    return;
+  }
+
+  el.innerHTML = items.slice(0, 3).map((it, i) => insightTileHtml(it, i === 0)).join('');
+
+  el.querySelectorAll('.ov-tile').forEach((tile) => {
+    const id = tile.dataset.id;
+    const open = () => {
+      if (typeof window.showInsightDetail === 'function') {
+        window.showInsightDetail('insight', id);
+      }
+    };
+    tile.querySelector('[data-open-detail]')?.addEventListener('click', open);
+    tile.querySelector('.ov-tile-cta')?.addEventListener('click', (ev) => {
+      // The tile is not itself one big button. The two controls on it go to
+      // two different places, and one clickable region with two destinations
+      // is how a reader ends up somewhere they did not choose.
+      ev.stopPropagation();
+      const tab = ev.currentTarget.dataset.ctaTab;
+      // An empty `tab` is the shortfall drawer, not a missing destination —
+      // see the override in insightTileHtml().
+      if (!tab) { openDemandShortfallDetail(); return; }
+      if (typeof window.navigateToTab === 'function') window.navigateToTab(tab);
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OVERVIEW — row 3: what the analysis did not have
+   ═══════════════════════════════════════════════════════════════
+   The completeness gate reads the upload and reports the fields that are not
+   in it. Two kinds, and they must never read as one:
+
+     REQUIRED  a field the analysis needs. Its absence is why some figure on
+               this page is a dash.
+     OPTIONAL  a field that would sharpen the analysis. Its absence costs
+               precision, not the result.
+
+   Both used to be buried inside the attention card's collapsed "further
+   findings" list, seventh to tenth on a real upload — below the fold, inside
+   a card that scrolled. A request nobody scrolls to has not been raised.
+
+   EVERY REQUEST, AND THE FULL WIDTH.
+
+   This showed two per group with an "N more" link into the Insights page.
+   Two is the wrong number for a list whose whole purpose is to be actioned:
+   a reader cannot tell whether the third one matters without opening another
+   screen, and the count that replaced them ("3 more optional fields") is a
+   statistic rather than something anyone can act on. All of them are here.
+
+   And each group is one band across the page rather than a column beside its
+   neighbour. Two side-by-side cards are only ever the same height by
+   accident — with two required fields and three optional ones, the shorter
+   one ends in a block of empty tint. A full-width band ends where its last
+   request ends.
+   ═══════════════════════════════════════════════════════════════ */
+
+const OV_DATA_GROUPS = [
+  {
+    id: 'required',
+    tone: 'tone-required',
+    title: 'Critical missing data',
+    blurb: 'The analysis is running without these. Its totals are computed from the records that do state them.',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13.5"/><line x1="12" y1="17" x2="12" y2="17.01"/></svg>`,
+  },
+  {
+    id: 'optional',
+    tone: 'tone-optional',
+    title: 'Optional data to enhance',
+    blurb: 'Not needed for a result. Supplying them sharpens the one you have.',
+    icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.2 17.6h5.6M10 20.6h4"/><path d="M12 3.2a5.6 5.6 0 0 0-3.3 10.1v1.4h6.6v-1.4A5.6 5.6 0 0 0 12 3.2z"/></svg>`,
+  },
+];
+
+/**
+ * Whether this request has already gone out, and when.
+ *
+ * `lastSent` is the endpoint's own dispatch record for this action —
+ * `{sent_at, recipients, result}` — and the band never showed it. So a list
+ * of four requests looked identical whether one of them had been emailed an
+ * hour ago or never, and the mistake it invited is asking the same person
+ * for the same column twice.
+ *
+ * `stubbed` is reported as saved rather than sent, because no message left
+ * the machine: this build ships with no outbound credential, and a stub
+ * described as a send is the one outcome that makes the feature worse than
+ * not having it.
+ *
+ * Returns null when nothing has been sent, so the row carries no chip at all
+ * rather than one saying "not yet" — the absence of the chip is the state.
+ */
+function dataSentChip(item) {
+  const sent = (item.record || {}).lastSent;
+  if (!sent || !sent.sent_at) return null;
+  const at = new Date(sent.sent_at);
+  if (Number.isNaN(at.getTime())) return null;
+  const when = at.toDateString() === new Date().toDateString()
+    ? 'today'
+    : at.toLocaleDateString([], { day: 'numeric', month: 'short' });
+  if (sent.result === 'failed') return { label: `Send failed ${when}`, tone: 'is-failed' };
+  if (sent.result === 'stubbed') return { label: `Saved ${when}`, tone: '' };
+  if (sent.result === 'partial') return { label: `Partly sent ${when}`, tone: 'is-failed' };
+  return { label: `Asked ${when}`, tone: 'is-sent' };
+}
+
+function dataStripCardHtml(group, items) {
+  // The count belongs in the heading, not in a "+N more" link at the bottom:
+  // a reader deciding whether to deal with this now needs to know it is four
+  // fields before they start reading, and all four are below it.
+  const n = items.length;
+  return `
+    <section class="ov-data-card ${group.tone}">
+      <div class="ov-data-card-head">
+        <span class="ov-data-card-icon" aria-hidden="true">${group.icon}</span>
+        <div class="ov-data-card-headtext">
+          <h3 class="ov-data-card-title">${escapeInsightText(group.title)}
+            <span class="ov-data-card-count">${n} ${n === 1 ? 'field' : 'fields'}</span>
+          </h3>
+          <p class="ov-data-card-blurb">${escapeInsightText(group.blurb)}</p>
+        </div>
+      </div>
+      <ul class="ov-data-list">
+        ${items.map((it) => {
+          const sent = dataSentChip(it);
+          return `
+          <li class="ov-data-item">
+            <div class="ov-data-item-text">
+              <span class="ov-data-item-title">${escapeInsightText(it.title)}</span>
+              ${sent ? `<span class="ov-data-item-sent ${sent.tone}">${escapeInsightText(sent.label)}</span>` : ''}
+              ${it.subtitle ? `<span class="ov-data-item-sub">${escapeInsightText(it.subtitle)}</span>` : ''}
+            </div>
+            <!-- BOTH WAYS TO ANSWER, on the row.
+                 There was one button, labelled "Request this data", and it
+                 opened a page offering two things: send the request, or
+                 upload the file yourself. Most of the time the person
+                 reading this HAS the workbook — they uploaded the last one
+                 — so the single most likely action was behind a button
+                 promising an email, and its label described only the other
+                 one. Nielsen #4: a control says what it does. -->
+            <div class="ov-data-item-actions">
+              <button type="button" class="ov-data-item-cta is-quiet"
+                      data-upload-for="${escapeInsightText(it.id)}">
+                <span>Upload it</span>
+              </button>
+              <button type="button" class="ov-data-item-cta" data-action-id="${escapeInsightText(it.id)}">
+                <span>${sent ? 'Ask again' : 'Ask for it'}</span>
+                <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+              </button>
+            </div>
+          </li>`; }).join('')}
+      </ul>
+    </section>`;
+}
+
+function renderHomeDataStrip(containerId = 'ov-data-strip') {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  const actions = attentionActionItems();
+  const required = actions.filter((a) => a.required);
+  const optional = actions.filter((a) => !a.required);
+
+  if (!actions.length) {
+    // "Nothing is missing" is a claim, and it is only true once the gate has
+    // actually run. It runs with the briefing, so a network that has findings
+    // has been checked and one that has none has not — and the second says
+    // nothing at all rather than issuing a clean bill of health it cannot
+    // support.
+    const analysed = rankedAttentionInsights().length > 0;
+    el.classList.toggle('is-empty', !analysed);
+    el.innerHTML = analysed ? `
+      <div class="ov-data-clear">
+        <span class="ov-data-clear-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.4"/><polyline points="8.4 12.2 11 14.8 15.8 9.6"/></svg>
+        </span>
+        <span>Your upload carried every field this analysis asked for. No data
+          requests are outstanding.</span>
+      </div>` : '';
+    return;
+  }
+
+  el.classList.remove('is-empty');
+  el.innerHTML = [
+    required.length ? dataStripCardHtml(OV_DATA_GROUPS[0], required) : '',
+    optional.length ? dataStripCardHtml(OV_DATA_GROUPS[1], optional) : '',
+  ].filter(Boolean).join('');
+
+  el.querySelectorAll('[data-action-id]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      // The same page the feed opened: one destination for one request, with
+      // the recipients, the draft the server composed, and the send.
+      if (typeof window.showInsightDetail === 'function') {
+        window.showInsightDetail('action', btn.dataset.actionId);
+      }
+    });
+  });
+
+  // The workbook, straight from here. The same call the detail page's
+  // "Upload the data instead" makes — a reader who already has the column
+  // should not have to walk through a page about emailing someone for it.
+  el.querySelectorAll('[data-upload-for]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (typeof window.showUploadData !== 'function') return;
+      const project = typeof window.getCurrentProject === 'function'
+        ? window.getCurrentProject() : null;
+      window.showUploadData(project);
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   INSIGHTS PAGE — every finding, not just the three that lead
+   ═══════════════════════════════════════════════════════════════
+   Home shows three tiles. This is what "View more insights" opens, and what
+   the sidebar's Baseline > Insights entry points at: the same records, all of
+   them, filterable, each row opening the same deep dive a tile does.
+
+   Nielsen #6 — the filters carry their own counts, so a reader can see there
+   are two risks without first selecting "Risks" and counting the rows.
+   ═══════════════════════════════════════════════════════════════ */
+
+const INSIGHTS_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'RISK', label: 'Risks' },
+  { id: 'OPPORTUNITY', label: 'Opportunities' },
+  { id: 'INFORMATION', label: 'For information' },
+  { id: 'action', label: 'Data needed' },
+];
+
+/**
+ * One finding, as a row a leader can scan.
+ *
+ * WHAT CAME OFF, AND WHY.
+ *
+ * The row used to carry the engine's narrative — two or three sentences of
+ * analysis — between the headline and the recommended action. On a list of
+ * eight findings that is eight paragraphs to read before the first decision is
+ * visible, and every one of them restates evidence the headline has already
+ * summarised. It made each row 157px tall, so four findings filled a screen.
+ *
+ * What is left is the shape of a decision list: what the finding is, what it
+ * measured, what to DO about it, and the way into the working. The narrative
+ * has not been deleted — it is the first thing on the detail page, one click
+ * away, where a reader who wants the analysis is going anyway.
+ *
+ * The action is an IMPERATIVE naming an intervention — "Expand capacity at
+ * Pune DC" — derived on the server from the solved per-site rows. It used to
+ * be "Open the KPI page to see which sites are over the threshold", which is
+ * an instruction to go and do the analysis yourself.
+ */
+function insightRowHtml(item) {
+  const rec = item.record || {};
+  const sev = OV_TILE_SEVERITY[item.severity] || OV_TILE_SEVERITY.INFORMATION;
+  const isAction = Boolean(item.isAction);
+  const tone = isAction
+    ? (item.required ? 'tone-risk' : 'tone-opportunity') : sev.tone;
+  const icon = isAction ? OV_DATA_GROUPS[item.required ? 0 : 1].icon : sev.icon;
+
+  const lead = isAction ? null
+    : (rec.evidence || []).find((e) => e && e.display_value
+                                       && e.display_value !== 'Not available');
+
+  // A data request's "action" is the request itself, and it is stated rather
+  // than borrowed from the reasoning vocabulary: nothing was solved to
+  // produce it, so it must never read as something the engine concluded.
+  const action = isAction
+    ? (item.required
+        ? 'Request this field from whoever owns it.'
+        : 'Request this field when you can.')
+    : (rec.recommendedAction || '').trim();
+
+  // The intervention behind the sentence, when the ladder produced one. Its
+  // presence is what turns the recommendation from advice into something a
+  // reader can price: the button opens the scenario builder already filled in
+  // with the change being recommended.
+  const intervention = (!isAction && rec.action && rec.action.scenario
+                        && Object.keys(rec.action.scenario).length)
+    ? rec.action : null;
+
+  const figureHtml = lead ? `
+        <div class="insp-row-figure">
+          <span class="insp-row-figure-value">${escapeInsightText(lead.display_value)}</span>
+          <span class="insp-row-figure-label">${escapeInsightText(lead.label || '')}</span>
+        </div>` : '';
+
+  // The test, not a commitment. A recommendation nobody can price is an
+  // opinion, and a button that APPLIED one would be a structural change made
+  // from a dashboard — which governance exists to prevent.
+  const testHtml = intervention ? `
+        <button type="button" class="insp-row-test" data-test-scenario="1"
+                data-scn-action="${escapeInsightText(intervention.scenario.action || '')}"
+                data-scn-facility="${escapeInsightText(intervention.scenario.facility_id || '')}"
+                data-scn-mode="${escapeInsightText(intervention.scenario.open_mode || '')}"
+                data-scn-region="${escapeInsightText(intervention.scenario.region || '')}"
+                data-scn-name="${escapeInsightText(intervention.scenario.name || '')}">
+          <!-- NAMES THE CHANGE, AND WHERE IT GOES.
+               "Test this as a scenario" sat under four different
+               recommendations saying the same thing about each; and it did not
+               say that pressing it leaves this page, which is the one thing a
+               reader needs to know before they press it. -->
+          ${escapeInsightText(intervention.cta || 'Test this')} in the scenario planner &rarr;
+        </button>` : '';
+
+  return `
+    <article class="insp-row ${tone}" data-kind="${item.kind}" data-id="${escapeInsightText(item.id)}"
+             role="button" tabindex="0">
+      <span class="insp-row-icon" aria-hidden="true">${icon}</span>
+
+      <div class="insp-row-main">
+        <div class="insp-row-eyebrow">${escapeInsightText(item.label || item.category || '')}</div>
+        <h3 class="insp-row-title">${escapeInsightText(item.title || '')}</h3>
+      </div>
+
+      <!-- BESIDE the finding, not under it. Stacked, every row was 157px of
+           which about a third was empty tint to the right of a one-line
+           sentence in a box the width of the page. -->
+      ${action ? `
+      <div class="insp-row-action">
+        <div class="insp-row-action-label">Recommended action</div>
+        <p class="insp-row-action-text">${escapeInsightText(action)}</p>
+        ${testHtml}
+      </div>` : '<div class="insp-row-action is-empty"></div>'}
+
+      <div class="insp-row-right">
+        ${figureHtml}
+        <span class="insp-row-link">
+          <span>${isAction ? 'Open this request' : 'View detail'}</span>
+          <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+        </span>
+      </div>
+    </article>`;
+}
+
+function renderInsightsPage() {
+  const filterEl = document.getElementById('insp-filters');
+  const listEl = document.getElementById('insp-list');
+  if (!listEl) return;
+
+  const insights = rankedAttentionInsights();
+  const actions = attentionActionItems();
+  const all = [...insights, ...actions];
+
+  // The one recommendation that ranks the findings rather than following from
+  // any single one of them. `getNetworkRecommendation()` is the engine's own,
+  // with its grounding caveat attached; it is stated once, at the head of the
+  // list, because five rows each carrying a step leave a reader working out
+  // which of them is the overall answer.
+  const recEl = document.getElementById('insp-rec');
+  if (recEl) {
+    const rec = getNetworkRecommendation();
+    // What the algorithm recommends CHANGING, as distinct from what it
+    // recommends doing next: close this, open that, read off the plans that
+    // were actually solved. It was on Home, inside the attention card; this
+    // page is where it belongs now, beside the recommendation it makes
+    // concrete. Quiet when nothing has been solved — a reader who has run no
+    // plan is not owed a line saying so, and the Digital Twin states it for
+    // the reader who goes looking.
+    const change = recommendedChangeSummary({ quietWhenNothing: true,
+                                              onTwin: false });
+    recEl.hidden = !rec;
+    recEl.innerHTML = rec ? `
+      <div class="insp-rec-head">
+        <span class="insp-rec-icon" aria-hidden="true">${OV_ICONS.chart}</span>
+        <div>
+          <div class="insp-rec-label">What I recommend for this network</div>
+          <p class="insp-rec-headline">${escapeInsightText(rec.headline)}</p>
+        </div>
+      </div>
+      <p class="insp-rec-text">${escapeInsightText(rec.text)}</p>
+      ${change ? `<div class="insp-rec-change">${change.html}</div>` : ''}
+      ${rec.limitation
+        ? `<p class="insp-rec-limit">${escapeInsightText(rec.limitation)}</p>` : ''}
+      <button type="button" class="insp-rec-cta" id="insp-rec-cta"
+              data-action="navigateToTab" data-arg="scenarios">
+        <span>${escapeInsightText(rec.cta)}</span>
+        <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path d="M5 10h10M11 6l4 4-4 4"/></svg>
+      </button>` : '';
+    // `data-action="navigateToTab"` is dispatched by the delegated listener in
+    // actions.js, so the tab change needs no handler here. What DOES need one
+    // is filling the builder in: the listener opens the planner, and this
+    // opens the form on top of it with the recommended change already set.
+    // Ordered so the tab is showing before the form is filled — the builder
+    // reads its facility list from the rendered screen.
+    if (rec && rec.action && rec.action.scenario) {
+      document.getElementById('insp-rec-cta')?.addEventListener('click', () => {
+        const scn = rec.action.scenario;
+        setTimeout(() => {
+          if (typeof window.openScenarioBuilderWith !== 'function') return;
+          window.openScenarioBuilderWith(scn.action || 'CHANGE_CAPACITY', {
+            facilityId: scn.facility_id || undefined,
+            openMode: scn.open_mode || undefined,
+            region: scn.region || undefined,
+            name: scn.name || undefined,
+          });
+        }, 120);
+      });
+    }
+  }
+
+  const countFor = (id) => id === 'all' ? all.length
+    : id === 'action' ? actions.length
+    : insights.filter((i) => i.severity === id).length;
+
+  const active = INSIGHTS_FILTERS.some((f) => f.id === state.insightsFilter)
+    ? state.insightsFilter : 'all';
+  state.insightsFilter = active;
+
+  if (filterEl) {
+    // A filter that would empty the list is disabled rather than removed: a
+    // control that appears and disappears between renders is a control a
+    // reader cannot learn (Nielsen #4).
+    filterEl.innerHTML = INSIGHTS_FILTERS.map((f) => {
+      const n = countFor(f.id);
+      return `
+        <button type="button" role="tab" class="insp-filter${f.id === active ? ' is-active' : ''}"
+                data-filter="${f.id}" aria-selected="${f.id === active}"
+                ${n === 0 && f.id !== 'all' ? 'disabled' : ''}>
+          <span>${escapeInsightText(f.label)}</span>
+          <span class="insp-filter-count">${n}</span>
+        </button>`;
+    }).join('');
+    filterEl.querySelectorAll('.insp-filter').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.insightsFilter = btn.dataset.filter;
+        renderInsightsPage();
+      });
+    });
+  }
+
+  const rows = active === 'all' ? all
+    : active === 'action' ? actions
+    : insights.filter((i) => i.severity === active);
+
+  if (!rows.length) {
+    listEl.innerHTML = `<div class="insp-empty">${all.length
+      ? 'Nothing in this network matches that filter.'
+      : 'No findings have been generated for this network yet. Upload a '
+        + 'network dataset, or re-run the analysis, and the Reasoning '
+        + 'Agent’s conclusions appear here.'}</div>`;
+    return;
+  }
+
+  listEl.innerHTML = rows.map(insightRowHtml).join('');
+  const open = (row) => {
+    if (typeof window.showInsightDetail === 'function') {
+      window.showInsightDetail(row.dataset.kind, row.dataset.id);
+    }
+  };
+  listEl.querySelectorAll('.insp-row').forEach((row) => {
+    row.addEventListener('click', () => open(row));
+    // A row is a button, so it answers to a keyboard like one.
+    row.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        open(row);
+      }
+    });
+  });
+
+  // THE RECOMMENDATION, PRICED.
+  //
+  // The row opens the finding; this button opens the scenario that would
+  // prove the recommendation, already filled in with the change being
+  // recommended — the site, the kind of intervention, the region. Nothing is
+  // submitted: the builder opens and a person presses Run, which is the whole
+  // difference between recommending a change and making one.
+  //
+  // `stopPropagation` because the button lives inside a row that is itself a
+  // control. Without it, pressing "Test this as a scenario" would open the
+  // detail drawer over the builder it had just opened.
+  listEl.querySelectorAll('[data-test-scenario]').forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      ev.preventDefault();
+      if (typeof window.openScenarioBuilderWith !== 'function') return;
+      const d = btn.dataset;
+      navigateToTab('scenarios');
+      window.openScenarioBuilderWith(d.scnAction || 'CHANGE_CAPACITY', {
+        facilityId: d.scnFacility || undefined,
+        openMode: d.scnMode || undefined,
+        region: d.scnRegion || undefined,
+        name: d.scnName || undefined,
+      });
+    });
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -3522,140 +4631,4 @@ function showNotification(message) {
     notif.style.transition = 'opacity .3s';
     setTimeout(() => notif.remove(), 300);
   }, 4000);
-}
-
-// ─── KPI Export Report ───────────────────────────────────────
-/** One CSV field: quoted, with embedded quotes doubled, never "undefined". */
-function csvCell(value) {
-  if (value === null || value === undefined || value === '') return '"Not available"';
-  return '"' + String(value).split('"').join('""') + '"';
-}
-
-/**
- * Read one exported figure out of a facility KPI record.
- *
- * The record's fields are OBJECTS — `{ value, unit, delta }` — and the export
- * interpolated them straight into a string, so "On-Time Service SLA" left the
- * building as the literal text `[object Object]`. Three other rows named keys
- * (`cost`, `invDays`, `fillRate`) that no record has ever carried, so they
- * exported "Not available" on a fully solved network.
- */
-function kpiField(kpis, key) {
-  const entry = kpis && kpis[key];
-  if (entry === null || entry === undefined) return null;
-  const value = (typeof entry === 'object') ? entry.value : entry;
-  return (value === null || value === undefined || Number.isNaN(Number(value)))
-    ? null : value;
-}
-
-export function exportFacilityReport() {
-  const facId = state.selectedFacility;
-  const fac = getFacilityById(facId) || DCS[0] || PLANTS[0];
-  if (!fac) { showNotification('No facility is loaded to export.'); return; }
-  const kpis = getKpisForFacility(facId, state.selectedPeriod) || {};
-  const insights = getInsightsForFacility(facId);
-
-  const util = kpiField(kpis, 'util');
-  const sla = kpiField(kpis, 'sla');
-  const cost = kpiField(kpis, 'totalCost');
-  const invDays = kpiField(kpis, 'inventoryDays');
-  const throughput = kpiField(kpis, 'throughput') ?? fac.throughput;
-  const capacity = kpiField(kpis, 'capacity') ?? fac.capacity;
-  const perPeriod = perPeriodLabel();
-  const ccy = getActiveCurrency();
-
-  // Location from what the network actually carries. `fac.city`, `fac.state`
-  // and `fac.region` are not fields on a loaded facility, so this row exported
-  // "undefined, undefined (undefined Region)" for every facility of every
-  // project — including the ones whose coordinates were on screen beside it.
-  const coords = (typeof fac.lat === 'number' && typeof fac.lng === 'number')
-    ? `${fac.lat.toFixed(4)}, ${fac.lng.toFixed(4)}` : null;
-  const location = [fac.name, NETWORK_GEOGRAPHY.region].filter(Boolean).join(' — ');
-
-  const lines = [
-    '=== NetGravity Facility Performance Report ===',
-    'Generated,' + csvCell(new Date().toISOString()),
-    'Facility,' + csvCell(fac.name),
-    'Facility ID,' + csvCell(fac.id),
-    'Facility Type,' + csvCell(isPlantFacility(fac.id) ? 'Manufacturing Plant' : 'Distribution Centre'),
-    'Location,' + csvCell(location),
-    'Coordinates,' + csvCell(coords),
-    'Currency,' + csvCell(ccy),
-    'Planning horizon,' + csvCell(horizonLabel() || `${SOLVE_HORIZON.periodsModelled} period`),
-    'Period shown,' + csvCell(state.selectedPeriod || 'as uploaded'),
-    '',
-    '=== Operational Telemetry ===',
-    // An exported figure is evidence a reader may act on, so a metric the
-    // engine did not produce is exported as "Not available" — never as a
-    // plausible-looking number, and never with a status ("Target Met",
-    // "Healthy") asserted over a value that does not exist. Peak utilisation
-    // has no forecast behind it at all, so it is always reported as absent.
-    `Capacity (units/${perPeriod}),` + csvCell(capacity),
-    `Throughput (units/${perPeriod}),` + csvCell(throughput),
-    'Utilisation %,' + csvCell(util === null ? null : Number(util).toFixed(2)),
-    'Projected Peak Utilisation,' + csvCell(null) + ',"no demand forecast for this facility"',
-    '',
-    '=== Core Performance KPIs ===',
-    'Metric,Value,Unit,Status',
-    'Demand served within SLA,' + csvCell(sla) + ',' + csvCell('%')
-      + ',' + csvCell(sla === null ? null : 'Reported'),
-    'Operating cost,' + csvCell(cost) + ',' + csvCell(ccy)
-      + ',' + csvCell(cost === null ? null : 'Reported'),
-    'Inventory days of supply,' + csvCell(invDays) + ',' + csvCell('days')
-      + ',' + csvCell(invDays === null ? null : 'Reported'),
-    '',
-    '=== Findings ===',
-    'Insight ID,Severity,Summary',
-  ];
-
-  if (insights && insights.length > 0) {
-    insights.forEach(function (ins) {
-      lines.push([
-        csvCell(ins.id),
-        // The insight's own severity, or absence. It was defaulted to
-        // "Critical", which asserts a severity the engine never assigned.
-        csvCell(ins.impact || ins.severity),
-        csvCell(ins.title || ins.headline || ins.desc),
-      ].join(','));
-    });
-  } else {
-    // No insight has been generated for this network. Exporting two invented
-    // ones about the prototype's demo footprint would put fabricated findings
-    // into a file the user may circulate as analysis.
-    lines.push(csvCell('') + ',' + csvCell('No insight')
-      + ',' + csvCell('No insight has been generated for this network yet.'));
-  }
-
-  // The other half of the same screen. One button on the panel, so one file:
-  // the reader who exports the KPI dashboard gets every metric that was on it,
-  // not the half that happened to sit under the button they pressed.
-  lines.push('');
-  lines.push(...warehouseHealthCsvLines());
-
-  // A Blob with an explicit filename, not a `data:` URL. Chrome ignores the
-  // `download` attribute's name on long data: URLs and saves the report under a
-  // generated temporary name, which is how an export meant to be circulated
-  // arrived as an unidentifiable file.
-  const stamp = new Date().toISOString().slice(0, 10);
-  const blob = new Blob(['﻿' + lines.join('\r\n')],
-                        { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  // Named for the screen, not for one facility. The file now carries every
-  // site in the network as well as the selected one, and a filename naming a
-  // single site would have a reader circulate it as that site's report.
-  link.download = `NetGravity_KPI_Dashboard_${stamp}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-
-  showNotification('Exported the KPI dashboard \u2014 the facility network '
-                   + 'and ' + fac.name + '.');
-}
-
-// Expose export on window
-if (typeof window !== 'undefined') {
-  window.exportFacilityReport = exportFacilityReport;
 }

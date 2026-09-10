@@ -32,6 +32,7 @@ from netgravity.orchestrator.reasoning.evidence import (
 )
 from netgravity.orchestrator.reasoning.runtime import ReasoningRuntime
 from netgravity.orchestrator.reasoning.validation import validate_reasoning_draft
+from netgravity.orchestrator.reasoning.strategic_actions import format_pct
 from netgravity.orchestrator.schemas.reasoning import (
     EvidenceCompleteness,
     ExecutiveBriefing,
@@ -101,8 +102,13 @@ def _period_span(state: dict) -> str:
         return " per period"
     per_period = state.get("cost_per_period")
     if isinstance(per_period, (int, float)):
+        # Through `_money`, like every other amount in this file. It used to be
+        # `f"{per_period:,.2f}"`, so a sentence read "…₹1,807,532 across the 12
+        # periods modelled (150,627.70 per period)" — the same quantity twice
+        # in one breath, once with a symbol and no cents and once with cents
+        # and no symbol.
         return (f" across the {periods} periods modelled "
-                f"({per_period:,.2f} per period)")
+                f"({_money(per_period, state)} per period)")
     return f" across the {periods} periods modelled"
 
 
@@ -110,6 +116,44 @@ def _period_span(state: dict) -> str:
 #: a row in a table. Two fifths: with four sites an even split is 25%, so this
 #: is comfortably above "the largest of several" and below "almost all of it".
 _SPEND_CONCENTRATION_SHARE = 0.40
+
+
+def _money(value: Any, state: Dict[str, Any]) -> str:
+    """
+    An amount, in the currency this network is priced in.
+
+    The template path printed `f"{value:,.2f}"`, so the prose read "business
+    network cost at 150,627.70" beside an evidence chip reading ₹150,627.70 —
+    the same figure twice on one card, once with its unit and once without.
+    On a network priced in USD it was worse: a bare quantity in no unit,
+    which a reader has no way to interpret and no reason to trust.
+
+    `format_money` is the evidence layer's own, so the sentence and the chip
+    beside it are formatted by one function. Where the upload named no
+    currency it prints the amount bare — the honest rendering of an unknown
+    unit, and the same thing every other surface does with it.
+    """
+    from netgravity.orchestrator.reasoning.evidence import format_money
+
+    currency = state.get("currency") if isinstance(state, dict) else None
+    try:
+        return format_money(float(value), currency)
+    except (TypeError, ValueError):
+        return str(value)
+
+
+def _sites(n: Any) -> str:
+    """"site" or "sites", for a count that may arrive as a float."""
+    try:
+        return "site" if abs(float(n) - 1.0) < 1e-9 else "sites"
+    except (TypeError, ValueError):
+        return "sites"
+
+
+def _lead_cap(text: str) -> str:
+    """Capitalise the first letter only - `str.capitalize()` lowercases the rest,
+    which would turn "CO2 transport cost" into "Co2 transport cost"."""
+    return (text[:1].upper() + text[1:]) if text else ""
 
 
 class ReasoningAgent:
@@ -361,12 +405,58 @@ class ReasoningAgent:
     #: budget it needs to answer.
     _EVIDENCE_LIST_ROWS = 8
 
+    #: Blocks whose rows are cut harder than the rest, and how many are kept.
+    #:
+    #: Measured on a scenario run: the payload was 11,807 characters and `rei`
+    #: alone was 5,704 of them — one row per facility, each carrying a full
+    #: exposure decomposition. The model bills its deliberation to the same
+    #: 2,000-token budget it writes with, so half a prompt of resilience rows
+    #: is paid for out of the words the reader gets, and the reply was
+    #: truncated mid-JSON often enough that the scenario card was routinely
+    #: written by the template on a build with a working gateway.
+    #:
+    #: The KIND of evidence is kept — the block is still there, still says how
+    #: many rows exist, and the briefing can still cite the most exposed site.
+    #: What goes is the tail nothing cites.
+    _NARROW_LIST_ROWS = {"rei": 3, "facilities": 5, "warehouse": 5}
+
     #: Characters of evidence the prompt carries. Measured: the demo network's
     #: payload is ~12k and answers; the Canadian network's was ~40k and
     #: returned nothing twice. The bound is structural (see
     #: `_bounded_evidence`) — this is the last resort, and a slice at this size
     #: only happens on a payload the structural trim could not bring down.
     _EVIDENCE_CHARS = 16_000
+
+    @staticmethod
+    def _readable_figures(node: Any, currency: Optional[str],
+                          key: str = "") -> Any:
+        """
+        The same payload with its money and percentages already rendered.
+
+        A model told to copy a figure exactly will copy `150627.7036`, because
+        that is what the JSON says. Rendering them here means "copy it exactly"
+        and "write it the way a reader reads it" stop being two instructions
+        that contradict each other — and it costs nothing from the output
+        budget, which every extra line of prompt does.
+
+        `_display` is the evidence layer's own renderer: the one behind the
+        chips on the cards. Using it here is what makes a figure in a sentence
+        and the same figure on a screen agree.
+        """
+        from netgravity.orchestrator.reasoning.evidence import _display
+
+        if isinstance(node, dict):
+            return {k: ReasoningAgent._readable_figures(v, currency, k)
+                    for k, v in node.items()}
+        if isinstance(node, list):
+            return [ReasoningAgent._readable_figures(v, currency, key)
+                    for v in node]
+        if isinstance(node, (int, float)) and not isinstance(node, bool):
+            text, _unit = _display(node, key, currency)
+            # `_display` returns the raw string for anything it has no opinion
+            # about. Leaving those as numbers keeps counts as counts.
+            return text if text != str(node) else node
+        return node
 
     @classmethod
     def _bounded_evidence(cls, payload: Dict[str, Any]) -> str:
@@ -386,19 +476,19 @@ class ReasoningAgent:
 
         The deterministic template reads the ORIGINAL payload and is unaffected.
         """
-        def trim_value(value: Any) -> Any:
+        def trim_value(value: Any, limit: int) -> Any:
             if isinstance(value, dict):
-                return {k: trim_value(v) for k, v in value.items()}
+                return {k: trim_value(v, limit) for k, v in value.items()}
             if isinstance(value, list):
-                if len(value) <= cls._EVIDENCE_LIST_ROWS:
-                    return [trim_value(v) for v in value]
-                kept = [trim_value(v) for v in value[: cls._EVIDENCE_LIST_ROWS]]
+                if len(value) <= limit:
+                    return [trim_value(v, limit) for v in value]
+                kept = [trim_value(v, limit) for v in value[:limit]]
                 # Stated, not silently dropped: a narrative that says "three
                 # sites" about a network of twenty is worse than one that knows
                 # it was shown eight rows of twenty.
                 kept.append(
-                    f"...{len(value) - cls._EVIDENCE_LIST_ROWS} more rows not "
-                    f"shown here; {len(value)} in total")
+                    f"...{len(value) - limit} more rows not shown here; "
+                    f"{len(value)} in total")
                 return kept
             return value
 
@@ -413,10 +503,59 @@ class ReasoningAgent:
                 elif value is seen_state[1] or value == seen_state[1]:
                     bounded[key] = f"same as '{seen_state[0]}' above"
                     continue
-            bounded[key] = trim_value(value)
+            bounded[key] = trim_value(
+                value, cls._NARROW_LIST_ROWS.get(key, cls._EVIDENCE_LIST_ROWS))
 
         return json.dumps(bounded, default=str, sort_keys=True,
                           separators=(",", ":"))[: cls._EVIDENCE_CHARS]
+
+    @staticmethod
+    def _intervention_options(payload: Dict[str, Any]) -> str:
+        """
+        The ONE change these results justify, for the model to phrase.
+
+        Not a shortlist. A three-option block asking the model to choose cost
+        the entire output budget in deliberation — measured against the live
+        gateway at output_tokens=1984 with zero characters emitted, against
+        1,688 tokens and real prose for the same payload without it. Choosing
+        is a decision task; this model bills its thinking to the same allowance
+        it writes with.
+
+        There was nothing to delegate in the first place. `build_actions` walks
+        the solved per-site rows down a fixed ladder — reopen what is closed
+        before expanding, expand before building, build only where a region has
+        nothing left to reopen or expand — and the first rung it reaches IS the
+        recommendation. The model's job is to say it in a sentence a leader
+        would act on, which is rewriting, not deciding.
+
+        Returns "" when there are no facility rows: a recommendation the
+        results do not support is not improved by having a model write it.
+        """
+        rows = payload.get("facilities")
+        if not isinstance(rows, list) or not rows:
+            return ""
+        try:
+            from netgravity.orchestrator.reasoning.strategic_actions import (
+                build_actions,
+            )
+            state = payload.get("network_state") or {}
+            unserved = state.get("unserved_demand")
+            actions = build_actions(
+                rows,
+                unserved_demand=(unserved
+                                 if isinstance(unserved, (int, float)) else None),
+                limit=1,
+            )
+        except Exception:  # noqa: BLE001 — a briefing must not fail on this
+            return ""
+        if not actions:
+            return ""
+        if actions[0].key == "NO_ACTION":
+            # "Nothing needs doing" is an answer the ladder has already
+            # reached. Told to phrase an intervention anyway, the model would
+            # manufacture one.
+            return "\nRECOMMEND NO NETWORK CHANGE; say so plainly.\n"
+        return f"\nRECOMMEND EXACTLY THIS: {actions[0].label}\n"
 
     def _llm(
         self, payload: Dict[str, Any], missing: Dict[str, Any],
@@ -431,6 +570,17 @@ class ReasoningAgent:
         # deliberates scales with how much it is given. See
         # `_bounded_evidence` for what was measured.
         evidence = self._bounded_evidence(payload)
+        question = (user_question or "").strip()[:400]
+        answering = bool(question) and not payload.get("kpi_chart")
+        if answering:
+            # See `_readable_figures`. Only this path, because it is the only
+            # one that both writes figures and has nothing printed beside it.
+            from netgravity.orchestrator.reasoning.evidence import _find_currency
+
+            evidence = json.dumps(
+                self._readable_figures(
+                    json.loads(evidence), _find_currency(payload)),
+                separators=(",", ":"), default=str)[:self._EVIDENCE_CHARS]
 
         missing_block = ""
         if missing:
@@ -480,7 +630,6 @@ class ReasoningAgent:
         # It is placed AFTER the evidence and immediately before the response
         # contract, because that is the position a model weights most heavily,
         # and it is bounded so a long paste cannot displace the instructions.
-        question = (user_question or "").strip()[:400]
         if question:
             ask_block = (
                 "\nTHE USER ASKED:\n"
@@ -497,6 +646,42 @@ class ReasoningAgent:
                 "results mean for the business.\n"
             )
 
+        # THE INTERVENTIONS THIS NETWORK'S OWN RESULTS JUSTIFY.
+        #
+        # Derived, not invented: `build_actions` walks the solved per-site rows
+        # down a fixed ladder — reopen what is closed before expanding, expand
+        # before building, and only build where a region has nothing left to
+        # reopen or expand. The model is given the result and told to phrase
+        # one of them.
+        #
+        # Absent for a chart card (which describes and does not prescribe) and
+        # for any payload with no facility rows, in which case the field falls
+        # back to the open form it had. A recommendation the results do not
+        # support is not improved by having a model write it.
+        options_block = ""
+        if not payload.get("kpi_chart"):
+            options_block = self._intervention_options(payload)
+
+        # ANSWERING A QUESTION IS THE OTHER CASE WHERE THE FIGURES ARE THE POINT.
+        #
+        # A dashboard card is read beside the numbers it describes, which is
+        # why the default rule below forbids the model from writing any. The
+        # chat assistant has nothing beside it — its sentence is the whole
+        # answer — and under that rule "what is my total network cost?" came
+        # back as "The total network cost is reported as the business network
+        # cost." Grounded, true, and not an answer.
+        #
+        # Same safety as the chart exception: grounding runs afterwards and
+        # removes any figure that is not in the results above.
+        #
+        # The rule below carries no currency or rounding instruction, because
+        # `_readable_figures` has already rendered every amount in the
+        # network's own currency and every percentage at the precision the
+        # cards use. "Copy it exactly" therefore produces a well-formed figure
+        # on its own — and the two clauses that would otherwise have said so
+        # are two clauses not paid for out of the same 2,000-token allowance as
+        # the answer itself.
+
         prompt = (
             "DETERMINISTIC RESULTS:\n"
             f"{evidence}\n\n"
@@ -506,6 +691,7 @@ class ReasoningAgent:
             "If something is absent, say it is not available rather than "
             "guessing.\n"
             f"{missing_block}"
+            f"{options_block}"
             f"{ask_block}\n"
             # HOW TO WRITE. Every rule is here because its absence produced a
             # specific defect on screen, and every one is stated in as few
@@ -523,29 +709,89 @@ class ReasoningAgent:
             #   cost + service  a plan that costs less while stranding demand
             #                   is cheaper and not therefore better;
             #   once            the same finding as headline, paragraph and
-            #                   recommendation reads as three findings.
-            "RULES: no figures, amounts, percentages or currency symbols. "
+            #                   recommendation reads as three findings;
+            #   not a roster    "name the real things" is satisfied, literally
+            #                   and uselessly, by listing every site in the
+            #                   payload. A live call on a network where every
+            #                   site read the same returned six facility names
+            #                   as the conclusion AND as the paragraph under
+            #                   it — a card that names its subject twice and
+            #                   says nothing about it. A conclusion is a
+            #                   statement; the names belong inside it.
+            # ONE CHART is the exception to "no figures".
+            #
+            # The rest of this product applies the project's currency in one
+            # place afterwards, so a model-written amount would arrive in the
+            # wrong one. A chart explanation is read BESIDE the chart, where a
+            # sentence with no quantities in it ("utilisation is high at two
+            # sites") says less than the picture it sits under — so here the
+            # figures are the point, and every value the model may use is
+            # registered as a citable fact in `numeric_grounding._FACT_SPEC`
+            # before it is sent. Anything it writes that is not one of those
+            # is still removed by the validator afterwards.
+            + ("RULES: use ONLY figures from the results above. Write them as "
+               "a reader would — thousands separated, decimals rounded, "
+               "'approximately' when rounded — never a field name or a raw "
+               "key. No figure that is not there. Summary = the finding in one "
+               "sentence, then TWO more that do not repeat it: the key figures, "
+               "how they compare, what the pattern means to run. "
+               if payload.get("kpi_chart") else
+               # SHORT ON PURPOSE, and the length is the whole engineering
+               # problem here. The backing model bills its internal reasoning
+               # to the same 2,000-token output allowance as its text, so
+               # every additional instruction is paid for in deliberation
+               # before a character is emitted. A fuller version of this rule
+               # — six clauses, about fifty words — was measured against the
+               # live gateway at output_tokens=1984 with ZERO characters of
+               # text on two calls out of three: the reasoning layer silently
+               # degraded to templates, which is the exact failure the note
+               # above this prompt records. Cut to one clause per defect.
+               # "Never a field name" is the chart rule's clause, here for
+               # the same reason: told to copy the evidence exactly, the model
+               # copied the key with it — 'the most utilised, with
+               # utilization_pct "77.1%"' — which reads as a database dump
+               # rather than an answer.
+               ("RULES: quote the figure asked for, exactly as written "
+                "above, in sentence one. Never a field name or raw key. "
+                "No figure that is not in the results. "
+                if answering else
+                "RULES: no figures, amounts, percentages or currency symbols. "))
+            + (
             "Third person, never 'I' or 'my'. Plain business English, no "
             "solver or model vocabulary. Name the real things the results "
             "contain and never a placeholder; do not remark on the kinds "
             "they do not contain. No urgency the results do not establish. "
             "If cost improves but service or capacity does not, say both. "
-            "Say each thing once.\n"
+            "Say each thing once. State a finding, not a roster: name at most "
+            "two, or say 'no facility'/'every site' when it holds for all.\n"
             "Reply with ONLY this JSON, every string short:\n"
+            # A CHART CARD ASKS FOR WHAT A CHART CARD SHOWS.
+            #
+            # It renders the summary and nothing else: the recommendation is
+            # forced empty (a chart describes, it does not prescribe), and the
+            # drivers and risks are not drawn at all. Asking for them anyway
+            # spent output budget on three fields headed for the bin — and
+            # this model answers by reasoning first, so a bigger object is
+            # paid for in thinking before a single character is emitted. The
+            # gateway's own diagnosis when it ran out was "shorten the prompt
+            # or ask for a smaller object"; this is the second.
+            + ('{"summary":"<the finding in 1 sentence, then 2 more that do '
+               'not repeat it>",'
+               '"evidence":["<figure copied from the results>"],'
+               '"confidence":"LOW|MEDIUM|HIGH"}\n'
+               if payload.get("kpi_chart") else
             '{"summary":"<conclusion in 1 sentence, then what it means in 1 '
             'more>",'
-            '"recommendation":"<1 sentence, one next step>",'
+            + ('"recommendation":"<the RECOMMEND line above, as 1 sentence>",'
+               if options_block else
+               '"recommendation":"<1 sentence, one next step>",')
+            + (
             '"confidence":"LOW|MEDIUM|HIGH",'
             '"key_drivers":["<6 words>","<6 words>"],'
-            # No "evidence" field. It asked for "one figure quoted from the
-            # results" three lines under a rule forbidding figures — two
-            # instructions that cannot both be met, which a reasoning model
-            # spends its answer deliberating over. Grounding does not need it:
-            # `ground_narrative()` falls back to reading numbers out of the
-            # visible text, and under these rules there are none to read.
-            '"risks":["<the one thing not to miss, 12 words>"]}\n'
-            "Set confidence to LOW if key results are missing or the network "
-            "is infeasible; HIGH only when the results are complete.\n"
+            '"risks":["<the one thing not to miss, 12 words>"]}\n'))
+            + "Set confidence to LOW if key results are missing or the network "
+              "is infeasible; HIGH only when the results are complete.\n"
+            )
         )
 
         response = self.gateway.generate(prompt, purpose="reasoning")
@@ -577,7 +823,17 @@ class ReasoningAgent:
         summary = str(parsed.get("summary", ""))[:2000]
         drivers = as_list("key_drivers")
         risks = as_list("risks")
-        recommendation = str(parsed.get("recommendation", ""))[:1000]
+        # A CHART EXPLANATION MAKES NO RECOMMENDATION, on this path either.
+        #
+        # The template path already returns none; without this the model's
+        # `recommendation` came straight through and a utilisation chart
+        # advised shifting volume between sites — an instruction needing
+        # closure economics and a second solve, printed under an observation
+        # that supports nothing of the kind. Dropped here rather than removed
+        # from the JSON contract, which is shared with the flows that do
+        # legitimately recommend.
+        recommendation = ("" if payload.get("kpi_chart")
+                          else str(parsed.get("recommendation", ""))[:1000])
 
         return ReasoningResult(
             summary=summary,
@@ -800,7 +1056,8 @@ class ReasoningAgent:
                      if isinstance(total, (int, float)) and total > 0 else "")
             out.append(KPIInsight(
                 theme="Service",
-                headline="I see demand this network cannot serve",
+                headline="This plan leaves demand the network has no way "
+                         "to deliver",
                 severity=InsightSeverity.RISK,
                 narrative=(
                     f"I see {unserved:,.0f} units{share} left unserved. This is a "
@@ -812,15 +1069,24 @@ class ReasoningAgent:
                 comparison_refs=refs_for("total_demand"),
             ))
         elif isinstance(fill, (int, float)):
-            # Stated as the ratio the evidence pack holds, not converted to a
-            # percentage: a derived figure would not match the authoritative
-            # value the grounding check compares against.
+            # As a percentage, which is how a fill rate is discussed.
+            #
+            # This used to print the stored ratio — "a demand fill rate of
+            # 1.000" — on the reasoning that converting it would break the
+            # grounding check. It does not: `_equivalent_values` in the
+            # numeric validator exists for exactly this case and says so
+            # ("a fill rate stored as 0.968 may be written 96.8%"). The ratio
+            # was reaching the Insights page and the Overview tile as the
+            # headline figure of the service finding, where "1.000" is the
+            # storage format rather than an answer.
             out.append(KPIInsight(
                 theme="Service",
-                headline=("I see all stated demand served"
-                          if fill >= 1.0 else "I see demand going unmet"),
+                headline=("Every unit of stated demand is served by this "
+                          "plan" if fill >= 1.0 else
+                          "Part of the stated demand is not served by "
+                          "this plan"),
                 narrative=(
-                    f"I see a demand fill rate of {fill:.3f}. "
+                    f"I see a demand fill rate of {fill * 100:,.1f}%. "
                     + ("Every unit of stated demand is served by this plan, so "
                        "service is not what constrains it."
                        if fill >= 1.0 else
@@ -854,9 +1120,10 @@ class ReasoningAgent:
                 if isinstance(unserved, (int, float)) and unserved > 0 else ""
             )
             if methodology == "TRANSIT_TIME_SLA_FEASIBILITY":
-                headline = "I see demand this network cannot reach in time"
+                headline = ("Some demand cannot be reached inside its lead "
+                            "time, so this plan does not serve it at all")
                 narrative = (
-                    f"I see {sla_pct:.2f}% of demand served within its stated "
+                    f"I see {format_pct(sla_pct)} of demand served within its stated "
                     f"service level. The rest is not served late — it is not "
                     f"served at all: this plan moves volume only on lanes that "
                     f"already meet the destination's lead time, so demand it "
@@ -867,9 +1134,10 @@ class ReasoningAgent:
                 # An engine whose methodology this result does not record.
                 # State the figure and stop, rather than inventing what the
                 # rest of the demand did.
-                headline = "I see demand outside its stated service level"
+                headline = ("Some demand falls outside its stated service "
+                            "level, and this run does not record why")
                 narrative = (
-                    f"I see {sla_pct:.2f}% of demand served within its stated "
+                    f"I see {format_pct(sla_pct)} of demand served within its stated "
                     f"service level. How this run enforced service is not "
                     f"recorded on the result, so I cannot say whether the rest "
                     f"was delivered late or not delivered at all."
@@ -936,8 +1204,8 @@ class ReasoningAgent:
                            f"a finding in either direction.")
             return [KPIInsight(
                 theme="Capacity",
-                headline=f"I see {name(only)} at {util:.2f}% of stated capacity",
-                narrative=f"I see {name(only)} running at {util:.2f}% of its stated "
+                headline=f"{name(only)} is running at {format_pct(util)} of its stated capacity",
+                narrative=f"I see {name(only)} running at {format_pct(util)} of its stated "
                           f"capacity. {verdict}",
                 metric_refs=refs_for("utilization_pct"),
             )]
@@ -946,8 +1214,9 @@ class ReasoningAgent:
             named = ", ".join(name(f) for f in over[:3])
             out.append(KPIInsight(
                 theme="Capacity",
-                headline=f"I see {len(over)} site(s) at or above the "
-                         f"{over_pct:.0f}% utilisation threshold",
+                headline=f"{len(over)} {_sites(len(over))} are at or above "
+                         f"the {over_pct:.0f}% utilisation threshold, with "
+                         f"no headroom left",
                 severity=InsightSeverity.RISK,
                 narrative=(
                     f"I see {named} running at or above {over_pct:.0f}% of stated "
@@ -960,10 +1229,13 @@ class ReasoningAgent:
         elif isinstance(max_util, (int, float)) and isinstance(avg_util, (int, float)):
             out.append(KPIInsight(
                 theme="Capacity",
-                headline="I see capacity headroom across the footprint",
+                headline=f"No open site reaches the {over_pct:.0f}% "
+                         f"threshold, so capacity is not what limits this "
+                         f"plan",
                 narrative=(
-                    f"I see average utilisation at {avg_util:.2f}% and the busiest "
-                    f"site at {max_util:.2f}%. No open site reaches the "
+                    f"I see average utilisation at {format_pct(avg_util)} and the "
+                    f"busiest site at {format_pct(max_util)}. No open site "
+                    f"reaches the "
                     f"{over_pct:.0f}% threshold, so capacity is not what limits "
                     f"this plan."
                 ),
@@ -975,8 +1247,9 @@ class ReasoningAgent:
             named = ", ".join(name(f) for f in under[:3])
             out.append(KPIInsight(
                 theme="Utilisation",
-                headline=f"I see {len(under)} site(s) at or below "
-                         f"{under_pct:.0f}% utilisation",
+                headline=f"{len(under)} {_sites(len(under))} run at or below "
+                         f"{under_pct:.0f}% utilisation while carrying "
+                         f"full fixed cost",
                 severity=InsightSeverity.OPPORTUNITY,
                 narrative=(
                     f"I see {named} running at or below {under_pct:.0f}% of stated "
@@ -989,7 +1262,9 @@ class ReasoningAgent:
         return out
 
     @staticmethod
-    def _warehouse_insights(warehouse: Dict[str, Any], refs_for) -> List[KPIInsight]:
+    def _warehouse_insights(warehouse: Dict[str, Any], refs_for,
+                            state: Optional[Dict[str, Any]] = None,
+                            ) -> List[KPIInsight]:
         """
         What the horizon average was hiding, and where the spend sits.
 
@@ -1037,15 +1312,16 @@ class ReasoningAgent:
             name = str(row.get("name") or row.get("facility_id") or "a site")
             when = row.get("peak_period")
             where = f" in period {when}" if when else ""
-            others = (f" {len(hidden) - 1} other site(s) in this footprint read the "
+            others = (f" {len(hidden) - 1} other {_sites(len(hidden) - 1)} in this footprint read the "
                       f"same way." if len(hidden) > 1 else "")
             out.append(KPIInsight(
                 theme="Capacity",
-                headline=f"{name} is at {peak:.1f}% in its busiest period, not {avg:.1f}%",
+                headline=f"{name} is at {format_pct(peak)} in its busiest period, not {format_pct(avg)}",
                 severity=InsightSeverity.RISK,
                 narrative=(
-                    f"I see {name} averaging {avg:.2f}% of stated capacity across "
-                    f"the {periods} modelled periods and reaching {peak:.2f}%"
+                    f"I see {name} averaging {format_pct(avg)} of stated capacity across "
+                    f"the {periods} modelled periods and reaching "
+                    f"{format_pct(peak)}"
                     f"{where}. The average is below the {over_pct:.0f}% threshold "
                     f"and the peak is not, so a reading of the average alone would "
                     f"report headroom this site does not have when it matters."
@@ -1063,7 +1339,7 @@ class ReasoningAgent:
             observed = int(num(tight, "periods_observed") or periods)
             name = str(tight.get("name") or tight.get("facility_id") or "a site")
             n_bottlenecks = warehouse.get("n_bottlenecks")
-            across = (f" Across the footprint {n_bottlenecks} open site(s) reach "
+            across = (f" Across the footprint {n_bottlenecks} open {_sites(n_bottlenecks)} reach "
                       f"the threshold at some point in the horizon."
                       if isinstance(n_bottlenecks, int) and n_bottlenecks > 1 else "")
             out.append(KPIInsight(
@@ -1103,8 +1379,9 @@ class ReasoningAgent:
                     headline=(f"{name} carries {share * 100:.1f}% of what the "
                               f"facilities cost"),
                     narrative=(
-                        f"I see {name} accounting for {cost:,.2f} of facility "
-                        f"cost, which is {share * 100:.2f}% of what every site in "
+                        f"I see {name} accounting for "
+                        f"{_money(cost, state or {})} of facility "
+                        f"cost, which is {format_pct(share * 100)} of what every site in "
                         f"this plan costs together. That is fixed, opening, "
                         f"handling and holding cost at the site — it does not "
                         f"include transport, so it is where to look first for "
@@ -1143,9 +1420,10 @@ class ReasoningAgent:
                 else f" across the {periods} periods modelled")
         return [KPIInsight(
             theme="Cost structure",
-            headline=f"I see {label} as the largest cost line",
+            headline=f"{_lead_cap(label)} is the largest single component "
+                     f"of what this network costs",
             narrative=(
-                f"I see {label} at {priced[largest]:,.2f}{span}, the largest "
+                f"I see {label} at {_money(priced[largest], state)}{span}, the largest "
                 f"single component of this network's cost. Any material saving has "
                 f"to come from a line of this size."
             ),
@@ -1163,10 +1441,15 @@ class ReasoningAgent:
             return []
         return [KPIInsight(
             theme="Footprint",
-            headline=f"I see {closed:.0f} candidate site(s) the plan does not use",
+            headline=f"The plan leaves {closed:.0f} candidate "
+                     f"{_sites(closed)} unused",
+            # Capacity that is costed and switched off. The decision this
+            # finding asks for is whether to bring one IN — not, as the theme
+            # alone would suggest, to take one out.
+            action_hint="REOPEN_FACILITY",
             severity=InsightSeverity.OPPORTUNITY,
             narrative=(
-                f"I see {opened:.0f} site(s) open and {closed:.0f} not selected. "
+                f"I see {opened:.0f} {_sites(opened)} open and {closed:.0f} not selected. "
                 f"The unselected sites carry no cost in this plan; what they would "
                 f"cost and save if opened is a scenario question, and I have not "
                 f"run it."
@@ -1183,9 +1466,10 @@ class ReasoningAgent:
             return []
         return [KPIInsight(
             theme="Carbon",
-            headline="I see the transport emissions this plan implies",
+            headline="This plan's emissions come from the transport it "
+                     "routes, on the declared factors",
             narrative=(
-                f"I see {carbon:,.2f} kg of CO2 from the transport in this plan, "
+                f"I see {carbon:,.0f} kg of CO2 from the transport in this plan, "
                 f"on the declared emission factors. Whether that is priced into "
                 f"the objective is a configuration choice, and it does not change "
                 f"the quantity."
@@ -1323,7 +1607,8 @@ class ReasoningAgent:
     @staticmethod
     def _comparison_insights(comparison: Dict[str, Any],
                              alternatives: List[Dict[str, Any]],
-                             refs_for) -> List[KPIInsight]:
+                             refs_for,
+                             state: Optional[Dict[str, Any]] = None) -> List[KPIInsight]:
         """
         Why the recommended scenario is preferable to the ones beside it.
 
@@ -1346,9 +1631,11 @@ class ReasoningAgent:
             fill_gap = alt.get("fill_gap_vs_recommended_pts")
 
             if gap > 0:
-                lead = f"{winner} costs {gap:,.2f} less than {alt['name']}"
+                lead = (f"{winner} costs {_money(gap, state or {})} less "
+                        f"than {alt['name']}")
             elif gap < 0:
-                lead = f"{winner} costs {abs(gap):,.2f} MORE than {alt['name']}"
+                lead = (f"{winner} costs {_money(abs(gap), state or {})} "
+                        f"MORE than {alt['name']}")
             else:
                 lead = f"{winner} and {alt['name']} cost the same"
 
@@ -1459,7 +1746,7 @@ class ReasoningAgent:
         under = [f for f in facilities if f["utilization_pct"] <= under_pct]
 
         if over:
-            return (f"I recommend testing relief for the {len(over)} site(s) at or "
+            return (f"I recommend testing relief for the {len(over)} {_sites(len(over))} at or "
                     f"above the {over_pct:.0f}% utilisation threshold — reassigning "
                     f"volume, or added capacity — because that is where service "
                     f"fails first if demand moves. I have not run that scenario, so "
@@ -1502,7 +1789,7 @@ class ReasoningAgent:
                     "open by construction.")
 
         if len(under) >= 2:
-            return (f"I recommend testing consolidation of the {len(under)} site(s) "
+            return (f"I recommend testing consolidation of the {len(under)} {_sites(len(under))} "
                     f"at or below {under_pct:.0f}% utilisation. They carry full "
                     f"fixed cost against little volume; whether consolidating them "
                     f"is worth the service cost is exactly what a scenario answers.")
@@ -1585,6 +1872,17 @@ class ReasoningAgent:
         # nothing, in which case the branch below finds nothing and says
         # nothing — the same contract as the two blocks above.
         warehouse_block = payload.get("warehouse") or {}
+        # ONE chart on the KPI screen, asked about by a reader who pressed
+        # Explain on it. The chart writes its own deterministic reading beside
+        # the numbers it is about (see reasoning/kpi_chart_evidence.py) and
+        # this surfaces it; a branch per chart here would put four charts'
+        # wording in a file that knows nothing about any of them, and a fifth
+        # chart would then need a change in two places.
+        #
+        # Without this the template writer recognised none of the chart blocks
+        # and fell through to "I could not find a deterministic result to
+        # explain" — a button that promises a briefing and delivers an apology.
+        chart_block = payload.get("kpi_chart") or {}
 
         infeasible = self._is_infeasible(payload)
 
@@ -1616,17 +1914,20 @@ class ReasoningAgent:
                     # fragment, as the first line on the screen. The other
                     # insight headlines survive that removal as sentences; this
                     # one did not, so it is written as one.
-                    headline="The cost this network runs at today",
+                    headline=("This is what the network costs to run today, "
+                              "and the baseline every scenario is measured "
+                              "against"),
                     narrative=(
-                        f"I see business network cost at {cost:,.2f}{span}. I use "
-                        "this as the decision baseline for comparing any scenario."
+                        f"I see business network cost at {_money(cost, state)}"
+                        f"{span}. I use this as the decision baseline for "
+                        "comparing any scenario."
                     ),
                     metric_refs=refs_for("business_network_cost"),
                 ))
                 parts.append(
-                    f"I see a business network cost of {cost:,.2f}{span}; this is "
-                    "the operating-cost view from the optimizer, separate from any "
-                    "mathematical shortage penalty."
+                    f"I see a business network cost of {_money(cost, state)}{span}; "
+                    "this is the operating-cost view from the optimizer, separate "
+                    "from any mathematical shortage penalty."
                 )
                 evidence.append(f"business_network_cost = {cost:,.2f}")
 
@@ -1637,11 +1938,12 @@ class ReasoningAgent:
                 pct = f" ({delta_pct:+.2f}%)" if delta_pct is not None else ""
                 parts.append(
                     f"I see the scenario {direction} business cost by "
-                    f"{abs(delta):,.2f}{pct}; this is the incremental impact versus "
-                    "the baseline, not the full cost repeated."
+                    f"{_money(abs(delta), state)}{pct}; this is the incremental "
+                    "impact versus the baseline, not the full cost repeated."
                 )
                 evidence.append(f"business_cost_delta = {delta:,.2f}")
-                drivers.append(f"Cost {direction} of {abs(delta):,.2f} versus baseline")
+                drivers.append(f"Cost {direction} of {_money(abs(delta), state)} "
+                               f"versus baseline")
                 # FIRST, on a run that has one.
                 #
                 # `card_from_briefing` leads with `kpi_insights[0]`, and on a
@@ -1663,9 +1965,10 @@ class ReasoningAgent:
                     # defect already fixed on the Cost headline above.
                     headline=(f"This change {direction} what the network costs"),
                     narrative=(
-                        f"I see an incremental change of {abs(delta):,.2f}{pct}. "
-                        "This tells me the price of the tested network choice before "
-                        "a planner weighs the operational benefit."
+                        f"I see an incremental change of "
+                        f"{_money(abs(delta), state)}{pct}. This tells me the "
+                        "price of the tested network choice before a planner "
+                        "weighs the operational benefit."
                     ),
                     metric_refs=refs_for("business_cost_delta"),
                     comparison_refs=refs_for("business_cost_delta_pct"),
@@ -1704,7 +2007,8 @@ class ReasoningAgent:
             # on different bases, and the peak reading is the correction to the
             # average rather than a replacement for it — so a reader meets the
             # average first and then what it hid.
-            insights.extend(self._warehouse_insights(warehouse_block, refs_for))
+            insights.extend(self._warehouse_insights(
+                warehouse_block, refs_for, state))
             insights.extend(self._cost_structure_insights(state, refs_for))
             insights.extend(self._footprint_insights(state, refs_for))
             insights.extend(self._carbon_insights(state, refs_for))
@@ -1720,7 +2024,8 @@ class ReasoningAgent:
             evidence.append(f"highest_exposure_facility = {top}")
             insights.append(KPIInsight(
                 theme="Resilience",
-                headline=f"I see the greatest single-site exposure at {top}",
+                headline=f"{top} is where losing a single site would cost "
+                         f"the most",
                 severity=InsightSeverity.RISK,
                 narrative=(
                     f"I see {top} carrying the highest relative economic exposure "
@@ -1749,16 +2054,21 @@ class ReasoningAgent:
         if negatives:
             named = ", ".join(str(row.get("facility_id")) for row in negatives[:3])
             parts.append(
-                f"I see {len(negatives)} facility(ies) ({named}) whose loss would "
+                f"I see {len(negatives)} {_sites(len(negatives))} ({named}) whose loss would "
                 f"LOWER cost: their fixed cost exceeds the routing benefit they "
                 f"provide, so the footprint is worth reviewing."
             )
             insights.append(KPIInsight(
                 theme="Footprint",
-                headline="I see sites that cost more than the routing they save",
+                headline=f"{len(negatives)} open {_sites(len(negatives))} "
+                         f"cost more than the routing they save",
+                # The OPPOSITE footprint decision, under the same theme and
+                # the same severity as the one above: these sites are open and
+                # are not paying for themselves.
+                action_hint="CONSOLIDATE",
                 severity=InsightSeverity.OPPORTUNITY,
                 narrative=(
-                    f"I see {len(negatives)} open facility(ies) — {named} — whose "
+                    f"I see {len(negatives)} open {_sites(len(negatives))} — {named} — whose "
                     f"removal would REDUCE network cost, because their fixed cost "
                     f"exceeds the routing benefit they provide. The baseline holds "
                     f"the current footprint open, so this is a finding about the "
@@ -1859,7 +2169,7 @@ class ReasoningAgent:
 
         if comparison_block:
             comparison_insights = self._comparison_insights(
-                comparison_block, comparison_alternatives, refs_for)
+                comparison_block, comparison_alternatives, refs_for, state)
             insights.extend(comparison_insights)
             for insight in comparison_insights:
                 parts.append(insight.narrative)
@@ -1875,6 +2185,21 @@ class ReasoningAgent:
                     f"{comparison_block['n_not_comparable']} compared scenario(s) "
                     f"produced no usable cost.")
 
+        if chart_block:
+            finding = str(chart_block.get("finding") or "").strip()
+            matters = str(chart_block.get("matters") or "").strip()
+            # The finding leads, because it is the answer to "what am I
+            # looking at"; everything after it explains that rather than
+            # restating it.
+            if finding:
+                parts.insert(0, finding)
+            # NOT also into `risks`. The card blanks a meaning that repeats its
+            # warning, and `limitation` becomes that warning — so writing this
+            # sentence into both slots deleted it from the one a reader looks
+            # at first.
+            if matters:
+                parts.append(matters)
+
         if not parts:
             parts.append("I could not find a deterministic result to explain for this request.")
 
@@ -1888,6 +2213,17 @@ class ReasoningAgent:
             # projection.
             else self._forecast_recommendation(forecast_block)
             if forecast_block
+            # A CHART EXPLANATION MAKES NO RECOMMENDATION AT ALL.
+            #
+            # It says what the chart shows. Telling a reader to close a site
+            # or test a scenario needs closure economics, contractual
+            # constraints and a second solve — none of which a utilisation
+            # chart has — so that belongs to the Overview and the Scenario
+            # Planner, which do. Falling through to the network recommendation
+            # also printed "I have no deterministic finding to base a
+            # recommendation on" directly beneath a stated finding.
+            else ""
+            if chart_block
             else self._recommendation(
                 infeasible=infeasible,
                 state=state,

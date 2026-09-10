@@ -191,6 +191,17 @@ export function mapScenarioRecord(raw) {
       ? +(scenarioCost - referenceCost).toFixed(2) : null,
     referenceNote: raw.reference_note || '',
 
+    // What a capacity change was PRICED at: the site's fixed cost before and
+    // after, and on what basis. Null for any other kind of scenario, and for a
+    // capacity scenario solved before capacity carried a price.
+    capacityPricing: raw.capacity_pricing || null,
+    // The one-time investment beside the operating cost, whether the costs are
+    // a fully priced network, and what a period is. Null for a record solved
+    // before each existed, and for scenarios they do not apply to.
+    investment: raw.investment || null,
+    costCompleteness: raw.cost_completeness || null,
+    horizon: raw.horizon || null,
+
     deltas,
     baselineKpis: raw.baseline_kpis || {},
     referenceKpis: raw.reference_kpis || {},
@@ -214,6 +225,16 @@ export function mapScenarioRecord(raw) {
     // a scenario solved before it existed, and the card renders nothing
     // rather than deriving a substitute here.
     capacityResponse: raw.capacity_response || null,
+
+    // WHAT TO DO ABOUT IT, decided on the server from the solved result.
+    //
+    // This list used to be built here in the browser. One definition means
+    // the sentence a reader acts on is the sentence in the document they
+    // forward, and that the reasoning behind a recommendation is auditable
+    // rather than living in a render function. `/compare` recomputes it
+    // against the record as it now stands, so a scenario solved before this
+    // existed still gets one.
+    recommendedActions: raw.recommended_actions || null,
     // What the builder actually did, in its own words.
     overrides: raw.overrides || [],
     triggeredThresholds: raw.triggered_thresholds || [],

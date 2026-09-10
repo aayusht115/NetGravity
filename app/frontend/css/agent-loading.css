@@ -422,6 +422,78 @@
   background: linear-gradient(var(--primary, #6B2FA0), var(--border-light, #eceef2));
 }
 
+/* WHO IS DOING THIS, above what they are doing.
+   ─────────────────────────────────────────────
+   The layer behind each phase was in the model from the beginning and had
+   never been drawn, so a five-agent system rendered as an ordinary progress
+   list. The chip names the agent that genuinely owns the capability the
+   request reaches — it is read from `step.layer`, not chosen for effect.
+
+   Above the title rather than beside it: the titles are typed out character
+   by character, so a chip on the same line would be pushed sideways as each
+   one grew. */
+.agl-phase-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.agl-phase-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  background: rgba(107, 47, 160, 0.09);
+  color: var(--primary, #6B2FA0);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The dot pulses only while this agent is actually working. A permanently
+   animated badge on a finished step would say it is still running. */
+.agl-phase-agent-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+  flex: 0 0 auto;
+}
+
+.agl-phase.active .agl-phase-agent-pulse {
+  opacity: 1;
+  animation: agl-agent-pulse 1.15s ease-in-out infinite;
+}
+
+.agl-phase.done .agl-phase-agent {
+  background: rgba(22, 163, 74, 0.10);
+  color: var(--green, #16a34a);
+}
+
+.agl-phase.failed .agl-phase-agent {
+  background: rgba(220, 38, 38, 0.10);
+  color: var(--red, #dc2626);
+}
+
+.agl-phase.blocked .agl-phase-agent {
+  background: rgba(180, 83, 9, 0.12);
+  color: #b45309;
+}
+
+@keyframes agl-agent-pulse {
+  0%, 100% { transform: scale(1);   opacity: 1; }
+  50%      { transform: scale(1.5); opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agl-phase.active .agl-phase-agent-pulse { animation: none; }
+}
+
 .agl-phase-title {
   font-size: 13.5px;
   font-weight: 700;

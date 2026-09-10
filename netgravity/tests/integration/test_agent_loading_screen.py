@@ -476,20 +476,41 @@ class TestTheHomeCardsAreTheSizesAsked:
         fig = _rule(css, ".ov-alert-figure {")
         assert "font-size: 23px" in fig
 
-    def test_what_it_gives_up_the_attention_card_gets(self):
+    def test_nothing_a_reader_must_act_on_is_behind_a_scroller(self):
         """
-        They are the two rows of one column with a fixed total, so the height
-        trimmed above is height the recommended next step and the further
-        findings gain.
+        SUPERSEDED: this was two tests about the Overview's attention card —
+        that a fixed-height grid gave it the height the alert gave up, and
+        that its "further findings" list opened rather than collapsed.
+
+        There is no such card. Both were compensating for one scrolling
+        column that held six sections and, at 1680x1050, hid 204px of itself
+        including the recommendation. The Overview shows three tiles side by
+        side instead, and the findings they do not carry are a page of their
+        own rather than a `<details>` inside a card.
+
+        What survives is the rule the two were serving: nothing on this page
+        that a reader has to act on is behind a scroller of its own.
         """
         css = _without_comments(_asset("css", "home-overview.css"))
-        rows = css[css.index(".ov-main {"):css.index(".ov-attn-card,")]
-        assert "grid-template-rows: auto minmax(0, 1fr)" in rows
-        assert "max-height: calc(100vh" in rows
+        for gone in (".ov-main {", ".ov-attn-rest ", ".ov-attn-cta {"):
+            assert gone not in css, "%s is back" % gone
 
-    def test_the_further_findings_are_listed_rather_than_collapsed(self):
         js = _asset("js", "app.js")
-        assert '<details class="ov-attn-rest" open>' in js
+        assert '<details class="ov-attn-rest" open>' not in js, (
+            "the collapsed findings list is back"
+        )
+
+        # The tiles carry the recommendation and the way in, on the tile —
+        # no `overflow` of their own, so the whole of each one is on screen.
+        tile = _rule(css, ".ov-tile {")
+        assert "overflow" not in tile, tile
+        body = _rule(css, ".ov-tile-body {")
+        assert "overflow" not in body, body
+
+        # And the rest of the findings have a destination, not a disclosure.
+        html = _asset("index.html")
+        assert 'id="btn-view-more-insights"' in html
+        assert 'data-arg="insights"' in html
 
 
 class TestTheTwinTooltipFollowsItsCanvas:
